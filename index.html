@@ -32,12 +32,22 @@
         <label><input type="radio" name="dir" value="down" /> Down</label>
         <label><input type="radio" name="dir" value="up" /> Up</label>
       </fieldset>
+      <label>
+        <input id="toggleAutoFit" type="checkbox" checked />
+        Auto-Fit
+      </label>
       <button id="apply">Anzeigen</button>
       <button id="fit">Auf Seite einpassen</button>
     </div>
   </header>
   <main class="viewport">
-    <svg id="graph" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="canvas">
+      <svg id="graph" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <aside id="legendPane" aria-label="Organisationseinheiten">
+      <h2>OEs</h2>
+      <div id="legend"></div>
+    </aside>
   </main>
   <footer class="app-footer">
     <span id="status">Bereit</span>

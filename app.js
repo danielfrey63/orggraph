@@ -8,7 +8,7 @@ const BTN_APPLY_ID = "#apply";
 const WIDTH = 1200;
 const HEIGHT = 800;
 
-let raw = { nodes: [], links: [] };
+let raw = { nodes: [], links: [], persons: [], orgs: [] };
 let byId = new Map();
 let allNodesUnique = [];
 let filteredItems = [];
@@ -16,7 +16,11 @@ let activeIndex = -1;
 let currentSelectedId = null;
 let zoomBehavior = null;
 let managementEnabled = true;
+let autoFitEnabled = true;
 let hasSupervisor = new Set();
+let clusterLayer = null;
+let clusterSimById = new Map();
+let clusterPersonIds = new Set();
 
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
@@ -32,6 +36,8 @@ function setStatus(msg) {
 function idOf(v) {
   return String(typeof v === 'object' && v ? v.id : v);
 }
+
+let allowedOrgs = new Set();
 
 async function loadData() {
   setStatus("Lade Daten...");
@@ -49,47 +55,59 @@ async function loadData() {
     data = await res.json();
     sourceName = 'data.json';
   }
-  raw = data;
-  // Deduplicate by ID, then sort by label (or id)
+  // Adapt to new schema {persons, orgs, links}
+  const persons = Array.isArray(data.persons) ? data.persons : [];
+  const orgs = Array.isArray(data.orgs) ? data.orgs : [];
+  const links = Array.isArray(data.links) ? data.links : [];
+
+  // Merge nodes and tag types
+  const nodes = [];
+  const personIds = new Set();
+  persons.forEach(p => { if (p && p.id) { nodes.push({ ...p, id: String(p.id), type: 'person' }); personIds.add(String(p.id)); } });
+  orgs.forEach(o => { if (o && o.id) { nodes.push({ ...o, id: String(o.id), type: 'org' }); } });
+
+  // Normalize links and keep only valid endpoints
+  const seen = new Set();
+  const idSet = new Set(nodes.map(n => String(n.id)));
+  const norm = [];
+  for (const l of links) {
+    const s = idOf(l && l.source);
+    const t = idOf(l && l.target);
+    if (!idSet.has(s) || !idSet.has(t)) continue;
+    if (s === t) continue;
+    const key = `${s}>${t}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    norm.push({ source: s, target: t });
+  }
+
+  raw = { nodes, links: norm, persons, orgs };
   byId = new Map(raw.nodes.map(n => [String(n.id), n]));
   allNodesUnique = Array.from(byId.values());
-  // Normalize links: coerce to string ids, drop invalid/self, dedupe undirected
-  if (Array.isArray(raw.links)) {
-    // Prefer node flags when present: use isBasis if available, else hasSupervisor, else derive
-    if (allNodesUnique.some(n => Object.prototype.hasOwnProperty.call(n, 'isBasis'))) {
-      hasSupervisor = new Set(allNodesUnique.filter(n => n && !n.isBasis).map(n => String(n.id)));
-    } else if (allNodesUnique.some(n => Object.prototype.hasOwnProperty.call(n, 'hasSupervisor'))) {
-      hasSupervisor = new Set(allNodesUnique.filter(n => n && n.hasSupervisor).map(n => String(n.id)));
-    } else {
-      try {
-        hasSupervisor = new Set();
-        for (const l of raw.links) {
-          const s = idOf(l && l.source);
-          const t = idOf(l && l.target);
-          if (byId.has(s) && byId.has(t)) {
-            hasSupervisor.add(String(t));
-          }
-        }
-      } catch(_) { hasSupervisor = new Set(); }
-    }
-    const seen = new Set();
-    const norm = [];
-    for (const l of raw.links) {
-      const s = idOf(l && l.source);
-      const t = idOf(l && l.target);
-      if (!byId.has(s) || !byId.has(t)) continue;
-      if (s === t) continue;
-      const key = `${s}>${t}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      norm.push({ source: s, target: t });
-    }
-    raw.links = norm;
+
+  // Compute hasSupervisor set if not provided
+  if (allNodesUnique.some(n => Object.prototype.hasOwnProperty.call(n, 'hasSupervisor'))) {
+    hasSupervisor = new Set(allNodesUnique.filter(n => n && n.type === 'person' && n.hasSupervisor).map(n => String(n.id)));
   } else {
-    raw.links = [];
+    try {
+      hasSupervisor = new Set();
+      for (const l of raw.links) {
+        const s = idOf(l && l.source);
+        const t = idOf(l && l.target);
+        if (byId.has(s) && byId.has(t) && byId.get(s).type === 'person' && byId.get(t).type === 'person') {
+          hasSupervisor.add(String(t));
+        }
+      }
+    } catch(_) { hasSupervisor = new Set(); }
   }
+
+  // Initialize allowed orgs (all enabled by default)
+  allowedOrgs = new Set(orgs.map(o => String(o.id)));
+
   populateCombo("");
-  setStatus(`Daten geladen (${sourceName}): ${raw.nodes.length} Knoten, ${raw.links.length} Kanten`);
+  // Start with empty OE legend until a subgraph is applied
+  buildOrgLegend(new Set());
+  setStatus(`Daten geladen (${sourceName}): ${raw.nodes.length} Knoten, ${raw.links.length} Kanten, ${orgs.length} OEs`);
 }
 
 function populateCombo(filterText) {
@@ -145,6 +163,8 @@ function chooseItem(idx) {
   currentSelectedId = String(n.id);
   input.value = n.label || String(n.id);
   list.hidden = true;
+  // Auto-apply and re-center when selecting from dropdown
+  applyFromUI();
 }
 
 function guessIdFromInput(val) {
@@ -186,19 +206,50 @@ function computeSubgraph(startId, depth, mode) {
   const dist = new Map();
   const q = [];
   if (!byId.has(startId)) return { nodes: [], links: [] };
+  const startType = byId.get(startId)?.type;
   seen.add(startId); dist.set(startId, 0); q.push(startId);
   while (q.length) {
     const v = q.shift();
     const d = dist.get(v) || 0;
     if (d >= depth) continue;
+    const vType = byId.get(v)?.type;
     if (mode === 'down' || mode === 'both') {
+      // Follow forward edges with type filtering
       for (const w of out.get(v) || []) {
+        const wType = byId.get(w)?.type;
+        // Suppress Person->Org in down mode
+        if (vType === 'person' && wType === 'org') continue;
+        // If target is org and it's disabled, skip
+        if (wType === 'org' && !allowedOrgs.has(w)) continue;
         if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
+      }
+      // Additionally: Org -> Persons via inverse memberOf (Org gets its members)
+      // Only permit this fan-out when the START node is an Org, to avoid pulling all members when starting from a person
+      if (vType === 'org' && startType === 'org') {
+        for (const src of inn.get(v) || []) {
+          const sType = byId.get(src)?.type;
+          if (sType !== 'person') continue;
+          if (!seen.has(src)) { seen.add(src); dist.set(src, d + 1); q.push(src); }
+        }
       }
     }
     if (mode === 'up' || mode === 'both') {
+      // Follow inverse edges with type filtering
       for (const w of inn.get(v) || []) {
+        const wType = byId.get(w)?.type;
+        // For org nodes, only climb to parent orgs via inn
+        if (vType === 'org' && wType !== 'org') continue;
+        if (wType === 'org' && !allowedOrgs.has(w)) continue;
         if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
+      }
+      // Additionally: Person -> Org via forward memberOf in up mode
+      if (vType === 'person') {
+        for (const w of out.get(v) || []) {
+          const wType = byId.get(w)?.type;
+          if (wType !== 'org') continue;
+          if (wType === 'org' && !allowedOrgs.has(w)) continue;
+          if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
+        }
       }
     }
   }
@@ -214,15 +265,94 @@ function computeSubgraph(startId, depth, mode) {
     if (haveIsBasis) {
       nodes = nodes.filter(n => !n.isBasis);
     } else {
-      nodes = nodes.filter(n => hasSupervisor.has(String(n.id)));
+      nodes = nodes.filter(n => n.type !== 'person' || hasSupervisor.has(String(n.id)));
     }
   }
+  // Drop orgs that are disabled
+  nodes = nodes.filter(n => n.type !== 'org' || allowedOrgs.has(String(n.id)));
   const nodeSet = new Set(nodes.map(n => String(n.id)));
   const links = raw.links
     .map(l => ({ s: idOf(l.source), t: idOf(l.target) }))
     .filter(x => nodeSet.has(x.s) && nodeSet.has(x.t))
     .map(x => ({ source: x.s, target: x.t }));
   return { nodes, links };
+}
+
+function buildOrgLegend(scope) {
+  const legend = document.querySelector('#legend');
+  if (!legend) return;
+  legend.innerHTML = '';
+  // Build org parent relationships
+  const children = new Map();
+  const hasParent = new Set();
+  const scopeProvided = typeof scope !== 'undefined';
+  const scopeSet = scopeProvided ? new Set(Array.from(scope || []).map(String)) : null;
+  for (const l of raw.links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    if (byId.get(s)?.type !== 'org' || byId.get(t)?.type !== 'org') continue;
+    if (scopeProvided && (!scopeSet.has(s) || !scopeSet.has(t))) continue;
+    if (!children.has(s)) children.set(s, new Set());
+    children.get(s).add(t);
+    hasParent.add(t);
+  }
+  let allOrgs = scopeProvided ? Array.from(scopeSet) : raw.orgs.map(o => String(o.id));
+  const roots = allOrgs.filter(id => !hasParent.has(id));
+
+  const ul = document.createElement('ul');
+  ul.className = 'legend-list';
+  function renderNode(oid) {
+    const li = document.createElement('li');
+    const lbl = byId.get(oid)?.label || oid;
+    const idAttr = `org_${oid}`;
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = allowedOrgs.has(oid);
+    chk.id = idAttr;
+    chk.addEventListener('change', () => {
+      if (chk.checked) allowedOrgs.add(oid); else allowedOrgs.delete(oid);
+      refreshClusters();
+    });
+    const lab = document.createElement('label');
+    lab.setAttribute('for', idAttr);
+    lab.textContent = lbl;
+    li.appendChild(chk);
+    li.appendChild(lab);
+    const kids = Array.from(children.get(oid) || []).filter(id => !scopeProvided || scopeSet.has(id));
+    if (kids.length) {
+      const sub = document.createElement('ul');
+      kids.forEach(k => sub.appendChild(renderNode(k)));
+      li.appendChild(sub);
+    }
+    return li;
+  }
+  if (roots.length) {
+    roots.forEach(r => ul.appendChild(renderNode(r)));
+  } else if (scopeProvided) {
+    // Fallback: render flat list of scoped orgs (no parent-child within scope)
+    Array.from(scopeSet || []).forEach(oid => ul.appendChild(renderNode(oid)));
+  }
+  legend.appendChild(ul);
+}
+
+function refreshClusters() {
+  if (!clusterLayer) return;
+  const pad = cssNumber('--cluster-pad', 12);
+  const membersByOrg = new Map();
+  for (const l of raw.links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    if (!clusterPersonIds.has(s)) continue;
+    const tType = byId.get(t)?.type;
+    if (tType !== 'org') continue;
+    if (!allowedOrgs.has(t)) continue;
+    if (!membersByOrg.has(t)) membersByOrg.set(t, []);
+    const nd = clusterSimById.get(s);
+    if (nd && nd.x != null && nd.y != null) membersByOrg.get(t).push(nd);
+  }
+  const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }));
+  const paths = clusterLayer.selectAll('path.cluster').data(clusterData, d => d.oid);
+  paths.enter().append('path').attr('class','cluster').merge(paths)
+    .attr('d', d => clusterPath(d.nodes, pad));
+  paths.exit().remove();
 }
 
 function renderGraph(sub) {
@@ -249,16 +379,29 @@ function renderGraph(sub) {
 
   const gZoom = svg.append("g");
 
+  // Filter rendering to person-person links only
+  const personIdsInSub = new Set(sub.nodes.filter(n => byId.get(String(n.id))?.type === 'person').map(n => String(n.id)));
+  const linksPP = sub.links.filter(l => personIdsInSub.has(idOf(l.source)) && personIdsInSub.has(idOf(l.target)));
+
+  // Clusters layer (behind links and nodes)
+  const gClusters = gZoom.append("g").attr("class", "clusters");
+  clusterLayer = gClusters;
+
   const link = gZoom.append("g")
     .selectAll("line")
-    .data(sub.links, d => `${idOf(d.source)}|${idOf(d.target)}`)
+    .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
     .join("line")
     .attr("class", "link")
     .attr("marker-end", "url(#arrow)");
 
+  // Render only person nodes
+  const personNodes = sub.nodes.filter(n => byId.get(String(n.id))?.type === 'person');
+  const simById = new Map(personNodes.map(d => [String(d.id), d]));
+  clusterSimById = simById;
+  clusterPersonIds = new Set(personNodes.map(d => String(d.id)));
   const node = gZoom.append("g")
     .selectAll("g")
-    .data(sub.nodes)
+    .data(personNodes)
     .join("g");
 
   const nodeRadius = cssNumber('--node-radius', 8);
@@ -278,8 +421,8 @@ function renderGraph(sub) {
   const linkStrength = cssNumber('--link-strength', 0.4);
   const chargeStrength = cssNumber('--charge-strength', -200);
 
-  const simulation = d3.forceSimulation(sub.nodes)
-    .force("link", d3.forceLink(sub.links).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
+  const simulation = d3.forceSimulation(personNodes)
+    .force("link", d3.forceLink(linksPP).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
     .force("charge", d3.forceManyBody().strength(chargeStrength))
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2))
     .force("collide", d3.forceCollide().radius(nodeRadius + collidePadding))
@@ -308,7 +451,35 @@ function renderGraph(sub) {
         });
 
       node.attr("transform", d => `translate(${d.x},${d.y})`);
+
+      // Update clusters (OE hulls) around member persons
+      const pad = cssNumber('--cluster-pad', 12);
+      // Build membership map: orgId -> member person nodes present in this subgraph
+      const membersByOrg = new Map();
+      for (const l of raw.links) {
+        const s = idOf(l.source), t = idOf(l.target);
+        if (!personIdsInSub.has(s)) continue;
+        const tType = byId.get(t)?.type;
+        if (tType !== 'org') continue;
+        if (!allowedOrgs.has(t)) continue;
+        if (!membersByOrg.has(t)) membersByOrg.set(t, []);
+        const nd = simById.get(s);
+        if (nd && nd.x != null && nd.y != null) membersByOrg.get(t).push(nd);
+      }
+
+      // Data join for cluster paths
+      const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }));
+      const paths = gClusters.selectAll('path.cluster').data(clusterData, d => d.oid);
+      paths.enter().append('path').attr('class','cluster').merge(paths)
+        .attr('d', d => clusterPath(d.nodes, pad));
+      paths.exit().remove();
     });
+  // Re-center once the simulation has settled (if enabled)
+  simulation.on('end', () => {
+    if (autoFitEnabled) {
+      fitToViewport();
+    }
+  });
 
   // Optional radial layout to keep deeper levels closer and less disconnected
   const radialForceStrength = cssNumber('--radial-force', 0);
@@ -357,6 +528,50 @@ function renderGraph(sub) {
   svg.call(zoomBehavior);
 }
 
+// Build a smooth closed path around a set of nodes
+function clusterPath(nodes, pad) {
+  const pts = nodes.map(n => [n.x, n.y]);
+  const r = cssNumber('--node-radius', 8) + pad;
+  if (pts.length === 0) return '';
+  if (pts.length === 1) {
+    const [x,y] = pts[0];
+    const rr = r;
+    return `M ${x+rr},${y} A ${rr},${rr} 0 1,0 ${x-rr},${y} A ${rr},${rr} 0 1,0 ${x+rr},${y} Z`;
+  }
+  if (pts.length === 2) {
+    const [a,b] = pts;
+    const dx = b[0]-a[0], dy = b[1]-a[1];
+    const len = Math.hypot(dx,dy) || 1;
+    const ux = dx/len, uy = dy/len; // along
+    const nx = -uy, ny = ux;        // normal
+    const p1 = [a[0] + nx*r, a[1] + ny*r];
+    const p2 = [b[0] + nx*r, b[1] + ny*r];
+    const p3 = [b[0] - nx*r, b[1] - ny*r];
+    const p4 = [a[0] - nx*r, a[1] - ny*r];
+    const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
+    return line([p1,p2,p3,p4]);
+  }
+  const hull = d3.polygonHull(pts);
+  if (!hull || hull.length < 3) {
+    // Fallback to circle around centroid
+    const cx = d3.mean(pts, p=>p[0]);
+    const cy = d3.mean(pts, p=>p[1]);
+    const rr = r;
+    return `M ${cx+rr},${cy} A ${rr},${rr} 0 1,0 ${cx-rr},${cy} A ${rr},${rr} 0 1,0 ${cx+rr},${cy} Z`;
+  }
+  // Pad hull outward from centroid
+  const cx = d3.mean(hull, p=>p[0]);
+  const cy = d3.mean(hull, p=>p[1]);
+  const padded = hull.map(([x,y]) => {
+    const vx = x - cx, vy = y - cy;
+    const L = Math.hypot(vx,vy) || 1;
+    const scale = (L + pad) / L;
+    return [cx + vx*scale, cy + vy*scale];
+  });
+  const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
+  return line(padded);
+}
+
 function applyFromUI() {
   const input = document.querySelector(INPUT_COMBO_ID);
   const depthVal = parseInt(document.querySelector(INPUT_DEPTH_ID).value, 10);
@@ -370,6 +585,76 @@ function applyFromUI() {
   const sub = computeSubgraph(startId, Number.isFinite(depthVal) ? depthVal : 2, mode);
   setStatus(`Subgraph: ${sub.nodes.length} Knoten, ${sub.links.length} Kanten (Tiefe ${depthVal}, ${mode})`);
   renderGraph(sub);
+  // update legend to only include orgs related to the START node
+  const startType = byId.get(startId)?.type;
+  const scopeOrgs = new Set();
+  if (startType === 'person') {
+    // Direct memberOf orgs of the start person
+    for (const l of raw.links) {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (s === startId && byId.get(t)?.type === 'org') scopeOrgs.add(t);
+    }
+    // Add ancestor orgs (orgParent upwards)
+    const parents = new Map(); // child -> parent set
+    const children = new Map(); // parent -> child set (for deepest detection and downward expansion)
+    for (const l of raw.links) {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (byId.get(s)?.type === 'org' && byId.get(t)?.type === 'org') {
+        if (!parents.has(t)) parents.set(t, new Set());
+        parents.get(t).add(s);
+        if (!children.has(s)) children.set(s, new Set());
+        children.get(s).add(t);
+      }
+    }
+    const q = Array.from(scopeOrgs);
+    for (let i=0;i<q.length;i++) {
+      const c = q[i];
+      for (const p of (parents.get(c) || [])) {
+        if (!scopeOrgs.has(p)) { scopeOrgs.add(p); q.push(p); }
+      }
+    }
+    // Determine deepest memberOf orgs (those that are not parent of another memberOf in this set)
+    const memberSet = new Set(Array.from(scopeOrgs).filter(oid => {
+      // limit to original direct memberOf (exclude ancestors added above)
+      // reconstruct direct memberOf set
+      return Array.from(raw.links).some(l => idOf(l.source) === startId && idOf(l.target) === oid);
+    }));
+    const deepest = Array.from(memberSet).filter(oid => {
+      const kids = children.get(oid) || new Set();
+      // if any child is also in memberSet, then oid is not deepest
+      for (const k of kids) { if (memberSet.has(k)) return false; }
+      return true;
+    });
+    // Expand descendants from deepest
+    for (const root of deepest) {
+      const dq = [root];
+      for (let i=0;i<dq.length;i++) {
+        const cur = dq[i];
+        for (const ch of (children.get(cur) || [])) {
+          if (!scopeOrgs.has(ch)) { scopeOrgs.add(ch); dq.push(ch); }
+        }
+      }
+    }
+  } else if (startType === 'org') {
+    // The start org and all descendant orgs
+    const children = new Map();
+    for (const l of raw.links) {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (byId.get(s)?.type === 'org' && byId.get(t)?.type === 'org') {
+        if (!children.has(s)) children.set(s, new Set());
+        children.get(s).add(t);
+      }
+    }
+    const q = [startId];
+    scopeOrgs.add(startId);
+    for (let i=0;i<q.length;i++) {
+      const cur = q[i];
+      for (const ch of (children.get(cur) || [])) {
+        if (!scopeOrgs.has(ch)) { scopeOrgs.add(ch); q.push(ch); }
+      }
+    }
+  }
+  buildOrgLegend(scopeOrgs);
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -383,6 +668,16 @@ window.addEventListener("DOMContentLoaded", async () => {
     mgmt.addEventListener('change', () => {
       managementEnabled = !!mgmt.checked;
       applyFromUI();
+    });
+  }
+  const auto = document.querySelector('#toggleAutoFit');
+  if (auto) {
+    autoFitEnabled = !!auto.checked;
+    auto.addEventListener('change', () => {
+      autoFitEnabled = !!auto.checked;
+      if (autoFitEnabled) {
+        fitToViewport();
+      }
     });
   }
   if (input && list) {
@@ -409,6 +704,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (fitBtn) {
     fitBtn.addEventListener('click', fitToViewport);
   }
+  // Auto-apply on depth change and direction change
+  const depthEl = document.querySelector(INPUT_DEPTH_ID);
+  if (depthEl) {
+    depthEl.addEventListener('change', applyFromUI);
+  }
+  const dirRadios = document.querySelectorAll('input[name="dir"]');
+  dirRadios.forEach(r => r.addEventListener('change', applyFromUI));
 });
 
 function fitToViewport() {

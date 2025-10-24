@@ -37,8 +37,14 @@ body { display: grid; grid-template-rows: auto 1fr auto; }
 .combo-list li.is-active {
   background: #eef2ff; /* indigo-50 */
 }
-.viewport { min-height: 60vh; }
+.viewport { min-height: 60vh; display: grid; grid-template-columns: 1fr 280px; gap: 0; }
+.canvas { position: relative; }
 svg { width: 100%; height: calc(100vh - 120px); display: block; background: #fafafa; }
+#legendPane { border-left: 1px solid #eee; padding: 10px; overflow: auto; }
+#legendPane h2 { margin: 0 0 8px 0; font-size: 14px; font-weight: 600; }
+.legend-list, .legend-list ul { list-style: none; padding-left: 12px; margin: 0; }
+.legend-list > li { margin: 4px 0; }
+.legend-list input { margin-right: 6px; }
 .label { font-size: 12px; fill: #111; pointer-events: none; }
 
 /* Force/layout and styling variables */
@@ -52,6 +58,10 @@ svg { width: 100%; height: calc(100vh - 120px); display: block; background: #faf
   --link-stroke-width: 3;   /* link width */
   --link-opacity: 0.5;        /* link opacity (0..1) */
   --arrow-length: 10;         /* arrow marker length in user units */
+  --cluster-fill: rgba(79,70,229,0.10); /* translucent indigo */
+  --cluster-stroke: rgba(79,70,229,0.25);
+  --cluster-opacity: 1;
+  --cluster-pad: 12;          /* padding around member nodes in px */
 
   /* Forces */
   --link-distance: 60;        /* target link length */
@@ -75,4 +85,13 @@ svg { width: 100%; height: calc(100vh - 120px); display: block; background: #faf
   fill: var(--node-fill);
   stroke: var(--node-stroke);
   stroke-width: var(--node-stroke-width);
+}
+
+/* OE hulls */
+.cluster {
+  fill: var(--cluster-fill);
+  stroke: var(--cluster-stroke);
+  opacity: var(--cluster-opacity);
+  stroke-width: 1.5;
+  pointer-events: auto;
 }
