@@ -22,6 +22,16 @@
         Tiefe:
         <input id="depth" type="number" min="0" max="6" value="2" />
       </label>
+      <label>
+        <input id="toggleManagement" type="checkbox" checked />
+        Management
+      </label>
+      <fieldset>
+        <legend>Richtung</legend>
+        <label><input type="radio" name="dir" value="both" checked /> Beide</label>
+        <label><input type="radio" name="dir" value="down" /> Down</label>
+        <label><input type="radio" name="dir" value="up" /> Up</label>
+      </fieldset>
       <button id="apply">Anzeigen</button>
       <button id="fit">Auf Seite einpassen</button>
     </div>

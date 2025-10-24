@@ -15,8 +15,9 @@ let filteredItems = [];
 let activeIndex = -1;
 let currentSelectedId = null;
 let zoomBehavior = null;
+let managementEnabled = true;
+let hasSupervisor = new Set();
 
-// Read numeric CSS variables with fallback
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
   const n = parseFloat(v);
@@ -34,14 +35,43 @@ function idOf(v) {
 
 async function loadData() {
   setStatus("Lade Daten...");
-  const res = await fetch("./data.json", { cache: "no-store" });
-  const data = await res.json();
+  let data = null;
+  let sourceName = 'data.json';
+  try {
+    const resGen = await fetch("./data.generated.json", { cache: "no-store" });
+    if (resGen.ok) {
+      data = await resGen.json();
+      sourceName = 'data.generated.json';
+    }
+  } catch(_) {}
+  if (!data) {
+    const res = await fetch("./data.json", { cache: "no-store" });
+    data = await res.json();
+    sourceName = 'data.json';
+  }
   raw = data;
   // Deduplicate by ID, then sort by label (or id)
   byId = new Map(raw.nodes.map(n => [String(n.id), n]));
   allNodesUnique = Array.from(byId.values());
   // Normalize links: coerce to string ids, drop invalid/self, dedupe undirected
   if (Array.isArray(raw.links)) {
+    // Prefer node flags when present: use isBasis if available, else hasSupervisor, else derive
+    if (allNodesUnique.some(n => Object.prototype.hasOwnProperty.call(n, 'isBasis'))) {
+      hasSupervisor = new Set(allNodesUnique.filter(n => n && !n.isBasis).map(n => String(n.id)));
+    } else if (allNodesUnique.some(n => Object.prototype.hasOwnProperty.call(n, 'hasSupervisor'))) {
+      hasSupervisor = new Set(allNodesUnique.filter(n => n && n.hasSupervisor).map(n => String(n.id)));
+    } else {
+      try {
+        hasSupervisor = new Set();
+        for (const l of raw.links) {
+          const s = idOf(l && l.source);
+          const t = idOf(l && l.target);
+          if (byId.has(s) && byId.has(t)) {
+            hasSupervisor.add(String(t));
+          }
+        }
+      } catch(_) { hasSupervisor = new Set(); }
+    }
     const seen = new Set();
     const norm = [];
     for (const l of raw.links) {
@@ -49,19 +79,17 @@ async function loadData() {
       const t = idOf(l && l.target);
       if (!byId.has(s) || !byId.has(t)) continue;
       if (s === t) continue;
-      const a = s < t ? s : t;
-      const b = s < t ? t : s;
-      const key = `${a}|${b}`;
+      const key = `${s}>${t}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      norm.push({ source: a, target: b });
+      norm.push({ source: s, target: t });
     }
     raw.links = norm;
   } else {
     raw.links = [];
   }
   populateCombo("");
-  setStatus(`Daten geladen: ${raw.nodes.length} Knoten, ${raw.links.length} Kanten`);
+  setStatus(`Daten geladen (${sourceName}): ${raw.nodes.length} Knoten, ${raw.links.length} Kanten`);
 }
 
 function populateCombo(filterText) {
@@ -142,31 +170,54 @@ function buildAdjacency(links) {
   return adj;
 }
 
-function computeSubgraph(startId, depth) {
-  const adj = buildAdjacency(raw.links);
+function computeSubgraph(startId, depth, mode) {
+  const out = new Map();
+  const inn = new Map();
+  for (const l of raw.links) {
+    const s = idOf(l.source);
+    const t = idOf(l.target);
+    if (!byId.has(s) || !byId.has(t)) continue;
+    if (!out.has(s)) out.set(s, new Set());
+    if (!inn.has(t)) inn.set(t, new Set());
+    out.get(s).add(t);
+    inn.get(t).add(s);
+  }
   const seen = new Set();
   const dist = new Map();
   const q = [];
-  if (!adj.has(startId)) return { nodes: [], links: [] };
+  if (!byId.has(startId)) return { nodes: [], links: [] };
   seen.add(startId); dist.set(startId, 0); q.push(startId);
   while (q.length) {
     const v = q.shift();
     const d = dist.get(v) || 0;
     if (d >= depth) continue;
-    for (const w of adj.get(v) || []) {
-      if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
+    if (mode === 'down' || mode === 'both') {
+      for (const w of out.get(v) || []) {
+        if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
+      }
+    }
+    if (mode === 'up' || mode === 'both') {
+      for (const w of inn.get(v) || []) {
+        if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
+      }
     }
   }
-  const nodes = Array.from(seen)
+  let nodes = Array.from(seen)
     .map(id => {
       const n = byId.get(id);
       if (!n) return null;
-      // attach BFS level for layout forces
       return { ...n, level: dist.get(id) || 0 };
     })
     .filter(Boolean);
+  if (managementEnabled) {
+    const haveIsBasis = nodes.some(n => Object.prototype.hasOwnProperty.call(n, 'isBasis'));
+    if (haveIsBasis) {
+      nodes = nodes.filter(n => !n.isBasis);
+    } else {
+      nodes = nodes.filter(n => hasSupervisor.has(String(n.id)));
+    }
+  }
   const nodeSet = new Set(nodes.map(n => String(n.id)));
-  // Use idOf() to be robust to prior D3 mutations and clone links for the simulation
   const links = raw.links
     .map(l => ({ s: idOf(l.source), t: idOf(l.target) }))
     .filter(x => nodeSet.has(x.s) && nodeSet.has(x.t))
@@ -179,13 +230,31 @@ function renderGraph(sub) {
   svg.selectAll("*").remove();
   svg.attr("viewBox", [0, 0, WIDTH, HEIGHT]);
 
+  const defs = svg.append("defs");
+  const arrowLen = cssNumber('--arrow-length', 10);
+  const linkStroke = cssNumber('--link-stroke-width', 3);
+  defs.append("marker")
+    .attr("id", "arrow")
+    .attr("viewBox", "0 0 10 10")
+    .attr("refX", 0)
+    .attr("refY", 5)
+    .attr("markerWidth", arrowLen)
+    .attr("markerHeight", arrowLen + linkStroke)
+    .attr("markerUnits", "userSpaceOnUse")
+    .attr("orient", "auto-start-reverse")
+    .append("path")
+    .attr("d", "M 0 0 L 10 5 L 0 10 z")
+    .attr("fill", getComputedStyle(document.documentElement).getPropertyValue('--link-stroke') || '#bbb')
+    .attr("fill-opacity", parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')) || 1);
+
   const gZoom = svg.append("g");
 
   const link = gZoom.append("g")
     .selectAll("line")
     .data(sub.links, d => `${idOf(d.source)}|${idOf(d.target)}`)
     .join("line")
-    .attr("class", "link");
+    .attr("class", "link")
+    .attr("marker-end", "url(#arrow)");
 
   const node = gZoom.append("g")
     .selectAll("g")
@@ -215,11 +284,28 @@ function renderGraph(sub) {
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2))
     .force("collide", d3.forceCollide().radius(nodeRadius + collidePadding))
     .on("tick", () => {
+      const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
+      const nodeOuter = nodeRadius + (nodeStrokeWidth / 2);
+      const backoff = nodeOuter + arrowLen;
       link
-        .attr("x1", d => d.source.x)
-        .attr("y1", d => d.source.y)
-        .attr("x2", d => d.target.x)
-        .attr("y2", d => d.target.y);
+        .attr("x1", d => d.target.x)
+        .attr("y1", d => d.target.y)
+        .attr("x2", d => {
+          const x1 = d.target.x, y1 = d.target.y;
+          const x2 = d.source.x, y2 = d.source.y;
+          const dx = x2 - x1, dy = y2 - y1;
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len, uy = dy / len;
+          return x2 - ux * backoff;
+        })
+        .attr("y2", d => {
+          const x1 = d.target.x, y1 = d.target.y;
+          const x2 = d.source.x, y2 = d.source.y;
+          const dx = x2 - x1, dy = y2 - y1;
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len, uy = dy / len;
+          return y2 - uy * backoff;
+        });
 
       node.attr("transform", d => `translate(${d.x},${d.y})`);
     });
@@ -274,14 +360,15 @@ function renderGraph(sub) {
 function applyFromUI() {
   const input = document.querySelector(INPUT_COMBO_ID);
   const depthVal = parseInt(document.querySelector(INPUT_DEPTH_ID).value, 10);
+  const dirEl = document.querySelector('input[name="dir"]:checked');
+  const mode = dirEl ? dirEl.value : 'both';
   let startId = currentSelectedId;
   if (!startId && input && input.value) {
-    // if no explicit selection, try exact/partial match
     startId = guessIdFromInput(input.value);
   }
   if (!startId) { setStatus("Startknoten nicht gefunden"); return; }
-  const sub = computeSubgraph(startId, Number.isFinite(depthVal) ? depthVal : 2);
-  setStatus(`Subgraph: ${sub.nodes.length} Knoten, ${sub.links.length} Kanten (Tiefe ${depthVal})`);
+  const sub = computeSubgraph(startId, Number.isFinite(depthVal) ? depthVal : 2, mode);
+  setStatus(`Subgraph: ${sub.nodes.length} Knoten, ${sub.links.length} Kanten (Tiefe ${depthVal}, ${mode})`);
   renderGraph(sub);
 }
 
@@ -290,6 +377,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.querySelector(BTN_APPLY_ID).addEventListener("click", applyFromUI);
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
+  const mgmt = document.querySelector('#toggleManagement');
+  if (mgmt) {
+    managementEnabled = !!mgmt.checked;
+    mgmt.addEventListener('change', () => {
+      managementEnabled = !!mgmt.checked;
+      applyFromUI();
+    });
+  }
   if (input && list) {
     input.addEventListener('input', () => {
       currentSelectedId = null; // reset explicit selection on typing
@@ -323,12 +418,14 @@ function fitToViewport() {
   if (!g) return;
   const bbox = g.getBBox();
   if (!isFinite(bbox.width) || !isFinite(bbox.height) || bbox.width === 0 || bbox.height === 0) return;
-  const rect = svgEl.getBoundingClientRect();
-  const padding = 20;
-  const scale = Math.min((rect.width - padding * 2) / bbox.width, (rect.height - padding * 2) / bbox.height);
-  const x = -bbox.x * scale + (rect.width - bbox.width * scale) / 2;
-  const y = -bbox.y * scale + (rect.height - bbox.height * scale) / 2;
+  // Use SVG viewBox units for stable centering
+  const pad = 20; // in viewBox units
+  const availW = Math.max(1, WIDTH - pad * 2);
+  const availH = Math.max(1, HEIGHT - pad * 2);
+  const scale = Math.min(availW / bbox.width, availH / bbox.height);
+  const tx = (WIDTH - bbox.width * scale) / 2 - bbox.x * scale;
+  const ty = (HEIGHT - bbox.height * scale) / 2 - bbox.y * scale;
   const svg = d3.select(svgEl);
-  const t = d3.zoomIdentity.translate(x, y).scale(scale);
+  const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
   svg.transition().duration(300).call(zoomBehavior.transform, t);
 }

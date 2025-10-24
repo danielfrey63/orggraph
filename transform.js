@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const INPUT_PATH = path.join(__dirname, '..', 'orgchart', 'all.json');
+const INPUT_PATH = path.join(__dirname, '..', 'protected', 'personen-all-2.json');
 const OUTPUT_PATH = path.join(__dirname, 'data.generated.json');
 
 function getLangValue(obj) {
@@ -40,27 +40,52 @@ function transform(data) {
     }
   }
 
+  // Build links first and count degrees (appearances in links as source or target)
+  const degree = new Map();
+  function inc(id) { const k = String(id); degree.set(k, (degree.get(k) || 0) + 1); }
+
+  for (const p of personen) {
+    if (!p || !p.id) continue;
+    const mgrId = p.manager && p.manager.id;
+    if (mgrId && idSet.has(mgrId)) {
+      const s = String(mgrId);
+      const t = String(p.id);
+      if (s !== t) {
+        links.push({ source: s, target: t });
+        inc(s);
+        inc(t);
+      }
+    }
+  }
+
+  // Now build nodes with isBasis computed as degree == 1
   for (const p of personen) {
     if (!p || !p.id) continue;
     const fullName = [p.givenName, p.surname].filter(Boolean).join(' ');
     const funcLabel = getLangValue(p.function);
     const label = fullName || funcLabel || p.id;
     const group = buildGroup(p);
-
-    // No size property; visual size will be handled by CSS/D3 in the UI
-    nodes.push({ id: p.id, label, group });
+    const id = String(p.id);
+    const deg = degree.get(id) || 0;
+    const isBasis = (deg === 1);
+    nodes.push({ id, label, group, isBasis });
   }
 
-  for (const p of personen) {
-    if (!p || !p.id) continue;
-    const mgrId = p.manager && p.manager.id;
-    if (mgrId && idSet.has(mgrId)) {
-      // No distance property; link length handled by CSS/D3 forces in the UI
-      links.push({ source: mgrId, target: p.id });
+  // Link building moved above to count degrees as well
+
+  {
+    const seen = new Set();
+    const unique = [];
+    for (const l of links) {
+      const s = String(l.source);
+      const t = String(l.target);
+      const key = `${s}>${t}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push({ source: s, target: t });
     }
+    return { nodes, links: unique };
   }
-
-  return { nodes, links };
 }
 
 function main() {

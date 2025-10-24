@@ -50,6 +50,8 @@ svg { width: 100%; height: calc(100vh - 120px); display: block; background: #faf
   --node-stroke-width: 3;   /* node border width */
   --link-stroke: #bbb;        /* link color */
   --link-stroke-width: 3;   /* link width */
+  --link-opacity: 0.5;        /* link opacity (0..1) */
+  --arrow-length: 10;         /* arrow marker length in user units */
 
   /* Forces */
   --link-distance: 60;        /* target link length */
@@ -66,6 +68,7 @@ svg { width: 100%; height: calc(100vh - 120px); display: block; background: #faf
 .link {
   stroke: var(--link-stroke);
   stroke-width: var(--link-stroke-width);
+  stroke-opacity: var(--link-opacity);
 }
 
 .node-circle {
