@@ -28,6 +28,10 @@ function setStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+function idOf(v) {
+  return String(typeof v === 'object' && v ? v.id : v);
+}
+
 async function loadData() {
   setStatus("Lade Daten...");
   const res = await fetch("./data.json", { cache: "no-store" });
@@ -36,6 +40,26 @@ async function loadData() {
   // Deduplicate by ID, then sort by label (or id)
   byId = new Map(raw.nodes.map(n => [String(n.id), n]));
   allNodesUnique = Array.from(byId.values());
+  // Normalize links: coerce to string ids, drop invalid/self, dedupe undirected
+  if (Array.isArray(raw.links)) {
+    const seen = new Set();
+    const norm = [];
+    for (const l of raw.links) {
+      const s = idOf(l && l.source);
+      const t = idOf(l && l.target);
+      if (!byId.has(s) || !byId.has(t)) continue;
+      if (s === t) continue;
+      const a = s < t ? s : t;
+      const b = s < t ? t : s;
+      const key = `${a}|${b}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      norm.push({ source: a, target: b });
+    }
+    raw.links = norm;
+  } else {
+    raw.links = [];
+  }
   populateCombo("");
   setStatus(`Daten geladen: ${raw.nodes.length} Knoten, ${raw.links.length} Kanten`);
 }
@@ -142,7 +166,11 @@ function computeSubgraph(startId, depth) {
     })
     .filter(Boolean);
   const nodeSet = new Set(nodes.map(n => String(n.id)));
-  const links = raw.links.filter(l => nodeSet.has(String(l.source)) && nodeSet.has(String(l.target)));
+  // Use idOf() to be robust to prior D3 mutations and clone links for the simulation
+  const links = raw.links
+    .map(l => ({ s: idOf(l.source), t: idOf(l.target) }))
+    .filter(x => nodeSet.has(x.s) && nodeSet.has(x.t))
+    .map(x => ({ source: x.s, target: x.t }));
   return { nodes, links };
 }
 
@@ -155,7 +183,7 @@ function renderGraph(sub) {
 
   const link = gZoom.append("g")
     .selectAll("line")
-    .data(sub.links)
+    .data(sub.links, d => `${idOf(d.source)}|${idOf(d.target)}`)
     .join("line")
     .attr("class", "link");
 
