@@ -267,6 +267,17 @@ function computeSubgraph(startId, depth, mode) {
     } else {
       nodes = nodes.filter(n => n.type !== 'person' || hasSupervisor.has(String(n.id)));
     }
+    // Ensure managers that connect to kept persons are present so links are drawn
+    const nodeSet = new Set(nodes.map(n => String(n.id)));
+    for (const l of raw.links) {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (!byId.has(s) || !byId.has(t)) continue;
+      if (byId.get(s)?.type !== 'person' || byId.get(t)?.type !== 'person') continue;
+      if (nodeSet.has(t) && !nodeSet.has(s)) {
+        const m = byId.get(s);
+        if (m) { nodes.push({ ...m, level: (dist.get(s) || 0) }); nodeSet.add(s); }
+      }
+    }
   }
   // Drop orgs that are disabled
   nodes = nodes.filter(n => n.type !== 'org' || allowedOrgs.has(String(n.id)));
