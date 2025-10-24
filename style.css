@@ -1,0 +1,75 @@
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+body { display: grid; grid-template-rows: auto 1fr auto; }
+.app-header, .app-footer { padding: 10px 16px; border-bottom: 1px solid #eee; }
+.app-footer { border-top: 1px solid #eee; border-bottom: none; }
+.app-header h1 { margin: 0 0 8px 0; font-size: 18px; }
+.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.controls label { display: inline-flex; gap: 6px; align-items: center; }
+.controls input { padding: 6px 8px; }
+.controls button { padding: 6px 10px; cursor: pointer; }
+.controls select { padding: 6px 8px; }
+.controls #searchFilter { min-width: 200px; }
+.controls #searchSel { min-width: 240px; max-width: 360px; }
+
+/* Custom combobox */
+.combo { position: relative; display: inline-block; }
+.combo > input { padding: 6px 8px; min-width: 260px; }
+.combo-list {
+  position: absolute;
+  z-index: 10;
+  margin: 2px 0 0 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  max-height: 280px;
+  overflow: auto;
+  min-width: 100%;
+}
+.combo-list li {
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.combo-list li:hover,
+.combo-list li.is-active {
+  background: #eef2ff; /* indigo-50 */
+}
+.viewport { min-height: 60vh; }
+svg { width: 100%; height: calc(100vh - 120px); display: block; background: #fafafa; }
+.label { font-size: 12px; fill: #111; pointer-events: none; }
+
+/* Force/layout and styling variables */
+:root {
+  /* Visuals */
+  --node-radius: 8;           /* circle radius in px */
+  --node-fill: #4F46E5;       /* default node color */
+  --node-stroke: #ffffff;     /* node border color */
+  --node-stroke-width: 3;   /* node border width */
+  --link-stroke: #bbb;        /* link color */
+  --link-stroke-width: 3;   /* link width */
+
+  /* Forces */
+  --link-distance: 60;        /* target link length */
+  --link-strength: 0.8;       /* 0..1 */
+  --charge-strength: -200;    /* negative = repulsion */
+  --collide-padding: 6;       /* extra padding for collision */
+
+  /* Optional radial layout to keep levels cohesive */
+  --radial-force: 0.15;       /* 0 disables radial layout; try 0.05 - 0.15 */
+  --radial-gap: 120;          /* radius increment per level in px */
+  --radial-base: 0;           /* base radius for level 0 */
+}
+
+.link {
+  stroke: var(--link-stroke);
+  stroke-width: var(--link-stroke-width);
+}
+
+.node-circle {
+  fill: var(--node-fill);
+  stroke: var(--node-stroke);
+  stroke-width: var(--node-stroke-width);
+}
