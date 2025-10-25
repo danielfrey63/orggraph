@@ -43,9 +43,15 @@ svg { width: 100%; height: calc(100vh - 120px); display: block; background: #faf
 #legendPane { border-left: 1px solid #eee; padding: 10px; overflow: auto; }
 #legendPane h2 { margin: 0 0 8px 0; font-size: 14px; font-weight: 600; }
 .legend-list, .legend-list ul { list-style: none; padding-left: 12px; margin: 0; }
-.legend-list > li { margin: 4px 0; }
+.legend-list > li { margin: 0; }
+.legend-list li { display: block; }
+.legend-list .legend-row { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 4px; }
+.legend-list .twisty { border: none; background: transparent; padding: 0 2px; cursor: pointer; font-size: 20px; line-height: 1; color: #555; }
+.legend-list .twisty:focus { outline: none; }
+.legend-list input { margin-right: 6px; }
 .legend-list input { margin-right: 6px; }
 .label { font-size: 12px; fill: #111; pointer-events: none; }
+.labels-hidden .label { display: none; }
 
 /* Force/layout and styling variables */
 :root {
@@ -61,7 +67,7 @@ svg { width: 100%; height: calc(100vh - 120px); display: block; background: #faf
   --cluster-fill: rgba(79,70,229,0.10); /* translucent indigo */
   --cluster-stroke: rgba(79,70,229,0.25);
   --cluster-opacity: 1;
-  --cluster-pad: 12;          /* padding around member nodes in px */
+  --cluster-pad: 20;          /* padding around member nodes in px */
 
   /* Forces */
   --link-distance: 60;        /* target link length */

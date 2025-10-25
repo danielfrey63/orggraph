@@ -21,11 +21,94 @@ let hasSupervisor = new Set();
 let clusterLayer = null;
 let clusterSimById = new Map();
 let clusterPersonIds = new Set();
+let clusterPolygons = new Map();
+let currentZoomTransform = null;
+let labelsVisible = true;
+let legendMenuEl = null;
 
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function computeClusterPolygon(nodes, pad) {
+  const pts = nodes.map(n => [n.x, n.y]);
+  const r = cssNumber('--node-radius', 8) + pad;
+  if (pts.length === 0) return [];
+  if (pts.length === 1) {
+    const [x,y] = pts[0];
+    const poly = [];
+    for (let i=0;i<12;i++){ const a=(i/12)*Math.PI*2; poly.push([x+Math.cos(a)*r, y+Math.sin(a)*r]); }
+    return poly;
+  }
+  if (pts.length === 2) {
+    const [a,b] = pts;
+    const dx=b[0]-a[0], dy=b[1]-a[1];
+    const len=Math.hypot(dx,dy)||1;
+    const ux=dx/len, uy=dy/len; const nx=-uy, ny=ux;
+    return [
+      [a[0]+nx*r, a[1]+ny*r],
+      [b[0]+nx*r, b[1]+ny*r],
+      [b[0]-nx*r, b[1]-ny*r],
+      [a[0]-nx*r, a[1]-ny*r]
+    ];
+  }
+  const hull = d3.polygonHull(pts);
+  if (!hull || hull.length<3) return [];
+  const cx=d3.mean(hull,p=>p[0]);
+  const cy=d3.mean(hull,p=>p[1]);
+  return hull.map(([x,y])=>{
+    const vx=x-cx, vy=y-cy; const L=Math.hypot(vx,vy)||1; const s=(L+pad)/L; return [cx+vx*s, cy+vy*s];
+  });
+}
+
+// Tooltip helpers for overlapping clusters
+let tooltipEl = null;
+function ensureTooltip() {
+  if (tooltipEl) return;
+  tooltipEl = document.createElement('div');
+  tooltipEl.style.position = 'fixed';
+  tooltipEl.style.pointerEvents = 'none';
+  tooltipEl.style.background = 'rgba(17,17,17,0.85)';
+  tooltipEl.style.color = '#fff';
+  tooltipEl.style.fontSize = '12px';
+  tooltipEl.style.padding = '6px 8px';
+  tooltipEl.style.borderRadius = '4px';
+  tooltipEl.style.zIndex = 1000;
+  tooltipEl.style.whiteSpace = 'pre';
+  tooltipEl.style.display = 'none';
+  document.body.appendChild(tooltipEl);
+}
+function showTooltip(x, y, lines) {
+  tooltipEl.textContent = lines.join('\n');
+  tooltipEl.style.left = `${x+12}px`;
+  tooltipEl.style.top = `${y+12}px`;
+  tooltipEl.style.display = 'block';
+}
+function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
+function handleClusterHover(event, svgSel) {
+  if (!currentZoomTransform) { hideTooltip(); return; }
+  const [mx,my] = d3.pointer(event, svgSel.node());
+  const p = currentZoomTransform.invert([mx,my]);
+  const hits = [];
+  for (const [oid, poly] of clusterPolygons.entries()) {
+    if (!allowedOrgs.has(oid)) continue;
+    if (poly && poly.length>=3 && d3.polygonContains(poly, p)) {
+      const lbl = byId.get(oid)?.label || oid;
+      hits.push(lbl);
+    }
+  }
+  if (hits.length) showTooltip(event.clientX, event.clientY, hits); else hideTooltip();
+}
+
+// Color mapping for OEs (harmonious palette)
+function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; } return h>>>0; }
+function colorForOrg(oid){
+  const h = (hashCode(oid) % 12) * 30; // 12-step hue
+  const fill = `hsla(${h}, 60%, 60%, 0.08)`;
+  const stroke = `hsla(${h}, 60%, 40%, 0.25)`;
+  return { fill, stroke };
 }
 
 function setStatus(msg) {
@@ -326,14 +409,85 @@ function buildOrgLegend(scope) {
     const lab = document.createElement('label');
     lab.setAttribute('for', idAttr);
     lab.textContent = lbl;
-    li.appendChild(chk);
-    li.appendChild(lab);
+    // collapsible branch toggle
     const kids = Array.from(children.get(oid) || []).filter(id => !scopeProvided || scopeSet.has(id));
+    const row = document.createElement('div');
+    row.className = 'legend-row';
+    // colorize row with OE color
+    const { fill, stroke } = colorForOrg(oid);
+    row.style.background = fill;
+    row.style.borderLeft = `3px solid ${stroke}`;
+    if (kids.length) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.textContent = '▾';
+      toggle.title = 'Ein-/Ausklappen';
+      toggle.className = 'twisty';
+      toggle.addEventListener('click', () => {
+        const sub = li.querySelector('ul');
+        const collapsed = sub && sub.style.display === 'none';
+        if (sub) sub.style.display = collapsed ? '' : 'none';
+        toggle.textContent = collapsed ? '▾' : '▸';
+      });
+      row.appendChild(toggle);
+    } else {
+      // placeholder to align without triangle
+      const spacer = document.createElement('span');
+      spacer.style.display = 'inline-block';
+      spacer.style.width = '12px';
+      row.appendChild(spacer);
+    }
+    row.appendChild(chk);
+    row.appendChild(lab);
+    li.appendChild(row);
     if (kids.length) {
       const sub = document.createElement('ul');
       kids.forEach(k => sub.appendChild(renderNode(k)));
       li.appendChild(sub);
     }
+    // Context menu for subtree show/hide
+    const onCtx = (e) => {
+      e.preventDefault();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      e.stopPropagation();
+      // Compute descendants from immediate subtree (this LI's own UL children)
+      let subRoot = null;
+      let usedScope = true;
+      try {
+        subRoot = li.querySelector(':scope > ul');
+      } catch(_) {
+        usedScope = false;
+        subRoot = Array.from(li.children).find(ch => ch.tagName === 'UL');
+      }
+      const subtreeIds = new Set(
+        subRoot ? Array.from(subRoot.querySelectorAll('input[id^="org_"]')).map(cb => cb.id.replace('org_','')) : []
+      );
+      // debug removed
+      showLegendMenu(e.clientX, e.clientY, {
+        onShowAll: () => {
+          // include the clicked parent itself
+          allowedOrgs.add(oid);
+          subtreeIds.forEach(id => allowedOrgs.add(id));
+          // Update checkboxes in this subtree
+          if (subRoot) Array.from(subRoot.querySelectorAll('input[id^="org_"]')).forEach(c => c.checked = true);
+          const selfCb = li.querySelector(`#org_${oid}`);
+          if (selfCb) selfCb.checked = true;
+          refreshClusters();
+        },
+        onHideAll: () => {
+          // include the clicked parent itself
+          allowedOrgs.delete(oid);
+          subtreeIds.forEach(id => allowedOrgs.delete(id));
+          if (subRoot) Array.from(subRoot.querySelectorAll('input[id^="org_"]')).forEach(c => c.checked = false);
+          const selfCb = li.querySelector(`#org_${oid}`);
+          if (selfCb) selfCb.checked = false;
+          refreshClusters();
+        }
+      });
+    };
+    li.addEventListener('contextmenu', onCtx);
+    // Also bind to row to catch right-clicks near controls
+    row.addEventListener('contextmenu', onCtx);
     return li;
   }
   if (roots.length) {
@@ -344,6 +498,62 @@ function buildOrgLegend(scope) {
   }
   legend.appendChild(ul);
 }
+
+function collectSubtree(rootId, children, scopeSet) {
+  const out = new Set([rootId]);
+  const q = [rootId];
+  for (let i=0;i<q.length;i++) {
+    const cur = q[i];
+    for (const ch of (children.get(cur) || [])) {
+      if (scopeSet && !scopeSet.has(ch)) continue;
+      if (!out.has(ch)) { out.add(ch); q.push(ch); }
+    }
+  }
+  return out;
+}
+
+function ensureLegendMenu() {
+  if (legendMenuEl) return legendMenuEl;
+  const el = document.createElement('div');
+  el.style.position = 'fixed';
+  el.style.background = '#111';
+  el.style.color = '#fff';
+  el.style.fontSize = '12px';
+  el.style.padding = '6px 0';
+  el.style.borderRadius = '6px';
+  el.style.minWidth = '160px';
+  el.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)';
+  el.style.zIndex = 2000;
+  el.style.display = 'none';
+  const mkItem = (label, handler) => {
+    const it = document.createElement('div');
+    it.textContent = label;
+    it.style.padding = '6px 12px';
+    it.style.cursor = 'pointer';
+    it.addEventListener('click', () => { hideLegendMenu(); handler(); });
+    it.addEventListener('mouseenter', () => it.style.background = '#1f2937');
+    it.addEventListener('mouseleave', () => it.style.background = 'transparent');
+    return it;
+  };
+  el.appendChild(mkItem('Alle einblenden', () => {}));
+  el.appendChild(mkItem('Alle ausblenden', () => {}));
+  document.body.appendChild(el);
+  legendMenuEl = el;
+  // Dismiss on click elsewhere
+  document.addEventListener('click', (e) => { if (legendMenuEl && legendMenuEl.style.display === 'block') hideLegendMenu(); });
+  return el;
+}
+function showLegendMenu(x, y, actions) {
+  const el = ensureLegendMenu();
+  // Wire actions
+  const items = el.querySelectorAll('div');
+  items[0].onclick = () => { hideLegendMenu(); actions.onShowAll(); };
+  items[1].onclick = () => { hideLegendMenu(); actions.onHideAll(); };
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  el.style.display = 'block';
+}
+function hideLegendMenu() { if (legendMenuEl) legendMenuEl.style.display = 'none'; }
 
 function refreshClusters() {
   if (!clusterLayer) return;
@@ -362,7 +572,16 @@ function refreshClusters() {
   const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }));
   const paths = clusterLayer.selectAll('path.cluster').data(clusterData, d => d.oid);
   paths.enter().append('path').attr('class','cluster').merge(paths)
-    .attr('d', d => clusterPath(d.nodes, pad));
+    .each(function(d){
+      const poly = computeClusterPolygon(d.nodes, pad);
+      clusterPolygons.set(d.oid, poly);
+      const { fill, stroke } = colorForOrg(d.oid);
+      const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
+      d3.select(this)
+        .attr('d', line(poly))
+        .style('fill', fill)
+        .style('stroke', stroke);
+    });
   paths.exit().remove();
 }
 
@@ -482,7 +701,16 @@ function renderGraph(sub) {
       const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }));
       const paths = gClusters.selectAll('path.cluster').data(clusterData, d => d.oid);
       paths.enter().append('path').attr('class','cluster').merge(paths)
-        .attr('d', d => clusterPath(d.nodes, pad));
+        .each(function(d){
+          const poly = computeClusterPolygon(d.nodes, pad);
+          clusterPolygons.set(d.oid, poly);
+          const { fill, stroke } = colorForOrg(d.oid);
+          const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
+          d3.select(this)
+            .attr('d', line(poly))
+            .style('fill', fill)
+            .style('stroke', stroke);
+        });
       paths.exit().remove();
     });
   // Re-center once the simulation has settled (if enabled)
@@ -534,9 +762,18 @@ function renderGraph(sub) {
   });
 
   zoomBehavior = d3.zoom().scaleExtent([0.2, 5]).on("zoom", (event) => {
+    currentZoomTransform = event.transform;
     gZoom.attr("transform", event.transform);
   });
   svg.call(zoomBehavior);
+  // Apply labels visibility
+  svg.classed('labels-hidden', !labelsVisible);
+  currentZoomTransform = d3.zoomIdentity;
+
+  // Tooltip hover for overlapping clusters
+  ensureTooltip();
+  svg.on('mousemove', (event) => handleClusterHover(event, svg));
+  svg.on('mouseleave', hideTooltip);
 }
 
 // Build a smooth closed path around a set of nodes
@@ -689,6 +926,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (autoFitEnabled) {
         fitToViewport();
       }
+    });
+  }
+  const lbls = document.querySelector('#toggleLabels');
+  if (lbls) {
+    labelsVisible = !!lbls.checked;
+    lbls.addEventListener('change', () => {
+      labelsVisible = !!lbls.checked;
+      const svg = document.querySelector('#graph');
+      if (svg) svg.classList.toggle('labels-hidden', !labelsVisible);
     });
   }
   if (input && list) {
