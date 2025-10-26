@@ -174,6 +174,36 @@ function colorForOrg(oid){
   return colors;
 }
 
+function orgDepth(oid){
+  let d = 0;
+  let cur = String(oid);
+  const seen = new Set();
+  while (parentOf && parentOf.has(cur)) {
+    if (seen.has(cur)) break;
+    seen.add(cur);
+    cur = parentOf.get(cur);
+    d++;
+  }
+  return d;
+}
+
+function flattenToWhiteOrdered(oids){
+  const arr = Array.from(oids || []);
+  if (!arr.length) return 'transparent';
+  const ordered = arr
+    .map(oid => ({ oid, depth: orgDepth(oid) }))
+    .sort((a,b) => (a.depth - b.depth) || String(a.oid).localeCompare(String(b.oid)));
+  let r = 1, g = 1, b = 1;
+  for (const item of ordered) {
+    const rgba = hslaToRgba(colorForOrg(item.oid).fill);
+    const sr = rgba.r, sg = rgba.g, sb = rgba.b, sa = rgba.a;
+    r = sr * sa + r * (1 - sa);
+    g = sg * sa + g * (1 - sa);
+    b = sb * sa + b * (1 - sa);
+  }
+  return `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
+}
+
 // Compute mixed color of all currently allowed (active) OEs to approximate overlay
 function mixedActiveFillColorForOids(oids) {
   const list = Array.from(oids || []).map(oid => ({ oid, hsla: colorForOrg(oid).fill }));
@@ -522,12 +552,11 @@ function buildOrgLegend(scope) {
     const row = document.createElement('div');
     row.className = 'legend-row';
     // colorize row only when selected
-    const { stroke } = colorForOrg(oid);
+    const { stroke, fill } = colorForOrg(oid);
     if (chk.checked) {
-      const mixFill = mixedActiveFillColorForOids(new Set([oid]));
-      row.style.background = mixFill;
+      row.style.background = fill;
       row.style.borderLeft = `3px solid ${stroke}`;
-      console.log(`🎨 LEGEND (renderNode) ${oid}:`, mixFill);
+      console.log(`🎨 LEGEND (renderNode) ${oid}:`, fill);
     } else {
       row.style.background = 'transparent';
       row.style.borderLeft = '3px solid #e5e7eb';
@@ -632,13 +661,9 @@ function updateLegendChips(rootEl) {
       chip.style.background = 'transparent';
       return;
     }
-    const activeChain = getActiveAncestorChain(selfOid);
-    // Zeige nur Parent-Überlagerungen im Chip (ohne die OE selbst)
-    const parentsOnly = new Set([...activeChain].filter(oid => oid !== selfOid));
-    
-    if (parentsOnly.size > 0) {
-      const chipColor = mixedActiveFillColorForOids(parentsOnly);
-      console.log(`🌳 LEGEND (updateLegendChips) ${selfOid}: parents:`, Array.from(parentsOnly), '→', chipColor);
+    const chain = Array.from(getActiveAncestorChain(selfOid));
+    if (chain.length > 0) {
+      const chipColor = flattenToWhiteOrdered(chain);
       chip.style.background = chipColor;
     } else {
       chip.style.background = 'transparent';
@@ -653,12 +678,10 @@ function updateLegendRowColors(rootEl) {
     const cb = li.querySelector(':scope > .legend-row input[id^="org_"]');
     if (!row || !cb) return;
     const oid = cb.id.replace('org_','');
-    const { stroke } = colorForOrg(oid);
+    const { stroke, fill } = colorForOrg(oid);
     if (cb.checked && allowedOrgs.has(oid)) {
-      const mixFill = mixedActiveFillColorForOids(new Set([oid]));
-      row.style.background = mixFill;
+      row.style.background = fill;
       row.style.borderLeft = `3px solid ${stroke}`;
-      console.log(`🎨 LEGEND (updateLegendRowColors) ${oid}:`, mixFill);
     } else {
       row.style.background = 'transparent';
       row.style.borderLeft = '3px solid #e5e7eb';
@@ -669,7 +692,7 @@ function updateLegendRowColors(rootEl) {
 function collectSubtree(rootId, children, scopeSet) {
   const out = new Set([rootId]);
   const q = [rootId];
-  for (let i=0;i<q.length;i++) {
+  for (let i = 0; i < q.length; i++) {
     const cur = q[i];
     for (const ch of (children.get(cur) || [])) {
       if (scopeSet && !scopeSet.has(ch)) continue;
@@ -740,21 +763,19 @@ function refreshClusters() {
   }
   
   const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }))
-    .sort((a,b) => String(a.oid).localeCompare(String(b.oid)));
+    .sort((a,b) => (orgDepth(a.oid) - orgDepth(b.oid)) || String(a.oid).localeCompare(String(b.oid)));
     
   const paths = clusterLayer.selectAll('path.cluster').data(clusterData, d => d.oid);
   paths.enter().append('path').attr('class','cluster').merge(paths)
     .each(function(d){
       const poly = computeClusterPolygon(d.nodes, pad);
       clusterPolygons.set(d.oid, poly);
-      const { stroke } = colorForOrg(d.oid);
-      // Cluster zeigt nur eigene Grundfarbe (ohne Parents)
-      const mixFill = mixedActiveFillColorForOids(new Set([d.oid]));
-      console.log(`📊 CLUSTER ${d.oid}: base color →`, mixFill);
+      const { stroke, fill } = colorForOrg(d.oid);
+      console.log(`📊 CLUSTER ${d.oid}: base color →`, fill);
       const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
       d3.select(this)
         .attr('d', line(poly))
-        .style('fill', mixFill)
+        .style('fill', fill)
         .style('stroke', stroke);
     })
     .order();
@@ -887,18 +908,17 @@ function renderGraph(sub) {
 
       // Data join for cluster paths
       const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }))
-        .sort((a,b) => String(a.oid).localeCompare(String(b.oid)));
+        .sort((a,b) => (orgDepth(a.oid) - orgDepth(b.oid)) || String(a.oid).localeCompare(String(b.oid)));
       const paths = gClusters.selectAll('path.cluster').data(clusterData, d => d.oid);
       paths.enter().append('path').attr('class','cluster').merge(paths)
         .each(function(d){
           const poly = computeClusterPolygon(d.nodes, pad);
           clusterPolygons.set(d.oid, poly);
-          const { stroke } = colorForOrg(d.oid);
-          const mixFill = mixedActiveFillColorForOids(new Set([d.oid]));
+          const { stroke, fill } = colorForOrg(d.oid);
           const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
           d3.select(this)
             .attr('d', line(poly))
-            .style('fill', mixFill)
+            .style('fill', fill)
             .style('stroke', stroke);
         })
         .order();
