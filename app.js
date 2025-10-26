@@ -165,8 +165,8 @@ function colorForOrg(oid){
   }
   
   const h = (hashCode(oid) % 12) * 30; // 12-step hue
-  const fill = `hsla(${h}, 60%, 60%, 0.08)`;
-  const stroke = `hsla(${h}, 60%, 40%, 0.25)`;
+  const fill = `hsla(${h}, 60%, 60%, 0.25)`;
+  const stroke = `hsla(${h}, 60%, 40%, 0.85)`;
   const colors = { fill, stroke };
   
   orgColorCache.set(oid, colors);
@@ -633,9 +633,16 @@ function updateLegendChips(rootEl) {
       return;
     }
     const activeChain = getActiveAncestorChain(selfOid);
-    const chipColor = mixedActiveFillColorForOids(activeChain);
-    console.log(`🌳 LEGEND (updateLegendChips) ${selfOid}:`, Array.from(activeChain), '→', chipColor);
-    chip.style.background = chipColor;
+    // Zeige nur Parent-Überlagerungen im Chip (ohne die OE selbst)
+    const parentsOnly = new Set([...activeChain].filter(oid => oid !== selfOid));
+    
+    if (parentsOnly.size > 0) {
+      const chipColor = mixedActiveFillColorForOids(parentsOnly);
+      console.log(`🌳 LEGEND (updateLegendChips) ${selfOid}: parents:`, Array.from(parentsOnly), '→', chipColor);
+      chip.style.background = chipColor;
+    } else {
+      chip.style.background = 'transparent';
+    }
   });
 } 
 
@@ -741,9 +748,9 @@ function refreshClusters() {
       const poly = computeClusterPolygon(d.nodes, pad);
       clusterPolygons.set(d.oid, poly);
       const { stroke } = colorForOrg(d.oid);
-      const activeChain = getActiveAncestorChain(d.oid);
-      const mixFill = mixedActiveFillColorForOids(activeChain);
-      console.log(`📊 CLUSTER ${d.oid}:`, Array.from(activeChain), '→', mixFill);
+      // Cluster zeigt nur eigene Grundfarbe (ohne Parents)
+      const mixFill = mixedActiveFillColorForOids(new Set([d.oid]));
+      console.log(`📊 CLUSTER ${d.oid}: base color →`, mixFill);
       const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
       d3.select(this)
         .attr('d', line(poly))
@@ -887,7 +894,7 @@ function renderGraph(sub) {
           const poly = computeClusterPolygon(d.nodes, pad);
           clusterPolygons.set(d.oid, poly);
           const { stroke } = colorForOrg(d.oid);
-          const mixFill = mixedActiveFillColorForOids(getActiveAncestorChain(d.oid));
+          const mixFill = mixedActiveFillColorForOids(new Set([d.oid]));
           const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
           d3.select(this)
             .attr('d', line(poly))
