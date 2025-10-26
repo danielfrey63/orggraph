@@ -39,7 +39,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; }
 }
 .viewport { min-height: 60vh; display: grid; grid-template-columns: 1fr 280px; gap: 0; }
 .canvas { position: relative; }
-svg { width: 100%; height: calc(100vh - 120px); display: block; background: #fafafa; }
+svg { width: 100%; height: calc(100vh - 120px); display: block; background: #ffffff; }
 #legendPane { border-left: 1px solid #eee; padding: 10px; overflow: auto; }
 #legendPane h2 { margin: 0 0 8px 0; font-size: 14px; font-weight: 600; }
 .legend-list, .legend-list ul { list-style: none; padding-left: 12px; margin: 0; }
@@ -50,6 +50,7 @@ svg { width: 100%; height: calc(100vh - 120px); display: block; background: #faf
 .legend-list .twisty:focus { outline: none; }
 .legend-list input { margin-right: 6px; }
 .legend-list input { margin-right: 6px; }
+.legend-list .legend-label-chip { display: inline-block; padding: 2px 6px; border-radius: 3px; }
 .label { font-size: 12px; fill: #111; pointer-events: none; }
 .labels-hidden .label { display: none; }
 

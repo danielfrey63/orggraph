@@ -25,11 +25,44 @@ let clusterPolygons = new Map();
 let currentZoomTransform = null;
 let labelsVisible = true;
 let legendMenuEl = null;
+let simAllById = new Map();
+let parentOf = new Map();
 
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function hslaToRgba(hslaStr){
+  // hsla(h, s%, l%, a)
+  const m = /hsla\(([^,]+),\s*([^%]+)%\s*,\s*([^%]+)%\s*,\s*([^\)]+)\)/i.exec(hslaStr||'');
+  if (!m) return { r:1, g:1, b:1, a:0 };
+  const h = (parseFloat(m[1])||0)/360;
+  const s = (parseFloat(m[2])||0)/100;
+  const l = (parseFloat(m[3])||0)/100;
+  const a = Math.max(0, Math.min(1, parseFloat(m[4])||0));
+  const [r,g,b] = hslToRgb(h,s,l);
+  return { r, g, b, a };
+}
+
+function hslaToRgbaInt(hslaStr){
+  const rgba = hslaToRgba(hslaStr);
+  return `rgba(${Math.round(rgba.r * 255)},${Math.round(rgba.g * 255)},${Math.round(rgba.b * 255)},${rgba.a})`;
+}
+
+// Backward compat
+function mixedActiveFillColor() { return mixedActiveFillColorForOids(allowedOrgs); }
+
+function clustersAtPoint(p) {
+  const labels = [];
+  for (const [oid, poly] of clusterPolygons.entries()) {
+    if (!allowedOrgs.has(oid)) continue;
+    if (poly && poly.length>=3 && d3.polygonContains(poly, p)) {
+      labels.push(byId.get(oid)?.label || oid);
+    }
+  }
+  return labels;
 }
 
 function computeClusterPolygon(nodes, pad) {
@@ -63,6 +96,19 @@ function computeClusterPolygon(nodes, pad) {
   });
 }
 
+// Collect active ancestor chain (including self) for a given org id
+function getActiveAncestorChain(oid) {
+  const active = new Set();
+  let cur = String(oid);
+  while (cur) {
+    if (allowedOrgs.has(cur)) active.add(cur);
+    const p = parentOf.get(cur);
+    if (!p) break;
+    cur = p;
+  }
+  return active;
+}
+
 // Tooltip helpers for overlapping clusters
 let tooltipEl = null;
 function ensureTooltip() {
@@ -92,6 +138,14 @@ function handleClusterHover(event, svgSel) {
   const [mx,my] = d3.pointer(event, svgSel.node());
   const p = currentZoomTransform.invert([mx,my]);
   const hits = [];
+  // Node hit-test first (circle radius with small tolerance)
+  const r = cssNumber('--node-radius', 8) + 6;
+  let nodeLabel = null;
+  for (const nd of simAllById.values()) {
+    if (nd.x == null || nd.y == null) continue;
+    const dx = p[0] - nd.x, dy = p[1] - nd.y;
+    if ((dx*dx + dy*dy) <= r*r) { nodeLabel = nd.label || String(nd.id); break; }
+  }
   for (const [oid, poly] of clusterPolygons.entries()) {
     if (!allowedOrgs.has(oid)) continue;
     if (poly && poly.length>=3 && d3.polygonContains(poly, p)) {
@@ -99,16 +153,61 @@ function handleClusterHover(event, svgSel) {
       hits.push(lbl);
     }
   }
-  if (hits.length) showTooltip(event.clientX, event.clientY, hits); else hideTooltip();
+  const lines = nodeLabel ? [nodeLabel, ...hits] : hits;
+  if (lines.length) showTooltip(event.clientX, event.clientY, lines); else hideTooltip();
 }
 
 // Color mapping for OEs (harmonious palette)
 function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; } return h>>>0; }
+const orgColorCache = new Map();
+
 function colorForOrg(oid){
+  if (orgColorCache.has(oid)) {
+    return orgColorCache.get(oid);
+  }
+  
   const h = (hashCode(oid) % 12) * 30; // 12-step hue
   const fill = `hsla(${h}, 60%, 60%, 0.08)`;
   const stroke = `hsla(${h}, 60%, 40%, 0.25)`;
-  return { fill, stroke };
+  const colors = { fill, stroke };
+  
+  orgColorCache.set(oid, colors);
+  console.log(`🎨 CACHED colorForOrg(${oid}):`, hslaToRgbaInt(fill));
+  return colors;
+}
+
+// Compute mixed color of all currently allowed (active) OEs to approximate overlay
+function mixedActiveFillColorForOids(oids) {
+  const list = Array.from(oids || []).map(oid => ({ oid, hsla: colorForOrg(oid).fill }));
+  if (!list.length) return 'transparent';
+  
+  list.sort((a,b) => String(a.oid).localeCompare(String(b.oid)));
+  
+  let r = 1, g = 1, b = 1;
+  let alphaSum = 0;
+  
+  for (const item of list) {
+    const rgba = hslaToRgba(item.hsla);
+    const { r: sr, g: sg, b: sb, a: sa } = rgba;
+    r = sr * sa + r * (1 - sa);
+    g = sg * sa + g * (1 - sa);
+    b = sb * sa + b * (1 - sa);
+    alphaSum += sa;
+  }
+  
+  const uiAlpha = Math.max(0.08, Math.min(alphaSum, 0.35));
+  const result = `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${uiAlpha})`;
+  return result;
+}
+
+function hslToRgb(h, s, l) {
+  const a = s * Math.min(l, 1 - l);
+  function f(n){
+    const k = (n + h*12) % 12;
+    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return color;
+  }
+  return [f(0), f(8), f(4)];
 }
 
 function setStatus(msg) {
@@ -167,6 +266,14 @@ async function loadData() {
   raw = { nodes, links: norm, persons, orgs };
   byId = new Map(raw.nodes.map(n => [String(n.id), n]));
   allNodesUnique = Array.from(byId.values());
+  // Build org parent mapping for ancestor chain lookups
+  parentOf = new Map();
+  for (const l of raw.links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    if (byId.get(s)?.type === 'org' && byId.get(t)?.type === 'org') {
+      parentOf.set(t, s);
+    }
+  }
 
   // Compute hasSupervisor set if not provided
   if (allNodesUnique.some(n => Object.prototype.hasOwnProperty.call(n, 'hasSupervisor'))) {
@@ -286,7 +393,7 @@ function computeSubgraph(startId, depth, mode) {
     inn.get(t).add(s);
   }
   const seen = new Set();
-  const dist = new Map();
+  const dist = new Map(); 
   const q = [];
   if (!byId.has(startId)) return { nodes: [], links: [] };
   const startType = byId.get(startId)?.type;
@@ -404,19 +511,29 @@ function buildOrgLegend(scope) {
     chk.id = idAttr;
     chk.addEventListener('change', () => {
       if (chk.checked) allowedOrgs.add(oid); else allowedOrgs.delete(oid);
-      refreshClusters();
+      syncGraphAndLegendColors();
     });
     const lab = document.createElement('label');
     lab.setAttribute('for', idAttr);
-    lab.textContent = lbl;
+    // label chip to show mixed active color (set later via updateLegendChips)
+    const chip = document.createElement('span');
+    chip.className = 'legend-label-chip';
+    chip.textContent = lbl;
     // collapsible branch toggle
     const kids = Array.from(children.get(oid) || []).filter(id => !scopeProvided || scopeSet.has(id));
     const row = document.createElement('div');
     row.className = 'legend-row';
-    // colorize row with OE color
-    const { fill, stroke } = colorForOrg(oid);
-    row.style.background = fill;
-    row.style.borderLeft = `3px solid ${stroke}`;
+    // colorize row only when selected
+    const { stroke } = colorForOrg(oid);
+    if (chk.checked) {
+      const mixFill = mixedActiveFillColorForOids(new Set([oid]));
+      row.style.background = mixFill;
+      row.style.borderLeft = `3px solid ${stroke}`;
+      console.log(`🎨 LEGEND (renderNode) ${oid}:`, mixFill);
+    } else {
+      row.style.background = 'transparent';
+      row.style.borderLeft = '3px solid #e5e7eb';
+    }
     if (kids.length) {
       const toggle = document.createElement('button');
       toggle.type = 'button';
@@ -438,7 +555,7 @@ function buildOrgLegend(scope) {
       row.appendChild(spacer);
     }
     row.appendChild(chk);
-    row.appendChild(lab);
+    row.appendChild(chip);
     li.appendChild(row);
     if (kids.length) {
       const sub = document.createElement('ul');
@@ -472,7 +589,7 @@ function buildOrgLegend(scope) {
           if (subRoot) Array.from(subRoot.querySelectorAll('input[id^="org_"]')).forEach(c => c.checked = true);
           const selfCb = li.querySelector(`#org_${oid}`);
           if (selfCb) selfCb.checked = true;
-          refreshClusters();
+          syncGraphAndLegendColors();
         },
         onHideAll: () => {
           // include the clicked parent itself
@@ -481,7 +598,7 @@ function buildOrgLegend(scope) {
           if (subRoot) Array.from(subRoot.querySelectorAll('input[id^="org_"]')).forEach(c => c.checked = false);
           const selfCb = li.querySelector(`#org_${oid}`);
           if (selfCb) selfCb.checked = false;
-          refreshClusters();
+          syncGraphAndLegendColors();
         }
       });
     };
@@ -497,6 +614,51 @@ function buildOrgLegend(scope) {
     Array.from(scopeSet || []).forEach(oid => ul.appendChild(renderNode(oid)));
   }
   legend.appendChild(ul);
+  syncGraphAndLegendColors();
+}
+
+function updateLegendChips(rootEl) {
+  const root = rootEl || document;
+  // Keep allowedOrgs in sync with legend checkboxes
+  const newAllowed = new Set();
+  root.querySelectorAll('.legend-list input[id^="org_"]').forEach(cb => { if (cb.checked) newAllowed.add(cb.id.replace('org_','')); });
+  allowedOrgs = newAllowed;
+  // For each legend entry (li), compute active OEs from its checked ancestor chain (including self)
+  root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
+    const selfCb = li.querySelector(':scope > .legend-row input[id^="org_"]');
+    if (!selfCb) return;
+    const selfOid = selfCb.id.replace('org_','');
+    const chip = li.querySelector(':scope > .legend-row .legend-label-chip');
+    if (!chip) return;
+    if (!selfCb.checked || !allowedOrgs.has(selfOid)) {
+      chip.style.background = 'transparent';
+      return;
+    }
+    const activeChain = getActiveAncestorChain(selfOid);
+    const chipColor = mixedActiveFillColorForOids(activeChain);
+    console.log(`🌳 LEGEND (updateLegendChips) ${selfOid}:`, Array.from(activeChain), '→', chipColor);
+    chip.style.background = chipColor;
+  });
+} 
+
+function updateLegendRowColors(rootEl) {
+  const root = rootEl || document;
+  root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
+    const row = li.querySelector(':scope > .legend-row');
+    const cb = li.querySelector(':scope > .legend-row input[id^="org_"]');
+    if (!row || !cb) return;
+    const oid = cb.id.replace('org_','');
+    const { stroke } = colorForOrg(oid);
+    if (cb.checked && allowedOrgs.has(oid)) {
+      const mixFill = mixedActiveFillColorForOids(new Set([oid]));
+      row.style.background = mixFill;
+      row.style.borderLeft = `3px solid ${stroke}`;
+      console.log(`🎨 LEGEND (updateLegendRowColors) ${oid}:`, mixFill);
+    } else {
+      row.style.background = 'transparent';
+      row.style.borderLeft = '3px solid #e5e7eb';
+    }
+  });
 }
 
 function collectSubtree(rootId, children, scopeSet) {
@@ -557,8 +719,10 @@ function hideLegendMenu() { if (legendMenuEl) legendMenuEl.style.display = 'none
 
 function refreshClusters() {
   if (!clusterLayer) return;
+  
   const pad = cssNumber('--cluster-pad', 12);
   const membersByOrg = new Map();
+  
   for (const l of raw.links) {
     const s = idOf(l.source), t = idOf(l.target);
     if (!clusterPersonIds.has(s)) continue;
@@ -569,19 +733,26 @@ function refreshClusters() {
     const nd = clusterSimById.get(s);
     if (nd && nd.x != null && nd.y != null) membersByOrg.get(t).push(nd);
   }
-  const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }));
+  
+  const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }))
+    .sort((a,b) => String(a.oid).localeCompare(String(b.oid)));
+    
   const paths = clusterLayer.selectAll('path.cluster').data(clusterData, d => d.oid);
   paths.enter().append('path').attr('class','cluster').merge(paths)
     .each(function(d){
       const poly = computeClusterPolygon(d.nodes, pad);
       clusterPolygons.set(d.oid, poly);
-      const { fill, stroke } = colorForOrg(d.oid);
+      const { stroke } = colorForOrg(d.oid);
+      const activeChain = getActiveAncestorChain(d.oid);
+      const mixFill = mixedActiveFillColorForOids(activeChain);
+      console.log(`📊 CLUSTER ${d.oid}:`, Array.from(activeChain), '→', mixFill);
       const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
       d3.select(this)
         .attr('d', line(poly))
-        .style('fill', fill)
+        .style('fill', mixFill)
         .style('stroke', stroke);
-    });
+    })
+    .order();
   paths.exit().remove();
 }
 
@@ -629,6 +800,8 @@ function renderGraph(sub) {
   const simById = new Map(personNodes.map(d => [String(d.id), d]));
   clusterSimById = simById;
   clusterPersonIds = new Set(personNodes.map(d => String(d.id)));
+  // For hover hit-testing of nodes (names)
+  simAllById = new Map(personNodes.map(d => [String(d.id), d]));
   const node = gZoom.append("g")
     .selectAll("g")
     .data(personNodes)
@@ -646,6 +819,16 @@ function renderGraph(sub) {
     .attr("x", 10)
     .attr("y", 4)
     .attr("class", "label");
+
+  // Node-level tooltip to ensure node name is shown reliably
+  node.on('mousemove', (event, d) => {
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    const [mx,my] = d3.pointer(event, svg.node());
+    const p = currentZoomTransform ? currentZoomTransform.invert([mx,my]) : [mx,my];
+    const lines = [d.label || String(d.id), ...clustersAtPoint(p)];
+    showTooltip(event.clientX, event.clientY, lines);
+  });
+  node.on('mouseleave', hideTooltip);
 
   const linkDistance = cssNumber('--link-distance', 60);
   const linkStrength = cssNumber('--link-strength', 0.4);
@@ -698,19 +881,22 @@ function renderGraph(sub) {
       }
 
       // Data join for cluster paths
-      const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }));
+      const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }))
+        .sort((a,b) => String(a.oid).localeCompare(String(b.oid)));
       const paths = gClusters.selectAll('path.cluster').data(clusterData, d => d.oid);
       paths.enter().append('path').attr('class','cluster').merge(paths)
         .each(function(d){
           const poly = computeClusterPolygon(d.nodes, pad);
           clusterPolygons.set(d.oid, poly);
-          const { fill, stroke } = colorForOrg(d.oid);
+          const { stroke } = colorForOrg(d.oid);
+          const mixFill = mixedActiveFillColorForOids(getActiveAncestorChain(d.oid));
           const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
           d3.select(this)
             .attr('d', line(poly))
-            .style('fill', fill)
+            .style('fill', mixFill)
             .style('stroke', stroke);
-        });
+        })
+        .order();
       paths.exit().remove();
     });
   // Re-center once the simulation has settled (if enabled)
@@ -988,3 +1174,102 @@ function fitToViewport() {
   const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
   svg.transition().duration(300).call(zoomBehavior.transform, t);
 }
+
+// Einheitliche Hilfsfunktion für konsistente Farbberechnung
+function getConsistentColorForOid(oid) {
+  const activeChain = getActiveAncestorChain(oid);
+  return mixedActiveFillColorForOids(activeChain);
+}
+
+// Für Legend-Chips: zeigt Überlagerungsfarbe
+function updateLegendChips() {
+  document.querySelectorAll('.legend-label-chip').forEach(chip => {
+    const row = chip.closest('.legend-row');
+    const cb = row?.querySelector('input[id^="org_"]');
+    if (!cb) return;
+    
+    const oid = cb.id.replace('org_', '');
+    if (cb.checked && allowedOrgs.has(oid)) {
+      // DEBUG: Schritt-für-Schritt Farbberechnung
+      const activeChain = getActiveAncestorChain(oid);
+      console.log(`🔍 OID ${oid} activeChain:`, Array.from(activeChain));
+      
+      const chipColor = getConsistentColorForOid(oid);
+      console.log(`🌳 LEGEND (updateLegendChips) ${oid}: → ${chipColor}`);
+      
+      // DEBUG: Vergleiche mit direkter colorForOrg
+      const directColor = colorForOrg(oid);
+      console.log(`🎨 DIRECT 🌳 LEGEND colorForOrg(${oid}):`, directColor);
+      
+      chip.style.background = chipColor;
+    } else {
+      chip.style.background = 'transparent';
+    }
+  });
+}
+
+// Für Legend-Rows: zeigt Grundfarbe als Hintergrund
+function updateLegendRowBackgrounds() {
+  document.querySelectorAll('.legend-row').forEach(row => {
+    const cb = row.querySelector('input[id^="org_"]');
+    if (!cb) return;
+    
+    const oid = cb.id.replace('org_', '');
+    if (cb.checked && allowedOrgs.has(oid)) {
+      const baseColor = colorForOrg(oid).fill;
+      row.style.background = baseColor;
+    } else {
+      row.style.background = 'transparent';
+    }
+  });
+}
+
+// Einheitliche Farbberechnung für Graph und Legend
+function getVisibleOidsForOrg(oid) {
+  const active = new Set();
+  let cur = String(oid);
+  // Sammle nur sichtbare (allowedOrgs) Ancestor-Chain
+  while (cur) {
+    if (allowedOrgs.has(cur)) active.add(cur);
+    const p = parentOf.get(cur);
+    if (!p) break;
+    cur = p;
+  }
+  return active;
+}
+
+function getConsistentFillColor(oid) {
+  const visibleOids = getVisibleOidsForOrg(oid);
+  return mixedActiveFillColorForOids(visibleOids);
+}
+
+function getOrgBaseColor(oid) {
+  // Grundfarbe nur für diese OE (ohne Überlagerung)
+  return allowedOrgs.has(oid) ? colorForOrg(oid).fill : 'transparent';
+}
+
+// Nach jeder allowedOrgs-Änderung aufrufen
+function syncGraphAndLegendColors() {
+  const legend = document.querySelector('#legend');
+  if (legend) {
+    updateLegendRowColors(legend);
+    updateLegendChips(legend);
+  }
+  refreshClusters();
+}
+
+// In Checkbox-Event-Handlers ersetzen:
+chk.addEventListener('change', () => {
+  if (chk.checked) allowedOrgs.add(oid); else allowedOrgs.delete(oid);
+  syncGraphAndLegendColors();
+});
+
+
+
+
+
+
+
+
+
+
