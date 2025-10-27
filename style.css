@@ -58,11 +58,11 @@ svg { width: 100%; height: calc(100vh - 120px); display: block; background: #fff
 :root {
   /* Visuals */
   --node-radius: 8;           /* circle radius in px */
-  --node-fill: #4F46E5;       /* default node color */
-  --node-stroke: #ffffff;     /* node border color */
-  --node-stroke-width: 3;   /* node border width */
-  --link-stroke: #bbb;        /* link color */
-  --link-stroke-width: 3;   /* link width */
+  --node-fill: #4F46E5;     /* default node color */
+  --node-stroke: #ffffff;   /* node border color */
+  --node-stroke-width: 3;     /* node border width */
+  --link-stroke: #bbb;      /* link color */
+  --link-stroke-width: 3;     /* link width */
   --link-opacity: 0.5;        /* link opacity (0..1) */
   --arrow-length: 10;         /* arrow marker length in user units */
   --cluster-fill: rgba(79,70,229,0.10); /* translucent indigo */
