@@ -54,7 +54,15 @@
     </aside>
   </main>
   <footer class="app-footer">
-    <span id="status">Bereit</span>
+    <div class="footer-stats">
+      <span id="status">Bereit</span>
+      <span class="stat-separator">|</span>
+      <span id="stats-loaded">Geladen: <strong id="stats-nodes-total">0</strong> Knoten, <strong id="stats-links-total">0</strong> Kanten, <strong id="stats-orgs-total">0</strong> OEs</span>
+      <span class="stat-separator">|</span>
+      <span id="stats-visible">Sichtbar: <strong id="stats-nodes-visible">0</strong> Knoten, <strong id="stats-links-visible">0</strong> Kanten</span>
+      <span class="stat-separator">|</span>
+      <span id="stats-orgs-display">Aktive OEs: <strong id="stats-orgs-count">0</strong></span>
+    </div>
   </footer>
   <script src="./app.js"></script>
 </body>

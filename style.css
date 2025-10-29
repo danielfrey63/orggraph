@@ -2,7 +2,10 @@
 html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
 body { display: grid; grid-template-rows: auto 1fr auto; }
 .app-header, .app-footer { padding: 10px 16px; border-bottom: 1px solid #eee; }
-.app-footer { border-top: 1px solid #eee; border-bottom: none; }
+.app-footer { border-top: 1px solid #eee; border-bottom: none; font-size: 13px; color: #555; }
+.footer-stats { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.footer-stats .stat-separator { color: #ccc; }
+.footer-stats strong { color: #111; font-weight: 600; }
 .app-header h1 { margin: 0 0 8px 0; font-size: 18px; }
 .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .controls label { display: inline-flex; gap: 6px; align-items: center; }
@@ -37,9 +40,9 @@ body { display: grid; grid-template-rows: auto 1fr auto; }
 .combo-list li.is-active {
   background: #eef2ff; /* indigo-50 */
 }
-.viewport { min-height: 60vh; display: grid; grid-template-columns: 1fr 280px; gap: 0; }
-.canvas { position: relative; }
-svg { width: 100%; height: calc(100vh - 120px); display: block; background: #ffffff; }
+.viewport { display: grid; grid-template-columns: 1fr 280px; gap: 0; overflow: hidden; }
+.canvas { position: relative; overflow: hidden; }
+svg { width: 100%; height: 100%; display: block; background: #ffffff; }
 #legendPane { border-left: 1px solid #eee; padding: 10px; overflow: auto; }
 #legendPane h2 { margin: 0 0 8px 0; font-size: 14px; font-weight: 600; }
 .legend-list, .legend-list ul { list-style: none; padding-left: 12px; margin: 0; }

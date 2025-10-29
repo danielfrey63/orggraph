@@ -27,6 +27,7 @@ let labelsVisible = true;
 let legendMenuEl = null;
 let simAllById = new Map();
 let parentOf = new Map();
+let currentSubgraph = null;
 
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
@@ -243,6 +244,40 @@ function setStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+function updateFooterStats(subgraph) {
+  // Update total loaded stats
+  const nodesTotal = raw.nodes.length;
+  const linksTotal = raw.links.length;
+  const orgsTotal = raw.orgs.length;
+  
+  document.getElementById('stats-nodes-total').textContent = nodesTotal;
+  document.getElementById('stats-links-total').textContent = linksTotal;
+  document.getElementById('stats-orgs-total').textContent = orgsTotal;
+  
+  // Update visible stats (from subgraph if provided)
+  if (subgraph) {
+    document.getElementById('stats-nodes-visible').textContent = subgraph.nodes.length;
+    document.getElementById('stats-links-visible').textContent = subgraph.links.length;
+  } else {
+    document.getElementById('stats-nodes-visible').textContent = 0;
+    document.getElementById('stats-links-visible').textContent = 0;
+  }
+  
+  // Update OE stats: show only active OEs, unless cluster count differs
+  const clusterCount = clusterPolygons.size;
+  const activeOrgsCount = allowedOrgs.size;
+  const orgsDisplayEl = document.getElementById('stats-orgs-display');
+  const orgsCountEl = document.getElementById('stats-orgs-count');
+  
+  if (clusterCount > 0 && clusterCount !== activeOrgsCount) {
+    // Show both values when they differ
+    orgsDisplayEl.innerHTML = `Aktive OEs: <strong>${activeOrgsCount}</strong> (Cluster: <strong>${clusterCount}</strong>)`;
+  } else {
+    // Show only active OEs
+    orgsCountEl.textContent = activeOrgsCount;
+  }
+}
+
 function idOf(v) {
   return String(typeof v === 'object' && v ? v.id : v);
 }
@@ -325,7 +360,8 @@ async function loadData() {
   populateCombo("");
   // Start with empty OE legend until a subgraph is applied
   buildOrgLegend(new Set());
-  setStatus(`Daten geladen (${sourceName}): ${raw.nodes.length} Knoten, ${raw.links.length} Kanten, ${orgs.length} OEs`);
+  setStatus(sourceName);
+  updateFooterStats(null);
 }
 
 function populateCombo(filterText) {
@@ -999,8 +1035,9 @@ function applyFromUI() {
   }
   if (!startId) { setStatus("Startknoten nicht gefunden"); return; }
   const sub = computeSubgraph(startId, Number.isFinite(depthVal) ? depthVal : 2, mode);
-  setStatus(`Subgraph: ${sub.nodes.length} Knoten, ${sub.links.length} Kanten (Tiefe ${depthVal}, ${mode})`);
+  currentSubgraph = sub;
   renderGraph(sub);
+  updateFooterStats(sub);
   // update legend to only include orgs related to the START node
   const startType = byId.get(startId)?.type;
   const scopeOrgs = new Set();
@@ -1166,6 +1203,7 @@ function syncGraphAndLegendColors() {
     updateLegendChips(legend);
   }
   refreshClusters();
+  updateFooterStats(currentSubgraph);
 }
 
 
