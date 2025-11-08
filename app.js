@@ -1447,7 +1447,7 @@ function computeHierarchyLevels(nodes, links) {
  */
 function applyHierarchicalLayout(nodes, links, simulation) {
   const LEVEL_HEIGHT = 200; // Vertical spacing between hierarchy levels [CMV]
-  const LEVEL_FORCE_STRENGTH = 0.3; // Strength of level alignment force (0.1-0.5) [CMV]
+  const LEVEL_FORCE_STRENGTH = 0.25; // Strength of level alignment force (0.1-0.5) [CMV]
   
   console.log('🎯 Applying hierarchical force layout with level force');
   
@@ -1470,16 +1470,23 @@ function applyHierarchicalLayout(nodes, links, simulation) {
     n.fy = null;
   });
   
+  // Vorpositionieren der Knoten für bessere Startpositionen [SF]
+  nodes.forEach(n => {
+    n.x = WIDTH/2 + (Math.random() - 0.5) * 100; // Leichte horizontale Streuung
+    const level = hierarchyLevels.get(String(n.id)) ?? 0;
+    n.y = levelToY.get(level) ?? HEIGHT/2;
+  });
+
   // Configure force simulation with level force [ISA]
   simulation
     .force("link", d3.forceLink(links).id(d => d.id)
       .distance(80)
-      .strength(0.5))
+      .strength(0.7))
     .force("charge", d3.forceManyBody()
-      .strength(-300))
+      .strength(-250))
     .force("collide", d3.forceCollide()
-      .radius(25)
-      .strength(0.8))
+      .radius(15)
+      .strength(0.7))
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2)
       .strength(0.05))
     .force("level", d3.forceY(d => {
@@ -1487,8 +1494,8 @@ function applyHierarchicalLayout(nodes, links, simulation) {
       const level = hierarchyLevels.get(String(d.id)) ?? 0;
       return levelToY.get(level) ?? HEIGHT / 2;
     }).strength(LEVEL_FORCE_STRENGTH))
-    .alphaDecay(0.08) // Faster convergence (higher = faster) [PA]
-    .velocityDecay(0.6); // More damping for quicker stabilization [PA]
+    .alphaDecay(0.05) // Optimierte Konvergenz für besseres Layout [PA]
+    .velocityDecay(0.5); // Optimierte Dämpfung für flüssigere Bewegung [PA]
   
   // Restart simulation [SF]
   simulation.alpha(1).restart();
@@ -1520,17 +1527,17 @@ function applyForceLayout(simulation) {
   simulation
     .force("link", d3.forceLink(simulation.force("link").links()).id(d => d.id)
       .distance(80)
-      .strength(0.5))
+      .strength(0.7))
     .force("charge", d3.forceManyBody()
-      .strength(-300))
+      .strength(-250))
     .force("collide", d3.forceCollide()
-      .radius(25)
-      .strength(0.8))
+      .radius(15)
+      .strength(0.7))
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2)
       .strength(0.05))
     .force("level", null) // Remove level force [SF]
-    .alphaDecay(0.08) // Faster convergence [PA]
-    .velocityDecay(0.6); // More damping [PA]
+    .alphaDecay(0.05) // Optimierte Konvergenz für besseres Layout [PA]
+    .velocityDecay(0.5); // Optimierte Dämpfung für flüssigere Bewegung [PA]
   
   // Restart simulation [SF]
   simulation.alpha(1).restart();
