@@ -34,6 +34,7 @@ let currentSubgraph = null;
 let currentLayoutMode = 'force'; // 'force' or 'hierarchy'
 let hierarchyLevels = new Map(); // nodeId -> level number
 let currentSimulation = null; // Global reference to D3 simulation
+let preferredData = "auto";
 
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
@@ -290,34 +291,16 @@ function idOf(v) {
 
 let allowedOrgs = new Set();
 
-async function loadData() {
-  setStatus("Lade Daten...");
-  let data = null;
-  let sourceName = 'data.json';
-  try {
-    const resGen = await fetch("./data.generated.json", { cache: "no-store" });
-    if (resGen.ok) {
-      data = await resGen.json();
-      sourceName = 'data.generated.json';
-    }
-  } catch(_) {}
-  if (!data) {
-    const res = await fetch("./data.json", { cache: "no-store" });
-    data = await res.json();
-    sourceName = 'data.json';
-  }
-  // Adapt to new schema {persons, orgs, links}
+function applyLoadedDataObject(data, sourceName) {
   const persons = Array.isArray(data.persons) ? data.persons : [];
   const orgs = Array.isArray(data.orgs) ? data.orgs : [];
   const links = Array.isArray(data.links) ? data.links : [];
 
-  // Merge nodes and tag types
   const nodes = [];
   const personIds = new Set();
   persons.forEach(p => { if (p && p.id) { nodes.push({ ...p, id: String(p.id), type: 'person' }); personIds.add(String(p.id)); } });
   orgs.forEach(o => { if (o && o.id) { nodes.push({ ...o, id: String(o.id), type: 'org' }); } });
 
-  // Normalize links and keep only valid endpoints
   const seen = new Set();
   const idSet = new Set(nodes.map(n => String(n.id)));
   const norm = [];
@@ -335,7 +318,6 @@ async function loadData() {
   raw = { nodes, links: norm, persons, orgs };
   byId = new Map(raw.nodes.map(n => [String(n.id), n]));
   allNodesUnique = Array.from(byId.values());
-  // Build org parent mapping for ancestor chain lookups
   parentOf = new Map();
   for (const l of raw.links) {
     const s = idOf(l.source), t = idOf(l.target);
@@ -343,17 +325,37 @@ async function loadData() {
       parentOf.set(t, s);
     }
   }
-
-  // Management filtering now only uses isBasis field
-
-  // Initialize allowed orgs (all enabled by default)
   allowedOrgs = new Set(orgs.map(o => String(o.id)));
-
   populateCombo("");
-  // Start with empty OE legend until a subgraph is applied
   buildOrgLegend(new Set());
   setStatus(sourceName);
   updateFooterStats(null);
+}
+
+async function loadData() {
+  setStatus("Lade Daten...");
+  let data = null;
+  let sourceName = '(keine Daten)';
+  // Respect preferredData; fallbacks keep previous behavior
+  if (preferredData === 'generated' || preferredData === 'auto') {
+    try {
+      const resGen = await fetch("./data.generated.json", { cache: "no-store" });
+      if (resGen.ok) { data = await resGen.json(); sourceName = 'data.generated.json'; }
+    } catch(_) {}
+  }
+  if (!data && (preferredData === 'default' || preferredData === 'auto')) {
+    try {
+      const resDef = await fetch("./data.default.json", { cache: "no-store" });
+      if (resDef.ok) { data = await resDef.json(); sourceName = 'data.default.json'; }
+    } catch(_) {}
+  }
+  if (!data && preferredData === 'auto') {
+    try {
+      const resBase = await fetch("./data.json", { cache: "no-store" });
+      if (resBase.ok) { data = await resBase.json(); sourceName = 'data.json'; }
+    } catch(_) {}
+  }
+  applyLoadedDataObject(data, sourceName);
 }
 
 function populateCombo(filterText) {
@@ -1152,7 +1154,8 @@ function applyFromUI() {
 
 window.addEventListener("DOMContentLoaded", async () => {
   await loadData();
-  document.querySelector(BTN_APPLY_ID).addEventListener("click", applyFromUI);
+  const applyBtn = document.querySelector(BTN_APPLY_ID);
+  if (applyBtn) applyBtn.addEventListener("click", applyFromUI);
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
   const mgmt = document.querySelector('#toggleManagement');
@@ -1203,6 +1206,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         list.hidden = true;
       }
     });
+    input.addEventListener('change', () => { applyFromUI(); });
     input.addEventListener('focus', () => { if (filteredItems.length) list.hidden = false; });
     input.addEventListener('blur', () => { setTimeout(() => { list.hidden = true; }, 0); });
   }
@@ -1214,18 +1218,48 @@ window.addEventListener("DOMContentLoaded", async () => {
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
   if (depthEl) {
     depthEl.addEventListener('change', applyFromUI);
+    depthEl.addEventListener('input', applyFromUI);
   }
   const dirRadios = document.querySelectorAll('input[name="dir"]');
   dirRadios.forEach(r => r.addEventListener('change', applyFromUI));
   
-  // Layout toggle event listener
-  const layoutRadios = document.querySelectorAll('input[name="layout"]');
-  layoutRadios.forEach(r => r.addEventListener('change', (e) => {
-    const mode = e.target.value;
-    if (currentSimulation) {
-      switchLayout(mode, currentSimulation);
-    }
-  }));
+  // Hierarchy single-checkbox toggle
+  const hier = document.querySelector('#toggleHierarchy');
+  if (hier) {
+    currentLayoutMode = hier.checked ? 'hierarchy' : 'force';
+    hier.addEventListener('change', () => {
+      currentLayoutMode = hier.checked ? 'hierarchy' : 'force';
+      if (currentSimulation) switchLayout(currentLayoutMode, currentSimulation);
+    });
+  }
+
+  // Footer: click status to open a file dialog and load JSON dataset
+  const statusEl = document.querySelector(STATUS_ID);
+  if (statusEl) {
+    statusEl.addEventListener('click', async () => {
+      const picker = document.createElement('input');
+      picker.type = 'file';
+      picker.accept = 'application/json,.json';
+      picker.style.display = 'none';
+      document.body.appendChild(picker);
+      picker.addEventListener('change', async () => {
+        try {
+          const file = picker.files && picker.files[0];
+          if (!file) return;
+          const text = await file.text();
+          const data = JSON.parse(text);
+          applyLoadedDataObject(data, file.name);
+          populateCombo("");
+          try { applyFromUI(); } catch(_) { updateFooterStats(null); }
+        } catch(_) {
+          setStatus('Ungültige Datei');
+        } finally {
+          picker.remove();
+        }
+      });
+      picker.click();
+    });
+  }
 });
 
 function fitToViewport() {
@@ -1358,8 +1392,8 @@ function applyHierarchicalLayout(nodes, links, simulation) {
       const level = hierarchyLevels.get(String(d.id)) ?? 0;
       return levelToY.get(level) ?? HEIGHT / 2;
     }).strength(LEVEL_FORCE_STRENGTH))
-    .alphaDecay(0.02)
-    .velocityDecay(0.4);
+    .alphaDecay(0.08) // Faster convergence (higher = faster) [PA]
+    .velocityDecay(0.6); // More damping for quicker stabilization [PA]
   
   // Restart simulation [SF]
   simulation.alpha(1).restart();
@@ -1400,8 +1434,8 @@ function applyForceLayout(simulation) {
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2)
       .strength(0.05))
     .force("level", null) // Remove level force [SF]
-    .alphaDecay(0.02)
-    .velocityDecay(0.4);
+    .alphaDecay(0.08) // Faster convergence [PA]
+    .velocityDecay(0.6); // More damping [PA]
   
   // Restart simulation [SF]
   simulation.alpha(1).restart();

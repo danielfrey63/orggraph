@@ -11,26 +11,24 @@
   <header class="app-header">
     <h1>OrgGraph</h1>
     <div class="controls">
-      <label>
-        Startknoten:
+      <div>
         <div id="combo" class="combo">
           <input id="comboInput" autocomplete="off" placeholder="Suchen… (Name oder ID)" />
           <ul id="comboList" class="combo-list" hidden></ul>
         </div>
-      </label>
+      </div>
       <label>
-        Tiefe:
-        <input id="depth" type="number" min="0" max="6" value="2" />
+        Tiefe
+        <input id="depth" type="number" min="0" max="6" value="2" step="1" inputmode="numeric" />
       </label>
       <label>
         <input id="toggleManagement" type="checkbox" checked />
         Management
       </label>
-      <fieldset>
-        <legend>Layout</legend>
-        <label><input type="radio" name="layout" value="force" checked /> Force</label>
-        <label><input type="radio" name="layout" value="hierarchy" /> Hierarchie</label>
-      </fieldset>
+      <label>
+        <input id="toggleHierarchy" type="checkbox" checked />
+        Hierarchie
+      </label>
       <fieldset>
         <legend>Richtung</legend>
         <label><input type="radio" name="dir" value="both" checked /> Beide</label>
@@ -45,8 +43,14 @@
         <input id="toggleLabels" type="checkbox" checked />
         Namen
       </label>
-      <button id="apply">Anzeigen</button>
-      <button id="fit">Auf Seite einpassen</button>
+      <button id="fit" aria-label="Auf Seite einpassen" title="Auf Seite einpassen">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M4 9V5h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 9V5h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 15v4h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 15v4h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
     </div>
   </header>
   <main class="viewport">

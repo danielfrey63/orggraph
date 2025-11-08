@@ -1,19 +1,20 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-body { display: grid; grid-template-rows: auto 1fr auto; }
-.app-header, .app-footer { padding: 10px 16px; border-bottom: 1px solid #eee; }
-.app-footer { border-top: 1px solid #eee; border-bottom: none; font-size: 13px; color: #555; }
+body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); background: var(--bg); }
+.app-header, .app-footer { padding: 12px 16px; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); }
+.app-footer { border-top: 1px solid var(--panel-border); border-bottom: none; font-size: 13px; color: var(--text-muted); }
 .footer-stats { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.footer-stats .stat-separator { color: #ccc; }
-.footer-stats strong { color: #111; font-weight: 600; }
-.app-header h1 { margin: 0 0 8px 0; font-size: 18px; }
+.footer-stats .stat-separator { color: var(--text-muted); }
+.footer-stats strong { color: var(--text-strong); font-weight: 600; }
+.app-footer #status { cursor: pointer; }
+.app-header h1 { margin: 0 0 8px 0; font-size: 18px; color: var(--text-strong); }
 .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .controls label { display: inline-flex; gap: 6px; align-items: center; }
-.controls input { padding: 6px 8px; }
+.controls input, .controls select, .controls button { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--control-border); background: var(--control-bg); color: var(--text); }
 .controls button { padding: 6px 10px; cursor: pointer; }
-.controls select { padding: 6px 8px; }
-.controls fieldset { border: 1px solid #ddd; padding: 6px 10px; border-radius: 4px; display: inline-flex; gap: 8px; align-items: center; }
-.controls fieldset legend { font-size: 12px; font-weight: 600; padding: 0 4px; }
+.controls button:hover { background: var(--control-hover); }
+.controls fieldset { border: 1px solid var(--panel-border); background: transparent; padding: 6px 10px; border-radius: 8px; display: inline-flex; gap: 8px; align-items: center; }
+.controls fieldset legend { font-size: 12px; font-weight: 600; padding: 0 4px; color: var(--text-muted); }
 .controls #searchFilter { min-width: 200px; }
 .controls #searchSel { min-width: 240px; max-width: 360px; }
 
@@ -26,9 +27,10 @@ body { display: grid; grid-template-rows: auto 1fr auto; }
   margin: 2px 0 0 0;
   padding: 4px 0;
   list-style: none;
-  background: #fff;
-  border: 1px solid #ddd;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   max-height: 280px;
   overflow: auto;
   min-width: 100%;
@@ -40,33 +42,45 @@ body { display: grid; grid-template-rows: auto 1fr auto; }
 }
 .combo-list li:hover,
 .combo-list li.is-active {
-  background: #eef2ff; /* indigo-50 */
+  background: var(--control-hover);
 }
 .viewport { display: grid; grid-template-columns: 1fr 280px; gap: 0; overflow: hidden; }
-.canvas { position: relative; overflow: hidden; }
-svg { width: 100%; height: 100%; display: block; background: #ffffff; }
-#legendPane { border-left: 1px solid #eee; padding: 10px; overflow: auto; }
-#legendPane h2 { margin: 0 0 8px 0; font-size: 14px; font-weight: 600; }
+.canvas { position: relative; overflow: hidden; background: var(--panel-bg); }
+svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
+#legendPane { border-left: 1px solid var(--panel-border); padding: 10px; overflow: auto; background: var(--panel-bg); color: var(--text); }
+#legendPane h2 { margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: var(--text-muted); }
 .legend-list, .legend-list ul { list-style: none; padding-left: 12px; margin: 0; }
 .legend-list > li { margin: 0; }
 .legend-list li { display: block; }
 .legend-list .legend-row { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 4px; }
-.legend-list .twisty { border: none; background: transparent; padding: 0 2px; cursor: pointer; font-size: 20px; line-height: 1; color: #555; }
+.legend-list .twisty { border: none; background: transparent; padding: 0 2px; cursor: pointer; font-size: 20px; line-height: 1; color: var(--text-muted); }
 .legend-list .twisty:focus { outline: none; }
 .legend-list input { margin-right: 6px; }
 .legend-list input { margin-right: 6px; }
 .legend-list .legend-label-chip { display: inline-block; padding: 2px 6px; border-radius: 3px; }
-.label { font-size: 12px; fill: #111; pointer-events: none; }
+.label { font-size: 12px; fill: var(--text); pointer-events: none; }
 .labels-hidden .label { display: none; }
 
 /* Force/layout and styling variables */
 :root {
+  color-scheme: light dark;
+  --bg: #f8fafc;
+  --panel-bg: #ffffff;
+  --panel-border: #e5e7eb;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-strong: #0b1220;
+  --control-bg: #ffffff;
+  --control-border: #cbd5e1;
+  --control-hover: #eef2ff;
+  --canvas-bg: #ffffff;
+
   /* Visuals */
   --node-radius: 8;           /* circle radius in px */
-  --node-fill: #4F46E5;     /* default node color */
-  --node-stroke: #ffffff;   /* node border color */
-  --node-stroke-width: 3;     /* node border width */
-  --link-stroke: #bbb;      /* link color */
+  --node-fill: #4F46E5;       /* default node color */
+  --node-stroke: #ffffff;     /* node border color */
+  --node-stroke-width: 1;     /* node border width */
+  --link-stroke: #cbd5e1;     /* link color */
   --link-stroke-width: 3;     /* link width */
   --link-opacity: 0.5;        /* link opacity (0..1) */
   --arrow-length: 10;         /* arrow marker length in user units */
@@ -85,6 +99,22 @@ svg { width: 100%; height: 100%; display: block; background: #ffffff; }
   --radial-force: 0.15;       /* 0 disables radial layout; try 0.05 - 0.15 */
   --radial-gap: 120;          /* radius increment per level in px */
   --radial-base: 0;           /* base radius for level 0 */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --panel-bg: #0f172a;
+    --panel-border: #1e293b;
+    --text: #e5e7eb;
+    --text-muted: #94a3b8;
+    --text-strong: #f8fafc;
+    --control-bg: #0b1220;
+    --control-border: #263042;
+    --control-hover: #1b2537;
+    --canvas-bg: #0f172a;
+    --link-stroke: #475569;
+  }
 }
 
 .link {
