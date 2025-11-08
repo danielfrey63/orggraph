@@ -59,6 +59,55 @@ function hslaToRgbaInt(hslaStr){
   return `rgba(${Math.round(rgba.r * 255)},${Math.round(rgba.g * 255)},${Math.round(rgba.b * 255)},${rgba.a})`;
 }
 
+// Basic CSS color parser supporting #hex, rgb(a), hsl(a)
+function parseColorToRgba(str){
+  if (!str) return { r:1, g:1, b:1, a:1 };
+  const s = String(str).trim();
+  // Hex
+  if (s[0] === '#') {
+    const h = s.slice(1);
+    if (h.length === 3) {
+      const r = parseInt(h[0] + h[0], 16) / 255;
+      const g = parseInt(h[1] + h[1], 16) / 255;
+      const b = parseInt(h[2] + h[2], 16) / 255;
+      return { r, g, b, a: 1 };
+    }
+    if (h.length >= 6) {
+      const r = parseInt(h.slice(0,2), 16) / 255;
+      const g = parseInt(h.slice(2,4), 16) / 255;
+      const b = parseInt(h.slice(4,6), 16) / 255;
+      return { r, g, b, a: 1 };
+    }
+  }
+  // rgba/rgb
+  let m = /^rgba?\(([^\)]+)\)/i.exec(s);
+  if (m) {
+    const parts = m[1].split(',').map(x => x.trim());
+    const r = Math.max(0, Math.min(255, parseFloat(parts[0]))) / 255;
+    const g = Math.max(0, Math.min(255, parseFloat(parts[1]))) / 255;
+    const b = Math.max(0, Math.min(255, parseFloat(parts[2]))) / 255;
+    const a = parts[3] != null ? Math.max(0, Math.min(1, parseFloat(parts[3]))) : 1;
+    return { r, g, b, a };
+  }
+  // hsla/hsl
+  m = /^hsla?\(([^\)]+)\)/i.exec(s);
+  if (m) {
+    const parts = m[1].split(',').map(x => x.trim());
+    const h = (parseFloat(parts[0]) || 0) / 360;
+    const sP = (parseFloat(parts[1]) || 0) / 100;
+    const lP = (parseFloat(parts[2]) || 0) / 100;
+    const a = parts[3] != null ? Math.max(0, Math.min(1, parseFloat(parts[3]))) : 1;
+    const [r,g,b] = hslToRgb(h, sP, lP);
+    return { r, g, b, a };
+  }
+  return { r:1, g:1, b:1, a:1 };
+}
+
+function canvasBgRgba(){
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg') || '#ffffff';
+  return parseColorToRgba(bg);
+}
+
 
 function clustersAtPoint(p) {
   const labels = [];
@@ -201,7 +250,8 @@ function flattenToWhiteOrdered(oids){
   const ordered = arr
     .map(oid => ({ oid, depth: orgDepth(oid) }))
     .sort((a,b) => (a.depth - b.depth) || String(a.oid).localeCompare(String(b.oid)));
-  let r = 1, g = 1, b = 1;
+  const bg = canvasBgRgba();
+  let r = bg.r, g = bg.g, b = bg.b;
   for (const item of ordered) {
     const rgba = hslaToRgba(colorForOrg(item.oid).fill);
     const sr = rgba.r, sg = rgba.g, sb = rgba.b, sa = rgba.a;
@@ -216,12 +266,10 @@ function flattenToWhiteOrdered(oids){
 function mixedActiveFillColorForOids(oids) {
   const list = Array.from(oids || []).map(oid => ({ oid, hsla: colorForOrg(oid).fill }));
   if (!list.length) return 'transparent';
-  
   list.sort((a,b) => String(a.oid).localeCompare(String(b.oid)));
-  
-  let r = 1, g = 1, b = 1;
+  const bg = canvasBgRgba();
+  let r = bg.r, g = bg.g, b = bg.b;
   let alphaSum = 0;
-  
   for (const item of list) {
     const rgba = hslaToRgba(item.hsla);
     const { r: sr, g: sg, b: sb, a: sa } = rgba;
@@ -230,10 +278,8 @@ function mixedActiveFillColorForOids(oids) {
     b = sb * sa + b * (1 - sa);
     alphaSum += sa;
   }
-  
   const uiAlpha = Math.max(0.08, Math.min(alphaSum, 0.35));
-  const result = `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${uiAlpha})`;
-  return result;
+  return `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${uiAlpha})`;
 }
 
 function hslToRgb(h, s, l) {
