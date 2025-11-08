@@ -56,14 +56,21 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 .legend-list .twisty { border: none; background: transparent; padding: 0 2px; cursor: pointer; font-size: 20px; line-height: 1; color: var(--text-muted); }
 .legend-list .twisty:focus { outline: none; }
 .legend-list input { margin-right: 6px; }
-.legend-list input { margin-right: 6px; }
 .legend-list .legend-label-chip { display: inline-block; padding: 2px 6px; border-radius: 3px; }
 .label { font-size: 8px; fill: var(--text); pointer-events: none; }
 .labels-hidden .label { display: none; }
 
-/* Force/layout and styling variables */
+/* Konfigurationsparameter */
 :root {
   color-scheme: light dark;
+  
+  /* Layout & Dimensionen */
+  --canvas-width: 1200px;
+  --canvas-height: 800px;
+  --max-dropdown-items: 100;
+  --min-search-length: 2;
+  
+  /* Farben (Hell-Modus) */
   --bg: #f8fafc;
   --panel-bg: #ffffff;
   --panel-border: #e5e7eb;
@@ -75,32 +82,47 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   --control-hover: #eef2ff;
   --canvas-bg: #ffffff;
 
-  /* Visuals */
-  --node-radius: 8;             /* circle radius in px */
-  --node-fill: #4F46E5;       /* default node color */
-  --node-stroke: #ffffff;     /* node border color */
-  --node-stroke-width: 1;       /* node border width */
-  --link-stroke: #cbd5e1;     /* link color */
-  --link-stroke-width: 3;       /* link width */
-  --link-opacity: 0.5;          /* link opacity (0..1) */
-  --arrow-length: 10;           /* arrow marker length in user units */
+  /* Graph-Elemente */
+  --node-radius: 8;
+  --node-fill: #4F46E5;
+  --node-stroke: #ffffff;
+  --node-stroke-width: 1;
+  --link-stroke: #cbd5e1;
+  --link-stroke-width: 3;
+  --link-opacity: 0.5;
+  --arrow-length: 10;
   --cluster-fill: rgba(79,70,229,0.10);
   --cluster-stroke: rgba(79,70,229,0.25);
   --cluster-opacity: 1;
-  --cluster-pad: 20;            /* padding around member nodes in px */
+  --cluster-pad: 20;
 
-  /* Forces */
-  --link-distance: 5;           /* target link length */
-  --link-strength: 0.8;         /* 0..1 */
-  --charge-strength: -600;      /* negative = repulsion */
-  --collide-padding: 6;         /* extra padding for collision */
-
-  /* Optional radial layout to keep levels cohesive */
-  --radial-force: 0.15;         /* 0 disables radial layout; try 0.05 - 0.15 */
-  --radial-gap: 120;            /* radius increment per level in px */
-  --radial-base: 0;             /* base radius for level 0 */
+  /* Simulation-Parameter */
+  --link-distance: 80;
+  --link-strength: 0.7;
+  --charge-strength: -250;
+  --collide-radius: 15;
+  --collide-padding: 6;
+  --collide-strength: 0.7;
+  --center-strength: 0.05;
+  --alpha-decay: 0.05;
+  --velocity-decay: 0.5;
+  
+  /* Layout-Optionen */
+  --level-height: 200;
+  --level-force-strength: 0.25;
+  --radial-force: 0.15;
+  --radial-gap: 120;
+  --radial-base: 0;
+  
+  /* Standard-Einstellungen */
+  --default-layout-mode: 'force';
+  --default-data-preference: 'auto';
+  --default-management-enabled: 1;
+  --default-autofit-enabled: 1;
+  --default-labels-visible: 1;
 }
 
+/* Dunkelmodus */
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0b1220;

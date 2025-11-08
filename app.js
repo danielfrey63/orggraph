@@ -20,7 +20,6 @@ let searchDebounceTimer = null;
 let zoomBehavior = null;
 let managementEnabled = true;
 let autoFitEnabled = true;
-// Removed: hasSupervisor is no longer used
 let clusterLayer = null;
 let clusterSimById = new Map();
 let clusterPersonIds = new Set();
@@ -108,8 +107,6 @@ function canvasBgRgba(){
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg') || '#ffffff';
   return parseColorToRgba(bg);
 }
-
-
 function clustersAtPoint(p) {
   const labels = [];
   for (const [oid, poly] of clusterPolygons.entries()) {
@@ -189,28 +186,45 @@ function showTooltip(x, y, lines) {
   tooltipEl.style.display = 'block';
 }
 function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
+/**
+ * Tooltips für Cluster-Hover
+ */
 function handleClusterHover(event, svgSel) {
-  if (!currentZoomTransform) { hideTooltip(); return; }
-  const [mx,my] = d3.pointer(event, svgSel.node());
-  const p = currentZoomTransform.invert([mx,my]);
+  if (!currentZoomTransform) { 
+    hideTooltip(); 
+    return; 
+  }
+  
+  const [mx, my] = d3.pointer(event, svgSel.node());
+  const p = currentZoomTransform.invert([mx, my]);
   const hits = [];
-  // Node hit-test first (circle radius with small tolerance)
+  
   const r = cssNumber('--node-radius', 8) + 6;
   let nodeLabel = null;
+  
   for (const nd of simAllById.values()) {
     if (nd.x == null || nd.y == null) continue;
     const dx = p[0] - nd.x, dy = p[1] - nd.y;
-    if ((dx*dx + dy*dy) <= r*r) { nodeLabel = nd.label || String(nd.id); break; }
+    if ((dx*dx + dy*dy) <= r*r) { 
+      nodeLabel = nd.label || String(nd.id); 
+      break; 
+    }
   }
+  
   for (const [oid, poly] of clusterPolygons.entries()) {
     if (!allowedOrgs.has(oid)) continue;
-    if (poly && poly.length>=3 && d3.polygonContains(poly, p)) {
+    if (poly && poly.length >= 3 && d3.polygonContains(poly, p)) {
       const lbl = byId.get(oid)?.label || oid;
       hits.push(lbl);
     }
   }
+  
   const lines = nodeLabel ? [nodeLabel, ...hits] : hits;
-  if (lines.length) showTooltip(event.clientX, event.clientY, lines); else hideTooltip();
+  if (lines.length) {
+    showTooltip(event.clientX, event.clientY, lines);
+  } else {
+    hideTooltip();
+  }
 }
 
 // Color mapping for OEs (harmonious palette)
@@ -228,7 +242,6 @@ function colorForOrg(oid){
   const colors = { fill, stroke };
   
   orgColorCache.set(oid, colors);
-  console.log(`🎨 CACHED colorForOrg(${oid}):`, hslaToRgbaInt(fill));
   return colors;
 }
 
@@ -245,41 +258,72 @@ function orgDepth(oid){
   return d;
 }
 
+/**
+ * Mischt mehrere OE-Farben mit dem Canvas-Hintergrund für eine einheitliche Darstellung
+ * @param {string[]} oids - IDs der zu mischenden Organisationseinheiten
+ * @returns {string} CSS-Farbwert als RGB-String oder 'transparent' wenn keine IDs gegeben
+ */
 function flattenToWhiteOrdered(oids){
+  // Konvertiere zu Array und prüfe auf leere Eingabe
   const arr = Array.from(oids || []);
   if (!arr.length) return 'transparent';
+  
+  // Sortiere nach Tiefe in der Hierarchie und dann alphabetisch
   const ordered = arr
     .map(oid => ({ oid, depth: orgDepth(oid) }))
     .sort((a,b) => (a.depth - b.depth) || String(a.oid).localeCompare(String(b.oid)));
+  
+  // Starte mit der Canvas-Hintergrundfarbe
   const bg = canvasBgRgba();
   let r = bg.r, g = bg.g, b = bg.b;
+  
+  // Wende nacheinander alle Farben mit Alpha-Blending an
   for (const item of ordered) {
     const rgba = hslaToRgba(colorForOrg(item.oid).fill);
-    const sr = rgba.r, sg = rgba.g, sb = rgba.b, sa = rgba.a;
+    const { r: sr, g: sg, b: sb, a: sa } = rgba;
+    // Alpha-Blending-Formel
     r = sr * sa + r * (1 - sa);
     g = sg * sa + g * (1 - sa);
     b = sb * sa + b * (1 - sa);
   }
+  
+  // Rückgabe als CSS-RGB-Farbe
   return `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
 }
 
-// Compute mixed color of all currently allowed (active) OEs to approximate overlay
+/**
+ * Berechnet eine gemischte Farbe aus allen aktiven OEs mit angepasster Transparenz für UI-Elemente
+ * @param {string[]} oids - Array oder Set von Organisations-IDs
+ * @returns {string} CSS-RGBA-Farbwert oder 'transparent' wenn keine IDs gegeben
+ */
 function mixedActiveFillColorForOids(oids) {
+  // Bereite Eingabedaten vor und prüfe auf leere Eingabe
   const list = Array.from(oids || []).map(oid => ({ oid, hsla: colorForOrg(oid).fill }));
   if (!list.length) return 'transparent';
+  
+  // Sortiere für konsistente Ergebnisse
   list.sort((a,b) => String(a.oid).localeCompare(String(b.oid)));
+  
+  // Starte mit dem Hintergrund
   const bg = canvasBgRgba();
   let r = bg.r, g = bg.g, b = bg.b;
   let alphaSum = 0;
+  
+  // Alpha-Blending für alle Farben
   for (const item of list) {
     const rgba = hslaToRgba(item.hsla);
     const { r: sr, g: sg, b: sb, a: sa } = rgba;
+    // Alpha-Blending-Formel
     r = sr * sa + r * (1 - sa);
     g = sg * sa + g * (1 - sa);
     b = sb * sa + b * (1 - sa);
     alphaSum += sa;
   }
+  
+  // Begrenzte Alpha-Transparenz für UI-Elemente (nicht zu transparent oder zu deckend)
   const uiAlpha = Math.max(0.08, Math.min(alphaSum, 0.35));
+  
+  // Rückgabe als CSS-RGBA-Farbe
   return `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${uiAlpha})`;
 }
 
@@ -332,6 +376,9 @@ function updateFooterStats(subgraph) {
   }
 }
 
+/**
+ * Extrahiert ID aus Objekt oder String
+ */
 function idOf(v) {
   return String(typeof v === 'object' && v ? v.id : v);
 }
@@ -515,26 +562,47 @@ function chooseItem(idx) {
   applyFromUI();
 }
 
+/**
+ * Findet Knoten-ID aus Benutzereingabe
+ */
 function guessIdFromInput(val) {
   if (!val) return null;
+  
+  // Priorität 1: Exakte Übereinstimmung mit Label
   const exactByLabel = raw.nodes.find(n => (n.label || "") === val);
   if (exactByLabel) return String(exactByLabel.id);
+  
+  // Priorität 2: Exakte Übereinstimmung mit ID
   const exactById = raw.nodes.find(n => String(n.id) === val);
   if (exactById) return String(exactById.id);
+  
+  // Priorität 3: Teilweise Übereinstimmung mit Label (case-insensitive)
   const part = raw.nodes.find(n => (n.label || "").toLowerCase().includes(val.toLowerCase()));
   return part ? String(part.id) : null;
 }
 
+/**
+ * Erstellt Adjazenzliste des Graphen
+ */
 function buildAdjacency(links) {
   const adj = new Map();
-  function ensure(id) { if (!adj.has(id)) adj.set(id, new Set()); }
+  
+  // Hilfsfunktion zum Sicherstellen, dass der Knoten in der Map existiert
+  const ensure = (id) => { 
+    if (!adj.has(id)) adj.set(id, new Set()); 
+  };
+  
+  // Verarbeite alle Verbindungen
   links.forEach(l => {
-    const s = String(typeof l.source === 'object' ? l.source.id : l.source);
-    const t = String(typeof l.target === 'object' ? l.target.id : l.target);
-    ensure(s); ensure(t);
+    const s = idOf(l.source);
+    const t = idOf(l.target);
+    ensure(s); 
+    ensure(t);
+    // Ungerichtete Kanten (beide Richtungen eintragen)
     adj.get(s).add(t);
     adj.get(t).add(s);
   });
+  
   return adj;
 }
 
@@ -685,7 +753,6 @@ function buildOrgLegend(scope) {
     if (chk.checked) {
       row.style.background = fill;
       row.style.borderLeft = `3px solid ${stroke}`;
-      console.log(`🎨 LEGEND (renderNode) ${oid}:`, fill);
     } else {
       row.style.background = 'transparent';
       row.style.borderLeft = '3px solid #e5e7eb';
@@ -735,8 +802,7 @@ function buildOrgLegend(scope) {
       const subtreeIds = new Set(
         subRoot ? Array.from(subRoot.querySelectorAll('input[id^="org_"]')).map(cb => cb.id.replace('org_','')) : []
       );
-      // debug removed
-      showLegendMenu(e.clientX, e.clientY, {
+            showLegendMenu(e.clientX, e.clientY, {
         onShowAll: () => {
           // include the clicked parent itself
           allowedOrgs.add(oid);
@@ -818,16 +884,27 @@ function updateLegendRowColors(rootEl) {
   });
 }
 
+/**
+ * Sammelt alle Knoten im Unterbaum
+ */
 function collectSubtree(rootId, children, scopeSet) {
   const out = new Set([rootId]);
   const q = [rootId];
+  
   for (let i = 0; i < q.length; i++) {
     const cur = q[i];
+    // Iteriere über alle Kinder des aktuellen Knotens
     for (const ch of (children.get(cur) || [])) {
+      // Überspringe Knoten, die nicht im Scope sind, falls ein Scope definiert ist
       if (scopeSet && !scopeSet.has(ch)) continue;
-      if (!out.has(ch)) { out.add(ch); q.push(ch); }
+      // Füge neue Knoten zum Ergebnis und zur Warteschlange hinzu
+      if (!out.has(ch)) { 
+        out.add(ch); 
+        q.push(ch); 
+      }
     }
   }
+  
   return out;
 }
 
@@ -900,7 +977,6 @@ function refreshClusters() {
       const poly = computeClusterPolygon(d.nodes, pad);
       clusterPolygons.set(d.oid, poly);
       const { stroke, fill } = colorForOrg(d.oid);
-      console.log(`📊 CLUSTER ${d.oid}: base color →`, fill);
       const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
       d3.select(this)
         .attr('d', line(poly))
@@ -911,11 +987,16 @@ function refreshClusters() {
   paths.exit().remove();
 }
 
+/**
+ * Rendert den Graphen basierend auf dem berechneten Subgraphen
+ */
 function renderGraph(sub) {
+  // SVG-Element vorbereiten
   const svg = d3.select(SVG_ID);
   svg.selectAll("*").remove();
   svg.attr("viewBox", [0, 0, WIDTH, HEIGHT]);
 
+  // Pfeilspitzen-Definitionen
   const defs = svg.append("defs");
   const arrowLen = cssNumber('--arrow-length', 10);
   const linkStroke = cssNumber('--link-stroke-width', 3);
@@ -933,16 +1014,18 @@ function renderGraph(sub) {
     .attr("fill", getComputedStyle(document.documentElement).getPropertyValue('--link-stroke') || '#bbb')
     .attr("fill-opacity", parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')) || 1);
 
+  // Zoom-Container
   const gZoom = svg.append("g");
 
-  // Filter rendering to person-person links only
+  // Nur Personen-zu-Personen-Verbindungen anzeigen
   const personIdsInSub = new Set(sub.nodes.filter(n => byId.get(String(n.id))?.type === 'person').map(n => String(n.id)));
   const linksPP = sub.links.filter(l => personIdsInSub.has(idOf(l.source)) && personIdsInSub.has(idOf(l.target)));
 
-  // Clusters layer (behind links and nodes)
+  // Cluster-Ebene (hinter Links und Knoten)
   const gClusters = gZoom.append("g").attr("class", "clusters");
   clusterLayer = gClusters;
 
+  // Verbindungen rendern
   const link = gZoom.append("g")
     .selectAll("line")
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
@@ -950,155 +1033,150 @@ function renderGraph(sub) {
     .attr("class", "link")
     .attr("marker-end", "url(#arrow)");
 
-  // Render only person nodes
+  // Nur Personen-Knoten rendern
   const personNodes = sub.nodes.filter(n => byId.get(String(n.id))?.type === 'person');
   const simById = new Map(personNodes.map(d => [String(d.id), d]));
   clusterSimById = simById;
   clusterPersonIds = new Set(personNodes.map(d => String(d.id)));
-  // For hover hit-testing of nodes (names)
   simAllById = new Map(personNodes.map(d => [String(d.id), d]));
+  
+  // Knoten erstellen
   const node = gZoom.append("g")
     .selectAll("g")
     .data(personNodes, d => String(d.id))
     .join("g")
     .attr("class", "node");
 
+  // Styling-Parameter
   const nodeRadius = cssNumber('--node-radius', 8);
   const collidePadding = cssNumber('--collide-padding', 6);
 
-  const circles = node.append("circle")
-    .attr("r", nodeRadius)
-    .attr("class", "node-circle");
-
-  const labels = node.append("text")
+  // Kreise und Labels
+  node.append("circle").attr("r", nodeRadius).attr("class", "node-circle");
+  node.append("text")
     .text(d => d.label ?? d.id)
     .attr("x", 10)
     .attr("y", 4)
     .attr("class", "label");
 
-  // Node-level tooltip to ensure node name is shown reliably
+  // Tooltips für Knoten
   node.on('mousemove', (event, d) => {
     if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
-    const [mx,my] = d3.pointer(event, svg.node());
-    const p = currentZoomTransform ? currentZoomTransform.invert([mx,my]) : [mx,my];
+    const [mx, my] = d3.pointer(event, svg.node());
+    const p = currentZoomTransform ? currentZoomTransform.invert([mx, my]) : [mx, my];
     const lines = [d.label || String(d.id), ...clustersAtPoint(p)];
     showTooltip(event.clientX, event.clientY, lines);
   });
   node.on('mouseleave', hideTooltip);
 
+  // Force-Simulation-Parameter
   const linkDistance = cssNumber('--link-distance', 60);
   const linkStrength = cssNumber('--link-strength', 0.4);
   const chargeStrength = cssNumber('--charge-strength', -200);
 
-  // Create simulation
+  // Simulation erstellen
   const simulation = d3.forceSimulation(personNodes)
     .force("link", d3.forceLink(linksPP).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
     .force("charge", d3.forceManyBody().strength(chargeStrength))
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2))
     .force("collide", d3.forceCollide().radius(nodeRadius + collidePadding));
   
-  // No need to stop simulation - hierarchy mode also uses force layout [SF]
-  
+  // Tick-Handler für Animation
   simulation.on("tick", () => {
-      const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
-      const nodeOuter = nodeRadius + (nodeStrokeWidth / 2);
-      const backoff = nodeOuter + arrowLen;
-      link
-        .attr("x1", d => d.target.x)
-        .attr("y1", d => d.target.y)
-        .attr("x2", d => {
-          const x1 = d.target.x, y1 = d.target.y;
-          const x2 = d.source.x, y2 = d.source.y;
-          const dx = x2 - x1, dy = y2 - y1;
-          const len = Math.hypot(dx, dy) || 1;
-          const ux = dx / len, uy = dy / len;
-          return x2 - ux * backoff;
-        })
-        .attr("y2", d => {
-          const x1 = d.target.x, y1 = d.target.y;
-          const x2 = d.source.x, y2 = d.source.y;
-          const dx = x2 - x1, dy = y2 - y1;
-          const len = Math.hypot(dx, dy) || 1;
-          const ux = dx / len, uy = dy / len;
-          return y2 - uy * backoff;
-        });
+    const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
+    const nodeOuter = nodeRadius + (nodeStrokeWidth / 2);
+    const backoff = nodeOuter + arrowLen;
+    
+    // Verbindungsposition aktualisieren
+    link
+      .attr("x1", d => d.target.x)
+      .attr("y1", d => d.target.y)
+      .attr("x2", d => {
+        const dx = d.source.x - d.target.x, dy = d.source.y - d.target.y;
+        const len = Math.hypot(dx, dy) || 1;
+        return d.source.x - (dx / len) * backoff;
+      })
+      .attr("y2", d => {
+        const dx = d.source.x - d.target.x, dy = d.source.y - d.target.y;
+        const len = Math.hypot(dx, dy) || 1;
+        return d.source.y - (dy / len) * backoff;
+      });
 
-      node.attr("transform", d => `translate(${d.x},${d.y})`);
+    // Knotenposition aktualisieren
+    node.attr("transform", d => `translate(${d.x},${d.y})`);
 
-      // Update clusters (OE hulls) around member persons
-      const pad = cssNumber('--cluster-pad', 12);
-      // Build membership map: orgId -> member person nodes present in this subgraph
-      const membersByOrg = new Map();
-      for (const l of raw.links) {
-        const s = idOf(l.source), t = idOf(l.target);
-        if (!personIdsInSub.has(s)) continue;
-        const tType = byId.get(t)?.type;
-        if (tType !== 'org') continue;
-        if (!allowedOrgs.has(t)) continue;
-        if (!membersByOrg.has(t)) membersByOrg.set(t, []);
-        const nd = simById.get(s);
-        if (nd && nd.x != null && nd.y != null) membersByOrg.get(t).push(nd);
-      }
-
-      // Data join for cluster paths
-      const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }))
-        .sort((a,b) => (orgDepth(a.oid) - orgDepth(b.oid)) || String(a.oid).localeCompare(String(b.oid)));
-      const paths = gClusters.selectAll('path.cluster').data(clusterData, d => d.oid);
-      paths.enter().append('path').attr('class','cluster').merge(paths)
-        .each(function(d){
-          const poly = computeClusterPolygon(d.nodes, pad);
-          clusterPolygons.set(d.oid, poly);
-          const { stroke, fill } = colorForOrg(d.oid);
-          const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
-          d3.select(this)
-            .attr('d', line(poly))
-            .style('fill', fill)
-            .style('stroke', stroke);
-        })
-        .order();
-      paths.exit().remove();
-    });
-  // Re-center once the simulation has settled (if enabled)
-  simulation.on('end', () => {
-    if (autoFitEnabled) {
-      fitToViewport();
+    // Cluster (OE-Hüllen) aktualisieren
+    const pad = cssNumber('--cluster-pad', 12);
+    const membersByOrg = new Map();
+    
+    // Mitgliedschaften sammeln
+    for (const l of raw.links) {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (!personIdsInSub.has(s)) continue;
+      const tType = byId.get(t)?.type;
+      if (tType !== 'org' || !allowedOrgs.has(t)) continue;
+      if (!membersByOrg.has(t)) membersByOrg.set(t, []);
+      const nd = simById.get(s);
+      if (nd && nd.x != null && nd.y != null) membersByOrg.get(t).push(nd);
     }
+
+    // Cluster-Pfade aktualisieren
+    const clusterData = Array.from(membersByOrg.entries())
+      .map(([oid, arr]) => ({ oid, nodes: arr }))
+      .sort((a,b) => (orgDepth(a.oid) - orgDepth(b.oid)) || String(a.oid).localeCompare(String(b.oid)));
+      
+    const paths = gClusters.selectAll('path.cluster').data(clusterData, d => d.oid);
+    paths.enter().append('path').attr('class','cluster').merge(paths)
+      .each(function(d){
+        const poly = computeClusterPolygon(d.nodes, pad);
+        clusterPolygons.set(d.oid, poly);
+        const { stroke, fill } = colorForOrg(d.oid);
+        const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
+        d3.select(this)
+          .attr('d', line(poly))
+          .style('fill', fill)
+          .style('stroke', stroke);
+      })
+      .order();
+    paths.exit().remove();
+  });
+  
+  // Auto-Fit nach Simulation-Ende
+  simulation.on('end', () => {
+    if (autoFitEnabled) fitToViewport();
   });
 
-  // Optional radial layout to keep deeper levels closer and less disconnected
+  // Optionales radiales Layout
   const radialForceStrength = cssNumber('--radial-force', 0);
-  const radialGap = cssNumber('--radial-gap', 100);
-  const radialBase = cssNumber('--radial-base', 0);
   if (radialForceStrength > 0) {
+    const radialGap = cssNumber('--radial-gap', 100);
+    const radialBase = cssNumber('--radial-base', 0);
     simulation.force(
       "radial",
       d3.forceRadial(
-        (d) => radialBase + ((d.level || 0) * radialGap),
+        d => radialBase + ((d.level || 0) * radialGap),
         WIDTH / 2,
         HEIGHT / 2
       ).strength(radialForceStrength)
     );
   }
 
+  // Drag-Handler
   const drag = d3.drag()
     .on("start", (event, d) => {
       if (!event.active) simulation.alphaTarget(0.3).restart();
-      d.fx = d.x;
-      d.fy = d.y;
+      d.fx = d.x; d.fy = d.y;
     })
     .on("drag", (event, d) => {
-      d.fx = event.x;
-      d.fy = event.y;
+      d.fx = event.x; d.fy = event.y;
     })
     .on("end", (event, d) => {
       if (!event.active) simulation.alphaTarget(0);
-      d.fx = null; // release so the network can re-arrange [SF]
-      d.fy = null;
+      d.fx = null; d.fy = null;
     });
-
   node.call(drag);
 
-  // Double-click a node to make it the new center/start node
+  // Doppelklick auf Knoten setzt neues Zentrum
   node.on('dblclick', (event, d) => {
     currentSelectedId = String(d.id);
     const input = document.querySelector(INPUT_COMBO_ID);
@@ -1106,30 +1184,25 @@ function renderGraph(sub) {
     applyFromUI();
   });
 
-  zoomBehavior = d3.zoom().scaleExtent([0.2, 5]).on("zoom", (event) => {
-    currentZoomTransform = event.transform;
-    gZoom.attr("transform", event.transform);
-  });
+  // Zoom-Verhalten
+  zoomBehavior = d3.zoom().scaleExtent([0.2, 5])
+    .on("zoom", (event) => {
+      currentZoomTransform = event.transform;
+      gZoom.attr("transform", event.transform);
+    });
   svg.call(zoomBehavior);
-  // Apply labels visibility
   svg.classed('labels-hidden', !labelsVisible);
   currentZoomTransform = d3.zoomIdentity;
 
-  // Tooltip hover for overlapping clusters
+  // Tooltips für Cluster-Überlappungen
   ensureTooltip();
-  svg.on('mousemove', (event) => handleClusterHover(event, svg));
+  svg.on('mousemove', event => handleClusterHover(event, svg));
   svg.on('mouseleave', hideTooltip);
   
-  // Store simulation globally for layout switching
+  // Simulation global speichern und Layout anwenden
   currentSimulation = simulation;
-  
-  // Apply initial layout based on currentLayoutMode [SF]
-  if (currentLayoutMode === 'hierarchy') {
-    applyHierarchicalLayout(personNodes, linksPP, simulation);
-  }
+  configureLayout(personNodes, linksPP, simulation, currentLayoutMode);
 }
-
-
 function applyFromUI() {
   const input = document.querySelector(INPUT_COMBO_ID);
   const depthVal = parseInt(document.querySelector(INPUT_DEPTH_ID).value, 10);
@@ -1263,27 +1336,23 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (input && list) {
     input.addEventListener('input', () => {
       currentSelectedId = null;
-      
-      // Debounce search for performance
       if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = setTimeout(() => {
-        populateCombo(input.value);
-      }, 150);
+      searchDebounceTimer = setTimeout(() => populateCombo(input.value), 150);
     });
+    
     input.addEventListener('keydown', (e) => {
       const max = filteredItems.length - 1;
-      if (e.key === 'ArrowDown') { e.preventDefault(); setActive(Math.min(max, activeIndex + 1)); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(Math.max(-1, activeIndex - 1)); }
-      else if (e.key === 'Enter') {
-        if (activeIndex >= 0) { chooseItem(activeIndex); }
-        applyFromUI();
-      } else if (e.key === 'Escape') {
-        list.hidden = true;
+      switch (e.key) {
+        case 'ArrowDown': e.preventDefault(); setActive(Math.min(max, activeIndex + 1)); break;
+        case 'ArrowUp': e.preventDefault(); setActive(Math.max(-1, activeIndex - 1)); break;
+        case 'Enter': if (activeIndex >= 0) chooseItem(activeIndex); applyFromUI(); break;
+        case 'Escape': list.hidden = true; break;
       }
     });
-    input.addEventListener('change', () => { applyFromUI(); });
+    
+    input.addEventListener('change', applyFromUI);
     input.addEventListener('focus', () => { if (filteredItems.length) list.hidden = false; });
-    input.addEventListener('blur', () => { setTimeout(() => { list.hidden = true; }, 0); });
+    input.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 0));
   }
   const fitBtn = document.querySelector('#fit');
   if (fitBtn) {
@@ -1375,8 +1444,6 @@ function fitToViewport() {
   const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
   svg.transition().duration(300).call(zoomBehavior.transform, t);
 }
-
-
 // Nach jeder allowedOrgs-Änderung aufrufen
 function syncGraphAndLegendColors() {
   const legend = document.querySelector('#legend');
@@ -1389,12 +1456,8 @@ function syncGraphAndLegendColors() {
 }
 
 // ========== HIERARCHY LAYOUT FUNCTIONS ==========
-
-// forceBoundingBox removed - no longer needed [SF]
-
 /**
- * Compute hierarchy levels for all nodes based on manager relationships.
- * Returns Map: nodeId -> level (0 = top management, higher = deeper in hierarchy)
+ * Berechnet Hierarchieebenen für Knoten
  */
 function computeHierarchyLevels(nodes, links) {
   const levels = new Map();
@@ -1441,140 +1504,87 @@ function computeHierarchyLevels(nodes, links) {
 }
 
 /**
- * Apply hierarchical layout using force-directed approach with level force.
- * Combines organic force layout with soft vertical alignment by hierarchy level.
- * @param {Object} simulation - D3 force simulation
+ * Konfiguriert das Graph-Layout
  */
-function applyHierarchicalLayout(nodes, links, simulation) {
-  const LEVEL_HEIGHT = 200; // Vertical spacing between hierarchy levels [CMV]
-  const LEVEL_FORCE_STRENGTH = 0.25; // Strength of level alignment force (0.1-0.5) [CMV]
+function configureLayout(nodes, links, simulation, mode) {
+  // Gemeinsame Force-Stärken und Distanzen [CMV]
+  const LINK_DISTANCE = 80;
+  const LINK_STRENGTH = 0.7;
+  const CHARGE_STRENGTH = -250;
+  const COLLIDE_RADIUS = 15;
+  const COLLIDE_STRENGTH = 0.7;
+  const CENTER_STRENGTH = 0.05;
   
-  console.log('🎯 Applying hierarchical force layout with level force');
+  // Spezifische Parameter für Hierarchie-Layout
+  const LEVEL_HEIGHT = 200; // Vertikaler Abstand zwischen Hierarchie-Ebenen
+  const LEVEL_FORCE_STRENGTH = 0.25; // Stärke der Ebenen-Ausrichtungskraft (0.1-0.5)
   
-  // Compute hierarchy levels [SF]
-  hierarchyLevels = computeHierarchyLevels(nodes, links);
-  
-  
-  // Calculate target Y position for each level [SF]
-  const sortedLevels = Array.from(new Set(Array.from(hierarchyLevels.values()))).sort((a, b) => a - b);
-  const levelToY = new Map();
-  sortedLevels.forEach((level, idx) => {
-    levelToY.set(level, 100 + idx * LEVEL_HEIGHT);
-  });
-  
-  console.log(`📊 Hierarchy levels:`, Array.from(levelToY.entries()).map(([l, y]) => `L${l}→Y${y}`).join(', '));
-  
-  // Release all fixed positions [DRY]
+  // Fixierte Positionen zurücksetzen [DRY]
   nodes.forEach(n => {
     n.fx = null;
     n.fy = null;
   });
-  
-  // Vorpositionieren der Knoten für bessere Startpositionen [SF]
-  nodes.forEach(n => {
-    n.x = WIDTH/2 + (Math.random() - 0.5) * 100; // Leichte horizontale Streuung
-    const level = hierarchyLevels.get(String(n.id)) ?? 0;
-    n.y = levelToY.get(level) ?? HEIGHT/2;
-  });
 
-  // Configure force simulation with level force [ISA]
+  // Grundlegende Forces für beide Modi konfigurieren [DRY]
   simulation
     .force("link", d3.forceLink(links).id(d => d.id)
-      .distance(80)
-      .strength(0.7))
+      .distance(LINK_DISTANCE)
+      .strength(LINK_STRENGTH))
     .force("charge", d3.forceManyBody()
-      .strength(-250))
+      .strength(CHARGE_STRENGTH))
     .force("collide", d3.forceCollide()
-      .radius(15)
-      .strength(0.7))
+      .radius(COLLIDE_RADIUS)
+      .strength(COLLIDE_STRENGTH))
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2)
-      .strength(0.05))
-    .force("level", d3.forceY(d => {
-      // Soft vertical alignment by hierarchy level [SF]
+      .strength(CENTER_STRENGTH))
+    .alphaDecay(0.05) // Optimierte Konvergenz für besseres Layout [PA]
+    .velocityDecay(0.5); // Optimierte Dämpfung für flüssigere Bewegung [PA]
+
+  // Spezifische Konfiguration je nach Modus
+  if (mode === 'hierarchy') {
+    // Hierarchie-Ebenen berechnen [SF]
+    hierarchyLevels = computeHierarchyLevels(nodes, links);
+    
+    // Ziel-Y-Position für jede Ebene berechnen [SF]
+    const sortedLevels = Array.from(new Set(Array.from(hierarchyLevels.values()))).sort((a, b) => a - b);
+    const levelToY = new Map();
+    sortedLevels.forEach((level, idx) => {
+      levelToY.set(level, 100 + idx * LEVEL_HEIGHT);
+    });
+    
+    // Knoten vorpositionieren für besseren Start [SF]
+    nodes.forEach(n => {
+      n.x = WIDTH/2 + (Math.random() - 0.5) * 100; // Leichte horizontale Streuung
+      const level = hierarchyLevels.get(String(n.id)) ?? 0;
+      n.y = levelToY.get(level) ?? HEIGHT/2;
+    });
+    
+    // Hierarchie-spezifische Ebenen-Force hinzufügen
+    simulation.force("level", d3.forceY(d => {
       const level = hierarchyLevels.get(String(d.id)) ?? 0;
       return levelToY.get(level) ?? HEIGHT / 2;
-    }).strength(LEVEL_FORCE_STRENGTH))
-    .alphaDecay(0.05) // Optimierte Konvergenz für besseres Layout [PA]
-    .velocityDecay(0.5); // Optimierte Dämpfung für flüssigere Bewegung [PA]
+    }).strength(LEVEL_FORCE_STRENGTH));
+  } else {
+    // Im Force-Modus die level-Force entfernen
+    simulation.force("level", null);
+  }
   
-  // Restart simulation [SF]
+  // Simulation neustarten [SF]
   simulation.alpha(1).restart();
-  
-  console.log('✅ Hierarchical force layout active with level force strength:', LEVEL_FORCE_STRENGTH);
 }
 
 /**
- * Refresh clusters for hierarchy layout - uses same logic as force layout [DRY]
- */
-function refreshHierarchyClusters() {
-  // In hierarchy mode, clusters are the same as in force mode [SF]
-  refreshClusters();
-}
-
-/**
- * Switch back to force layout (remove level force).
- */
-function applyForceLayout(simulation) {
-  console.log('🎯 Applying organic force layout (no level force)');
-  
-  // Release fixed positions [DRY]
-  simulation.nodes().forEach(n => {
-    n.fx = null;
-    n.fy = null;
-  });
-  
-  // Remove level force and restore standard forces [SF]
-  simulation
-    .force("link", d3.forceLink(simulation.force("link").links()).id(d => d.id)
-      .distance(80)
-      .strength(0.7))
-    .force("charge", d3.forceManyBody()
-      .strength(-250))
-    .force("collide", d3.forceCollide()
-      .radius(15)
-      .strength(0.7))
-    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2)
-      .strength(0.05))
-    .force("level", null) // Remove level force [SF]
-    .alphaDecay(0.05) // Optimierte Konvergenz für besseres Layout [PA]
-    .velocityDecay(0.5); // Optimierte Dämpfung für flüssigere Bewegung [PA]
-  
-  // Restart simulation [SF]
-  simulation.alpha(1).restart();
-  
-  console.log('✅ Organic force layout active (level force removed)');
-}
-
-// updateLinksForHierarchy removed - simulation handles link updates [SF]
-
-/**
- * Switch between layouts (force vs hierarchy with level force). [SF]
+ * Wechselt zwischen Layout-Modi
  */
 function switchLayout(mode, simulation) {
   currentLayoutMode = mode;
   
-  if (mode === 'hierarchy') {
-    const nodes = simulation.nodes();
-    const links = currentSubgraph?.links || [];
-    
-    // Apply hierarchical layout with level force [SF]
-    applyHierarchicalLayout(nodes, links, simulation);
-    
-    // Update clusters [DRY]
-    setTimeout(() => {
-      refreshHierarchyClusters();
-    }, 100);
-    
-  } else if (mode === 'force') {
-    // Apply organic force layout (no level force) [SF]
-    applyForceLayout(simulation);
-    
-    // Update clusters [DRY]
-    setTimeout(() => {
-      refreshClusters();
-    }, 100);
-  }
+  const nodes = simulation.nodes();
+  const links = currentSubgraph?.links || [];
+  
+  // Konfiguriere Layout basierend auf Modus [DRY]
+  configureLayout(nodes, links, simulation, mode);
+  
+  setTimeout(() => refreshClusters(), 100);
 }
-
-
 
