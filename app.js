@@ -31,6 +31,9 @@ let legendMenuEl = null;
 let simAllById = new Map();
 let parentOf = new Map();
 let currentSubgraph = null;
+let currentLayoutMode = 'force'; // 'force' or 'hierarchy'
+let hierarchyLevels = new Map(); // nodeId -> level number
+let currentSimulation = null; // Global reference to D3 simulation
 
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
@@ -890,8 +893,9 @@ function renderGraph(sub) {
   simAllById = new Map(personNodes.map(d => [String(d.id), d]));
   const node = gZoom.append("g")
     .selectAll("g")
-    .data(personNodes)
-    .join("g");
+    .data(personNodes, d => String(d.id))
+    .join("g")
+    .attr("class", "node");
 
   const nodeRadius = cssNumber('--node-radius', 8);
   const collidePadding = cssNumber('--collide-padding', 6);
@@ -920,12 +924,16 @@ function renderGraph(sub) {
   const linkStrength = cssNumber('--link-strength', 0.4);
   const chargeStrength = cssNumber('--charge-strength', -200);
 
+  // Create simulation
   const simulation = d3.forceSimulation(personNodes)
     .force("link", d3.forceLink(linksPP).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
     .force("charge", d3.forceManyBody().strength(chargeStrength))
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2))
-    .force("collide", d3.forceCollide().radius(nodeRadius + collidePadding))
-    .on("tick", () => {
+    .force("collide", d3.forceCollide().radius(nodeRadius + collidePadding));
+  
+  // No need to stop simulation - hierarchy mode also uses force layout [SF]
+  
+  simulation.on("tick", () => {
       const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
       const nodeOuter = nodeRadius + (nodeStrokeWidth / 2);
       const backoff = nodeOuter + arrowLen;
@@ -1018,7 +1026,7 @@ function renderGraph(sub) {
     })
     .on("end", (event, d) => {
       if (!event.active) simulation.alphaTarget(0);
-      d.fx = null; // release so the network can re-arrange
+      d.fx = null; // release so the network can re-arrange [SF]
       d.fy = null;
     });
 
@@ -1045,6 +1053,14 @@ function renderGraph(sub) {
   ensureTooltip();
   svg.on('mousemove', (event) => handleClusterHover(event, svg));
   svg.on('mouseleave', hideTooltip);
+  
+  // Store simulation globally for layout switching
+  currentSimulation = simulation;
+  
+  // Apply initial layout based on currentLayoutMode [SF]
+  if (currentLayoutMode === 'hierarchy') {
+    applyHierarchicalLayout(personNodes, linksPP, simulation);
+  }
 }
 
 
@@ -1201,6 +1217,15 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   const dirRadios = document.querySelectorAll('input[name="dir"]');
   dirRadios.forEach(r => r.addEventListener('change', applyFromUI));
+  
+  // Layout toggle event listener
+  const layoutRadios = document.querySelectorAll('input[name="layout"]');
+  layoutRadios.forEach(r => r.addEventListener('change', (e) => {
+    const mode = e.target.value;
+    if (currentSimulation) {
+      switchLayout(mode, currentSimulation);
+    }
+  }));
 });
 
 function fitToViewport() {
@@ -1232,6 +1257,187 @@ function syncGraphAndLegendColors() {
   }
   refreshClusters();
   updateFooterStats(currentSubgraph);
+}
+
+// ========== HIERARCHY LAYOUT FUNCTIONS ==========
+
+// forceBoundingBox removed - no longer needed [SF]
+
+/**
+ * Compute hierarchy levels for all nodes based on manager relationships.
+ * Returns Map: nodeId -> level (0 = top management, higher = deeper in hierarchy)
+ */
+function computeHierarchyLevels(nodes, links) {
+  const levels = new Map();
+  const nodeSet = new Set(nodes.map(n => String(n.id)));
+  
+  // Build parent map (manager relationships for persons)
+  const managerOf = new Map(); // personId -> managerId
+  for (const l of links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    const sNode = byId.get(s), tNode = byId.get(t);
+    // Manager -> Employee link (source manages target)
+    if (sNode?.type === 'person' && tNode?.type === 'person' && nodeSet.has(s) && nodeSet.has(t)) {
+      managerOf.set(t, s);
+    }
+  }
+  
+  // Find roots (persons without managers in this subgraph)
+  const roots = nodes.filter(n => n.type === 'person' && !managerOf.has(String(n.id)));
+  
+  // BFS to assign levels
+  const queue = roots.map(r => ({ id: String(r.id), level: 0 }));
+  roots.forEach(r => levels.set(String(r.id), 0));
+  
+  while (queue.length > 0) {
+    const { id, level } = queue.shift();
+    
+    // Find all direct reports
+    for (const [empId, mgrId] of managerOf.entries()) {
+      if (mgrId === id && !levels.has(empId)) {
+        levels.set(empId, level + 1);
+        queue.push({ id: empId, level: level + 1 });
+      }
+    }
+  }
+  
+  // Assign level to org nodes (not used for positioning, but for consistency)
+  nodes.forEach(n => {
+    if (n.type === 'org' && !levels.has(String(n.id))) {
+      levels.set(String(n.id), -1); // Orgs get special level
+    }
+  });
+  
+  return levels;
+}
+
+/**
+ * Apply hierarchical layout using force-directed approach with level force.
+ * Combines organic force layout with soft vertical alignment by hierarchy level.
+ * @param {Object} simulation - D3 force simulation
+ */
+function applyHierarchicalLayout(nodes, links, simulation) {
+  const LEVEL_HEIGHT = 200; // Vertical spacing between hierarchy levels [CMV]
+  const LEVEL_FORCE_STRENGTH = 0.3; // Strength of level alignment force (0.1-0.5) [CMV]
+  
+  console.log('🎯 Applying hierarchical force layout with level force');
+  
+  // Compute hierarchy levels [SF]
+  hierarchyLevels = computeHierarchyLevels(nodes, links);
+  
+  
+  // Calculate target Y position for each level [SF]
+  const sortedLevels = Array.from(new Set(Array.from(hierarchyLevels.values()))).sort((a, b) => a - b);
+  const levelToY = new Map();
+  sortedLevels.forEach((level, idx) => {
+    levelToY.set(level, 100 + idx * LEVEL_HEIGHT);
+  });
+  
+  console.log(`📊 Hierarchy levels:`, Array.from(levelToY.entries()).map(([l, y]) => `L${l}→Y${y}`).join(', '));
+  
+  // Release all fixed positions [DRY]
+  nodes.forEach(n => {
+    n.fx = null;
+    n.fy = null;
+  });
+  
+  // Configure force simulation with level force [ISA]
+  simulation
+    .force("link", d3.forceLink(links).id(d => d.id)
+      .distance(80)
+      .strength(0.5))
+    .force("charge", d3.forceManyBody()
+      .strength(-300))
+    .force("collide", d3.forceCollide()
+      .radius(25)
+      .strength(0.8))
+    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2)
+      .strength(0.05))
+    .force("level", d3.forceY(d => {
+      // Soft vertical alignment by hierarchy level [SF]
+      const level = hierarchyLevels.get(String(d.id)) ?? 0;
+      return levelToY.get(level) ?? HEIGHT / 2;
+    }).strength(LEVEL_FORCE_STRENGTH))
+    .alphaDecay(0.02)
+    .velocityDecay(0.4);
+  
+  // Restart simulation [SF]
+  simulation.alpha(1).restart();
+  
+  console.log('✅ Hierarchical force layout active with level force strength:', LEVEL_FORCE_STRENGTH);
+}
+
+/**
+ * Refresh clusters for hierarchy layout - uses same logic as force layout [DRY]
+ */
+function refreshHierarchyClusters() {
+  // In hierarchy mode, clusters are the same as in force mode [SF]
+  refreshClusters();
+}
+
+/**
+ * Switch back to force layout (remove level force).
+ */
+function applyForceLayout(simulation) {
+  console.log('🎯 Applying organic force layout (no level force)');
+  
+  // Release fixed positions [DRY]
+  simulation.nodes().forEach(n => {
+    n.fx = null;
+    n.fy = null;
+  });
+  
+  // Remove level force and restore standard forces [SF]
+  simulation
+    .force("link", d3.forceLink(simulation.force("link").links()).id(d => d.id)
+      .distance(80)
+      .strength(0.5))
+    .force("charge", d3.forceManyBody()
+      .strength(-300))
+    .force("collide", d3.forceCollide()
+      .radius(25)
+      .strength(0.8))
+    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2)
+      .strength(0.05))
+    .force("level", null) // Remove level force [SF]
+    .alphaDecay(0.02)
+    .velocityDecay(0.4);
+  
+  // Restart simulation [SF]
+  simulation.alpha(1).restart();
+  
+  console.log('✅ Organic force layout active (level force removed)');
+}
+
+// updateLinksForHierarchy removed - simulation handles link updates [SF]
+
+/**
+ * Switch between layouts (force vs hierarchy with level force). [SF]
+ */
+function switchLayout(mode, simulation) {
+  currentLayoutMode = mode;
+  
+  if (mode === 'hierarchy') {
+    const nodes = simulation.nodes();
+    const links = currentSubgraph?.links || [];
+    
+    // Apply hierarchical layout with level force [SF]
+    applyHierarchicalLayout(nodes, links, simulation);
+    
+    // Update clusters [DRY]
+    setTimeout(() => {
+      refreshHierarchyClusters();
+    }, 100);
+    
+  } else if (mode === 'force') {
+    // Apply organic force layout (no level force) [SF]
+    applyForceLayout(simulation);
+    
+    // Update clusters [DRY]
+    setTimeout(() => {
+      refreshClusters();
+    }, 100);
+  }
 }
 
 

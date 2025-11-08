@@ -53,16 +53,33 @@ function transform(data) {
     orgMap.set(oid, label);
   }
 
-  // Build org hierarchy from children relationships
+  // Build child-to-parent map from children relationships
+  const oeChildToParent = new Map(); // childId -> parentId
   for (const oe of oes) {
     if (!oe || !oe.id || !Array.isArray(oe.children)) continue;
     const parentId = String(oe.id);
     for (const childId of oe.children) {
       if (!childId) continue;
       const cid = String(childId);
+      oeChildToParent.set(cid, parentId);
       // Parent -> Child link
       pushLink(parentId, cid);
     }
+  }
+
+  // Build function to get all ancestors of an OE (including itself)
+  function getOeAncestors(oeId) {
+    const ancestors = [];
+    let current = String(oeId);
+    const visited = new Set(); // Prevent infinite loops
+    
+    while (current && orgMap.has(current) && !visited.has(current)) {
+      ancestors.push(current);
+      visited.add(current);
+      current = oeChildToParent.get(current);
+    }
+    
+    return ancestors;
   }
 
   // Build set of managers (persons who have direct reports)
@@ -95,12 +112,57 @@ function transform(data) {
       pushLink(String(p.manager), id);
     }
 
-    // Person -> Org membership
-    // Use hierarchy field (single OE ID) as primary membership
+    // Person -> Org membership (collect all direct OE relationships)
+    const directOes = new Set();
+    
+    // 1. Primary hierarchy (most specific)
     if (p.hierarchy) {
-      const oid = String(p.hierarchy);
+      directOes.add(String(p.hierarchy));
+    }
+    
+    // 2. Division
+    if (p.division) {
+      directOes.add(String(p.division));
+    }
+    
+    // 3. Department
+    if (p.department) {
+      directOes.add(String(p.department));
+    }
+    
+    // 4. Organization (most general)
+    if (p.organization) {
+      directOes.add(String(p.organization));
+    }
+    
+    // For each direct OE, add links to it AND all its ancestors
+    const allOes = new Set();
+    for (const oid of directOes) {
       if (orgMap.has(oid)) {
-        pushLink(id, oid);
+        const ancestors = getOeAncestors(oid);
+        ancestors.forEach(ancestorId => allOes.add(ancestorId));
+      }
+    }
+    
+    // Create links for all OE relationships (direct + ancestors)
+    for (const oid of allOes) {
+      pushLink(id, oid);
+    }
+  }
+  
+  // Add persons from oe.persons arrays (explicit membership) + ancestors
+  for (const oe of oes) {
+    if (!oe || !oe.id || !Array.isArray(oe.persons)) continue;
+    const oid = String(oe.id);
+    if (!orgMap.has(oid)) continue;
+    
+    for (const personId of oe.persons) {
+      if (!personId) continue;
+      const pid = String(personId);
+      if (personIdSet.has(pid)) {
+        // Link to this OE and all its ancestors
+        const ancestors = getOeAncestors(oid);
+        ancestors.forEach(ancestorId => pushLink(pid, ancestorId));
       }
     }
   }

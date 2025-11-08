@@ -12,6 +12,8 @@ body { display: grid; grid-template-rows: auto 1fr auto; }
 .controls input { padding: 6px 8px; }
 .controls button { padding: 6px 10px; cursor: pointer; }
 .controls select { padding: 6px 8px; }
+.controls fieldset { border: 1px solid #ddd; padding: 6px 10px; border-radius: 4px; display: inline-flex; gap: 8px; align-items: center; }
+.controls fieldset legend { font-size: 12px; font-weight: 600; padding: 0 4px; }
 .controls #searchFilter { min-width: 200px; }
 .controls #searchSel { min-width: 240px; max-width: 360px; }
 
