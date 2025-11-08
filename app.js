@@ -7,6 +7,8 @@ const BTN_APPLY_ID = "#apply";
 
 const WIDTH = 1200;
 const HEIGHT = 800;
+const MAX_DROPDOWN_ITEMS = 100;
+const MIN_SEARCH_LENGTH = 2;
 
 let raw = { nodes: [], links: [], persons: [], orgs: [] };
 let byId = new Map();
@@ -14,10 +16,11 @@ let allNodesUnique = [];
 let filteredItems = [];
 let activeIndex = -1;
 let currentSelectedId = null;
+let searchDebounceTimer = null;
 let zoomBehavior = null;
 let managementEnabled = true;
 let autoFitEnabled = true;
-let hasSupervisor = new Set();
+// Removed: hasSupervisor is no longer used
 let clusterLayer = null;
 let clusterSimById = new Map();
 let clusterPersonIds = new Set();
@@ -338,21 +341,7 @@ async function loadData() {
     }
   }
 
-  // Compute hasSupervisor set if not provided
-  if (allNodesUnique.some(n => Object.prototype.hasOwnProperty.call(n, 'hasSupervisor'))) {
-    hasSupervisor = new Set(allNodesUnique.filter(n => n && n.type === 'person' && n.hasSupervisor).map(n => String(n.id)));
-  } else {
-    try {
-      hasSupervisor = new Set();
-      for (const l of raw.links) {
-        const s = idOf(l && l.source);
-        const t = idOf(l && l.target);
-        if (byId.has(s) && byId.has(t) && byId.get(s).type === 'person' && byId.get(t).type === 'person') {
-          hasSupervisor.add(String(t));
-        }
-      }
-    } catch(_) { hasSupervisor = new Set(); }
-  }
+  // Management filtering now only uses isBasis field
 
   // Initialize allowed orgs (all enabled by default)
   allowedOrgs = new Set(orgs.map(o => String(o.id)));
@@ -368,33 +357,69 @@ function populateCombo(filterText) {
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
   if (!input || !list) return;
-  const term = (filterText || "").toLowerCase();
-  filteredItems = allNodesUnique
-    .filter(n => {
-      if (!term) return true;
-      const label = (n.label || "").toLowerCase();
-      const idStr = String(n.id).toLowerCase();
-      return label.includes(term) || idStr.includes(term);
-    })
-    .sort((a, b) => (a.label || String(a.id)).localeCompare(b.label || String(b.id)));
+  const term = (filterText || "").toLowerCase().trim();
+  
+  // Require minimum search length for large datasets
+  if (term.length > 0 && term.length < MIN_SEARCH_LENGTH) {
+    list.innerHTML = '<li style="padding: 8px; color: #666; font-style: italic;">Mindestens ' + MIN_SEARCH_LENGTH + ' Zeichen eingeben...</li>';
+    list.hidden = false;
+    filteredItems = [];
+    activeIndex = -1;
+    return;
+  }
+  
+  // Fast filtering with early termination
+  filteredItems = [];
+  let count = 0;
+  for (const n of allNodesUnique) {
+    if (count >= MAX_DROPDOWN_ITEMS) break;
+    
+    if (!term) {
+      filteredItems.push(n);
+      count++;
+      continue;
+    }
+    
+    const label = (n.label || "").toLowerCase();
+    const idStr = String(n.id).toLowerCase();
+    if (label.includes(term) || idStr.includes(term)) {
+      filteredItems.push(n);
+      count++;
+    }
+  }
+  
+  filteredItems.sort((a, b) => (a.label || String(a.id)).localeCompare(b.label || String(b.id)));
 
   list.innerHTML = '';
   activeIndex = -1;
   const frag = document.createDocumentFragment();
+  
   filteredItems.forEach((n, idx) => {
     const li = document.createElement('li');
     const lbl = n.label || String(n.id);
     li.textContent = `${lbl} — ${n.id}`;
     li.setAttribute('data-id', String(n.id));
     li.tabIndex = -1;
-    li.addEventListener('mousedown', (e) => { // mousedown to run before blur
+    li.addEventListener('mousedown', (e) => {
       e.preventDefault();
       chooseItem(idx);
     });
     frag.appendChild(li);
   });
+  
+  // Show "more results" hint if truncated
+  if (count >= MAX_DROPDOWN_ITEMS) {
+    const hint = document.createElement('li');
+    hint.style.padding = '8px';
+    hint.style.color = '#666';
+    hint.style.fontStyle = 'italic';
+    hint.style.borderTop = '1px solid #e5e7eb';
+    hint.textContent = `Nur erste ${MAX_DROPDOWN_ITEMS} Ergebnisse angezeigt. Suchbegriff verfeinern...`;
+    frag.appendChild(hint);
+  }
+  
   list.appendChild(frag);
-  list.hidden = true; // keep hidden until focus or explicit open
+  list.hidden = filteredItems.length === 0;
 }
 
 function setActive(idx) {
@@ -515,12 +540,8 @@ function computeSubgraph(startId, depth, mode) {
     })
     .filter(Boolean);
   if (managementEnabled) {
-    const haveIsBasis = nodes.some(n => Object.prototype.hasOwnProperty.call(n, 'isBasis'));
-    if (haveIsBasis) {
-      nodes = nodes.filter(n => !n.isBasis);
-    } else {
-      nodes = nodes.filter(n => n.type !== 'person' || hasSupervisor.has(String(n.id)));
-    }
+    // Filter out basis persons (leaf nodes without direct reports)
+    nodes = nodes.filter(n => !n.isBasis);
     // Ensure managers that connect to kept persons are present so links are drawn
     const nodeSet = new Set(nodes.map(n => String(n.id)));
     for (const l of raw.links) {
@@ -528,6 +549,9 @@ function computeSubgraph(startId, depth, mode) {
       if (!byId.has(s) || !byId.has(t)) continue;
       if (byId.get(s)?.type !== 'person' || byId.get(t)?.type !== 'person') continue;
       if (nodeSet.has(t) && !nodeSet.has(s)) {
+        // In 'down' mode, only add managers that are below or at the start node level
+        // (dist > 0 means they were reached during traversal, dist === 0 is the start node)
+        if (mode === 'down' && !dist.has(s)) continue;
         const m = byId.get(s);
         if (m) { nodes.push({ ...m, level: (dist.get(s) || 0) }); nodeSet.add(s); }
       }
@@ -1144,9 +1168,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   if (input && list) {
     input.addEventListener('input', () => {
-      currentSelectedId = null; // reset explicit selection on typing
-      populateCombo(input.value);
-      list.hidden = filteredItems.length === 0 ? true : false; // auto-open when typing
+      currentSelectedId = null;
+      
+      // Debounce search for performance
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        populateCombo(input.value);
+      }, 150);
     });
     input.addEventListener('keydown', (e) => {
       const max = filteredItems.length - 1;

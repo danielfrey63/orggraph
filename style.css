@@ -74,9 +74,9 @@ svg { width: 100%; height: 100%; display: block; background: #ffffff; }
   --cluster-pad: 20;          /* padding around member nodes in px */
 
   /* Forces */
-  --link-distance: 60;        /* target link length */
+  --link-distance: 10;        /* target link length */
   --link-strength: 0.8;       /* 0..1 */
-  --charge-strength: -200;    /* negative = repulsion */
+  --charge-strength: -600;    /* negative = repulsion */
   --collide-padding: 6;       /* extra padding for collision */
 
   /* Optional radial layout to keep levels cohesive */

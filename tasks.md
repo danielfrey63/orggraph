@@ -51,6 +51,7 @@ Basierend auf der bestehenden Struktur ([index.html](cci:7://file:///d:/Meine%20
 
 ## 3) Footer-Statistiken
 
+- Status-Footer über die gesamte Breite der Seite (nicht nur unter Legende).
 - **[Neue Statuszeile]** (unter Beibehaltung von `#status`) mit dynamischen Kennzahlen:
   - Gesamt geladen: `Knoten`, `Kanten`, `OEs`
   - Sichtbar im aktuellen Subgraph: `Knoten`, `Kanten`
@@ -85,9 +86,9 @@ Basierend auf der bestehenden Struktur ([index.html](cci:7://file:///d:/Meine%20
 
 # Lade-Reihenfolge (finaler Vorschlag)
 
- - **Initial-Load (automatisch)**: `?data=URL` > `env.json` (`DATA_URL`) > `data.default.json` [REH][SF].
- - **Manuelles Laden**: ist keine Stufe der automatischen Kette; ersetzt die Daten jederzeit und setzt die UI auf Defaults zurück.
- - Hinweis: Das weicht bewusst von der älteren Notiz „kein Fallback“ ab; Ihr aktueller Wunsch nach Dummy-Default hat Priorität. Bestätigen Sie bitte diese Reihenfolge [TR].
+- **Initial-Load (automatisch)**: `?data=URL` > `env.json` (`DATA_URL`) > `data.default.json` [REH][SF].
+- **Manuelles Laden**: ist keine Stufe der automatischen Kette; ersetzt die Daten jederzeit und setzt die UI auf Defaults zurück.
+- Hinweis: Das weicht bewusst von der älteren Notiz „kein Fallback“ ab; Ihr aktueller Wunsch nach Dummy-Default hat Priorität. Bestätigen Sie bitte diese Reihenfolge [TR].
 
 # Edge Cases
 
@@ -95,7 +96,7 @@ Basierend auf der bestehenden Struktur ([index.html](cci:7://file:///d:/Meine%20
 - **Ungültiges JSON/CSV**: Fehler-Toast und keine State-Änderung [REH].
 - **Große Dateien**: Streaming nicht nötig; UI bleibt reaktiv durch einfache DOM-Updates [PA].
 - **Mehrere Attribute auf einem Knoten**: Mehrere Ringe; Reihenfolge nach Einlade-Zeitpunkt [RP].
- - **Legacy `nodes[].type` fehlt oder unbekannt**: Typisierung per Heuristik (mit `email` ⇒ person, sonst org). Unbekannte/fehlerhafte `type`-Werte werden in `unknown-types.txt` gesammelt, als Download bereitgestellt (analog `missing.txt`), Verarbeitung läuft weiter.
+- **Legacy `nodes[].type` fehlt oder unbekannt**: Typisierung per Heuristik (mit `email` ⇒ person, sonst org). Unbekannte/fehlerhafte `type`-Werte werden in `unknown-types.txt` gesammelt, als Download bereitgestellt (analog `missing.txt`), Verarbeitung läuft weiter.
 
 # Akzeptanzkriterien
 
