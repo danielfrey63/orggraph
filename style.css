@@ -14,7 +14,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .controls button { padding: 6px 10px; cursor: pointer; }
 .controls button:hover { background: var(--control-hover); }
 .controls fieldset { border: 1px solid var(--panel-border); background: transparent; padding: 6px 10px; border-radius: 8px; display: inline-flex; gap: 8px; align-items: center; }
-.controls fieldset legend { font-size: 12px; font-weight: 600; padding: 0 4px; color: var(--text-muted); }
+.controls fieldset legend { font-size: 13px; font-weight: 600; padding: 0 4px; color: var(--text-muted); }
 .controls #searchFilter { min-width: 200px; }
 .controls #searchSel { min-width: 240px; max-width: 360px; }
 
@@ -58,7 +58,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 .legend-list input { margin-right: 6px; }
 .legend-list input { margin-right: 6px; }
 .legend-list .legend-label-chip { display: inline-block; padding: 2px 6px; border-radius: 3px; }
-.label { font-size: 12px; fill: var(--text); pointer-events: none; }
+.label { font-size: 8px; fill: var(--text); pointer-events: none; }
 .labels-hidden .label { display: none; }
 
 /* Force/layout and styling variables */
@@ -76,29 +76,29 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   --canvas-bg: #ffffff;
 
   /* Visuals */
-  --node-radius: 8;           /* circle radius in px */
+  --node-radius: 8;             /* circle radius in px */
   --node-fill: #4F46E5;       /* default node color */
   --node-stroke: #ffffff;     /* node border color */
-  --node-stroke-width: 1;     /* node border width */
+  --node-stroke-width: 1;       /* node border width */
   --link-stroke: #cbd5e1;     /* link color */
-  --link-stroke-width: 3;     /* link width */
-  --link-opacity: 0.5;        /* link opacity (0..1) */
-  --arrow-length: 10;         /* arrow marker length in user units */
-  --cluster-fill: rgba(79,70,229,0.10); /* translucent indigo */
+  --link-stroke-width: 3;       /* link width */
+  --link-opacity: 0.5;          /* link opacity (0..1) */
+  --arrow-length: 10;           /* arrow marker length in user units */
+  --cluster-fill: rgba(79,70,229,0.10);
   --cluster-stroke: rgba(79,70,229,0.25);
   --cluster-opacity: 1;
-  --cluster-pad: 20;          /* padding around member nodes in px */
+  --cluster-pad: 20;            /* padding around member nodes in px */
 
   /* Forces */
-  --link-distance: 10;        /* target link length */
-  --link-strength: 0.8;       /* 0..1 */
-  --charge-strength: -600;    /* negative = repulsion */
-  --collide-padding: 6;       /* extra padding for collision */
+  --link-distance: 5;           /* target link length */
+  --link-strength: 0.8;         /* 0..1 */
+  --charge-strength: -600;      /* negative = repulsion */
+  --collide-padding: 6;         /* extra padding for collision */
 
   /* Optional radial layout to keep levels cohesive */
-  --radial-force: 0.15;       /* 0 disables radial layout; try 0.05 - 0.15 */
-  --radial-gap: 120;          /* radius increment per level in px */
-  --radial-base: 0;           /* base radius for level 0 */
+  --radial-force: 0.15;         /* 0 disables radial layout; try 0.05 - 0.15 */
+  --radial-gap: 120;            /* radius increment per level in px */
+  --radial-base: 0;             /* base radius for level 0 */
 }
 
 @media (prefers-color-scheme: dark) {

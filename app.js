@@ -35,6 +35,7 @@ let currentLayoutMode = 'force'; // 'force' or 'hierarchy'
 let hierarchyLevels = new Map(); // nodeId -> level number
 let currentSimulation = null; // Global reference to D3 simulation
 let preferredData = "auto";
+let envConfig = null;
 
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
@@ -378,15 +379,32 @@ function applyLoadedDataObject(data, sourceName) {
   updateFooterStats(null);
 }
 
+async function loadEnvConfig() {
+  try {
+    const res = await fetch("./env.json", { cache: "no-store" });
+    if (res.ok) {
+      envConfig = await res.json();
+      return true;
+    }
+  } catch(_) {}
+  return false;
+}
+
 async function loadData() {
   setStatus("Lade Daten...");
   let data = null;
   let sourceName = '(keine Daten)';
-  // Respect preferredData; fallbacks keep previous behavior
-  if (preferredData === 'generated' || preferredData === 'auto') {
+  const dataUrl = envConfig?.DATA_URL || null;
+  if (dataUrl) {
     try {
-      const resGen = await fetch("./data.generated.json", { cache: "no-store" });
-      if (resGen.ok) { data = await resGen.json(); sourceName = 'data.generated.json'; }
+      const res = await fetch(dataUrl, { cache: "no-store" });
+      if (res.ok) { data = await res.json(); sourceName = dataUrl; }
+    } catch(_) {}
+  }
+  if (!data && (preferredData === 'generated' || preferredData === 'auto')) {
+    try {
+      const resGen = await fetch("./data.json", { cache: "no-store" });
+      if (resGen.ok) { data = await resGen.json(); sourceName = 'data.json'; }
     } catch(_) {}
   }
   if (!data && (preferredData === 'default' || preferredData === 'auto')) {
@@ -1199,6 +1217,7 @@ function applyFromUI() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  await loadEnvConfig();
   await loadData();
   const applyBtn = document.querySelector(BTN_APPLY_ID);
   if (applyBtn) applyBtn.addEventListener("click", applyFromUI);
@@ -1206,7 +1225,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   const list = document.querySelector(LIST_COMBO_ID);
   const mgmt = document.querySelector('#toggleManagement');
   if (mgmt) {
-    managementEnabled = !!mgmt.checked;
+    if (envConfig?.DEFAULT_MANAGEMENT != null) {
+      managementEnabled = !!envConfig.DEFAULT_MANAGEMENT;
+      mgmt.checked = managementEnabled;
+    } else {
+      managementEnabled = !!mgmt.checked;
+    }
     mgmt.addEventListener('change', () => {
       managementEnabled = !!mgmt.checked;
       applyFromUI();
@@ -1224,7 +1248,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   const lbls = document.querySelector('#toggleLabels');
   if (lbls) {
-    labelsVisible = !!lbls.checked;
+    if (envConfig?.DEFAULT_LABELS != null) {
+      labelsVisible = !!envConfig.DEFAULT_LABELS;
+      lbls.checked = labelsVisible;
+    } else {
+      labelsVisible = !!lbls.checked;
+    }
     lbls.addEventListener('change', () => {
       labelsVisible = !!lbls.checked;
       const svg = document.querySelector('#graph');
@@ -1263,15 +1292,25 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Auto-apply on depth change and direction change
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
   if (depthEl) {
+    if (envConfig?.DEFAULT_DEPTH != null) {
+      depthEl.value = envConfig.DEFAULT_DEPTH;
+    }
     depthEl.addEventListener('change', applyFromUI);
     depthEl.addEventListener('input', applyFromUI);
   }
   const dirRadios = document.querySelectorAll('input[name="dir"]');
+  if (envConfig?.DEFAULT_DIR) {
+    const targetRadio = document.querySelector(`input[name="dir"][value="${envConfig.DEFAULT_DIR}"]`);
+    if (targetRadio) targetRadio.checked = true;
+  }
   dirRadios.forEach(r => r.addEventListener('change', applyFromUI));
   
   // Hierarchy single-checkbox toggle
   const hier = document.querySelector('#toggleHierarchy');
   if (hier) {
+    if (envConfig?.DEFAULT_HIERARCHY != null) {
+      hier.checked = !!envConfig.DEFAULT_HIERARCHY;
+    }
     currentLayoutMode = hier.checked ? 'hierarchy' : 'force';
     hier.addEventListener('change', () => {
       currentLayoutMode = hier.checked ? 'hierarchy' : 'force';
@@ -1305,6 +1344,16 @@ window.addEventListener("DOMContentLoaded", async () => {
       });
       picker.click();
     });
+  }
+
+  // Apply initial start node from env.json if provided
+  if (envConfig?.DEFAULT_START_ID) {
+    const startNode = byId.get(String(envConfig.DEFAULT_START_ID));
+    if (startNode) {
+      currentSelectedId = String(startNode.id);
+      if (input) input.value = startNode.label || String(startNode.id);
+      try { applyFromUI(); } catch(_) {}
+    }
   }
 });
 
