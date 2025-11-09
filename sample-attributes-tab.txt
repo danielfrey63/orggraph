@@ -1,0 +1,16 @@
+p-1	Projekt A
+p-2	Projekt A
+p-3	Projekt B
+p-4	Projekt B
+p-5	Projekt A	Lead
+p-5	Zertifizierung	ITIL
+p-10	Projekt C
+p-11	Projekt C	Lead
+p-12	Projekt B
+p-20	Zertifizierung	SCRUM
+p-21	Zertifizierung	SCRUM
+p-30	Schulung
+p-40	Schulung
+p-50	Urlaub
+p-51	Krank
+p-3	Zertifizierung	SCRUM

@@ -58,8 +58,29 @@
       <svg id="graph" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
     <aside id="legendPane" aria-label="Organisationseinheiten">
-      <h2>OEs</h2>
-      <div id="legend"></div>
+      <div class="legend-section">
+        <div class="legend-header">
+          <h2>OEs</h2>
+          <button class="collapse-btn" data-target="legend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+        </div>
+        <div id="legend" class="legend-content"></div>
+      </div>
+      
+      <div class="legend-section">
+        <div class="legend-header">
+          <h2>Attribute</h2>
+          <button class="collapse-btn" data-target="attributeContainer" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+        </div>
+        <div id="attributeContainer" class="legend-content">
+          <div class="attribute-actions">
+            <button id="loadAttributes" class="btn">Attributliste laden</button>
+            <input type="file" id="attributeFileInput" accept=".txt,.csv,text/plain,text/csv,text/tab-separated-values" hidden />
+          </div>
+          <div id="attributeLegend" class="attribute-legend">
+            <!-- Dynamisch generierte Attribut-Legende -->
+          </div>
+        </div>
+      </div>
     </aside>
   </main>
   <footer class="app-footer">
@@ -71,6 +92,8 @@
       <span id="stats-visible">Sichtbar: <strong id="stats-nodes-visible">0</strong> Knoten, <strong id="stats-links-visible">0</strong> Kanten</span>
       <span class="stat-separator">|</span>
       <span id="stats-orgs-display">Aktive OEs: <strong id="stats-orgs-count">0</strong></span>
+      <span class="stat-separator">|</span>
+      <span id="stats-attributes">Attribute: <strong id="stats-attributes-count">0</strong></span>
     </div>
   </footer>
   <script src="./app.js"></script>

@@ -10,7 +10,10 @@ const HEIGHT = 800;
 const MAX_DROPDOWN_ITEMS = 100;
 const MIN_SEARCH_LENGTH = 2;
 
-let raw = { nodes: [], links: [], persons: [], orgs: [] };
+let raw = { nodes: [], links: [], persons: [], orgs: []};
+let personAttributes = new Map(); // Map von ID/Email zu Attribut-Maps
+let attributeTypes = new Map(); // Map von Attributnamen zu Farbwerten
+let activeAttributes = new Set(); // Menge der aktiven Attribute für die Anzeige
 let byId = new Map();
 let allNodesUnique = [];
 let filteredItems = [];
@@ -201,12 +204,14 @@ function handleClusterHover(event, svgSel) {
   
   const r = cssNumber('--node-radius', 8) + 6;
   let nodeLabel = null;
+  let personId = null;
   
   for (const nd of simAllById.values()) {
     if (nd.x == null || nd.y == null) continue;
     const dx = p[0] - nd.x, dy = p[1] - nd.y;
     if ((dx*dx + dy*dy) <= r*r) { 
-      nodeLabel = nd.label || String(nd.id); 
+      nodeLabel = nd.label || String(nd.id);
+      personId = String(nd.id);
       break; 
     }
   }
@@ -219,7 +224,29 @@ function handleClusterHover(event, svgSel) {
     }
   }
   
-  const lines = nodeLabel ? [nodeLabel, ...hits] : hits;
+  const lines = [];
+  
+  // Person name
+  if (nodeLabel) {
+    lines.push(nodeLabel);
+    
+    // Zeige Attribute für diese Person an
+    if (personId && personAttributes.has(personId)) {
+      const attrs = personAttributes.get(personId);
+      for (const [attrName, attrValue] of attrs.entries()) {
+        if (activeAttributes.has(attrName)) {
+          const displayValue = attrValue !== '1' ? `: ${attrValue}` : '';
+          lines.push(`- ${attrName}${displayValue}`);
+        }
+      }
+    }
+    
+    // Add org memberships
+    lines.push(...hits);
+  } else if (hits.length) {
+    lines.push(...hits);
+  }
+  
   if (lines.length) {
     showTooltip(event.clientX, event.clientY, lines);
   } else {
@@ -342,6 +369,169 @@ function setStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+/**
+ * Zeigt eine temporäre Benachrichtigung an, ohne den Status zu überschreiben
+ */
+function showTemporaryNotification(message, duration = 3000) {
+  // Prüfe, ob bereits eine Benachrichtigung existiert
+  let notification = document.getElementById('temp-notification');
+  
+  // Wenn nicht, erstelle eine neue
+  if (!notification) {
+    notification = document.createElement('div');
+    notification.id = 'temp-notification';
+    notification.style.position = 'fixed';
+    notification.style.bottom = '60px'; // Über dem Footer
+    notification.style.left = '50%';
+    notification.style.transform = 'translateX(-50%)';
+    notification.style.background = 'var(--text-strong)';
+    notification.style.color = 'var(--panel-bg)';
+    notification.style.padding = '8px 16px';
+    notification.style.borderRadius = '4px';
+    notification.style.boxShadow = '0 2px 8px rgba(0,0,0,0.25)';
+    notification.style.zIndex = '1000';
+    notification.style.opacity = '0';
+    notification.style.transition = 'opacity 0.3s ease';
+    document.body.appendChild(notification);
+  }
+  
+  // Bestehende Timer löschen
+  if (notification.hideTimeout) {
+    clearTimeout(notification.hideTimeout);
+  }
+  
+  // Nachricht aktualisieren und einblenden
+  notification.textContent = message;
+  
+  // Sicherstellen, dass das Element im DOM ist, bevor wir die Transition starten
+  setTimeout(() => {
+    notification.style.opacity = '1';
+  }, 10);
+  
+  // Nach der angegebenen Zeit ausblenden
+  notification.hideTimeout = setTimeout(() => {
+    notification.style.opacity = '0';
+    // Nach dem Ausblenden aus dem DOM entfernen
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 300); // Dauer der Ausblend-Transition
+  }, duration);
+}
+
+/**
+ * Aktualisiert die Attribute-Statistik in der Fußzeile
+ */
+function updateAttributeStats() {
+  const attributeCountEl = document.getElementById('stats-attributes-count');
+  if (attributeCountEl) {
+    const loadedCount = attributeTypes.size;
+    const activeCount = activeAttributes.size;
+    attributeCountEl.textContent = `${activeCount}/${loadedCount}`;
+  }
+}
+
+/**
+ * Aktualisiert nur die Attribut-Kreise ohne ein komplettes Relayout
+ */
+function updateAttributeCircles() {
+  // Wenn wir aus dem renderGraph-Kontext heraus aufgerufen werden, ist der Graph bereits gerendert
+  // Wenn nicht, prüfen wir, ob überhaupt ein Subgraph existiert
+  
+  // Styling-Parameter
+  const nodeRadius = cssNumber('--node-radius', 8);
+  const circleGap = cssNumber('--attribute-circle-gap', 4);
+  const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+  
+  // Farbe und Stil für Knoten mit Attributen
+  const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
+  const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke, #4682b4)';
+  const nodeWithAttributesStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
+  
+  // Transparenz für Knoten ohne Attribute
+  const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity', 0.2);
+  
+  // Alle Knoten im SVG auswählen
+  const nodes = d3.selectAll(SVG_ID + ' .node');
+  
+  // Alle bestehenden Attribut-Kreise entfernen
+  nodes.selectAll('circle.attribute-circle').remove();
+  
+  // Prüfe, ob es überhaupt aktive Attribute gibt
+  const hasAnyActiveAttributes = activeAttributes.size > 0;
+  
+  // Set zum Speichern aller IDs von Knoten mit aktiven Attributen
+  const nodesWithActiveAttributesIds = new Set();
+  
+  // Alle Knoten auf Standard zurücksetzen
+  nodes.selectAll('circle.node-circle')
+    .style('fill', null)
+    .style('stroke', null)
+    .style('stroke-width', null)
+    .style('opacity', 1);
+  
+  // Neue Attribut-Kreise hinzufügen und Knoten mit Attributen identifizieren
+  nodes.each(function(d) {
+    if (!d) return; // Sicherheitsprüfung
+    
+    const nodeGroup = d3.select(this);
+    const personId = String(d.id);
+    const nodeAttrs = personAttributes.get(personId);
+    
+    // Knoten mit Attributen prüfen
+    if (nodeAttrs && nodeAttrs.size > 0) {
+      // Filtere auf aktive Attribute
+      const activeNodeAttrs = Array.from(nodeAttrs.entries())
+        .filter(([attrName]) => activeAttributes.has(attrName))
+        .sort((a, b) => a[0].localeCompare(b[0])); // Sortiere für konsistente Reihenfolge
+      
+      // Wenn es aktive Attribute gibt, ändere den Hauptknoten und speichere die ID
+      if (activeNodeAttrs.length > 0) {
+        nodesWithActiveAttributesIds.add(personId);
+        
+        // Haupt-Knoten mit spezieller Darstellung für Knoten mit Attributen
+        nodeGroup.select('circle.node-circle')
+          .style('fill', nodeWithAttributesFill)
+          .style('stroke', nodeWithAttributesStroke)
+          .style('stroke-width', nodeWithAttributesStrokeWidth);
+      }
+      
+      // Füge Attribute-Kreise von innen nach außen hinzu
+      activeNodeAttrs.forEach(([attrName], idx) => {
+        const attrColor = attributeTypes.get(attrName);
+        if (!attrColor) return;
+        
+        // Kreisradius berechnen
+        const attrRadius = nodeRadius + circleGap + (idx * (circleGap + circleWidth));
+        
+        // Attributkreis vor dem Hauptkreis einfügen, damit er dahinter liegt
+        nodeGroup.insert("circle", "circle.node-circle")
+          .attr("r", attrRadius)
+          .attr("class", "attribute-circle")
+          .attr("data-attribute", attrName)
+          .style("stroke", attrColor)
+          .style("stroke-width", circleWidth);
+      });
+    }
+  });
+  
+  // Wenn es aktive Attribute gibt, wende Transparenz auf alle Knoten ohne Attribute an
+  if (hasAnyActiveAttributes && activeAttributes.size > 0 && nodesWithActiveAttributesIds.size > 0) {
+    nodes.each(function(d) {
+      if (!d) return;
+      const personId = String(d.id);
+      const nodeGroup = d3.select(this);
+      
+      // Wenn dieser Knoten nicht in der Liste der Knoten mit aktiven Attributen ist
+      if (!nodesWithActiveAttributesIds.has(personId)) {
+        nodeGroup.select('circle.node-circle')
+          .style('opacity', nodesWithoutAttributesOpacity);
+      }
+    });
+  }
+}
+
 function updateFooterStats(subgraph) {
   // Update total loaded stats
   const nodesTotal = raw.nodes.length;
@@ -351,6 +541,11 @@ function updateFooterStats(subgraph) {
   document.getElementById('stats-nodes-total').textContent = nodesTotal;
   document.getElementById('stats-links-total').textContent = linksTotal;
   document.getElementById('stats-orgs-total').textContent = orgsTotal;
+  
+  // Stelle sicher, dass die Attributstatistik aktualisiert wird, wenn noch nicht geschehen
+  if (document.getElementById('stats-attributes-count').textContent === '0') {
+    updateAttributeStats();
+  }
   
   // Update visible stats (from subgraph if provided)
   if (subgraph) {
@@ -420,6 +615,23 @@ function applyLoadedDataObject(data, sourceName) {
     }
   }
   allowedOrgs = new Set(orgs.map(o => String(o.id)));
+
+  // Beim Laden eines neuen Datensatzes prüfe, ob Personen mit den aktuellen Attributen übereinstimmen
+  if (personAttributes.size > 0) {
+    const newPersonIds = new Set(persons.map(p => String(p.id)));
+    const stillValid = Array.from(personAttributes.keys()).some(id => newPersonIds.has(id));
+    
+    if (!stillValid) {
+      // Wenn keine der Personen mit Attributen im neuen Datensatz vorhanden ist,
+      // setze die Attribute zurück
+      personAttributes = new Map();
+      attributeTypes = new Map();
+      activeAttributes = new Set();
+      buildAttributeLegend();
+      document.getElementById('stats-attributes-count').textContent = '0';
+    }
+  }
+  
   populateCombo("");
   buildOrgLegend(new Set());
   setStatus(sourceName);
@@ -744,6 +956,7 @@ function buildOrgLegend(scope) {
     const chip = document.createElement('span');
     chip.className = 'legend-label-chip';
     chip.textContent = lbl;
+    chip.title = lbl; // Tooltip für den vollständigen Text bei Hover
     // collapsible branch toggle
     const kids = Array.from(children.get(oid) || []).filter(id => !scopeProvided || scopeSet.has(id));
     const row = document.createElement('div');
@@ -775,10 +988,19 @@ function buildOrgLegend(scope) {
       const spacer = document.createElement('span');
       spacer.style.display = 'inline-block';
       spacer.style.width = '12px';
+      spacer.style.flexShrink = '0';
       row.appendChild(spacer);
     }
     row.appendChild(chk);
-    row.appendChild(chip);
+    
+    // Wrapper für den Chip, um korrekte Größenbegrenzung zu ermöglichen
+    const chipWrapper = document.createElement('div');
+    chipWrapper.style.overflow = 'hidden'; // Notwendig für text-overflow
+    chipWrapper.style.flexGrow = '1'; // Nimmt verfügbaren Platz ein
+    chipWrapper.style.minWidth = '0'; // Wichtig für text-overflow in Flexbox
+    chipWrapper.appendChild(chip);
+    
+    row.appendChild(chipWrapper);
     li.appendChild(row);
     if (kids.length) {
       const sub = document.createElement('ul');
@@ -1050,21 +1272,47 @@ function renderGraph(sub) {
   // Styling-Parameter
   const nodeRadius = cssNumber('--node-radius', 8);
   const collidePadding = cssNumber('--collide-padding', 6);
-
-  // Kreise und Labels
+  const circleGap = cssNumber('--attribute-circle-gap', 4);
+  const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+  
+  // Hauptkreis hinzufügen (nur einmal!)
   node.append("circle").attr("r", nodeRadius).attr("class", "node-circle");
   node.append("text")
     .text(d => d.label ?? d.id)
     .attr("x", 10)
     .attr("y", 4)
     .attr("class", "label");
+    
+  // Attribut-Kreise hinzufügen (ohne Relayout)
+  updateAttributeCircles();
 
   // Tooltips für Knoten
   node.on('mousemove', (event, d) => {
     if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
     const [mx, my] = d3.pointer(event, svg.node());
     const p = currentZoomTransform ? currentZoomTransform.invert([mx, my]) : [mx, my];
-    const lines = [d.label || String(d.id), ...clustersAtPoint(p)];
+    
+    // Sammle alle Informationen für den Tooltip
+    const lines = [d.label || String(d.id)];
+    
+    // Attribute-Informationen hinzufügen, wenn vorhanden
+    const personId = String(d.id);
+    if (personAttributes.has(personId)) {
+      const attrs = personAttributes.get(personId);
+      for (const [attrName, attrValue] of attrs.entries()) {
+        if (activeAttributes.has(attrName)) {
+          const displayValue = attrValue !== '1' ? `: ${attrValue}` : '';
+          lines.push(`- ${attrName}${displayValue}`);
+        }
+      }
+    }
+    
+    // OE-Zugehörigkeiten hinzufügen
+    const clusters = clustersAtPoint(p);
+    if (clusters.length > 0) {
+      lines.push(...clusters);
+    }
+    
     showTooltip(event.clientX, event.clientY, lines);
   });
   node.on('mouseleave', hideTooltip);
@@ -1079,7 +1327,27 @@ function renderGraph(sub) {
     .force("link", d3.forceLink(linksPP).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
     .force("charge", d3.forceManyBody().strength(chargeStrength))
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2))
-    .force("collide", d3.forceCollide().radius(nodeRadius + collidePadding));
+    .force("collide", d3.forceCollide().radius(d => {
+      // Kollisionsradius basierend auf Attribut-Kreisen berechnen
+      const personId = String(d.id);
+      const nodeAttrs = personAttributes.get(personId);
+      const circleGap = cssNumber('--attribute-circle-gap', 4);
+      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+      
+      // Zähle aktive Attribute für diese Person
+      let attrCount = 0;
+      if (nodeAttrs && nodeAttrs.size > 0) {
+        for (const attrName of nodeAttrs.keys()) {
+          if (activeAttributes.has(attrName)) {
+            attrCount++;
+          }
+        }
+      }
+      
+      // Basis-Radius + Abstand für jedes Attribut
+      const attrSpace = attrCount > 0 ? (circleGap + (attrCount * (circleGap + circleWidth))) : 0;
+      return nodeRadius + collidePadding + attrSpace;
+    }));
   
   // Tick-Handler für Animation
   simulation.on("tick", () => {
@@ -1289,6 +1557,213 @@ function applyFromUI() {
   buildOrgLegend(scopeOrgs);
 }
 
+/**
+ * Parst eine Liste von E-Mails/IDs mit Attributen
+ * Unterstützte Formate:
+ * - Komma-separiert: ID/Email,AttributName[,AttributWert]
+ * - Tab-separiert: ID/Email\tAttributName[\tAttributWert]
+ * - Gemischte Formate (zeilenweise Erkennung)
+ */
+function parseAttributeList(text) {
+  const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+  const result = new Map();
+  const foundAttributes = new Set();
+  let count = 0;
+  
+  for (const line of lines) {
+    // Zeilenweise das Trennzeichen erkennen (Tab oder Komma)
+    let separator = ',';
+    let parts;
+    
+    if (line.includes('\t')) {
+      // Tab-separiert
+      parts = line.split('\t').map(p => p.trim());
+    } else {
+      // Komma-separiert
+      parts = line.split(',').map(p => p.trim());
+    }
+    
+    if (parts.length < 2) continue;
+    
+    const identifier = parts[0]; // ID oder E-Mail
+    const attribute = parts[1]; // Attributname
+    const value = parts.length > 2 ? parts[2] : '1'; // Optionaler Attributwert
+    
+    if (!result.has(identifier)) {
+      result.set(identifier, new Map());
+    }
+    
+    result.get(identifier).set(attribute, value);
+    foundAttributes.add(attribute);
+    count++;
+  }
+  
+  return { 
+    attributes: result, 
+    types: Array.from(foundAttributes),
+    count
+  };
+}
+
+/**
+ * Sucht nach Personen im Datensatz basierend auf ID oder E-Mail
+ */
+function findPersonIdsByIdentifier(identifier) {
+  const normalizedId = String(identifier).toLowerCase();
+  const matches = [];
+  
+  // Suche nach exakter ID
+  const exactById = raw.persons.find(p => String(p.id).toLowerCase() === normalizedId);
+  if (exactById) matches.push(String(exactById.id));
+  
+  // Suche nach exakter E-Mail
+  const exactByEmail = raw.persons.find(p => (p.email || '').toLowerCase() === normalizedId);
+  if (exactByEmail && !matches.includes(String(exactByEmail.id))) {
+    matches.push(String(exactByEmail.id));
+  }
+  
+  return matches;
+}
+
+/**
+ * Lädt Attributliste aus einer Datei
+ */
+async function loadAttributesFromFile(file) {
+  try {
+    const text = await file.text();
+    const { attributes, types, count } = parseAttributeList(text);
+    
+    // Erkenne das verwendete Format für die Statusmeldung
+    const hasTabFormat = text.includes('\t');
+    const formatInfo = hasTabFormat ? 'Tab-separiert' : 'Komma-separiert';
+    
+    // Verknüpfe die geladenen Attribute mit den Personen-IDs
+    const newPersonAttributes = new Map();
+    let matchedCount = 0;
+    
+    for (const [identifier, attrs] of attributes.entries()) {
+      const personIds = findPersonIdsByIdentifier(identifier);
+      if (personIds.length > 0) {
+        for (const id of personIds) {
+          if (!newPersonAttributes.has(id)) {
+            newPersonAttributes.set(id, new Map());
+          }
+          for (const [attrName, attrValue] of attrs.entries()) {
+            newPersonAttributes.get(id).set(attrName, attrValue);
+          }
+        }
+        matchedCount++;
+      }
+    }
+    
+    // Generiere Farben für neue Attributtypen
+    for (const type of types) {
+      if (!attributeTypes.has(type)) {
+        // Generiere eine neue Farbe für diesen Attributtyp
+        const hue = (hashCode(type) % 360);
+        const color = `hsl(${hue}, 70%, 50%)`;
+        attributeTypes.set(type, color);
+        activeAttributes.add(type); // Neue Attribute standardmäßig aktivieren
+      }
+    }
+    
+    // Setze die neuen Attribute und aktualisiere
+    personAttributes = newPersonAttributes;
+    
+    // UI aktualisieren
+    buildAttributeLegend();
+    updateAttributeStats();
+    
+    // Nur die Attribut-Kreise aktualisieren, ohne Layout-Neuberechnung
+    if (currentSubgraph) updateAttributeCircles();
+    
+    // Zeige eine temporäre Benachrichtigung ohne den Status zu überschreiben
+    showTemporaryNotification(`Attribute geladen: ${count} Einträge, ${matchedCount} gefunden (${formatInfo})`);
+    
+    // Die Attributstatistik wird bereits durch updateAttributeStats() aktualisiert
+    
+    return true;
+  } catch (e) {
+    // Zeige Fehler als Benachrichtigung an, nicht als Status
+    showTemporaryNotification(`Fehler beim Laden der Attribute: ${e.message}`, 5000);
+    console.error('Fehler beim Laden der Attribute:', e);
+    return false;
+  }
+}
+
+/**
+ * Erstellt die Attribut-Legende basierend auf den geladenen Attributtypen
+ */
+function buildAttributeLegend() {
+  const legend = document.getElementById('attributeLegend');
+  if (!legend) return;
+  
+  legend.innerHTML = '';
+  if (attributeTypes.size === 0) {
+    legend.innerHTML = '<div class="attribute-empty">Keine Attribute geladen</div>';
+    updateAttributeStats(); // Aktualisiere 0/0 Anzeige
+    return;
+  }
+  
+  // Zähle Vorkommen je Attributtyp
+  const typeCount = new Map();
+  for (const attrs of personAttributes.values()) {
+    for (const type of attrs.keys()) {
+      typeCount.set(type, (typeCount.get(type) || 0) + 1);
+    }
+  }
+  
+  // Sortiere Attribute alphabetisch
+  const sortedTypes = Array.from(attributeTypes.keys()).sort();
+  
+  for (const type of sortedTypes) {
+    const color = attributeTypes.get(type);
+    const isActive = activeAttributes.has(type);
+    const count = typeCount.get(type) || 0;
+    
+    const item = document.createElement('div');
+    item.className = 'attribute-legend-item';
+    
+    const colorSpan = document.createElement('span');
+    colorSpan.className = 'attribute-color';
+    colorSpan.style.backgroundColor = color;
+    
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'attribute-name';
+    nameSpan.textContent = type;
+    nameSpan.title = type; // Tooltip für vollständigen Namen
+    
+    const countSpan = document.createElement('span');
+    countSpan.className = 'attribute-count';
+    countSpan.textContent = `(${count})`;
+    
+    const toggleCheckbox = document.createElement('input');
+    toggleCheckbox.type = 'checkbox';
+    toggleCheckbox.className = 'attribute-toggle';
+    toggleCheckbox.checked = isActive;
+    toggleCheckbox.addEventListener('change', () => {
+      if (toggleCheckbox.checked) {
+        activeAttributes.add(type);
+      } else {
+        activeAttributes.delete(type);
+      }
+      updateAttributeStats(); // Aktualisiere die Attribut-Statistik
+      
+      // Statt eines kompletten Relayouts nur die Attribut-Kreise aktualisieren
+      updateAttributeCircles();
+    });
+    
+    item.appendChild(colorSpan);
+    item.appendChild(nameSpan);
+    item.appendChild(countSpan);
+    item.appendChild(toggleCheckbox);
+    legend.appendChild(item);
+  }
+  
+  // Attributstatistik aktualisieren
+  updateAttributeStats();
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
   await loadEnvConfig();
   await loadData();
@@ -1386,6 +1861,32 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (currentSimulation) switchLayout(currentLayoutMode, currentSimulation);
     });
   }
+
+  // Attribute-Funktionalität einbinden
+  const loadAttrBtn = document.getElementById('loadAttributes');
+  const attrFileInput = document.getElementById('attributeFileInput');
+  if (loadAttrBtn && attrFileInput) {
+    // Klick auf Button löst File-Dialog aus
+    loadAttrBtn.addEventListener('click', () => {
+      attrFileInput.click();
+    });
+    
+    // Datei-Input-Änderung verarbeiten
+    attrFileInput.addEventListener('change', async () => {
+      if (attrFileInput.files && attrFileInput.files[0]) {
+        const file = attrFileInput.files[0];
+        await loadAttributesFromFile(file);
+        attrFileInput.value = ''; // Reset für wiederholtes Laden
+      }
+    });
+    
+    // Initialen leeren Attribut-Legend erzeugen
+    buildAttributeLegend();
+    updateAttributeStats();
+  }
+  
+  // Kollabierbare Legenden einrichten
+  initializeCollapsibleLegends();
 
   // Footer: click status to open a file dialog and load JSON dataset
   const statusEl = document.querySelector(STATUS_ID);
@@ -1586,5 +2087,70 @@ function switchLayout(mode, simulation) {
   configureLayout(nodes, links, simulation, mode);
   
   setTimeout(() => refreshClusters(), 100);
+}
+
+/**
+ * Initialisiert die kollabierbaren Legendenbereiche
+ */
+function initializeCollapsibleLegends() {
+  // Speichern des Klappzustands im localStorage, wenn verfügbar
+  const saveCollapseState = (id, isCollapsed) => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(`orggraph_collapsed_${id}`, isCollapsed ? '1' : '0');
+      }
+    } catch (e) {
+      console.warn('Konnte Zustand nicht speichern:', e);
+    }
+  };
+  
+  // Laden des Klappzustands aus localStorage, wenn verfügbar
+  const loadCollapseState = (id) => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const saved = localStorage.getItem(`orggraph_collapsed_${id}`);
+        return saved === '1';
+      }
+    } catch (e) {
+      console.warn('Konnte Zustand nicht laden:', e);
+    }
+    return false; // Standardmäßig aufgeklappt
+  };
+  
+  // Alle Schaltflächen und Inhalte initialisieren
+  const buttons = document.querySelectorAll('.collapse-btn');
+  buttons.forEach(btn => {
+    const targetId = btn.dataset.target;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    
+    // Initialen Zustand aus localStorage laden
+    const isInitiallyCollapsed = loadCollapseState(targetId);
+    if (isInitiallyCollapsed) {
+      target.classList.add('collapsed');
+      btn.classList.add('collapsed');
+    }
+    
+    // Klick-Event für den Button
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isCollapsed = target.classList.toggle('collapsed');
+      btn.classList.toggle('collapsed');
+      saveCollapseState(targetId, isCollapsed);
+    });
+    
+    // Klick-Event für die Überschrift
+    const header = btn.closest('.legend-header');
+    if (header) {
+      header.addEventListener('click', (e) => {
+        // Verhindere, dass der Klick auf den Button hier nochmals behandelt wird
+        if (e.target !== btn) {
+          const isCollapsed = target.classList.toggle('collapsed');
+          btn.classList.toggle('collapsed');
+          saveCollapseState(targetId, isCollapsed);
+        }
+      });
+    }
+  });
 }
 
