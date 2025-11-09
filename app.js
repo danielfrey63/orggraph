@@ -30,6 +30,7 @@ let clusterPolygons = new Map();
 let currentZoomTransform = null;
 let labelsVisible = true;
 let legendMenuEl = null;
+let nodeMenuEl = null;
 let simAllById = new Map();
 let parentOf = new Map();
 let currentSubgraph = null;
@@ -38,6 +39,9 @@ let hierarchyLevels = new Map(); // nodeId -> level number
 let currentSimulation = null; // Global reference to D3 simulation
 let preferredData = "auto";
 let envConfig = null;
+let hiddenNodes = new Set();
+let hiddenByRoot = new Map();
+let globalMode = false; // Flag für den globalen Modus
 
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
@@ -172,14 +176,17 @@ function ensureTooltip() {
   tooltipEl = document.createElement('div');
   tooltipEl.style.position = 'fixed';
   tooltipEl.style.pointerEvents = 'none';
-  tooltipEl.style.background = 'rgba(17,17,17,0.85)';
+  tooltipEl.style.background = 'rgba(17,17,17,0.9)';
   tooltipEl.style.color = '#fff';
   tooltipEl.style.fontSize = '12px';
-  tooltipEl.style.padding = '6px 8px';
-  tooltipEl.style.borderRadius = '4px';
+  tooltipEl.style.padding = '10px 12px';
+  tooltipEl.style.borderRadius = '6px';
   tooltipEl.style.zIndex = 1000;
   tooltipEl.style.whiteSpace = 'pre';
   tooltipEl.style.display = 'none';
+  tooltipEl.style.maxWidth = '400px';
+  tooltipEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+  tooltipEl.style.lineHeight = '1.4';
   document.body.appendChild(tooltipEl);
 }
 function showTooltip(x, y, lines) {
@@ -226,25 +233,45 @@ function handleClusterHover(event, svgSel) {
   
   const lines = [];
   
-  // Person name
+  // Person information or cluster information
   if (nodeLabel) {
-    lines.push(nodeLabel);
+    // Section header for node
+    lines.push(`👤 ${nodeLabel}`);
     
     // Zeige Attribute für diese Person an
     if (personId && personAttributes.has(personId)) {
       const attrs = personAttributes.get(personId);
+      lines.push('📊 Attribute:');
+      let hasAttributes = false;
       for (const [attrName, attrValue] of attrs.entries()) {
         if (activeAttributes.has(attrName)) {
           const displayValue = attrValue !== '1' ? `: ${attrValue}` : '';
-          lines.push(`- ${attrName}${displayValue}`);
+          lines.push(`  • ${attrName}${displayValue}`);
+          hasAttributes = true;
         }
+      }
+      if (!hasAttributes) {
+        lines.push('  • Keine aktiven Attribute');
       }
     }
     
-    // Add org memberships
-    lines.push(...hits);
+    // Get all OEs this person belongs to (not just visible ones)
+    const allPersonOrgs = findAllPersonOrgs(personId);
+    
+    // Add visible org memberships (at mouse point) with a header
+    if (hits.length > 0) {
+      lines.push('🔍 OEs am Cursor:');
+      hits.forEach(hit => lines.push(`  • ${hit}`));
+    }
+    
+    // Add all org memberships (without header)
+    if (allPersonOrgs.length > 0) {
+      allPersonOrgs.forEach(org => lines.push(`  • ${org}`));
+    }
   } else if (hits.length) {
-    lines.push(...hits);
+    // Display cluster information with header
+    lines.push('🏢 OE-Bereiche:');
+    hits.forEach(hit => lines.push(`  • ${hit}`));
   }
   
   if (lines.length) {
@@ -255,6 +282,33 @@ function handleClusterHover(event, svgSel) {
 }
 
 // Color mapping for OEs (harmonious palette)
+/**
+ * Finds all organizational units a person belongs to
+ * @param {string} personId - ID of the person
+ * @returns {string[]} - Array of organization labels
+ */
+function findAllPersonOrgs(personId) {
+  if (!personId) return [];
+  const orgs = new Set();
+  
+  // Search for direct links from person to orgs
+  for (const link of raw.links) {
+    const sourceId = idOf(link.source);
+    const targetId = idOf(link.target);
+    
+    // Person -> Org connections
+    if (sourceId === personId && byId.has(targetId)) {
+      const targetNode = byId.get(targetId);
+      if (targetNode && targetNode.type === 'org') {
+        // Include all OEs, regardless of whether they're in allowedOrgs
+        orgs.add(targetNode.label || String(targetId));
+      }
+    }
+  }
+  
+  return Array.from(orgs).sort();
+}
+
 function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; } return h>>>0; }
 const orgColorCache = new Map();
 
@@ -615,6 +669,8 @@ function applyLoadedDataObject(data, sourceName) {
     }
   }
   allowedOrgs = new Set(orgs.map(o => String(o.id)));
+  hiddenNodes = new Set();
+  hiddenByRoot = new Map();
 
   // Beim Laden eines neuen Datensatzes prüfe, ob Personen mit den aktuellen Attributen übereinstimmen
   if (personAttributes.size > 0) {
@@ -634,6 +690,7 @@ function applyLoadedDataObject(data, sourceName) {
   
   populateCombo("");
   buildOrgLegend(new Set());
+  buildHiddenLegend();
   setStatus(sourceName);
   updateFooterStats(null);
 }
@@ -847,8 +904,8 @@ function computeSubgraph(startId, depth, mode) {
         const wType = byId.get(w)?.type;
         // Suppress Person->Org in down mode
         if (vType === 'person' && wType === 'org') continue;
-        // If target is org and it's disabled, skip
-        if (wType === 'org' && !allowedOrgs.has(w)) continue;
+        // If target is org and it's disabled (and not in global mode), skip
+        if (wType === 'org' && !globalMode && !allowedOrgs.has(w)) continue;
         if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
       }
       // Additionally: Org -> Persons via inverse memberOf (Org gets its members)
@@ -867,7 +924,8 @@ function computeSubgraph(startId, depth, mode) {
         const wType = byId.get(w)?.type;
         // For org nodes, only climb to parent orgs via inn
         if (vType === 'org' && wType !== 'org') continue;
-        if (wType === 'org' && !allowedOrgs.has(w)) continue;
+        // If target is org and it's disabled (and not in global mode), skip
+        if (wType === 'org' && !globalMode && !allowedOrgs.has(w)) continue;
         if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
       }
       // Additionally: Person -> Org via forward memberOf in up mode
@@ -875,7 +933,8 @@ function computeSubgraph(startId, depth, mode) {
         for (const w of out.get(v) || []) {
           const wType = byId.get(w)?.type;
           if (wType !== 'org') continue;
-          if (wType === 'org' && !allowedOrgs.has(w)) continue;
+          // If target is org and it's disabled (and not in global mode), skip
+          if (wType === 'org' && !globalMode && !allowedOrgs.has(w)) continue;
           if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
         }
       }
@@ -888,6 +947,9 @@ function computeSubgraph(startId, depth, mode) {
       return { ...n, level: dist.get(id) || 0 };
     })
     .filter(Boolean);
+  if (hiddenNodes && hiddenNodes.size > 0) {
+    nodes = nodes.filter(n => !hiddenNodes.has(String(n.id)));
+  }
   if (managementEnabled) {
     // Filter out basis persons (leaf nodes without direct reports)
     nodes = nodes.filter(n => !n.isBasis);
@@ -898,6 +960,7 @@ function computeSubgraph(startId, depth, mode) {
       if (!byId.has(s) || !byId.has(t)) continue;
       if (byId.get(s)?.type !== 'person' || byId.get(t)?.type !== 'person') continue;
       if (nodeSet.has(t) && !nodeSet.has(s)) {
+        if (hiddenNodes && hiddenNodes.has(String(s))) continue;
         // In 'down' mode, only add managers that are below or at the start node level
         // (dist > 0 means they were reached during traversal, dist === 0 is the start node)
         if (mode === 'down' && !dist.has(s)) continue;
@@ -906,14 +969,102 @@ function computeSubgraph(startId, depth, mode) {
       }
     }
   }
-  // Drop orgs that are disabled
-  nodes = nodes.filter(n => n.type !== 'org' || allowedOrgs.has(String(n.id)));
+  // Drop orgs that are disabled (unless in global mode)
+  if (!globalMode) {
+    nodes = nodes.filter(n => n.type !== 'org' || allowedOrgs.has(String(n.id)));
+  }
   const nodeSet = new Set(nodes.map(n => String(n.id)));
   const links = raw.links
     .map(l => ({ s: idOf(l.source), t: idOf(l.target) }))
     .filter(x => nodeSet.has(x.s) && nodeSet.has(x.t))
     .map(x => ({ source: x.s, target: x.t }));
   return { nodes, links };
+}
+
+function recomputeHiddenNodes() {
+  const agg = new Set();
+  for (const s of hiddenByRoot.values()) {
+    for (const id of s) agg.add(String(id));
+  }
+  hiddenNodes = agg;
+}
+
+function collectReportSubtree(rootId) {
+  const rid = String(rootId);
+  const out = new Map();
+  for (const l of raw.links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    if (byId.get(s)?.type === 'person' && byId.get(t)?.type === 'person') {
+      if (!out.has(s)) out.set(s, new Set());
+      out.get(s).add(t);
+    }
+  }
+  const seen = new Set([rid]);
+  const q = [rid];
+  while (q.length) {
+    const v = q.shift();
+    for (const w of (out.get(v) || [])) {
+      if (!seen.has(w)) { seen.add(w); q.push(w); }
+    }
+  }
+  return seen;
+}
+
+function hideSubtreeFromRoot(rootId) {
+  const rid = String(rootId);
+  const n = byId.get(rid);
+  if (!n || n.type !== 'person') { setStatus('Bitte eine Management-Person wählen'); return; }
+  const sub = collectReportSubtree(rid);
+  hiddenByRoot.set(rid, sub);
+  recomputeHiddenNodes();
+  buildHiddenLegend();
+  updateVisibility();
+  applyFromUI();
+}
+
+function unhideSubtree(rootId) {
+  const rid = String(rootId);
+  if (hiddenByRoot.has(rid)) {
+    hiddenByRoot.delete(rid);
+    recomputeHiddenNodes();
+  }
+  buildHiddenLegend();
+  updateVisibility();
+  applyFromUI();
+}
+
+function buildHiddenLegend() {
+  const legend = document.getElementById('hiddenLegend');
+  if (!legend) return;
+  legend.innerHTML = '';
+  if (hiddenByRoot.size === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'legend-empty';
+    empty.textContent = 'Keine ausgeblendeten Personen';
+    legend.appendChild(empty);
+    return;
+  }
+  const ul = document.createElement('ul');
+  ul.className = 'legend-list';
+  for (const [root, setIds] of hiddenByRoot.entries()) {
+    const li = document.createElement('li');
+    const row = document.createElement('div');
+    row.className = 'legend-row';
+    const name = byId.get(root)?.label || root;
+    const chip = document.createElement('span');
+    chip.className = 'legend-label-chip';
+    chip.textContent = `${name} (${setIds.size})`;
+    chip.title = name;
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = 'Einblenden';
+    btn.addEventListener('click', () => unhideSubtree(root));
+    row.appendChild(chip);
+    row.appendChild(btn);
+    li.appendChild(row);
+    ul.appendChild(li);
+  }
+  legend.appendChild(ul);
 }
 
 function buildOrgLegend(scope) {
@@ -1012,6 +1163,7 @@ function buildOrgLegend(scope) {
       e.preventDefault();
       if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
       e.stopPropagation();
+      
       // Compute descendants from immediate subtree (this LI's own UL children)
       let subRoot = null;
       let usedScope = true;
@@ -1021,14 +1173,31 @@ function buildOrgLegend(scope) {
         usedScope = false;
         subRoot = Array.from(li.children).find(ch => ch.tagName === 'UL');
       }
-      const subtreeIds = new Set(
-        subRoot ? Array.from(subRoot.querySelectorAll('input[id^="org_"]')).map(cb => cb.id.replace('org_','')) : []
-      );
-            showLegendMenu(e.clientX, e.clientY, {
+      
+      // Direktes Kind-Mapping abrufen
+      const directChildrenIds = new Set();
+      const allDescendantIds = new Set();
+      
+      if (subRoot) {
+        // Direkte Kinder sammeln
+        Array.from(subRoot.children).forEach(childLi => {
+          const childCb = childLi.querySelector('input[id^="org_"]');
+          if (childCb) {
+            const childId = childCb.id.replace('org_', '');
+            directChildrenIds.add(childId);
+          }
+          
+          // Sammle alle Nachfahren-Checkboxen im Subtree
+          const allCbs = childLi.querySelectorAll('input[id^="org_"]');
+          allCbs.forEach(cb => allDescendantIds.add(cb.id.replace('org_', '')));
+        });
+      }
+      
+      showLegendMenu(e.clientX, e.clientY, {
         onShowAll: () => {
           // include the clicked parent itself
           allowedOrgs.add(oid);
-          subtreeIds.forEach(id => allowedOrgs.add(id));
+          allDescendantIds.forEach(id => allowedOrgs.add(id));
           // Update checkboxes in this subtree
           if (subRoot) Array.from(subRoot.querySelectorAll('input[id^="org_"]')).forEach(c => c.checked = true);
           const selfCb = li.querySelector(`#org_${oid}`);
@@ -1038,19 +1207,59 @@ function buildOrgLegend(scope) {
         onHideAll: () => {
           // include the clicked parent itself
           allowedOrgs.delete(oid);
-          subtreeIds.forEach(id => allowedOrgs.delete(id));
+          allDescendantIds.forEach(id => allowedOrgs.delete(id));
           if (subRoot) Array.from(subRoot.querySelectorAll('input[id^="org_"]')).forEach(c => c.checked = false);
           const selfCb = li.querySelector(`#org_${oid}`);
           if (selfCb) selfCb.checked = false;
           syncGraphAndLegendColors();
+        },
+        onShowDirectChildrenOnly: () => {
+          // Alle Nachfahren-OEs ausblenden
+          allDescendantIds.forEach(id => {
+            allowedOrgs.delete(id);
+            const cb = subRoot.querySelector(`#org_${id}`);
+            if (cb) cb.checked = false;
+          });
+          
+          // Den Parent und direkte Kinder einblenden
+          allowedOrgs.add(oid);
+          directChildrenIds.forEach(id => allowedOrgs.add(id));
+          
+          // Checkboxen aktualisieren
+          const selfCb = li.querySelector(`#org_${oid}`);
+          if (selfCb) selfCb.checked = true;
+          
+          // Nur direkte Kind-Checkboxen aktivieren
+          directChildrenIds.forEach(id => {
+            const cb = subRoot.querySelector(`#org_${id}`);
+            if (cb) cb.checked = true;
+          });
+          
+          // Direkte Kind-Unterbäume kollabieren
+          if (subRoot) {
+            Array.from(subRoot.children).forEach(childLi => {
+              const childUl = childLi.querySelector('ul');
+              if (childUl) {
+                childUl.style.display = 'none';
+                const twisty = childLi.querySelector('.twisty');
+                if (twisty && twisty.textContent === '▾') { // ▾ = ▾
+                  twisty.textContent = '▸'; // ▸ = ▸
+                }
+              }
+            });
+          }
+          
+          syncGraphAndLegendColors();
         }
       });
     };
+    
     li.addEventListener('contextmenu', onCtx);
     // Also bind to row to catch right-clicks near controls
     row.addEventListener('contextmenu', onCtx);
     return li;
   }
+  
   if (roots.length) {
     roots.forEach(r => ul.appendChild(renderNode(r)));
   } else if (scopeProvided) {
@@ -1063,10 +1272,17 @@ function buildOrgLegend(scope) {
 
 function updateLegendChips(rootEl) {
   const root = rootEl || document;
-  // Keep allowedOrgs in sync with legend checkboxes
-  const newAllowed = new Set();
-  root.querySelectorAll('.legend-list input[id^="org_"]').forEach(cb => { if (cb.checked) newAllowed.add(cb.id.replace('org_','')); });
-  allowedOrgs = newAllowed;
+  
+  // Mit Checkboxen synchronisieren, außer wenn OEs absichtlich ausgeblendet wurden
+  if (oesVisible) {
+    // OEs sind sichtbar, normale Synchronisierung
+    const newAllowed = new Set();
+    root.querySelectorAll('.legend-list input[id^="org_"]').forEach(cb => { 
+      if (cb.checked) newAllowed.add(cb.id.replace('org_','')); 
+    });
+    allowedOrgs = newAllowed;
+  }
+  // Wenn OEs ausgeblendet sind (oesVisible=false), dann bleibt allowedOrgs leer
   // For each legend entry (li), compute active OEs from its checked ancestor chain (including self)
   root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
     const selfCb = li.querySelector(':scope > .legend-row input[id^="org_"]');
@@ -1153,8 +1369,20 @@ function ensureLegendMenu() {
     it.addEventListener('mouseleave', () => it.style.background = 'transparent');
     return it;
   };
+  
+  // Erweiterte Menü-Optionen
   el.appendChild(mkItem('Alle einblenden', () => {}));
   el.appendChild(mkItem('Alle ausblenden', () => {}));
+  
+  // Trennlinie
+  const divider = document.createElement('div');
+  divider.style.borderTop = '1px solid rgba(255,255,255,0.2)';
+  divider.style.margin = '4px 0';
+  el.appendChild(divider);
+  
+  // Neue Option: Nur direkte Kinder anzeigen
+  el.appendChild(mkItem('Nur direkte Kinder anzeigen', () => {}));
+  
   document.body.appendChild(el);
   legendMenuEl = el;
   // Dismiss on click elsewhere
@@ -1164,14 +1392,63 @@ function ensureLegendMenu() {
 function showLegendMenu(x, y, actions) {
   const el = ensureLegendMenu();
   // Wire actions
-  const items = el.querySelectorAll('div');
+  const items = el.querySelectorAll('div:not([style*="border-top"])');
   items[0].onclick = () => { hideLegendMenu(); actions.onShowAll(); };
   items[1].onclick = () => { hideLegendMenu(); actions.onHideAll(); };
+  items[2].onclick = () => { hideLegendMenu(); actions.onShowDirectChildrenOnly(); };
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
   el.style.display = 'block';
 }
 function hideLegendMenu() { if (legendMenuEl) legendMenuEl.style.display = 'none'; }
+
+function ensureNodeMenu() {
+  if (nodeMenuEl) return nodeMenuEl;
+  const el = document.createElement('div');
+  el.style.position = 'fixed';
+  el.style.background = '#111';
+  el.style.color = '#fff';
+  el.style.fontSize = '12px';
+  el.style.padding = '6px 0';
+  el.style.borderRadius = '6px';
+  el.style.minWidth = '160px';
+  el.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)';
+  el.style.zIndex = 2000;
+  el.style.display = 'none';
+  const it = document.createElement('div');
+  it.textContent = 'Ausblenden';
+  it.style.padding = '6px 12px';
+  it.style.cursor = 'pointer';
+  it.addEventListener('mouseenter', () => it.style.background = '#1f2937');
+  it.addEventListener('mouseleave', () => it.style.background = 'transparent');
+  el.appendChild(it);
+  document.body.appendChild(el);
+  nodeMenuEl = el;
+  document.addEventListener('click', () => { if (nodeMenuEl && nodeMenuEl.style.display === 'block') nodeMenuEl.style.display = 'none'; });
+  return el;
+}
+function showNodeMenu(x, y, onHide) {
+  const el = ensureNodeMenu();
+  const it = el.querySelector('div');
+  it.onclick = () => { el.style.display = 'none'; onHide(); };
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  el.style.display = 'block';
+}
+
+// Aktualisiert nur die Sichtbarkeit der Knoten im DOM ohne Layout-Änderung
+function updateVisibility() {
+  // Versteckte Knoten unsichtbar machen
+  d3.selectAll(SVG_ID + ' .node').style('opacity', d => 
+    hiddenNodes.has(String(d.id)) ? '0' : null);
+  
+  // Links, die zu versteckten Knoten führen, ebenfalls ausblenden
+  d3.selectAll(SVG_ID + ' .link').style('opacity', d => {
+    const s = idOf(d.source);
+    const t = idOf(d.target);
+    return (hiddenNodes.has(s) || hiddenNodes.has(t)) ? '0' : null;
+  });
+}
 
 function refreshClusters() {
   if (!clusterLayer) return;
@@ -1293,29 +1570,51 @@ function renderGraph(sub) {
     const p = currentZoomTransform ? currentZoomTransform.invert([mx, my]) : [mx, my];
     
     // Sammle alle Informationen für den Tooltip
-    const lines = [d.label || String(d.id)];
+    const lines = [];
+    
+    // Node header with name/ID
+    lines.push(`👤 ${d.label || String(d.id)}`);
     
     // Attribute-Informationen hinzufügen, wenn vorhanden
     const personId = String(d.id);
     if (personAttributes.has(personId)) {
       const attrs = personAttributes.get(personId);
+      lines.push('📊 Attribute:');
+      let hasAttributes = false;
       for (const [attrName, attrValue] of attrs.entries()) {
         if (activeAttributes.has(attrName)) {
           const displayValue = attrValue !== '1' ? `: ${attrValue}` : '';
-          lines.push(`- ${attrName}${displayValue}`);
+          lines.push(`  • ${attrName}${displayValue}`);
+          hasAttributes = true;
         }
+      }
+      if (!hasAttributes) {
+        lines.push('  • Keine aktiven Attribute');
       }
     }
     
     // OE-Zugehörigkeiten hinzufügen
     const clusters = clustersAtPoint(p);
     if (clusters.length > 0) {
-      lines.push(...clusters);
+      lines.push('🔍 OEs am Cursor:');
+      clusters.forEach(cluster => lines.push(`  • ${cluster}`));
+    }
+    
+    // Alle OE-Zugehörigkeiten hinzufügen
+    const allOrgs = findAllPersonOrgs(personId);
+    if (allOrgs.length > 0) {
+      allOrgs.forEach(org => lines.push(`  • ${org}`));
     }
     
     showTooltip(event.clientX, event.clientY, lines);
   });
   node.on('mouseleave', hideTooltip);
+  // Context menu to hide subtree via right-click
+  node.on('contextmenu', (event, d) => {
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    showNodeMenu(event.clientX, event.clientY, () => hideSubtreeFromRoot(String(d.id)));
+  });
 
   // Force-Simulation-Parameter
   const linkDistance = cssNumber('--link-distance', 60);
@@ -1500,7 +1799,15 @@ function applyFromUI() {
   currentSubgraph = sub;
   renderGraph(sub);
   updateFooterStats(sub);
-  // update legend to only include orgs related to the START node
+  
+  // Wenn wir im globalen Modus sind, alle OEs anzeigen
+  if (globalMode) {
+    allowedOrgs = new Set(raw.orgs.map(o => String(o.id)));
+    buildOrgLegend(allowedOrgs);
+    return;
+  }
+  
+  // Im normalen Modus: update legend to only include orgs related to the START node
   const startType = byId.get(startId)?.type;
   const scopeOrgs = new Set();
   if (startType === 'person') {
@@ -2666,6 +2973,10 @@ function exportUnmatchedEntries(unmatchedEntries) {
   showTemporaryNotification(`${unmatchedEntries.size} nicht zugeordnete Einträge exportiert als ${filename}`);
 }
 
+// Zustand für OE-Sichtbarkeit (init mit true = sichtbar)
+let oesVisible = true;
+let savedAllowedOrgs = new Set();
+
 window.addEventListener("DOMContentLoaded", async () => {
   await loadEnvConfig();
   await loadData();
@@ -2673,6 +2984,103 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (applyBtn) applyBtn.addEventListener("click", applyFromUI);
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
+  // OE-Sichtbarkeits-Toggle
+  const oeVisibilityBtn = document.getElementById('toggleOesVisibility');
+  if (oeVisibilityBtn) {
+    // Anfangs aktiv (OEs sichtbar)
+    oesVisible = oeVisibilityBtn.classList.contains('active');
+    
+    oeVisibilityBtn.addEventListener('click', () => {
+      // Toggle Button-Status
+      oeVisibilityBtn.classList.toggle('active');
+      oesVisible = oeVisibilityBtn.classList.contains('active');
+      
+      if (oesVisible) {
+        // OEs einblenden - gespeicherte Auswahl wiederherstellen
+        if (savedAllowedOrgs.size > 0) {
+          allowedOrgs = new Set(savedAllowedOrgs);
+          savedAllowedOrgs = new Set();
+        }
+      } else {
+        // OEs ausblenden - aktuelle Auswahl speichern
+        savedAllowedOrgs = new Set(allowedOrgs);
+        allowedOrgs = new Set();
+      }
+      
+      // NUR den Graph aktualisieren ohne UI-Elemente zu beeinflussen
+      refreshClusters();
+    });
+  }
+  
+  // OE-Filter initialisieren
+  const oeFilter = document.getElementById('oeFilter');
+  if (oeFilter) {
+    oeFilter.addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase().trim();
+      const legend = document.querySelector('#legend');
+      if (!legend) return;
+      
+      const items = legend.querySelectorAll('.legend-list li');
+      let anyVisible = false;
+      
+      items.forEach(li => {
+        const chip = li.querySelector('.legend-label-chip');
+        const label = chip?.textContent?.toLowerCase() || '';
+        const match = label.includes(term);
+        
+        // Setze Sichtbarkeit basierend auf Filter
+        li.style.display = term === '' || match ? '' : 'none';
+        
+        // Merke, ob mindestens ein Element sichtbar ist
+        if (li.style.display !== 'none') {
+          anyVisible = true;
+        }
+        
+        // Wenn der übergeordnete Knoten sichtbar ist, mache alle Kinder sichtbar
+        if (match && term !== '') {
+          // Mache alle Eltern-ULs sichtbar
+          let parent = li.parentElement;
+          while (parent) {
+            if (parent.tagName === 'UL') {
+              parent.style.display = '';
+              const parentLi = parent.parentElement;
+              if (parentLi && parentLi.tagName === 'LI') {
+                parentLi.style.display = '';
+              }
+            }
+            parent = parent.parentElement;
+          }
+          
+          // Mache alle Kind-ULs sichtbar und expandiere sie
+          const childUl = li.querySelector('ul');
+          if (childUl) {
+            childUl.style.display = '';
+            const twisty = li.querySelector('.twisty');
+            if (twisty && twisty.textContent === '▸') {
+              twisty.textContent = '▾';
+            }
+          }
+        }
+      });
+      
+      // Zeige Meldung, wenn keine Treffer
+      let noMatchesMsg = legend.querySelector('.no-matches-message');
+      if (!anyVisible && term !== '') {
+        if (!noMatchesMsg) {
+          noMatchesMsg = document.createElement('div');
+          noMatchesMsg.className = 'no-matches-message';
+          noMatchesMsg.textContent = 'Keine OEs gefunden';
+          noMatchesMsg.style.padding = '8px';
+          noMatchesMsg.style.fontStyle = 'italic';
+          noMatchesMsg.style.color = '#666';
+          legend.appendChild(noMatchesMsg);
+        }
+      } else if (noMatchesMsg) {
+        noMatchesMsg.remove();
+      }
+    });
+  }
+  
   const mgmt = document.querySelector('#toggleManagement');
   if (mgmt) {
     if (envConfig?.DEFAULT_MANAGEMENT != null) {
@@ -2700,6 +3108,38 @@ window.addEventListener("DOMContentLoaded", async () => {
       autoFitEnabled = auto.classList.contains('active');
       if (autoFitEnabled) {
         fitToViewport();
+      }
+    });
+  }
+  
+  // Globaler Toggle-Button
+  const globalBtn = document.querySelector('#toggleGlobal');
+  if (globalBtn) {
+    if (envConfig?.DEFAULT_GLOBAL_MODE != null) {
+      globalMode = !!envConfig.DEFAULT_GLOBAL_MODE;
+      if (globalMode) globalBtn.classList.add('active');
+    } else {
+      globalMode = globalBtn.classList.contains('active');
+    }
+    globalBtn.addEventListener('click', () => {
+      globalBtn.classList.toggle('active');
+      globalMode = globalBtn.classList.contains('active');
+      
+      // Logik für den globalen Modus implementieren
+      if (globalMode) {
+        // Alle OEs anzeigen
+        allowedOrgs = new Set(raw.orgs.map(o => String(o.id)));
+      } else {
+        // Zurück zum standardmäßigen Modus mit nur relevanten OEs
+        applyFromUI(); // Dies setzt allowedOrgs basierend auf dem aktuellen Knoten zurück
+        return; // applyFromUI rendert bereits den Graphen neu, daher hier zurückkehren
+      }
+      
+      // OE-Legende aktualisieren und Graph neu rendern
+      buildOrgLegend(allowedOrgs);
+      if (currentSubgraph) {
+        renderGraph(currentSubgraph);
+        updateFooterStats(currentSubgraph);
       }
     });
   }
@@ -2870,6 +3310,37 @@ window.addEventListener("DOMContentLoaded", async () => {
       try { applyFromUI(); } catch(_) {}
     }
   }
+  // Apply default hidden roots from env
+  if (Array.isArray(envConfig?.DEFAULT_HIDDEN_ROOTS) && envConfig.DEFAULT_HIDDEN_ROOTS.length > 0) {
+    hiddenByRoot = new Map();
+    for (const ridRaw of envConfig.DEFAULT_HIDDEN_ROOTS) {
+      const rid = String(ridRaw);
+      if (byId.has(rid)) hiddenByRoot.set(rid, collectReportSubtree(rid));
+    }
+    recomputeHiddenNodes();
+    buildHiddenLegend();
+    if (currentSubgraph) updateVisibility();
+    try { applyFromUI(); } catch(_) {}
+  }
+  const hideBtn = document.querySelector('#hideSubtree');
+  if (hideBtn) {
+    // Always hide the button by default
+    hideBtn.style.display = 'none';
+    if (envConfig?.HIDE_SUBTREE_BUTTON === true) {
+      hideBtn.addEventListener('click', () => {
+        let id = currentSelectedId;
+        if (!id) {
+          const input = document.querySelector(INPUT_COMBO_ID);
+          if (input && input.value) id = guessIdFromInput(input.value);
+        }
+        if (!id) { setStatus('Keine Person ausgewählt'); return; }
+        hideSubtreeFromRoot(String(id));
+      });
+    } else {
+      hideBtn.style.display = 'none';
+    }
+  }
+  buildHiddenLegend();
 });
 
 function fitToViewport() {

@@ -9,14 +9,14 @@
 </head>
 <body>
   <header class="app-header">
-    <h1>OrgGraph</h1>
-    <div class="controls">
-      <div>
-        <div id="combo" class="combo">
-          <input id="comboInput" autocomplete="off" placeholder="Suchen… (Name oder ID)" />
-          <ul id="comboList" class="combo-list" hidden></ul>
-        </div>
+    <div class="app-header-main">
+      <h1>OrgGraph</h1>
+      <div id="combo" class="combo">
+        <input id="comboInput" autocomplete="off" placeholder="Suchen… (Name oder ID)" />
+        <ul id="comboList" class="combo-list" hidden></ul>
       </div>
+    </div>
+    <div class="controls">
       <input id="depth" type="number" min="0" max="6" value="2" step="1" inputmode="numeric" />
       
       <div class="direction-toggle" id="directionToggle">
@@ -98,6 +98,16 @@
         </svg>
       </button>
       
+      <button id="toggleGlobal" class="toggle-btn" title="Globaler Modus">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M2 12h20" />
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </svg>
+      </button>
+      
+      <button id="hideSubtree" class="toggle-btn" title="Ausgewählten Manager mit Team ausblenden">Ausblenden</button>
+      
       <button id="fit" class="toggle-btn" aria-label="Auf Seite einpassen" title="Auf Seite einpassen">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor">
           <!-- Vollbild-Symbol mit kürzeren diagonalen Pfeilen -->
@@ -127,26 +137,56 @@
     <aside id="legendPane" aria-label="Organisationseinheiten">
       <div class="legend-section">
         <div class="legend-header">
-          <h2>OEs</h2>
-          <button class="collapse-btn" data-target="legend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+          <div class="legend-title-group">
+            <h2>OEs</h2>
+            <div class="oe-filter-container">
+              <input type="text" id="oeFilter" placeholder="OE filtern..." class="oe-filter-input">
+            </div>
+            <button id="toggleOesVisibility" class="toggle-btn active" title="OEs ausblenden">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+          <div class="legend-controls">
+            <button class="collapse-btn" data-target="legend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+          </div>
         </div>
         <div id="legend" class="legend-content"></div>
       </div>
       
       <div class="legend-section">
         <div class="legend-header">
-          <h2>Attribute</h2>
-          <button class="collapse-btn" data-target="attributeContainer" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+          <div class="legend-title-group">
+            <h2>Attribute</h2>
+            <button id="loadAttributes" class="toggle-btn" title="Attributliste laden">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                <path d="M14 2v6h6" />
+                <path d="M9 15l3-3 3 3" />
+                <path d="M12 12v6" />
+              </svg>
+            </button>
+          </div>
+          <div class="legend-controls">
+            <button class="collapse-btn" data-target="attributeContainer" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+          </div>
         </div>
         <div id="attributeContainer" class="legend-content">
-          <div class="attribute-actions">
-            <button id="loadAttributes" class="btn">Attributliste laden</button>
-            <input type="file" id="attributeFileInput" accept=".txt,.csv,text/plain,text/csv,text/tab-separated-values" hidden />
-          </div>
+          <input type="file" id="attributeFileInput" accept=".txt,.csv,text/plain,text/csv,text/tab-separated-values" hidden />
           <div id="attributeLegend" class="attribute-legend">
             <!-- Dynamisch generierte Attribut-Legende -->
           </div>
         </div>
+      </div>
+      
+      <div class="legend-section">
+        <div class="legend-header">
+          <h2>Ausgeblendet</h2>
+          <button class="collapse-btn" data-target="hiddenLegend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+        </div>
+        <div id="hiddenLegend" class="legend-content"></div>
       </div>
     </aside>
   </main>
