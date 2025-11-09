@@ -1621,6 +1621,161 @@ function parseAttributeList(text) {
 }
 
 /**
+ * Berechnet die Levenshtein-Distanz zwischen zwei Strings
+ * Gibt einen Wert zurück, der die Ähnlichkeit der Strings angibt (kleinerer Wert = ähnlicher)
+ */
+function levenshteinDistance(str1, str2) {
+  const len1 = str1.length;
+  const len2 = str2.length;
+  
+  // Erstelle eine Matrix für die Berechnung
+  const matrix = [];
+  
+  // Initialisiere die erste Zeile und Spalte
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
+  
+  // Berechne die Distanz
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,      // Löschen
+        matrix[i][j - 1] + 1,      // Einfügen
+        matrix[i - 1][j - 1] + cost // Ersetzen oder Beibehalten
+      );
+    }
+  }
+  
+  return matrix[len1][len2];
+}
+
+/**
+ * Berechnet die normalisierte Levenshtein-Distanz zwischen zwei Strings
+ * Gibt einen Wert zwischen 0 und 1 zurück (0 = identisch, 1 = komplett verschieden)
+ */
+function normalizedLevenshteinDistance(str1, str2) {
+  const distance = levenshteinDistance(str1, str2);
+  const maxLength = Math.max(str1.length, str2.length);
+  // Vermeide Division durch Null
+  if (maxLength === 0) return 0;
+  return distance / maxLength;
+}
+
+/**
+ * Führt eine Fuzzy-Suche für einen Identifikator durch und gibt potentielle Treffer zurück
+ */
+function fuzzySearch(identifier, threshold = 0.3, progressCallback = null, abortFlag = null) {
+  if (!identifier || !String(identifier).trim()) return [];
+  
+  const normalizedInput = String(identifier).toLowerCase();
+  const potentialMatches = [];
+  let processedCount = 0;
+  const totalItems = raw.persons.length;
+  const batchSize = 100; // Anzahl der zu verarbeitenden Elemente pro Batch
+  
+  return new Promise((resolve) => {
+    // Timer für Progress-Update, wenn die Suche länger als 1 Sekunde dauert
+    let searchStartTime = performance.now();
+    let progressShown = false;
+    let progressTimer = setTimeout(() => {
+      progressShown = true;
+      if (progressCallback) progressCallback(0, totalItems);
+    }, 1000);
+    
+    function processNextBatch(startIndex) {
+      // Prüfen, ob die Suche abgebrochen wurde
+      if (abortFlag && abortFlag.aborted) {
+        clearTimeout(progressTimer);
+        resolve([]); // Leeres Ergebnis zurückgeben
+        return;
+      }
+      
+      let endIndex = Math.min(startIndex + batchSize, totalItems);
+      
+      // Verarbeite den aktuellen Batch
+      for (let i = startIndex; i < endIndex; i++) {
+        // Noch einmal prüfen, ob die Suche abgebrochen wurde (feingranularer)
+        if (abortFlag && abortFlag.aborted) break;
+        
+        const person = raw.persons[i];
+        if (!person || !person.id) continue;
+        
+        // Berechne die Levenshtein-Distanz für ID
+        const personId = String(person.id);
+        const normalizedId = personId.toLowerCase();
+        const idDistance = normalizedLevenshteinDistance(normalizedInput, normalizedId);
+        
+        // Berechne die Levenshtein-Distanz für E-Mail, falls vorhanden
+        let emailDistance = 1; // Maximum (keine Übereinstimmung)
+        let normalizedEmail = '';
+        if (person.email) {
+          normalizedEmail = person.email.toLowerCase();
+          emailDistance = normalizedLevenshteinDistance(normalizedInput, normalizedEmail);
+        }
+        
+        // Berechne die Levenshtein-Distanz für das Label (Name), falls vorhanden
+        let labelDistance = 1; // Maximum (keine Übereinstimmung)
+        let normalizedLabel = '';
+        if (person.label) {
+          normalizedLabel = person.label.toLowerCase();
+          labelDistance = normalizedLevenshteinDistance(normalizedInput, normalizedLabel);
+        }
+        
+        // Nehme den besten Match (kleinsten Distanzwert)
+        const bestDistance = Math.min(idDistance, emailDistance, labelDistance);
+        const matchedOn = bestDistance === idDistance ? 'ID' : 
+                         (bestDistance === emailDistance ? 'E-Mail' : 'Name');
+        
+        // Wenn die Distanz unter dem Threshold liegt, füge es zu den potentiellen Matches hinzu
+        if (bestDistance <= threshold) {
+          potentialMatches.push({
+            id: personId,
+            label: person.label || personId,
+            email: person.email || '',
+            similarity: bestDistance,
+            matchedOn
+          });
+        }
+      }
+      
+      processedCount = endIndex;
+      
+      // Update Progress-Callback wenn gezeigt
+      if (progressShown && progressCallback) {
+        progressCallback(processedCount, totalItems);
+      }
+      
+      // Abbruch oder Fortsetzung?
+      if (abortFlag && abortFlag.aborted) {
+        clearTimeout(progressTimer);
+        resolve([]); // Leeres Ergebnis bei Abbruch
+        return;
+      }
+      
+      // Prüfen ob wir fertig sind oder den nächsten Batch verarbeiten müssen
+      if (processedCount < totalItems) {
+        // Für bessere Reaktionsfähigkeit der UI, zeitversetzt fortsetzen
+        setTimeout(() => processNextBatch(endIndex), 0);
+      } else {
+        // Fertig! Timer löschen und Ergebnis zurückgeben
+        clearTimeout(progressTimer);
+        
+        // Sortiere nach Ähnlichkeit (kleinere Werte zuerst)
+        resolve(potentialMatches.sort((a, b) => a.similarity - b.similarity));
+      }
+    }
+    
+    // Starte die Verarbeitung mit dem ersten Batch
+    processNextBatch(0);
+  });
+}
+
+/**
  * Sucht nach Personen im Datensatz basierend auf ID oder E-Mail
  */
 function findPersonIdsByIdentifier(identifier) {
@@ -1641,7 +1796,7 @@ function findPersonIdsByIdentifier(identifier) {
 }
 
 /**
- * Lädt Attributliste aus einer Datei
+ * Lädt Attributliste aus einer Datei mit Fuzzy-Search-Unterstützung
  */
 async function loadAttributesFromFile(file) {
   try {
@@ -1654,8 +1809,78 @@ async function loadAttributesFromFile(file) {
     
     // Verknüpfe die geladenen Attribute mit den Personen-IDs
     const newPersonAttributes = new Map();
+    const fuzzyMatches = new Map();
+    const unmatchedEntries = new Map();
     let matchedCount = 0;
     
+    // Progress-Anzeige erstellen
+    let searchProgress = null;
+    let searchCount = 0;
+    let searchAborted = false; // Flag, um die Suche abzubrechen
+    
+    const progressContainer = document.createElement('div');
+    progressContainer.className = 'progress-container';
+    progressContainer.style.display = 'none';
+    
+    const progressOverlay = document.createElement('div');
+    progressOverlay.className = 'progress-overlay';
+    
+    const progressBox = document.createElement('div');
+    progressBox.className = 'progress-box';
+    
+    const progressText = document.createElement('div');
+    progressText.className = 'progress-text';
+    progressText.textContent = 'Suche nach ähnlichen Einträgen...';
+    
+    const progressBar = document.createElement('div');
+    progressBar.className = 'progress-bar';
+    
+    const progressBarInner = document.createElement('div');
+    progressBarInner.className = 'progress-bar-inner';
+    progressBar.appendChild(progressBarInner);
+    
+    const progressPercent = document.createElement('div');
+    progressPercent.className = 'progress-percent';
+    progressPercent.textContent = '0%';
+    
+    // Abbrechen-Button hinzufügen
+    const progressCancelBtn = document.createElement('button');
+    progressCancelBtn.className = 'progress-cancel-btn';
+    progressCancelBtn.textContent = 'Abbrechen';
+    progressCancelBtn.addEventListener('click', () => {
+      // Suche abbrechen
+      searchAborted = true;
+      
+      // Dialog entfernen
+      progressContainer.remove();
+      
+      // Meldung anzeigen
+      showTemporaryNotification('Suche nach ähnlichen Einträgen abgebrochen');
+    });
+    
+    progressBox.appendChild(progressText);
+    progressBox.appendChild(progressBar);
+    progressBox.appendChild(progressPercent);
+    progressBox.appendChild(progressCancelBtn); // Button zum Container hinzufügen
+    progressContainer.appendChild(progressOverlay);
+    progressContainer.appendChild(progressBox);
+    document.body.appendChild(progressContainer);
+    
+    // Progress-Callback für Fortschrittsanzeige
+    const updateProgress = (processed, total) => {
+      if (progressContainer.style.display === 'none') {
+        progressContainer.style.display = 'flex';
+      }
+      
+      const percent = Math.round((processed / total) * 100);
+      progressBarInner.style.width = `${percent}%`;
+      progressPercent.textContent = `${processed} / ${total} (${percent}%)`;
+      progressText.textContent = `Suche nach ähnlichen Einträgen für ${searchCount} nicht exakt zugeordnete Attribute...`;
+    };
+    
+    // Verarbeite alle Attribute
+    // Sammle explizit alle Einträge ohne exakte Zuordnung für die spätere Fuzzy-Suche
+    const unmatchedToSearch = [];
     for (const [identifier, attrs] of attributes.entries()) {
       const personIds = findPersonIdsByIdentifier(identifier);
       if (personIds.length > 0) {
@@ -1668,7 +1893,94 @@ async function loadAttributesFromFile(file) {
           }
         }
         matchedCount++;
+      } else {
+        // Zähle nicht exakt zugeordnete Einträge
+        searchCount++;
+        unmatchedToSearch.push([identifier, attrs]);
       }
+    }
+    
+    // Abbruch-Flag außerhalb des Blocks deklarieren, damit es nachher sicher verfügbar ist
+    let abortFlagObj = null;
+
+    // Neue, vollständig lineare Fortschrittsberechnung für nicht-matched Attribute
+    if (searchCount > 0) {
+      progressText.textContent = `Vorbereitung der Suche für ${searchCount} nicht zugeordnete Attribute...`;
+      
+      // Klare Berechnung: Gesamtfortschritt = 100% / searchCount für jeden Eintrag
+      const progressPerEntry = 1 / searchCount;
+      
+      // Statische Variablen zum Tracking des Fortschritts
+      let searchesCompleted = 0;
+      
+      // Neuer, linearer Progress-Handler
+      const linearProgressHandler = (entriesProcessed, totalEntries, currentEntryIndex) => {
+        // Korrekte Index-Anzeige (1-basiert, begrenzt)
+        const displayIndex = Math.max(1, Math.min(currentEntryIndex + 1, searchCount));
+        
+        // Prüfe auf Division durch Null
+        const entryProgress = totalEntries > 0 ? entriesProcessed / totalEntries : 0;
+        
+        // Linearer Gesamtfortschritt:
+        // - Abgeschlossene Einträge zählen zu 100%
+        // - Aktueller Eintrag zählt anteilig
+        const overallProgress = (searchesCompleted * progressPerEntry) + 
+                              (entryProgress * progressPerEntry);
+        
+        // Sichere Prozentberechnung mit Rundung
+        const percent = Math.round(overallProgress * 100);
+        const boundedPercent = Math.max(0, Math.min(100, percent));
+        
+        // Aktualisiere die visuelle Anzeige
+        progressBarInner.style.width = `${boundedPercent}%`;
+        progressPercent.textContent = `${boundedPercent}%`;
+        progressText.textContent = `Suche nach ähnlichen Einträgen... (${displayIndex} von ${searchCount})`;
+        
+        // Stelle sicher, dass der Progress-Dialog sichtbar ist
+        if (progressContainer.style.display === 'none') {
+          progressContainer.style.display = 'flex';
+        }
+      };
+      
+      // Objekt für das Abbruch-Flag (als Referenz, damit es in der fuzzySearch-Funktion aktualisiert werden kann)
+      abortFlagObj = { aborted: false };
+      
+      // Abbruch-Flag mit dem Cancel-Button verknüpfen
+      progressCancelBtn.addEventListener('click', () => {
+        abortFlagObj.aborted = true;
+      });
+      
+      // Fuzzy-Suche nur über die tatsächlich nicht zugeordneten Einträge durchführen
+      for (let i = 0; i < unmatchedToSearch.length; i++) {
+        if (searchAborted || (abortFlagObj && abortFlagObj.aborted)) break;
+
+        const [identifier, attrs] = unmatchedToSearch[i];
+
+        // Fortschritt-Handler für diesen Eintrag (Index i ist 0-basiert)
+        const entryProgressHandler = (processed, total) => {
+          linearProgressHandler(processed, total, i);
+        };
+
+        // Fuzzy Search durchführen
+        const potentialMatches = await fuzzySearch(identifier, 0.3, entryProgressHandler, abortFlagObj);
+        if (potentialMatches.length > 0) {
+          fuzzyMatches.set(identifier, { attrs, potentialMatches });
+        } else if (!abortFlagObj.aborted) {
+          unmatchedEntries.set(identifier, attrs);
+        }
+
+        // Eintrag abgeschlossen -> Gesamtfortschritt erhöhen
+        searchesCompleted++;
+      }
+    }
+    
+    // Progress-Anzeige entfernen
+    progressContainer.remove();
+    
+    // Prüfen, ob die Suche abgebrochen wurde
+    if (searchAborted || (abortFlagObj && abortFlagObj.aborted)) {
+      showTemporaryNotification('Attribute-Import abgebrochen - keine Änderungen vorgenommen');
+      return false;
     }
     
     // Generiere Farben für neue Attributtypen
@@ -1680,6 +1992,17 @@ async function loadAttributesFromFile(file) {
         attributeTypes.set(type, color);
         activeAttributes.add(type); // Neue Attribute standardmäßig aktivieren
       }
+    }
+    
+    // Wenn es Fuzzy-Matches gibt, zeige den Dialog
+    if (fuzzyMatches.size > 0) {
+      showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttributes, attributeTypes);
+      return true;
+    }
+    
+    // Wenn nur unmatched entries existieren, exportiere diese
+    if (unmatchedEntries.size > 0) {
+      exportUnmatchedEntries(unmatchedEntries);
     }
     
     // Setze die neuen Attribute und aktualisiere
@@ -1694,8 +2017,6 @@ async function loadAttributesFromFile(file) {
     
     // Zeige eine temporäre Benachrichtigung ohne den Status zu überschreiben
     showTemporaryNotification(`Attribute geladen: ${count} Einträge, ${matchedCount} gefunden (${formatInfo})`);
-    
-    // Die Attributstatistik wird bereits durch updateAttributeStats() aktualisiert
     
     return true;
   } catch (e) {
@@ -1777,6 +2098,572 @@ function buildAttributeLegend() {
   
   // Attributstatistik aktualisieren
   updateAttributeStats();
+}
+
+/**
+ * Zeigt einen Dialog mit Fuzzy-Match-Vorschlägen
+ */
+function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttributes, attributeTypes) {
+  // Dialog-Container erstellen
+  const dialogContainer = document.createElement('div');
+  dialogContainer.className = 'fuzzy-match-dialog-container';
+  
+  // Event-Listener für Dialog-Schließung durch Klick auf Overlay - Abbruch ohne Änderungen
+  dialogContainer.addEventListener('click', (e) => {
+    // Nur reagieren, wenn direkt auf den Container geklickt wurde (nicht auf Dialog-Inhalt)
+    if (e.target === dialogContainer) {
+      // Bereinige alle Dropdown-Elemente
+      document.querySelectorAll('body > .combo-list').forEach(el => {
+        el.remove();
+      });
+      
+      // Entferne den Dialog ohne Attribute zu importieren
+      dialogContainer.remove();
+      
+      // Benachrichtigung anzeigen
+      showTemporaryNotification('Import abgebrochen - keine Änderungen vorgenommen');
+    }
+  });
+  
+  // ESC-Taste zum Abbrechen des Dialogs ohne Änderungen
+  document.addEventListener('keydown', function escHandler(e) {
+    if (e.key === 'Escape' && document.body.contains(dialogContainer)) {
+      // Bereinige alle Dropdown-Elemente
+      document.querySelectorAll('body > .combo-list').forEach(el => {
+        el.remove();
+      });
+      
+      // Entferne den Dialog ohne Attribute zu importieren
+      dialogContainer.remove();
+      
+      // Benachrichtigung anzeigen
+      showTemporaryNotification('Import abgebrochen - keine Änderungen vorgenommen');
+      
+      // Entferne den Event-Listener nach Dialog-Schließung
+      document.removeEventListener('keydown', escHandler);
+    }
+  });
+  
+  const dialog = document.createElement('div');
+  dialog.className = 'fuzzy-match-dialog';
+  
+  // Dialog-Header
+  const header = document.createElement('div');
+  header.className = 'fuzzy-match-header';
+  
+  const title = document.createElement('h2');
+  title.textContent = 'Mögliche Übereinstimmungen gefunden';
+  header.appendChild(title);
+  
+  // Close Button (Abbrechen)
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'fuzzy-match-close-btn';
+  closeBtn.innerHTML = '&times;';
+  closeBtn.title = 'Abbrechen';
+  closeBtn.addEventListener('click', () => {
+    // Abbrechen ohne Änderungen - nichts importieren
+    
+    // Bereinige alle Dropdown-Elemente, die direkt an body angehängt wurden
+    document.querySelectorAll('body > .combo-list').forEach(el => {
+      el.remove();
+    });
+    
+    // Entferne den Dialog ohne Attribute zu importieren
+    dialogContainer.remove();
+    
+    // Benachrichtigung anzeigen
+    showTemporaryNotification('Import abgebrochen - keine Änderungen vorgenommen');
+  });
+  header.appendChild(closeBtn);
+  
+  dialog.appendChild(header);
+  
+  // Dialog-Inhalt
+  const content = document.createElement('div');
+  content.className = 'fuzzy-match-content';
+  
+  // Meldung
+  const message = document.createElement('p');
+  message.textContent = 'Folgende Einträge konnten nicht eindeutig zugeordnet werden. Bitte wählen Sie die korrekte Zuordnung:'
+  content.appendChild(message);
+  
+  // Liste der Fuzzy-Matches
+  const matchList = document.createElement('div');
+  matchList.className = 'fuzzy-match-list';
+  
+  // Für jeden unklaren Eintrag
+  for (const [identifier, { attrs, potentialMatches }] of fuzzyMatches.entries()) {
+    const matchItem = document.createElement('div');
+    matchItem.className = 'fuzzy-match-item';
+    
+    // Vereinfachter Header mit Identifier und Attributen in einer Zeile
+    const itemInfo = document.createElement('div');
+    itemInfo.className = 'fuzzy-match-info';
+    
+    // Erstelle Infotext (Identifier und Attribute)
+    const identifierDisplay = document.createElement('span');
+    identifierDisplay.className = 'fuzzy-identifier';
+    identifierDisplay.textContent = identifier;
+    itemInfo.appendChild(identifierDisplay);
+    
+    // Trenner
+    itemInfo.appendChild(document.createTextNode(' — '));
+    
+    // Attribute anzeigen
+    const attrsDisplay = document.createElement('span');
+    attrsDisplay.className = 'fuzzy-attrs';
+    attrsDisplay.textContent = Array.from(attrs.entries())
+      .map(([name, value]) => `${name}${value !== '1' ? `: ${value}` : ''}`)
+      .join(', ');
+    itemInfo.appendChild(attrsDisplay);
+    
+    matchItem.appendChild(itemInfo);
+    
+    // Combo-Container im Stil des Hauptfensters (eine einzelne Komponente)
+    const comboContainer = document.createElement('div');
+    comboContainer.className = 'fuzzy-match-combo';
+    
+    // Die eigentliche Combo-Box
+    const combo = document.createElement('div');
+    combo.className = 'combo';
+    comboContainer.appendChild(combo);
+    
+    // Suchfeld innerhalb der Combo
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'combo-input';
+    searchInput.placeholder = 'Klicken zum Auswählen...';
+    searchInput.id = `fuzzy-search-${identifier}`;
+    searchInput.setAttribute('data-identifier', identifier);
+    
+    // Standardwert: "Keine Übereinstimmung - als unzugeordnet markieren"
+    const defaultText = 'Keine Übereinstimmung - als unzugeordnet markieren';
+    searchInput.value = defaultText;
+    
+    // Default: keine Übereinstimmung (unmatched entry)
+    unmatchedEntries.set(identifier, attrs);
+    
+    combo.appendChild(searchInput);
+    
+    // Dropdown-Liste mit verbesserter Sichtbarkeit
+    const dropdownList = document.createElement('ul');
+    dropdownList.className = 'combo-list';
+    dropdownList.id = `fuzzy-list-${identifier}`;
+    
+    // Beginn: unsichtbar, aber bereit zum Anzeigen
+    dropdownList.style.cssText = 'display: none; visibility: hidden; opacity: 0;';
+    
+    // Füge das Dropdown direkt an body an, damit es nicht von anderen Elementen verdeckt wird
+    // Wir werden die Position später anpassen
+    document.body.appendChild(dropdownList);
+    
+    // Speichere die Referenz auf das Dropdown im Combo-Element
+    combo.dropdownElement = dropdownList;
+    
+    // Option "Keine Übereinstimmung" als erstes Item
+    const noMatchItem = document.createElement('li');
+    noMatchItem.dataset.value = 'none';
+    noMatchItem.dataset.search = 'keine übereinstimmung unzugeordnet';
+    noMatchItem.textContent = 'Keine Übereinstimmung - als unzugeordnet markieren';
+    noMatchItem.classList.add('none-match-option');
+    noMatchItem.addEventListener('click', (e) => {
+      e.stopPropagation(); // Verhindern, dass das Klick-Event zu anderen Elementen propagiert
+      searchInput.value = noMatchItem.textContent;
+      dropdownList.style.cssText = 'display: none !important;';
+      // "Keine Übereinstimmung" - zur unmatched Liste hinzufügen
+      unmatchedEntries.set(identifier, attrs);
+      
+      // Fokus zurück auf Eingabefeld setzen
+      searchInput.focus();
+    });
+    dropdownList.appendChild(noMatchItem);
+    
+    // Keine Trennlinie mehr zwischen "Keine Übereinstimmung" und den Vorschlägen
+    
+    // Speichere die Matches für die Suche
+    const matchOptions = [];
+    
+    // Potentielle Matches als Liste hinzufügen
+    for (const match of potentialMatches) {
+      const option = document.createElement('li');
+      option.dataset.value = match.id;
+      
+      // Ähnlichkeit als Prozentsatz anzeigen
+      const similarityPercent = Math.round((1 - match.similarity) * 100);
+      
+      // HTML für formatiertes Item
+      const nameHtml = `<strong>${match.label}</strong> (ID: ${match.id})`;
+      const emailHtml = match.email ? ` - ${match.email}` : '';
+      const similarityHtml = ` <span class="match-similarity">${similarityPercent}%</span>`;
+      const matchedOnHtml = ` <span class="match-source">(${match.matchedOn})</span>`;
+      
+      option.innerHTML = nameHtml + emailHtml + similarityHtml + matchedOnHtml;
+      
+      // Such-Keywords hinzufügen
+      let searchTerms = match.label + ' ' + match.id;
+      if (match.email) searchTerms += ' ' + match.email;
+      searchTerms += ' ' + match.matchedOn + ' ' + similarityPercent;
+      option.dataset.search = searchTerms.toLowerCase();
+      
+      // Click-Handler mit verbessertem Verhalten
+      option.addEventListener('click', (e) => {
+        e.stopPropagation(); // Verhindere Bubbling
+        
+        // Setze den Wert im Suchfeld
+        searchInput.value = match.label + (match.email ? ` (${match.email})` : ` (ID: ${match.id})`);
+        
+        // Dropdown vollständig ausblenden mit !important
+        dropdownList.style.cssText = 'display: none !important; visibility: hidden !important;';
+        
+        // Aus unmatched entfernen, falls vorhanden
+        unmatchedEntries.delete(identifier);
+        
+        // Attribute zuordnen
+        const personId = match.id;
+        if (!newPersonAttributes.has(personId)) {
+          newPersonAttributes.set(personId, new Map());
+        }
+        for (const [attrName, attrValue] of attrs.entries()) {
+          newPersonAttributes.get(personId).set(attrName, attrValue);
+        }
+        
+        // Fokus zurück auf Eingabefeld setzen
+        searchInput.focus();
+      });
+      
+      dropdownList.appendChild(option);
+      matchOptions.push({
+        element: option,
+        id: match.id,
+        label: match.label,
+        email: match.email || '',
+        matchedOn: match.matchedOn,
+        similarity: match.similarity,
+        similarityPercent: similarityPercent,
+        searchTerms: searchTerms.toLowerCase()
+      });
+    }
+    
+    // Variablen für die aktuelle Auswahl in der Combo-Box
+    let activeItemIndex = -1;
+    let visibleItems = [];
+    
+    // Hilfsfunktion, um das aktive Item zu setzen
+    const setActiveItem = (index) => {
+      // Alte Auswahl entfernen
+      dropdownList.querySelectorAll('li').forEach(li => li.classList.remove('is-active'));
+      
+      // Gültige Indizes prüfen
+      activeItemIndex = Math.max(-1, Math.min(index, visibleItems.length - 1));
+      
+      // Neue Auswahl setzen, wenn Index gültig
+      if (activeItemIndex >= 0) {
+        visibleItems[activeItemIndex].classList.add('is-active');
+      }
+    };
+    
+    // Hilfsfunktion zum Auswählen eines Items
+    const chooseItem = (index) => {
+      if (index >= 0 && index < visibleItems.length) {
+        // Simuliere einen Klick auf das Element
+        visibleItems[index].click();
+      }
+    };
+    
+    // Verbesserter Event-Listener für Tastatureingaben
+    searchInput.addEventListener('keydown', (e) => {
+      // Stell sicher, dass das Dropdown sichtbar ist
+      const isVisible = window.getComputedStyle(dropdownList).display !== 'none';
+      if (!isVisible && e.key !== 'ArrowDown') return;
+      
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          // Falls das Dropdown nicht sichtbar ist, zeige es an
+          if (!isVisible) {
+            showDropdown();
+            setActiveItem(0); // Aktiviere das erste Element
+          } else {
+            setActiveItem(activeItemIndex + 1);
+          }
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setActiveItem(Math.max(-1, activeItemIndex - 1));
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (activeItemIndex >= 0) {
+            chooseItem(activeItemIndex);
+          } else if (searchInput.value.trim() !== '') {
+            // Falls etwas eingegeben wurde, aber kein Item aktiviert ist
+            // Erster sichtbarer Eintrag auswählen
+            if (visibleItems.length > 0) {
+              chooseItem(0);
+            }
+          }
+          break;
+        case 'Escape':
+          e.preventDefault();
+          // Vollständiges Ausblenden mit !important
+          dropdownList.style.cssText = 'display: none !important; visibility: hidden !important;';
+          break;
+      }
+    });
+    
+    // Event-Listeners für die Suche mit verbesserter Anzeige
+    searchInput.addEventListener('input', function() {
+      const searchTerm = this.value.toLowerCase();
+      const dropdownId = `fuzzy-list-${this.getAttribute('data-identifier')}`;
+      const dropdown = document.getElementById(dropdownId);
+      
+      // Dropdown anzeigen (mit showDropdown-Funktion)
+      showDropdown();
+      
+      // Erster Eintrag (Keine Übereinstimmung)
+      const noMatchLi = dropdown.children[0];
+      
+      // Alle sichtbaren Elemente zurücksetzen
+      visibleItems = [];
+      
+      // "Keine Übereinstimmung" filtern
+      if (!noMatchLi.dataset.search.includes(searchTerm)) {
+        noMatchLi.style.display = 'none';
+      } else {
+        noMatchLi.style.display = '';
+        visibleItems.push(noMatchLi);
+      }
+      
+      // Variable für die Sichtbarkeit der Match-Optionen
+      let matchOptionsVisible = false;
+      
+      // Alle anderen Optionen filtern
+      for (const matchOption of matchOptions) {
+        const listItem = matchOption.element;
+        if (!searchTerm || matchOption.searchTerms.includes(searchTerm)) {
+          listItem.style.display = '';
+          matchOptionsVisible = true;
+          visibleItems.push(listItem);
+        } else {
+          listItem.style.display = 'none';
+        }
+      }
+      
+      // Keine Trennlinie mehr zu verwalten
+      
+      // Falls keine Ergebnisse, Info anzeigen
+      if (visibleItems.length === 0 && searchTerm) {
+        const noResults = document.createElement('li');
+        noResults.className = 'no-results';
+        noResults.textContent = 'Keine Ergebnisse gefunden';
+        noResults.style.fontStyle = 'italic';
+        noResults.style.color = 'var(--text-muted)';
+        noResults.style.textAlign = 'center';
+        noResults.style.padding = '10px';
+        dropdown.appendChild(noResults);
+      } else {
+        // Entferne no-results falls vorhanden
+        const noResultsEl = dropdown.querySelector('.no-results');
+        if (noResultsEl) noResultsEl.remove();
+      }
+      
+      // Aktives Element zurücksetzen
+      activeItemIndex = -1;
+    });
+    
+    // Hilfsfunktion zum Positionieren des Dropdowns unter dem Eingabefeld
+    const positionDropdown = () => {
+      const rect = searchInput.getBoundingClientRect();
+      dropdownList.style.position = 'fixed';
+      dropdownList.style.top = (rect.bottom + window.scrollY) + 'px';
+      dropdownList.style.left = (rect.left + window.scrollX) + 'px';
+      
+      // Setze die Breite exakt auf die Breite des Eingabefelds
+      const inputWidth = rect.width;
+      dropdownList.style.width = inputWidth + 'px';
+      dropdownList.style.minWidth = inputWidth + 'px';
+      dropdownList.style.maxWidth = inputWidth + 'px';
+    };
+    
+    // Hilfsfunktion zum Anzeigen des Dropdowns
+    const showDropdown = () => {
+      // Positioniere das Dropdown korrekt
+      positionDropdown();
+      
+      // Hole die aktuellen Maße des Eingabefelds
+      const rect = searchInput.getBoundingClientRect();
+      const inputWidth = rect.width;
+      
+      // Mache es sichtbar mit !important Eigenschaften
+      dropdownList.style.cssText = `
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: fixed !important;
+        z-index: 99999 !important;
+        top: ${(rect.bottom + window.scrollY)}px !important;
+        left: ${(rect.left + window.scrollX)}px !important;
+        width: ${inputWidth}px !important;
+        min-width: ${inputWidth}px !important;
+        max-width: ${inputWidth}px !important;
+      `;
+      
+      // Force DOM Reflow für bessere Sichtbarkeit
+      void dropdownList.offsetWidth;
+    };
+    
+    // Fokus-Handler für Suchfeld
+    searchInput.addEventListener('focus', function() {
+      // Zeige das Dropdown an
+      showDropdown();
+      
+      // Selektiere den gesamten Text im Input
+      this.select();
+    });
+    
+    // Wenn das Fenster oder ein Element die Größe ändert, Dropdown neu positionieren
+    window.addEventListener('resize', () => {
+      if (dropdownList.style.display !== 'none') {
+        positionDropdown();
+      }
+    });
+    
+    // Bei jedem Klick auf das Eingabefeld das Dropdown anzeigen
+    searchInput.addEventListener('click', function() {
+      showDropdown();
+    });
+    
+    // Klick außerhalb schließt die Dropdown-Liste
+    document.addEventListener('click', function(e) {
+      if (!combo.contains(e.target) && e.target !== dropdownList && !dropdownList.contains(e.target)) {
+        dropdownList.style.display = 'none';
+      }
+    });
+    
+    matchItem.appendChild(comboContainer);
+    matchList.appendChild(matchItem);
+  }
+  
+  content.appendChild(matchList);
+  dialog.appendChild(content);
+  
+  // Footer mit Aktionsbuttons
+  const footer = document.createElement('div');
+  footer.className = 'fuzzy-match-footer';
+  
+  // "Bestätigen" Button
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'fuzzy-match-confirm-btn';
+  confirmBtn.textContent = 'Bestätigen';
+  confirmBtn.addEventListener('click', () => {
+    // Prüfen, ob Einträge ohne Auswahl vorhanden sind und diese als "unmatched" markieren
+    for (const [identifier, { attrs }] of fuzzyMatches.entries()) {
+      const searchInput = document.getElementById(`fuzzy-search-${identifier}`);
+      
+      // Wenn kein Wert ausgewählt wurde, als unmatched markieren
+      if (!searchInput || searchInput.value === '') {
+        unmatchedEntries.set(identifier, attrs);
+      }
+    }
+    
+    // Unmatched exportieren
+    if (unmatchedEntries.size > 0) {
+      exportUnmatchedEntries(unmatchedEntries);
+    }
+    
+    // Bereinige alle Dropdown-Elemente, die direkt an body angehängt wurden
+    document.querySelectorAll('body > .combo-list').forEach(el => {
+      el.remove();
+    });
+    
+    finalizeFuzzyMatching(newPersonAttributes, attributeTypes);
+    dialogContainer.remove();
+  });
+  footer.appendChild(confirmBtn);
+  
+  dialog.appendChild(footer);
+  dialogContainer.appendChild(dialog);
+  document.body.appendChild(dialogContainer);
+}
+
+/**
+ * Schließt den Fuzzy-Match-Prozess ab und wendet die Attribute an
+ */
+function finalizeFuzzyMatching(newPersonAttributes, attributeTypes) {
+  // Generiere Farben für neue Attributtypen
+  const attributeNames = new Set();
+  for (const [id, attrs] of newPersonAttributes.entries()) {
+    for (const attrName of attrs.keys()) {
+      attributeNames.add(attrName);
+    }
+  }
+  
+  // Erstelle Farben für neue Attributtypen
+  for (const attrName of attributeNames) {
+    if (!attributeTypes.has(attrName)) {
+      // Generiere eine neue Farbe für diesen Attributtyp
+      const hue = (hashCode(attrName) % 360);
+      const color = `hsl(${hue}, 70%, 50%)`;
+      attributeTypes.set(attrName, color);
+      activeAttributes.add(attrName); // Neue Attribute standardmäßig aktivieren
+    }
+  }
+  
+  // Setze die neuen Attribute und aktualisiere
+  personAttributes = newPersonAttributes;
+  
+  // UI aktualisieren
+  buildAttributeLegend();
+  updateAttributeStats();
+  
+  // Nur die Attribut-Kreise aktualisieren, ohne Layout-Neuberechnung
+  if (currentSubgraph) updateAttributeCircles();
+  
+  // Benachrichtigung anzeigen
+  showTemporaryNotification(`Attribute wurden erfolgreich zugeordnet und aktualisiert`);
+}
+
+/**
+ * Exportiert nicht zugeordnete Einträge in eine separate Datei
+ */
+function exportUnmatchedEntries(unmatchedEntries) {
+  if (unmatchedEntries.size === 0) return;
+  
+  // Erstelle den Export-Inhalt im CSV-Format
+  let exportContent = 'Identifier,Attribute,Wert\n';
+  
+  for (const [identifier, attrs] of unmatchedEntries.entries()) {
+    for (const [attrName, attrValue] of attrs.entries()) {
+      // Vermeide Komma-Probleme durch Anführungszeichen
+      const safeIdentifier = `"${identifier.replace(/"/g, '""')}"`;
+      const safeAttrName = `"${attrName.replace(/"/g, '""')}"`;
+      const safeAttrValue = `"${String(attrValue).replace(/"/g, '""')}"`;
+      
+      exportContent += `${safeIdentifier},${safeAttrName},${safeAttrValue}\n`;
+    }
+  }
+  
+  // Erstelle einen Download-Link
+  const blob = new Blob([exportContent], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const filename = `unmatched_attributes_${timestamp}.csv`;
+  
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.display = 'none';
+  
+  document.body.appendChild(link);
+  link.click();
+  
+  // Cleanup
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, 100);
+  
+  showTemporaryNotification(`${unmatchedEntries.size} nicht zugeordnete Einträge exportiert als ${filename}`);
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -2126,6 +3013,57 @@ function configureLayout(nodes, links, simulation, mode) {
   } else {
     // Im Force-Modus die level-Force entfernen
     simulation.force("level", null);
+
+    const nodeIdSet = new Set(nodes.map(n => String(n.id)));
+    const memberships = new Map();
+    for (const l of raw.links) {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (!nodeIdSet.has(s)) continue;
+      if (byId.get(s)?.type !== 'person') continue;
+      if (byId.get(t)?.type !== 'org') continue;
+      if (!allowedOrgs.has(t)) continue;
+      if (!memberships.has(s)) memberships.set(s, new Set());
+      memberships.get(s).add(t);
+    }
+    const orgIds = new Set();
+    for (const set of memberships.values()) { for (const oid of set) orgIds.add(oid); }
+    const orgList = Array.from(orgIds).sort((a,b) => (orgDepth(a) - orgDepth(b)) || String(a).localeCompare(String(b)));
+    const cx = WIDTH / 2, cy = HEIGHT / 2;
+    const CLUSTER_RING_RADIUS = Math.min(WIDTH, HEIGHT) * 0.35;
+    const centers = new Map();
+    for (let i = 0; i < Math.max(1, orgList.length); i++) {
+      const angle = (2 * Math.PI * i) / Math.max(1, orgList.length);
+      const oid = orgList[i] ?? null;
+      if (oid) centers.set(oid, { x: cx + Math.cos(angle) * CLUSTER_RING_RADIUS, y: cy + Math.sin(angle) * CLUSTER_RING_RADIUS });
+    }
+    const primaryOf = new Map();
+    for (const [pid, set] of memberships.entries()) {
+      let best = null, bestDepth = -1;
+      for (const oid of set) { const d = orgDepth(oid); if (d > bestDepth) { bestDepth = d; best = oid; } }
+      primaryOf.set(pid, best);
+    }
+    const JITTER = 30;
+    nodes.forEach(n => {
+      const pid = String(n.id);
+      const oid = primaryOf.get(pid);
+      const c = (oid && centers.get(oid)) || { x: cx, y: cy };
+      n.x = c.x + (Math.random() - 0.5) * JITTER;
+      n.y = c.y + (Math.random() - 0.5) * JITTER;
+    });
+    const CLUSTER_FORCE_STRENGTH = 0.08;
+    simulation
+      .force("clusterX", d3.forceX(d => {
+        const pid = String(d.id);
+        const oid = primaryOf.get(pid);
+        const c = (oid && centers.get(oid)) || { x: cx, y: cy };
+        return c.x;
+      }).strength(CLUSTER_FORCE_STRENGTH))
+      .force("clusterY", d3.forceY(d => {
+        const pid = String(d.id);
+        const oid = primaryOf.get(pid);
+        const c = (oid && centers.get(oid)) || { x: cx, y: cy };
+        return c.y;
+      }).strength(CLUSTER_FORCE_STRENGTH));
   }
   
   // Simulation neustarten [SF]

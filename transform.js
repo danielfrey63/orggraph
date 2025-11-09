@@ -98,7 +98,7 @@ function transform(data) {
     const id = String(p.id);
     const fullName = [p.givenName, p.surname].filter(Boolean).join(' ');
     const label = fullName || id;
-    const email = (p.contactInformation && p.contactInformation.email) || undefined;
+    const email = (p.contactInformation && p.contactInformation.email) || p.email || undefined;
     const isManager = managerSet.has(id);
 
     const personOut = { id, label };
@@ -150,19 +150,35 @@ function transform(data) {
     }
   }
   
-  // Add persons from oe.persons arrays (explicit membership) + ancestors
+  // Add persons from oe.persons and oe.overview arrays (explicit membership) + ancestors
   for (const oe of oes) {
-    if (!oe || !oe.id || !Array.isArray(oe.persons)) continue;
+    if (!oe || !oe.id) continue;
     const oid = String(oe.id);
     if (!orgMap.has(oid)) continue;
     
-    for (const personId of oe.persons) {
-      if (!personId) continue;
-      const pid = String(personId);
-      if (personIdSet.has(pid)) {
-        // Link to this OE and all its ancestors
-        const ancestors = getOeAncestors(oid);
-        ancestors.forEach(ancestorId => pushLink(pid, ancestorId));
+    // Process oe.persons array if it exists
+    if (Array.isArray(oe.persons)) {
+      for (const personId of oe.persons) {
+        if (!personId) continue;
+        const pid = String(personId);
+        if (personIdSet.has(pid)) {
+          // Link to this OE and all its ancestors
+          const ancestors = getOeAncestors(oid);
+          ancestors.forEach(ancestorId => pushLink(pid, ancestorId));
+        }
+      }
+    }
+    
+    // Process oe.overview array if it exists
+    if (Array.isArray(oe.overview)) {
+      for (const personId of oe.overview) {
+        if (!personId) continue;
+        const pid = String(personId);
+        if (personIdSet.has(pid)) {
+          // Link to this OE and all its ancestors
+          const ancestors = getOeAncestors(oid);
+          ancestors.forEach(ancestorId => pushLink(pid, ancestorId));
+        }
       }
     }
   }

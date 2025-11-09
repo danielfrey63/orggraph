@@ -375,3 +375,368 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   stroke-width: 1.5;
   pointer-events: auto;
 }
+
+/* Fuzzy Match Dialog Styles */
+.fuzzy-match-dialog-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.fuzzy-match-dialog {
+  background-color: var(--panel-bg);
+  color: var(--text);
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 800px;
+  max-height: 85vh; /* Leicht reduzierte Maximalhöhe */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fuzzy-match-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px; /* Reduziertes Padding */
+  background-color: var(--header-bg, var(--panel-bg));
+  border-bottom: 1px solid var(--border, var(--panel-border));
+}
+
+.fuzzy-match-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.fuzzy-match-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fuzzy-match-close-btn:hover {
+  color: var(--text-strong);
+}
+
+.fuzzy-match-content {
+  padding: 10px 16px; /* Reduziertes Padding */
+  flex: 1;
+  overflow-y: auto;
+}
+
+.fuzzy-match-content p {
+  margin-top: 0;
+  margin-bottom: 10px; /* Reduzierter Abstand */
+}
+
+.fuzzy-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px; /* Halbierter Abstand zwischen Items */
+}
+
+.fuzzy-match-item {
+  border: 1px solid var(--border, var(--panel-border));
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.fuzzy-match-item-header {
+  padding: 8px 12px; /* Reduziertes Padding */
+  background-color: var(--item-header-bg, rgba(0, 0, 0, 0.05));
+  border-bottom: 1px solid var(--border, var(--panel-border));
+}
+
+.fuzzy-match-item-header h3 {
+  margin: 0 0 4px 0; /* Reduzierter unterer Abstand */
+  font-size: 1rem; /* Etwas kleinere Schrift */
+  font-weight: 600;
+}
+
+.fuzzy-match-attrs {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.fuzzy-match-options {
+  padding: 8px 12px; /* Reduziertes Padding */
+}
+
+.fuzzy-match-options-title {
+  font-weight: 500;
+  margin-bottom: 4px; /* Reduzierter Abstand */
+}
+
+/* Progress-Anzeige für lange Suchvorgänge */
+.progress-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.progress-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.progress-box {
+  background-color: var(--panel-bg);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  padding: 10px;
+  width: 90%;
+  max-width: 400px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progress-text {
+  font-weight: 500;
+  text-align: center;
+  color: var(--text);
+}
+
+.progress-bar {
+  height: 8px;
+  background-color: var(--control-border, #e2e8f0);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.progress-bar-inner {
+  height: 100%;
+  background-color: var(--active-toggle-bg, #6366f1);
+  border-radius: 4px;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.progress-percent {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 0px;
+}
+
+.progress-cancel-btn {
+  background-color: var(--control-bg, #e2e8f0);
+  color: var(--text, #334155);
+  border: 1px solid var(--control-border, #cbd5e1);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  display: block;
+  margin: 0 auto;
+  margin-top: 4px;
+}
+
+.progress-cancel-btn:hover {
+  background-color: var(--control-hover, #cbd5e1);
+}
+
+/* Vereinfachtes Fuzzy-Match-Dialog-Layout */
+.fuzzy-match-info {
+  padding: 12px 16px;
+  background-color: var(--item-header-bg, rgba(0, 0, 0, 0.05));
+  border-radius: 6px 6px 0 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fuzzy-identifier {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.fuzzy-attrs {
+  color: var(--text-muted);
+  font-size: 0.95em;
+}
+
+.fuzzy-match-combo {
+  padding: 12px 16px;
+  padding-top: 4px;
+  border-radius: 0 0 6px 6px;
+}
+
+/* Combo-Box im Fuzzy-Match-Dialog (identisch zum Hauptfenster) */
+/* Verbesserte Combo-Box im Dialog */
+.fuzzy-match-dialog .combo {
+  width: 100%;
+  position: relative;
+  margin-top: 8px;
+  display: block;
+  /* Stacking context erzwingen */
+  isolation: isolate;
+}
+
+.fuzzy-match-dialog .combo-input {
+  width: 100%;
+  padding: 6px 6px;
+  min-width: 260px;
+  border-radius: 6px;
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.fuzzy-match-dialog .combo-input:focus {
+  border-color: var(--active-toggle-bg, #6366f1);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Überarbeitete Dropdown-Liste mit maximaler Sichtbarkeit */
+.fuzzy-match-dialog .combo-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 99999; /* Extrem hoher Z-Index */
+  margin: 2px 0 0 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  max-height: 280px;
+  overflow: auto;
+  min-width: 100%;
+  width: 100%;
+  /* Forcierte Sichtbarkeit */
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  /* Weitere Sicherheitsmaßnahmen */
+  transform: none !important;
+  clip: auto !important;
+  clip-path: none !important;
+  pointer-events: auto !important;
+}
+
+.fuzzy-match-dialog .combo-list li {
+  padding: 4px 8px; /* Reduziertes Padding */
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fuzzy-match-dialog .combo-list li:hover,
+.fuzzy-match-dialog .combo-list li.is-active {
+  background: var(--control-hover);
+}
+
+/* Besondere Stile für "Keine Übereinstimmung"-Option */
+.fuzzy-match-dialog .combo-list li.none-match-option {
+  font-weight: bold;
+  border-bottom: 1px solid var(--panel-border);
+  margin-bottom: 2px;
+  padding-bottom: 4px;
+}
+
+.fuzzy-match-dialog .match-similarity {
+  color: var(--active-toggle-bg, #6366f1);
+  font-weight: 600;
+}
+
+.fuzzy-match-dialog .match-source {
+  color: var(--text-muted);
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+/* Globaler Stil für alle Dropdowns im Dialog, um maximale Sichtbarkeit zu garantieren */
+body > .combo-list {
+  position: fixed !important;
+  z-index: 999999 !important;
+  background: var(--panel-bg) !important;
+  border: 2px solid var(--active-toggle-bg, #6366f1) !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3) !important;
+  pointer-events: auto !important;
+  max-height: 320px !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important; /* Wichtig für korrekte Breitenberechnung */
+  overflow-x: hidden !important;
+  white-space: normal !important;
+}
+
+/* Korrekte Breite für alle Dropdown-Elemente */
+body > .combo-list li {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+}
+
+/* Separator wurde entfernt */
+
+.fuzzy-match-item {
+  margin-bottom: 8px; /* Reduzierter Abstand */
+  border: 1px solid var(--border, var(--panel-border));
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: var(--panel-bg);
+}
+
+.fuzzy-match-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 16px; /* Reduziertes Padding */
+  border-top: 1px solid var(--border, var(--panel-border));
+  gap: 10px;
+}
+
+.fuzzy-match-confirm-btn {
+  background-color: var(--button-primary-bg, #4a6cf7);
+  color: var(--button-primary-text, #fff);
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px; /* Kleinerer Button */
+  font-size: 0.9rem; /* Kleinere Schrift */
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.fuzzy-match-confirm-btn:hover {
+  background-color: var(--button-primary-hover, #3a5bd7);
+}
