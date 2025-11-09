@@ -1471,17 +1471,32 @@ function renderGraph(sub) {
   currentSimulation = simulation;
   configureLayout(personNodes, linksPP, simulation, currentLayoutMode);
 }
+
 function applyFromUI() {
+  if (!raw || !raw.links || !raw.nodes) return;
+  if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
+  
+  // Get current search input value
   const input = document.querySelector(INPUT_COMBO_ID);
-  const depthVal = parseInt(document.querySelector(INPUT_DEPTH_ID).value, 10);
-  const dirEl = document.querySelector('input[name="dir"]:checked');
-  const mode = dirEl ? dirEl.value : 'both';
+  const inputValue = input?.value.trim() || '';
+
+  // Get selected depth
+  const depthEl = document.querySelector(INPUT_DEPTH_ID);
+  const depth = depthEl ? parseInt(depthEl.value, 10) || 0 : 0;
+
+  // Get direction mode
+  let dirMode = 'both';
+  const activeDirectionButton = document.querySelector('#directionToggle button.active');
+  if (activeDirectionButton) {
+    dirMode = activeDirectionButton.dataset.dir;
+  }
+
   let startId = currentSelectedId;
   if (!startId && input && input.value) {
     startId = guessIdFromInput(input.value);
   }
   if (!startId) { setStatus("Startknoten nicht gefunden"); return; }
-  const sub = computeSubgraph(startId, Number.isFinite(depthVal) ? depthVal : 2, mode);
+  const sub = computeSubgraph(startId, Number.isFinite(depth) ? depth : 2, dirMode);
   currentSubgraph = sub;
   renderGraph(sub);
   updateFooterStats(sub);
@@ -1775,20 +1790,27 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (mgmt) {
     if (envConfig?.DEFAULT_MANAGEMENT != null) {
       managementEnabled = !!envConfig.DEFAULT_MANAGEMENT;
-      mgmt.checked = managementEnabled;
+      if (!managementEnabled) mgmt.classList.remove('active');
     } else {
-      managementEnabled = !!mgmt.checked;
+      managementEnabled = mgmt.classList.contains('active');
     }
-    mgmt.addEventListener('change', () => {
-      managementEnabled = !!mgmt.checked;
+    mgmt.addEventListener('click', () => {
+      mgmt.classList.toggle('active');
+      managementEnabled = mgmt.classList.contains('active');
       applyFromUI();
     });
   }
   const auto = document.querySelector('#toggleAutoFit');
   if (auto) {
-    autoFitEnabled = !!auto.checked;
-    auto.addEventListener('change', () => {
-      autoFitEnabled = !!auto.checked;
+    if (envConfig?.DEFAULT_AUTOFIT_ENABLED != null) {
+      autoFitEnabled = !!envConfig.DEFAULT_AUTOFIT_ENABLED;
+      if (!autoFitEnabled) auto.classList.remove('active');
+    } else {
+      autoFitEnabled = auto.classList.contains('active');
+    }
+    auto.addEventListener('click', () => {
+      auto.classList.toggle('active');
+      autoFitEnabled = auto.classList.contains('active');
       if (autoFitEnabled) {
         fitToViewport();
       }
@@ -1798,12 +1820,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (lbls) {
     if (envConfig?.DEFAULT_LABELS != null) {
       labelsVisible = !!envConfig.DEFAULT_LABELS;
-      lbls.checked = labelsVisible;
+      if (!labelsVisible) lbls.classList.remove('active');
     } else {
-      labelsVisible = !!lbls.checked;
+      labelsVisible = lbls.classList.contains('active');
     }
-    lbls.addEventListener('change', () => {
-      labelsVisible = !!lbls.checked;
+    lbls.addEventListener('click', () => {
+      lbls.classList.toggle('active');
+      labelsVisible = lbls.classList.contains('active');
       const svg = document.querySelector('#graph');
       if (svg) svg.classList.toggle('labels-hidden', !labelsVisible);
     });
@@ -1842,22 +1865,53 @@ window.addEventListener("DOMContentLoaded", async () => {
     depthEl.addEventListener('change', applyFromUI);
     depthEl.addEventListener('input', applyFromUI);
   }
-  const dirRadios = document.querySelectorAll('input[name="dir"]');
-  if (envConfig?.DEFAULT_DIR) {
-    const targetRadio = document.querySelector(`input[name="dir"][value="${envConfig.DEFAULT_DIR}"]`);
-    if (targetRadio) targetRadio.checked = true;
-  }
-  dirRadios.forEach(r => r.addEventListener('change', applyFromUI));
+  // Direction Buttons
+  const dirButtons = document.querySelectorAll('#directionToggle button');
+  let currentDir = 'both';
   
-  // Hierarchy single-checkbox toggle
+  // Initialize direction from config
+  if (envConfig?.DEFAULT_DIR) {
+    currentDir = envConfig.DEFAULT_DIR;
+    dirButtons.forEach(btn => {
+      if (btn.dataset.dir === currentDir) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+  }
+  
+  // Direction button click handlers
+  dirButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Remove active class from all buttons
+      dirButtons.forEach(b => b.classList.remove('active'));
+      
+      // Add active class to clicked button
+      btn.classList.add('active');
+      
+      // Update current direction
+      currentDir = btn.dataset.dir;
+      
+      // Apply changes
+      applyFromUI();
+    });
+  });
+  
+  // Hierarchy toggle button
   const hier = document.querySelector('#toggleHierarchy');
   if (hier) {
     if (envConfig?.DEFAULT_HIERARCHY != null) {
-      hier.checked = !!envConfig.DEFAULT_HIERARCHY;
+      const hierEnabled = !!envConfig.DEFAULT_HIERARCHY;
+      if (!hierEnabled) hier.classList.remove('active');
+      currentLayoutMode = hierEnabled ? 'hierarchy' : 'force';
+    } else {
+      currentLayoutMode = hier.classList.contains('active') ? 'hierarchy' : 'force';
     }
-    currentLayoutMode = hier.checked ? 'hierarchy' : 'force';
-    hier.addEventListener('change', () => {
-      currentLayoutMode = hier.checked ? 'hierarchy' : 'force';
+    
+    hier.addEventListener('click', () => {
+      hier.classList.toggle('active');
+      currentLayoutMode = hier.classList.contains('active') ? 'hierarchy' : 'force';
       if (currentSimulation) switchLayout(currentLayoutMode, currentSimulation);
     });
   }
@@ -1921,7 +1975,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     const startNode = byId.get(String(envConfig.DEFAULT_START_ID));
     if (startNode) {
       currentSelectedId = String(startNode.id);
-      if (input) input.value = startNode.label || String(startNode.id);
+      if (input) {
+        input.value = startNode.label || String(startNode.id);
+        // Stelle sicher, dass die Dropdown-Liste geschlossen ist
+        list.hidden = true;
+      }
       try { applyFromUI(); } catch(_) {}
     }
   }

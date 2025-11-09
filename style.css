@@ -1,5 +1,5 @@
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg); min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
 body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); background: var(--bg); }
 .app-header, .app-footer { padding: 12px 16px; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); }
 .app-footer { border-top: 1px solid var(--panel-border); border-bottom: none; font-size: 13px; color: var(--text-muted); }
@@ -7,11 +7,25 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .footer-stats .stat-separator { color: var(--text-muted); }
 .footer-stats strong { color: var(--text-strong); font-weight: 600; }
 .app-footer #status { cursor: pointer; }
-.app-header h1 { margin: 0 0 8px 0; font-size: 18px; color: var(--text-strong); }
-.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.app-header { display: flex; align-items: center; }
+.app-header h1 { margin: 0; font-size: 18px; color: var(--text-strong); margin-right: 16px; flex-shrink: 0; }
+.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1; }
 .controls label { display: inline-flex; gap: 6px; align-items: center; }
 .controls input, .controls select, .controls button { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--control-border); background: var(--control-bg); color: var(--text); }
-.controls button { padding: 6px 10px; cursor: pointer; }
+
+/* Tiefe-Eingabefeld */
+input#depth {
+  width: 60px;
+  height: 40px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 500;
+  background-color: var(--control-bg);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border: none;
+}
+.controls button { padding: 6px 6px; cursor: pointer; }
 .controls button:hover { background: var(--control-hover); }
 .controls fieldset { border: 1px solid var(--panel-border); background: transparent; padding: 6px 10px; border-radius: 8px; display: inline-flex; gap: 8px; align-items: center; }
 .controls fieldset legend { font-size: 13px; font-weight: 600; padding: 0 4px; color: var(--text-muted); }
@@ -20,7 +34,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 /* Custom combobox */
 .combo { position: relative; display: inline-block; }
-.combo > input { padding: 6px 8px; min-width: 260px; }
+.combo > input { padding: 6px 6px; min-width: 260px; }
 .combo-list {
   position: absolute;
   z-index: 10;
@@ -44,10 +58,10 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .combo-list li.is-active {
   background: var(--control-hover);
 }
-.viewport { display: grid; grid-template-columns: 1fr 280px; gap: 0; overflow: hidden; }
+.viewport { display: grid; grid-template-columns: 1fr 320px; gap: 0; overflow: hidden; }
 .canvas { position: relative; overflow: hidden; background: var(--panel-bg); }
 svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
-#legendPane { border-left: 1px solid var(--panel-border); padding: 10px; overflow: auto; background: var(--panel-bg); color: var(--text); }
+#legendPane { border-left: 1px solid var(--panel-border); padding: 10px; overflow: auto; background: var(--panel-bg); color: var(--text); width: 320px; }
 #legendPane h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-muted); }
 
 /* Kollabierbare Legenden */
@@ -166,6 +180,88 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 .attribute-circle { fill: none; opacity: 0.8; }
 .attribute-actions { margin: 8px 0 12px 0; display: flex; gap: 8px; }
 
+/* Toggle Button Styles */
+.toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  border: none;
+  background-color: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggle-btn:hover {
+  background-color: var(--control-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+}
+
+.toggle-btn.active {
+  background-color: var(--active-toggle-bg, #6366f1);
+  color: var(--active-toggle-color, white);
+  border-color: transparent;
+  box-shadow: 0 2px 5px rgba(99,102,241,0.4);
+}
+
+.toggle-btn svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: transparent;
+  background: transparent;
+}
+
+/* Direction Selector */
+.direction-toggle {
+  display: flex;
+  gap: 5px;
+}
+
+.direction-toggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  border: none;
+  background-color: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.direction-toggle button:hover {
+  background-color: var(--control-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+}
+
+.direction-toggle button.active {
+  background-color: var(--active-toggle-bg, #6366f1);
+  color: var(--active-toggle-color, white);
+  box-shadow: 0 2px 5px rgba(99,102,241,0.4);
+}
+
+.direction-toggle button svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: transparent;
+  background: transparent;
+}
+
 /* Konfigurationsparameter */
 :root {
   color-scheme: light dark;
@@ -176,16 +272,18 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   --max-dropdown-items: 100;
   --min-search-length: 2;
   
-  /* Farben (Hell-Modus) */
+  /* Theming & Farben */
   --bg: #f8fafc;
-  --panel-bg: #ffffff;
-  --panel-border: #e5e7eb;
-  --text: #0f172a;
+  --panel-bg: #f1f5f9;
+  --panel-border: #e2e8f0;
+  --text: #334155;
   --text-muted: #64748b;
-  --text-strong: #0b1220;
+  --text-strong: #0f172a;
   --control-bg: #ffffff;
   --control-border: #cbd5e1;
-  --control-hover: #eef2ff;
+  --control-hover: #e2e8f0;
+  --active-toggle-bg: #6366f1;
+  --active-toggle-color: white;
   --canvas-bg: #ffffff;
 
   /* Graph-Elemente */
@@ -248,6 +346,8 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
     --control-hover: #1b2537;
     --canvas-bg: #0f172a;
     --link-stroke: #475569;
+    --active-toggle-bg: #818cf8;
+    --active-toggle-color: #ffffff;
     --node-with-attributes-fill: #ffffff;
     --node-with-attributes-stroke: #93c5fd;
     --node-with-attributes-stroke-width: 3;
