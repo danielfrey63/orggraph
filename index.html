@@ -118,6 +118,15 @@
           <path d="M19 19v-3" />
         </svg>
       </button>
+      
+      <button id="exportBtn" class="toggle-btn" aria-label="Grafik exportieren" title="Grafik exportieren">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <!-- Download/Export-Symbol -->
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+      </button>
     </div>
   </header>
   <main class="viewport">
@@ -197,6 +206,73 @@
       <span id="stats-attributes">Attribute: <strong id="stats-attributes-count">0</strong></span>
     </div>
   </footer>
+  <script src="./export.js"></script>
   <script src="./app.js"></script>
+  
+  <!-- Export Dialog -->
+  <div id="exportModal" class="modal" style="display:none;">
+    <div class="modal-overlay"></div>
+    <div class="modal-container">
+      <div class="modal-header">
+        <h2>Grafik exportieren</h2>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-content">
+        <div class="export-options">
+          <div class="export-option-group">
+            <h3>Format</h3>
+            <div class="radio-group">
+              <label>
+                <input type="radio" name="exportFormat" value="svg" checked>
+                <span>SVG</span>
+              </label>
+              <label>
+                <input type="radio" name="exportFormat" value="png">
+                <span>PNG</span>
+              </label>
+            </div>
+          </div>
+          
+          <div id="svgOptions" class="export-option-group">
+            <button id="downloadSvg" class="export-btn">SVG herunterladen</button>
+          </div>
+          
+          <div id="pngOptions" class="export-option-group" style="display:none;">
+            <h3>Auflösung</h3>
+            <div class="resolution-options">
+              <div class="resolution-presets">
+                <button class="resolution-preset" data-width="1200" data-height="800">1200 × 800</button>
+                <button class="resolution-preset" data-width="1920" data-height="1080">1920 × 1080</button>
+                <button class="resolution-preset" data-width="2560" data-height="1440">2560 × 1440</button>
+                <button class="resolution-preset" data-width="3840" data-height="2160">3840 × 2160</button>
+              </div>
+              <div class="custom-resolution">
+                <h4>Benutzerdefiniert</h4>
+                <div class="resolution-inputs">
+                  <div class="resolution-input-group">
+                    <label for="customWidth">Breite</label>
+                    <input type="number" id="customWidth" value="1200" min="100" max="10000">
+                  </div>
+                  <div class="resolution-input-group">
+                    <label for="customHeight">Höhe</label>
+                    <input type="number" id="customHeight" value="800" min="100" max="10000">
+                  </div>
+                </div>
+              </div>
+            </div>
+            <h3>Qualität</h3>
+            <div class="quality-slider">
+              <input type="range" id="qualitySlider" min="1" max="4" step="0.5" value="2">
+              <div class="quality-labels">
+                <span>Schneller</span>
+                <span>Besser</span>
+              </div>
+            </div>
+            <button id="downloadPng" class="export-btn">PNG herunterladen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

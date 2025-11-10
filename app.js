@@ -1580,6 +1580,24 @@ function renderGraph(sub) {
   // Attribut-Kreise hinzufügen (ohne Relayout)
   updateAttributeCircles();
 
+  const prevPos = new Map();
+  if (currentSimulation && typeof currentSimulation.nodes === 'function') {
+    currentSimulation.nodes().forEach(n => {
+      if (n && n.id != null) {
+        prevPos.set(String(n.id), { x: n.x, y: n.y, vx: n.vx || 0, vy: n.vy || 0 });
+      }
+    });
+  }
+  personNodes.forEach(n => {
+    const p = prevPos.get(String(n.id));
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+      n.x = p.x;
+      n.y = p.y;
+      n.vx = p.vx;
+      n.vy = p.vy;
+    }
+  });
+
   // Tooltips für Knoten
   node.on('mousemove', (event, d) => {
     if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
@@ -3309,6 +3327,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   // hideSubtree-Button wurde aus der Toolbar entfernt
   // Die hideSubtreeFromRoot-Funktion bleibt für das Kontextmenü erhalten
   buildHiddenLegend();
+  
+  // Initialisiere Export-Funktionalität
+  if (typeof initializeExport === 'function') {
+    initializeExport();
+  }
 });
 
 function fitToViewport() {
@@ -3416,9 +3439,13 @@ function configureLayout(nodes, links, simulation, mode) {
     
     // Knoten vorpositionieren für besseren Start [SF]
     nodes.forEach(n => {
-      n.x = WIDTH/2 + (Math.random() - 0.5) * 100; // Leichte horizontale Streuung
-      const level = hierarchyLevels.get(String(n.id)) ?? 0;
-      n.y = levelToY.get(level) ?? HEIGHT/2;
+      if (!Number.isFinite(n.x)) {
+        n.x = WIDTH/2 + (Math.random() - 0.5) * 100;
+      }
+      if (!Number.isFinite(n.y)) {
+        const level = hierarchyLevels.get(String(n.id)) ?? 0;
+        n.y = levelToY.get(level) ?? HEIGHT/2;
+      }
     });
     
     // Hierarchie-spezifische Ebenen-Force hinzufügen
@@ -3426,7 +3453,6 @@ function configureLayout(nodes, links, simulation, mode) {
       const level = hierarchyLevels.get(String(d.id)) ?? 0;
       return levelToY.get(level) ?? HEIGHT / 2;
     }).strength(LEVEL_FORCE_STRENGTH));
-    // Cluster-Forces deaktivieren, um Hierarchie-Layout nicht zu beeinflussen
     simulation.force("clusterX", null);
     simulation.force("clusterY", null);
   } else {
@@ -3466,8 +3492,8 @@ function configureLayout(nodes, links, simulation, mode) {
       const pid = String(n.id);
       const oid = primaryOf.get(pid);
       const c = (oid && centers.get(oid)) || { x: cx, y: cy };
-      n.x = c.x + (Math.random() - 0.5) * JITTER;
-      n.y = c.y + (Math.random() - 0.5) * JITTER;
+      if (!Number.isFinite(n.x)) n.x = c.x + (Math.random() - 0.5) * JITTER;
+      if (!Number.isFinite(n.y)) n.y = c.y + (Math.random() - 0.5) * JITTER;
     });
     const CLUSTER_FORCE_STRENGTH = 0.08;
     simulation
