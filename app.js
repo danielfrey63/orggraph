@@ -40,6 +40,7 @@ let hierarchyLevels = new Map(); // nodeId -> level number
 let currentSimulation = null; // Global reference to D3 simulation
 let preferredData = "auto";
 let envConfig = null;
+let collapsedCategories = new Set(); // Kategorien mit eingeklapptem Zustand
 let hiddenNodes = new Set();
 let hiddenByRoot = new Map();
 
@@ -47,6 +48,25 @@ function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+// Farb-Hilfen: gleiche Kategorie -> ähnliche Farben, Kategorien klar unterscheidbar
+const categoryHueCache = new Map();
+function quantizedHueFromCategory(category) {
+  if (categoryHueCache.has(category)) return categoryHueCache.get(category);
+  const rawHue = Math.abs(hashCode(String(category))) % 360;
+  const step = 40; // große Abstände zwischen Kategorien
+  const hue = (Math.round(rawHue / step) * step) % 360;
+  categoryHueCache.set(category, hue);
+  return hue;
+}
+function colorForCategoryAttribute(category, attrName, ordinal) {
+  const baseHue = quantizedHueFromCategory(category);
+  const localShift = (ordinal % 6) * 10; // kleine Variation innerhalb der Kategorie
+  const hue = (baseHue + localShift) % 360;
+  const sat = 65;
+  const light = 50 + ((ordinal % 2) ? 5 : 0); // leichte Helligkeitsvariation
+  return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
 /**
@@ -548,8 +568,9 @@ function updateAttributeCircles() {
   
   // Styling-Parameter
   const nodeRadius = cssNumber('--node-radius', 8);
-  const circleGap = cssNumber('--attribute-circle-gap', 4);
+  const circleGap = cssNumber('--attribute-circle-gap', 2);
   const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
   
   // Farbe und Stil für Knoten mit Attributen
   const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
@@ -602,7 +623,11 @@ function updateAttributeCircles() {
       // Filtere auf aktive Attribute
       const activeNodeAttrs = Array.from(nodeAttrs.entries())
         .filter(([attrName]) => activeAttributes.has(attrName))
-        .sort((a, b) => a[0].localeCompare(b[0])); // Sortiere für konsistente Reihenfolge
+        .sort((a, b) => {
+          const [ca, na] = String(a[0]).split('::');
+          const [cb, nb] = String(b[0]).split('::');
+          return (ca === cb) ? na.localeCompare(nb) : ca.localeCompare(cb);
+        }); // Gruppiere nach Kategorie, dann nach Name
       
       // Wenn es aktive Attribute gibt, ändere den Hauptknoten und speichere die ID
       if (activeNodeAttrs.length > 0) {
@@ -620,8 +645,11 @@ function updateAttributeCircles() {
         const attrColor = attributeTypes.get(attrName);
         if (!attrColor) return;
         
-        // Kreisradius berechnen
-        const attrRadius = nodeRadius + circleGap + (idx * (circleGap + circleWidth));
+        // Kreisradius berechnen (gleichmäßige Abstände):
+        // r0 = nodeRadius + nodeStroke/2 + gap + width/2
+        // r(i) = r0 + i * (gap + width)
+        const base = nodeRadius + (nodeStrokeWidth / 2) + circleGap + (circleWidth / 2);
+        const attrRadius = base + idx * (circleGap + circleWidth);
         
         // Attributkreis vor dem Hauptkreis einfügen, damit er dahinter liegt
         nodeGroup.insert("circle", "circle.node-circle")
@@ -771,6 +799,19 @@ async function loadEnvConfig() {
 }
 
 /**
+ * Hilfsfunktion: Kategorie aus Dateinamen ableiten
+ */
+function categoryFromUrl(url){
+  try{
+    const withoutQuery = String(url).split('?')[0].split('#')[0];
+    const parts = withoutQuery.split('/');
+    const fname = parts[parts.length-1] || withoutQuery;
+    const dot = fname.lastIndexOf('.');
+    return (dot>0?fname.slice(0,dot):fname).trim();
+  }catch{ return 'Attribute'; }
+}
+
+/**
  * Lädt Attribute aus einer URL gemäß ENV-Konfiguration
  */
 async function loadAttributesFromUrl(url) {
@@ -781,6 +822,7 @@ async function loadAttributesFromUrl(url) {
     }
     const text = await res.text();
     const { attributes, types, count } = parseAttributeList(text);
+    const category = categoryFromUrl(url);
     
     // Verknüpfe die geladenen Attribute mit den Personen-IDs
     const newPersonAttributes = new Map();
@@ -797,7 +839,8 @@ async function loadAttributesFromUrl(url) {
             newPersonAttributes.set(id, new Map());
           }
           for (const [attrName, attrValue] of attrs.entries()) {
-            newPersonAttributes.get(id).set(attrName, attrValue);
+            const composite = `${category}::${attrName}`;
+            newPersonAttributes.get(id).set(composite, attrValue);
           }
         }
         matchedCount++;
@@ -806,15 +849,32 @@ async function loadAttributesFromUrl(url) {
       }
     }
     
-    // Setze die Attribute und Typen
-    personAttributes = newPersonAttributes;
-    // 'types' ist ein Array von Attributnamen -> korrekte Iteration ohne Indexpaare
-    for (const type of types) {
-      if (!attributeTypes.has(type)) {
-        const hue = (hashCode(type) % 360);
-        const color = `hsl(${hue}, 70%, 50%)`;
-        attributeTypes.set(type, color);
+    // Setze/Merge die Attribute und Typen
+    if (personAttributes.size === 0) {
+      personAttributes = newPersonAttributes;
+    } else {
+      for (const [pid, attrsMap] of newPersonAttributes.entries()) {
+        if (!personAttributes.has(pid)) {
+          personAttributes.set(pid, new Map(attrsMap));
+        } else {
+          const target = personAttributes.get(pid);
+          for (const [k, v] of attrsMap.entries()) {
+            target.set(k, v);
+          }
+        }
       }
+    }
+    // 'types' ist ein Array von Attributnamen -> als category::name registrieren
+    let existingInCategory = 0;
+    for (const k of attributeTypes.keys()) if (String(k).startsWith(category + '::')) existingInCategory++;
+    let i = 0;
+    for (const type of types) {
+      const composite = `${category}::${type}`;
+      if (!attributeTypes.has(composite)) {
+        const color = colorForCategoryAttribute(category, type, existingInCategory + i);
+        attributeTypes.set(composite, color);
+      }
+      i++;
     }
     
     // Alle geladenen Attributtypen standardmäßig aktivieren, wenn noch keine Auswahl besteht
@@ -872,15 +932,20 @@ async function loadData() {
   }
   applyLoadedDataObject(data, sourceName);
   
-  // Lade Attribute automatisch, falls in ENV konfiguriert
-  if (envConfig?.ATTRIBUTES_URL) {
-    try {
-      const result = await loadAttributesFromUrl(envConfig.ATTRIBUTES_URL);
-      if (result.loaded) {
-        showTemporaryNotification(`Attribute geladen: ${result.matchedCount} zugeordnet, ${result.unmatchedCount} nicht gefunden`, 3000);
+  // Lade Attribute automatisch, falls in ENV konfiguriert (string oder string[])
+  const attrCfg = envConfig?.ATTRIBUTES_URL;
+  if (attrCfg) {
+    const urls = Array.isArray(attrCfg) ? attrCfg : [attrCfg];
+    collapsedCategories = new Set(urls.map(u => categoryFromUrl(u)));
+    for (const u of urls) {
+      try {
+        const result = await loadAttributesFromUrl(u);
+        if (result.loaded) {
+          showTemporaryNotification(`Attribute geladen (${categoryFromUrl(u)}): ${result.matchedCount} zugeordnet, ${result.unmatchedCount} nicht gefunden`, 2500);
+        }
+      } catch (error) {
+        console.error('Automatisches Laden der Attribute fehlgeschlagen:', error);
       }
-    } catch (error) {
-      console.error('Automatisches Laden der Attribute fehlgeschlagen:', error);
     }
   }
 }
@@ -1700,8 +1765,9 @@ function renderGraph(sub) {
   // Styling-Parameter
   const nodeRadius = cssNumber('--node-radius', 8);
   const collidePadding = cssNumber('--collide-padding', 6);
-  const circleGap = cssNumber('--attribute-circle-gap', 4);
+  const circleGap = cssNumber('--attribute-circle-gap', 2);
   const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
   
   // Hauptkreis hinzufügen (nur einmal!)
   node.append("circle").attr("r", nodeRadius).attr("class", "node-circle")
@@ -1814,9 +1880,12 @@ function renderGraph(sub) {
         }
       }
       
-      // Basis-Radius + Abstand für jedes Attribut
-      const attrSpace = attrCount > 0 ? (circleGap + (attrCount * (circleGap + circleWidth))) : 0;
-      return nodeRadius + collidePadding + attrSpace;
+      // Äußerer Radius der Attributringe relativ zum Knotenzentrum:
+      // outer = nodeRadius + nodeStroke/2 + attrCount * (gap + width)
+      const outerExtra = (attrCount > 0)
+        ? (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth))
+        : 0;
+      return nodeRadius + collidePadding + outerExtra;
     }));
   
   // Tick-Handler für Animation
@@ -2524,14 +2593,14 @@ async function loadAttributesFromFile(file) {
 function buildAttributeLegend() {
   const legend = document.getElementById('attributeLegend');
   if (!legend) return;
-  
+
   legend.innerHTML = '';
   if (attributeTypes.size === 0) {
     legend.innerHTML = '<div class="attribute-empty">Keine Attribute geladen</div>';
-    updateAttributeStats(); // Aktualisiere 0/0 Anzeige
+    updateAttributeStats();
     return;
   }
-  
+
   // Zähle Vorkommen je Attributtyp
   const typeCount = new Map();
   for (const attrs of personAttributes.values()) {
@@ -2539,61 +2608,123 @@ function buildAttributeLegend() {
       typeCount.set(type, (typeCount.get(type) || 0) + 1);
     }
   }
-  
-  // Sortiere Attribute alphabetisch
-  const sortedTypes = Array.from(attributeTypes.keys()).sort();
-  
-  for (const type of sortedTypes) {
-    const color = attributeTypes.get(type);
-    const isActive = activeAttributes.has(type);
-    const count = typeCount.get(type) || 0;
-    
-    const item = document.createElement('div');
-    item.className = 'attribute-legend-item';
-    
-    const colorSpan = document.createElement('span');
-    colorSpan.className = 'attribute-color';
-    colorSpan.style.backgroundColor = color;
-    
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'attribute-name';
-    nameSpan.textContent = type;
-    nameSpan.title = type; // Tooltip für vollständigen Namen
-    
+
+  // Kategorien sammeln
+  const categories = new Map(); // cat -> [{key,name,color,count}]
+  for (const key of attributeTypes.keys()) {
+    const [cat, name] = String(key).includes('::') ? String(key).split('::') : ['Attribute', String(key)];
+    if (!categories.has(cat)) categories.set(cat, []);
+    categories.get(cat).push({
+      key,
+      name,
+      color: attributeTypes.get(key),
+      count: typeCount.get(key) || 0
+    });
+  }
+
+  const sortedCats = Array.from(categories.keys()).sort();
+  for (const cat of sortedCats) {
+    const items = categories.get(cat).sort((a,b)=> a.name.localeCompare(b.name));
+    const catDiv = document.createElement('div');
+    catDiv.className = 'attribute-category';
+
+    const header = document.createElement('div');
+    header.className = 'attribute-category-header';
+
+    const caret = document.createElement('button');
+    caret.className = 'collapse-btn';
+    const collapsed = collapsedCategories.has(cat);
+    caret.setAttribute('aria-label', 'Ein-/Ausklappen');
+    caret.title = 'Ein-/Ausklappen';
+    caret.textContent = collapsed ? '▸' : '▾';
+
+    const catToggle = document.createElement('input');
+    catToggle.type = 'checkbox';
+    catToggle.className = 'attribute-category-toggle';
+    catToggle.checked = items.every(it => activeAttributes.has(it.key));
+    if (!attributesVisible) catToggle.disabled = true;
+
+    const label = document.createElement('span');
+    label.className = 'attribute-category-name';
+    label.textContent = cat;
+
+    const total = items.reduce((s,it)=> s + (it.count||0), 0);
     const countSpan = document.createElement('span');
-    countSpan.className = 'attribute-count';
-    countSpan.textContent = `(${count})`;
-    
-    const toggleCheckbox = document.createElement('input');
-    toggleCheckbox.type = 'checkbox';
-    toggleCheckbox.className = 'attribute-toggle';
-    toggleCheckbox.checked = isActive;
-    
-    // Checkbox deaktivieren, wenn Attribute global ausgeblendet sind
-    if (!attributesVisible) {
-      toggleCheckbox.disabled = true;
-    }
-    
-    toggleCheckbox.addEventListener('change', () => {
-      if (toggleCheckbox.checked) {
-        activeAttributes.add(type);
+    countSpan.className = 'attribute-category-count';
+    countSpan.textContent = `(${total})`;
+
+    header.appendChild(caret);
+    header.appendChild(catToggle);
+    header.appendChild(label);
+    header.appendChild(countSpan);
+    catDiv.appendChild(header);
+
+    const list = document.createElement('div');
+    list.className = 'attribute-category-items';
+    list.style.display = collapsed ? 'none' : '';
+
+    caret.addEventListener('click', () => {
+      if (collapsedCategories.has(cat)) {
+        collapsedCategories.delete(cat);
+        list.style.display = '';
+        caret.textContent = '▾';
       } else {
-        activeAttributes.delete(type);
+        collapsedCategories.add(cat);
+        list.style.display = 'none';
+        caret.textContent = '▸';
       }
-      updateAttributeStats(); // Aktualisiere die Attribut-Statistik
-      
-      // Statt eines kompletten Relayouts nur die Attribut-Kreise aktualisieren
+    });
+
+    catToggle.addEventListener('change', () => {
+      if (catToggle.checked) {
+        for (const it of items) activeAttributes.add(it.key);
+      } else {
+        for (const it of items) activeAttributes.delete(it.key);
+      }
+      buildAttributeLegend();
       updateAttributeCircles();
     });
-    
-    item.appendChild(colorSpan);
-    item.appendChild(nameSpan);
-    item.appendChild(countSpan);
-    item.appendChild(toggleCheckbox);
-    legend.appendChild(item);
+
+    for (const it of items) {
+      const row = document.createElement('div');
+      row.className = 'attribute-legend-item';
+
+      const colorSpan = document.createElement('span');
+      colorSpan.className = 'attribute-color';
+      colorSpan.style.backgroundColor = it.color;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'attribute-name';
+      nameSpan.textContent = it.name;
+      nameSpan.title = `${cat} :: ${it.name}`;
+
+      const cnt = document.createElement('span');
+      cnt.className = 'attribute-count';
+      cnt.textContent = `(${it.count})`;
+
+      const toggle = document.createElement('input');
+      toggle.type = 'checkbox';
+      toggle.className = 'attribute-toggle';
+      toggle.checked = activeAttributes.has(it.key);
+      if (!attributesVisible) toggle.disabled = true;
+      toggle.addEventListener('change', () => {
+        if (toggle.checked) activeAttributes.add(it.key); else activeAttributes.delete(it.key);
+        catToggle.checked = items.every(child => activeAttributes.has(child.key));
+        updateAttributeStats();
+        updateAttributeCircles();
+      });
+
+      row.appendChild(colorSpan);
+      row.appendChild(nameSpan);
+      row.appendChild(cnt);
+      row.appendChild(toggle);
+      list.appendChild(row);
+    }
+
+    catDiv.appendChild(list);
+    legend.appendChild(catDiv);
   }
-  
-  // Attributstatistik aktualisieren
+
   updateAttributeStats();
 }
 
