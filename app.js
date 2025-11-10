@@ -1504,6 +1504,9 @@ function refreshClusters() {
  * Rendert den Graphen basierend auf dem berechneten Subgraphen
  */
 function renderGraph(sub) {
+  // Aktuellen Zoom-Zustand speichern
+  const savedZoomTransform = currentZoomTransform;
+
   // SVG-Element vorbereiten
   const svg = d3.select(SVG_ID);
   svg.selectAll("*").remove();
@@ -1803,7 +1806,20 @@ function renderGraph(sub) {
     });
   svg.call(zoomBehavior);
   svg.classed('labels-hidden', !labelsVisible);
-  currentZoomTransform = d3.zoomIdentity;
+
+  // Alten Zoom-Zustand wiederherstellen, falls vorhanden und gültig
+  if (savedZoomTransform && typeof savedZoomTransform.k === 'number' && 
+      typeof savedZoomTransform.x === 'number' && 
+      typeof savedZoomTransform.y === 'number') {
+    // Wende den gespeicherten Zoom direkt auf die SVG an
+    currentZoomTransform = savedZoomTransform;
+    gZoom.attr("transform", savedZoomTransform);
+    // Aktualisiere auch den internen Zustand des Zoom-Verhaltens
+    svg.call(zoomBehavior.transform, savedZoomTransform);
+  } else {
+    // Fallback auf Standard-Identität, wenn noch kein Zoom angewendet wurde
+    currentZoomTransform = d3.zoomIdentity;
+  }
 
   // Tooltips für Cluster-Überlappungen
   ensureTooltip();
