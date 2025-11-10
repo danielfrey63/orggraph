@@ -151,7 +151,14 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 .labels-hidden .label { display: none; }
 
 /* Attribut-Legende und Attribute-Kreise */
-.attribute-legend { margin-top: 4px; }
+.attribute-toggle {
+  margin-left: auto;
+}
+
+.attribute-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .attribute-legend-item { 
   display: flex; 
   align-items: center; 
@@ -159,6 +166,11 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   padding: 2px 4px; 
   border-radius: 3px; 
   min-height: 22px;
+}
+
+/* Stil für Attribute-Legende wenn Attribute global ausgeblendet sind */
+.attributes-hidden .attribute-legend-item {
+  opacity: 0.6;
 }
 .attribute-legend-item:hover { background: var(--control-hover); }
 .attribute-color { 

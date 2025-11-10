@@ -16,6 +16,8 @@ let attributeTypes = new Map(); // Map von Attributnamen zu Farbwerten
 let activeAttributes = new Set(); // Menge der aktiven Attribute für die Anzeige
 let byId = new Map();
 let allNodesUnique = [];
+let attributesVisible = true; // Flag für die Sichtbarkeit der Attribute
+let savedActiveAttributes = new Set(); // Speicher für aktive Attribute
 let filteredItems = [];
 let activeIndex = -1;
 let currentSelectedId = null;
@@ -527,6 +529,17 @@ function updateAttributeCircles() {
   
   // Alle bestehenden Attribut-Kreise entfernen
   nodes.selectAll('circle.attribute-circle').remove();
+  
+  // Wenn Attribute ausgeblendet sind, nur die Kreise entfernen und den Rest überspringen
+  if (!attributesVisible) {
+    // Alle Knoten auf Standard zurücksetzen
+    nodes.selectAll('circle.node-circle')
+      .style('fill', null)
+      .style('stroke', null)
+      .style('stroke-width', null)
+      .style('opacity', 1);
+    return;
+  }
   
   // Prüfe, ob es überhaupt aktive Attribute gibt
   const hasAnyActiveAttributes = activeAttributes.size > 0;
@@ -2438,6 +2451,12 @@ function buildAttributeLegend() {
     toggleCheckbox.type = 'checkbox';
     toggleCheckbox.className = 'attribute-toggle';
     toggleCheckbox.checked = isActive;
+    
+    // Checkbox deaktivieren, wenn Attribute global ausgeblendet sind
+    if (!attributesVisible) {
+      toggleCheckbox.disabled = true;
+    }
+    
     toggleCheckbox.addEventListener('change', () => {
       if (toggleCheckbox.checked) {
         activeAttributes.add(type);
@@ -3063,6 +3082,57 @@ window.addEventListener("DOMContentLoaded", async () => {
       
       // NUR den Graph aktualisieren ohne UI-Elemente zu beeinflussen
       refreshClusters();
+    });
+  }
+  
+  // Attribute-Sichtbarkeit-Toggle
+  const attributesVisibilityBtn = document.getElementById('toggleAttributesVisibility');
+  if (attributesVisibilityBtn) {
+    // Anfangs aktiv (Attribute sichtbar)
+    attributesVisible = attributesVisibilityBtn.classList.contains('active');
+    
+    // Initialen Zustand des Container-Styles setzen
+    const attributeContainer = document.getElementById('attributeContainer');
+    if (attributeContainer) {
+      if (attributesVisible) {
+        attributeContainer.classList.remove('attributes-hidden');
+      } else {
+        attributeContainer.classList.add('attributes-hidden');
+      }
+    }
+    
+    attributesVisibilityBtn.addEventListener('click', () => {
+      // Toggle Button-Status
+      attributesVisibilityBtn.classList.toggle('active');
+      attributesVisible = attributesVisibilityBtn.classList.contains('active');
+      
+      // CSS-Klasse für visuelles Feedback auf Container anwenden
+      const attributeContainer = document.getElementById('attributeContainer');
+      if (attributeContainer) {
+        if (attributesVisible) {
+          attributeContainer.classList.remove('attributes-hidden');
+        } else {
+          attributeContainer.classList.add('attributes-hidden');
+        }
+      }
+      
+      if (attributesVisible) {
+        // Attribute einblenden - gespeicherte Auswahl wiederherstellen
+        if (savedActiveAttributes.size > 0) {
+          savedActiveAttributes.forEach(attr => activeAttributes.add(attr));
+          savedActiveAttributes.clear();
+        }
+      } else {
+        // Attribute ausblenden - aktuelle Auswahl speichern
+        activeAttributes.forEach(attr => savedActiveAttributes.add(attr));
+        activeAttributes.clear();
+      }
+      
+      // Attributlegende aktualisieren um Checkboxen zu aktivieren/deaktivieren
+      buildAttributeLegend();
+      
+      // Attribut-Kreise aktualisieren ohne Layout-Neuberechnung
+      updateAttributeCircles();
     });
   }
   
