@@ -3392,14 +3392,6 @@ function computeHierarchyLevels(nodes, links) {
  * Konfiguriert das Graph-Layout
  */
 function configureLayout(nodes, links, simulation, mode) {
-  // Gemeinsame Force-Stärken und Distanzen [CMV]
-  const LINK_DISTANCE = 80;
-  const LINK_STRENGTH = 0.7;
-  const CHARGE_STRENGTH = -250;
-  const COLLIDE_RADIUS = 15;
-  const COLLIDE_STRENGTH = 0.7;
-  const CENTER_STRENGTH = 0.05;
-  
   // Spezifische Parameter für Hierarchie-Layout
   const LEVEL_HEIGHT = 200; // Vertikaler Abstand zwischen Hierarchie-Ebenen
   const LEVEL_FORCE_STRENGTH = 0.25; // Stärke der Ebenen-Ausrichtungskraft (0.1-0.5)
@@ -3409,22 +3401,7 @@ function configureLayout(nodes, links, simulation, mode) {
     n.fx = null;
     n.fy = null;
   });
-
-  // Grundlegende Forces für beide Modi konfigurieren [DRY]
-  simulation
-    .force("link", d3.forceLink(links).id(d => d.id)
-      .distance(LINK_DISTANCE)
-      .strength(LINK_STRENGTH))
-    .force("charge", d3.forceManyBody()
-      .strength(CHARGE_STRENGTH))
-    .force("collide", d3.forceCollide()
-      .radius(COLLIDE_RADIUS)
-      .strength(COLLIDE_STRENGTH))
-    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2)
-      .strength(CENTER_STRENGTH))
-    .alphaDecay(0.05) // Optimierte Konvergenz für besseres Layout [PA]
-    .velocityDecay(0.5); // Optimierte Dämpfung für flüssigere Bewegung [PA]
-
+  
   // Spezifische Konfiguration je nach Modus
   if (mode === 'hierarchy') {
     // Hierarchie-Ebenen berechnen [SF]
@@ -3449,6 +3426,9 @@ function configureLayout(nodes, links, simulation, mode) {
       const level = hierarchyLevels.get(String(d.id)) ?? 0;
       return levelToY.get(level) ?? HEIGHT / 2;
     }).strength(LEVEL_FORCE_STRENGTH));
+    // Cluster-Forces deaktivieren, um Hierarchie-Layout nicht zu beeinflussen
+    simulation.force("clusterX", null);
+    simulation.force("clusterY", null);
   } else {
     // Im Force-Modus die level-Force entfernen
     simulation.force("level", null);
