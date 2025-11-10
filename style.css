@@ -326,18 +326,18 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   --node-stroke: #ffffff;
   --node-stroke-width: 1;
   --link-stroke: #cbd5e1;
-  --link-stroke-width: 3;
+  --link-stroke-width: 2;
   --link-opacity: 0.5;
-  --arrow-length: 10;
+  --arrow-length: 8;
   --cluster-fill: rgba(79,70,229,0.10);
   --cluster-stroke: rgba(79,70,229,0.25);
   --cluster-opacity: 1;
   --cluster-pad: 20;
-  --attribute-circle-gap: 4;
-  --attribute-circle-stroke-width: 2;
+  --attribute-circle-gap: 1;
+  --attribute-circle-stroke-width: 4;
   --node-with-attributes-fill: #000000;
   --node-with-attributes-stroke: #4682b4;
-  --node-with-attributes-stroke-width: 3;
+  --node-with-attributes-stroke-width: 6;
   --nodes-without-attributes-opacity: 0.2;
 
   /* Simulation-Parameter */
@@ -387,7 +387,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
     --active-toggle-color: #ffffff;
     --node-with-attributes-fill: #ffffff;
     --node-with-attributes-stroke: #93c5fd;
-    --node-with-attributes-stroke-width: 3;
+    --node-with-attributes-stroke-width: 0;
     --nodes-without-attributes-opacity: 0.2;
   }
 }

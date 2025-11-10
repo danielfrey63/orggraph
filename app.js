@@ -567,10 +567,10 @@ function updateAttributeCircles() {
   // Wenn nicht, prüfen wir, ob überhaupt ein Subgraph existiert
   
   // Styling-Parameter
-  const nodeRadius = cssNumber('--node-radius', 8);
-  const circleGap = cssNumber('--attribute-circle-gap', 2);
+  const nodeRadius = cssNumber('--node-radius', 3);
+  const circleGap = cssNumber('--attribute-circle-gap', 1);
   const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
+  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 2);
   
   // Farbe und Stil für Knoten mit Attributen
   const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
