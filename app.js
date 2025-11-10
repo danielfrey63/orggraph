@@ -1892,29 +1892,55 @@ function renderGraph(sub) {
   simulation.on("tick", () => {
     const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
     const nodeOuter = nodeRadius + (nodeStrokeWidth / 2);
-    const backoff = nodeOuter + arrowLen;
+    
+    // Funktion zur Berechnung des äussersten Attributring-Radius für einen Knoten
+    const getOutermostAttributeRadius = (d) => {
+      const personId = String(d.id);
+      const nodeAttrs = personAttributes.get(personId);
+      const circleGap = cssNumber('--attribute-circle-gap', 2);
+      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+      const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
+      
+      let attrCount = 0;
+      if (nodeAttrs && nodeAttrs.size > 0) {
+        for (const attrName of nodeAttrs.keys()) {
+          if (activeAttributes.has(attrName)) {
+            attrCount++;
+          }
+        }
+      }
+      
+      // Äusserster Radius: nodeRadius + nodeStroke/2 + attrCount * (gap + width)
+      return nodeRadius + (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth));
+    };
     
     // Verbindungsposition aktualisieren
     link
       .attr("x1", d => {
         const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
         const len = Math.hypot(dx, dy) || 1;
-        return d.target.x - (dx / len) * nodeOuter; // Startpunkt am Rand des Ziel-Knotens
+        const targetOuter = getOutermostAttributeRadius(d.target);
+        return d.target.x - (dx / len) * targetOuter; // Startpunkt am äussersten Ring des Ziel-Knotens
       })
       .attr("y1", d => {
         const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
         const len = Math.hypot(dx, dy) || 1;
-        return d.target.y - (dy / len) * nodeOuter; // Startpunkt am Rand des Ziel-Knotens
+        const targetOuter = getOutermostAttributeRadius(d.target);
+        return d.target.y - (dy / len) * targetOuter; // Startpunkt am äussersten Ring des Ziel-Knotens
       })
       .attr("x2", d => {
         const dx = d.source.x - d.target.x, dy = d.source.y - d.target.y;
         const len = Math.hypot(dx, dy) || 1;
-        return d.source.x - (dx / len) * backoff; // Endpunkt am Rand des Quell-Knotens mit Platz für Pfeilspitze
+        const sourceOuter = getOutermostAttributeRadius(d.source);
+        const backoff = sourceOuter + arrowLen;
+        return d.source.x - (dx / len) * backoff; // Endpunkt am äussersten Ring des Quell-Knotens mit Platz für Pfeilspitze
       })
       .attr("y2", d => {
         const dx = d.source.x - d.target.x, dy = d.source.y - d.target.y;
         const len = Math.hypot(dx, dy) || 1;
-        return d.source.y - (dy / len) * backoff; // Endpunkt am Rand des Quell-Knotens mit Platz für Pfeilspitze
+        const sourceOuter = getOutermostAttributeRadius(d.source);
+        const backoff = sourceOuter + arrowLen;
+        return d.source.y - (dy / len) * backoff; // Endpunkt am äussersten Ring des Quell-Knotens mit Platz für Pfeilspitze
       });
 
     // Knotenposition aktualisieren
