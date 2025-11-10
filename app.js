@@ -770,6 +770,77 @@ async function loadEnvConfig() {
   return false;
 }
 
+/**
+ * Lädt Attribute aus einer URL gemäß ENV-Konfiguration
+ */
+async function loadAttributesFromUrl(url) {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const text = await res.text();
+    const { attributes, types, count } = parseAttributeList(text);
+    
+    // Verknüpfe die geladenen Attribute mit den Personen-IDs
+    const newPersonAttributes = new Map();
+    const fuzzyMatches = new Map();
+    const unmatchedEntries = new Map();
+    let matchedCount = 0;
+    
+    // Verarbeite alle Attribute ohne Fuzzy-Suche (nur exakte Matches)
+    for (const [identifier, attrs] of attributes.entries()) {
+      const personIds = findPersonIdsByIdentifier(identifier);
+      if (personIds.length > 0) {
+        for (const id of personIds) {
+          if (!newPersonAttributes.has(id)) {
+            newPersonAttributes.set(id, new Map());
+          }
+          for (const [attrName, attrValue] of attrs.entries()) {
+            newPersonAttributes.get(id).set(attrName, attrValue);
+          }
+        }
+        matchedCount++;
+      } else {
+        unmatchedEntries.set(identifier, attrs);
+      }
+    }
+    
+    // Setze die Attribute und Typen
+    personAttributes = newPersonAttributes;
+    // 'types' ist ein Array von Attributnamen -> korrekte Iteration ohne Indexpaare
+    for (const type of types) {
+      if (!attributeTypes.has(type)) {
+        const hue = (hashCode(type) % 360);
+        const color = `hsl(${hue}, 70%, 50%)`;
+        attributeTypes.set(type, color);
+      }
+    }
+    
+    // Alle geladenen Attributtypen standardmäßig aktivieren, wenn noch keine Auswahl besteht
+    if (activeAttributes.size === 0 && attributeTypes.size > 0) {
+      activeAttributes = new Set(attributeTypes.keys());
+    }
+    
+    // Update UI
+    buildAttributeLegend();
+    updateAttributeStats();
+    // Falls bereits ein Graph gerendert ist, Attribute sofort sichtbar machen
+    updateAttributeCircles();
+    
+    return {
+      loaded: true,
+      matchedCount,
+      unmatchedCount: unmatchedEntries.size,
+      totalAttributes: count
+    };
+  } catch (error) {
+    console.error('Fehler beim Laden der Attribute:', error);
+    showTemporaryNotification(`Fehler beim Laden der Attribute: ${error.message}`, 5000);
+    return { loaded: false, error: error.message };
+  }
+}
+
 async function loadData() {
   setStatus("Lade Daten...");
   let data = null;
@@ -800,6 +871,18 @@ async function loadData() {
     } catch(_) {}
   }
   applyLoadedDataObject(data, sourceName);
+  
+  // Lade Attribute automatisch, falls in ENV konfiguriert
+  if (envConfig?.ATTRIBUTES_URL) {
+    try {
+      const result = await loadAttributesFromUrl(envConfig.ATTRIBUTES_URL);
+      if (result.loaded) {
+        showTemporaryNotification(`Attribute geladen: ${result.matchedCount} zugeordnet, ${result.unmatchedCount} nicht gefunden`, 3000);
+      }
+    } catch (error) {
+      console.error('Automatisches Laden der Attribute fehlgeschlagen:', error);
+    }
+  }
 }
 
 function populateCombo(filterText) {

@@ -2,6 +2,40 @@
 
 Minimaler statischer D3-Graph. Benutzer kann Startknoten wählen und Such-Tiefe konfigurieren.
 
+## ENV-Konfiguration
+
+Die App kann über eine `env.json` Datei konfiguriert werden. Kopieren Sie `env.example.json` nach `env.json` und passen Sie die Werte an:
+
+```bash
+cp env.example.json env.json
+```
+
+```json
+{
+  "DATA_URL": "./data.default.json",
+  "DEFAULT_START_ID": "p-1",
+  "DEFAULT_DEPTH": 2,
+  "DEFAULT_DIR": "both",
+  "DEFAULT_MANAGEMENT": true,
+  "DEFAULT_LABELS": true,
+  "DEFAULT_HIERARCHY": true,
+  "DEFAULT_HIDDEN_ROOTS": ["p-1"],
+  "ATTRIBUTES_URL": "./attributes.tsv.txt"
+}
+```
+
+### Konfigurationsoptionen
+
+- **`DATA_URL`**: URL zur Datendatei (optional)
+- **`DEFAULT_START_ID`**: Standard-Startknoten-ID
+- **`DEFAULT_DEPTH`**: Standard-Suchtiefe
+- **`DEFAULT_DIR`**: Standard-Richtung (`both`, `down`, `up`)
+- **`DEFAULT_MANAGEMENT`**: Management-Filter standardmäßig aktiviert
+- **`DEFAULT_LABELS`**: Knoten-Labels standardmäßig sichtbar
+- **`DEFAULT_HIERARCHY`**: Hierarchie-Layout standardmäßig aktiviert
+- **`DEFAULT_HIDDEN_ROOTS`**: Array von Knoten-IDs, die standardmäßig ausgeblendet werden
+- **`ATTRIBUTES_URL`**: URL zur Attributdatei (TSV/CSV-Format, optional)
+
 ## Datenformat
 
 Die App erwartet eine Datei `data.json` oder `data.generated.json` im `orggraph/` Verzeichnis mit folgendem Format:
@@ -49,6 +83,7 @@ node transform.js --help
 - **Management-Checkbox**: Standardmäßig aktiviert - blendet Personen ohne Mitarbeiter (Blätter) aus
 - **Button „Anzeigen"**: Rendert den Teilgraphen
 - **OE-Legende**: Organisationseinheiten ein-/ausblenden (Rechtsklick für Subtree-Aktionen)
+- **Attribute**: Über ENV-Datei konfigurierbar - bei Angabe von `ATTRIBUTES_URL` werden Attribute automatisch geladen und angezeigt
 
 ## Beispiel
 
