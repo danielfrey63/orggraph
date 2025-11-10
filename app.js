@@ -41,7 +41,6 @@ let preferredData = "auto";
 let envConfig = null;
 let hiddenNodes = new Set();
 let hiddenByRoot = new Map();
-let globalMode = false; // Flag für den globalen Modus
 
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
@@ -115,14 +114,21 @@ function canvasBgRgba(){
   return parseColorToRgba(bg);
 }
 function clustersAtPoint(p) {
-  const labels = [];
+  // Sammle OEs mit ihren IDs und Labels
+  const orgItems = [];
   for (const [oid, poly] of clusterPolygons.entries()) {
     if (!allowedOrgs.has(oid)) continue;
     if (poly && poly.length>=3 && d3.polygonContains(poly, p)) {
-      labels.push(byId.get(oid)?.label || oid);
+      const label = byId.get(oid)?.label || oid;
+      orgItems.push({ id: oid, label, depth: orgDepth(oid) });
     }
   }
-  return labels;
+  
+  // Sortiere nach Tiefe absteigend (höhere Tiefe = kleinere OE kommt zuerst)
+  orgItems.sort((a, b) => b.depth - a.depth || a.label.localeCompare(b.label));
+  
+  // Gib nur die Labels zurück
+  return orgItems.map(item => item.label);
 }
 
 function computeClusterPolygon(nodes, pad) {
@@ -264,8 +270,9 @@ function handleClusterHover(event, svgSel) {
       hits.forEach(hit => lines.push(`  • ${hit}`));
     }
     
-    // Add all org memberships (without header)
+    // Add all org memberships with header
     if (allPersonOrgs.length > 0) {
+      lines.push('🏢 Alle OE-Zugehörigkeiten:');
       allPersonOrgs.forEach(org => lines.push(`  • ${org}`));
     }
   } else if (hits.length) {
@@ -285,28 +292,37 @@ function handleClusterHover(event, svgSel) {
 /**
  * Finds all organizational units a person belongs to
  * @param {string} personId - ID of the person
- * @returns {string[]} - Array of organization labels
+ * @returns {string[]} - Array of organization labels ordered by hierarchy (smallest/lowest unit first)
  */
 function findAllPersonOrgs(personId) {
   if (!personId) return [];
-  const orgs = new Set();
+  // Map speichert Zuordnung von OE-Labels zu ihren IDs für die spätere Tiefenberechnung
+  const orgMap = new Map(); // Map: label -> id
   
-  // Search for direct links from person to orgs
+  // Suche nach direkten Verbindungen von Person zu OEs
   for (const link of raw.links) {
     const sourceId = idOf(link.source);
     const targetId = idOf(link.target);
     
-    // Person -> Org connections
+    // Person -> Org Verbindungen
     if (sourceId === personId && byId.has(targetId)) {
       const targetNode = byId.get(targetId);
       if (targetNode && targetNode.type === 'org') {
-        // Include all OEs, regardless of whether they're in allowedOrgs
-        orgs.add(targetNode.label || String(targetId));
+        // Alle OEs einschließen, unabhängig davon, ob sie in allowedOrgs sind
+        const label = targetNode.label || String(targetId);
+        orgMap.set(label, targetId);
       }
     }
   }
   
-  return Array.from(orgs).sort();
+  // Nach Tiefe sortieren (kleinere OEs haben eine höhere Tiefe)
+  return Array.from(orgMap.entries())
+    .map(([label, id]) => ({ label, id, depth: orgDepth(id) }))
+    .sort((a, b) => {
+      // Zuerst nach Tiefe absteigend sortieren (höhere Tiefe = kleinere OE zuerst)
+      return b.depth - a.depth || a.label.localeCompare(b.label);
+    })
+    .map(item => item.label);
 }
 
 function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; } return h>>>0; }
@@ -904,8 +920,8 @@ function computeSubgraph(startId, depth, mode) {
         const wType = byId.get(w)?.type;
         // Suppress Person->Org in down mode
         if (vType === 'person' && wType === 'org') continue;
-        // If target is org and it's disabled (and not in global mode), skip
-        if (wType === 'org' && !globalMode && !allowedOrgs.has(w)) continue;
+        // If target is org and it's disabled, skip
+        if (wType === 'org' && !allowedOrgs.has(w)) continue;
         if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
       }
       // Additionally: Org -> Persons via inverse memberOf (Org gets its members)
@@ -924,8 +940,8 @@ function computeSubgraph(startId, depth, mode) {
         const wType = byId.get(w)?.type;
         // For org nodes, only climb to parent orgs via inn
         if (vType === 'org' && wType !== 'org') continue;
-        // If target is org and it's disabled (and not in global mode), skip
-        if (wType === 'org' && !globalMode && !allowedOrgs.has(w)) continue;
+        // If target is org and it's disabled, skip
+        if (wType === 'org' && !allowedOrgs.has(w)) continue;
         if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
       }
       // Additionally: Person -> Org via forward memberOf in up mode
@@ -933,8 +949,8 @@ function computeSubgraph(startId, depth, mode) {
         for (const w of out.get(v) || []) {
           const wType = byId.get(w)?.type;
           if (wType !== 'org') continue;
-          // If target is org and it's disabled (and not in global mode), skip
-          if (wType === 'org' && !globalMode && !allowedOrgs.has(w)) continue;
+          // If target is org and it's disabled, skip
+          if (wType === 'org' && !allowedOrgs.has(w)) continue;
           if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
         }
       }
@@ -969,10 +985,8 @@ function computeSubgraph(startId, depth, mode) {
       }
     }
   }
-  // Drop orgs that are disabled (unless in global mode)
-  if (!globalMode) {
-    nodes = nodes.filter(n => n.type !== 'org' || allowedOrgs.has(String(n.id)));
-  }
+  // Drop orgs that are disabled
+  nodes = nodes.filter(n => n.type !== 'org' || allowedOrgs.has(String(n.id)));
   const nodeSet = new Set(nodes.map(n => String(n.id)));
   const links = raw.links
     .map(l => ({ s: idOf(l.source), t: idOf(l.target) }))
@@ -1513,6 +1527,9 @@ function renderGraph(sub) {
     .attr("fill", getComputedStyle(document.documentElement).getPropertyValue('--link-stroke') || '#bbb')
     .attr("fill-opacity", parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')) || 1);
 
+  // SVG-Tooltip einrichten
+  d3.select("svg").append("title").text("Klicke auf eine Person im Graph, um sie als Startpunkt zu setzen");
+
   // Zoom-Container
   const gZoom = svg.append("g");
 
@@ -1603,6 +1620,7 @@ function renderGraph(sub) {
     // Alle OE-Zugehörigkeiten hinzufügen
     const allOrgs = findAllPersonOrgs(personId);
     if (allOrgs.length > 0) {
+      lines.push('🏢 Alle OE-Zugehörigkeiten:');
       allOrgs.forEach(org => lines.push(`  • ${org}`));
     }
     
@@ -1800,12 +1818,6 @@ function applyFromUI() {
   renderGraph(sub);
   updateFooterStats(sub);
   
-  // Wenn wir im globalen Modus sind, alle OEs anzeigen
-  if (globalMode) {
-    allowedOrgs = new Set(raw.orgs.map(o => String(o.id)));
-    buildOrgLegend(allowedOrgs);
-    return;
-  }
   
   // Im normalen Modus: update legend to only include orgs related to the START node
   const startType = byId.get(startId)?.type;
@@ -3112,37 +3124,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   }
   
-  // Globaler Toggle-Button
-  const globalBtn = document.querySelector('#toggleGlobal');
-  if (globalBtn) {
-    if (envConfig?.DEFAULT_GLOBAL_MODE != null) {
-      globalMode = !!envConfig.DEFAULT_GLOBAL_MODE;
-      if (globalMode) globalBtn.classList.add('active');
-    } else {
-      globalMode = globalBtn.classList.contains('active');
-    }
-    globalBtn.addEventListener('click', () => {
-      globalBtn.classList.toggle('active');
-      globalMode = globalBtn.classList.contains('active');
-      
-      // Logik für den globalen Modus implementieren
-      if (globalMode) {
-        // Alle OEs anzeigen
-        allowedOrgs = new Set(raw.orgs.map(o => String(o.id)));
-      } else {
-        // Zurück zum standardmäßigen Modus mit nur relevanten OEs
-        applyFromUI(); // Dies setzt allowedOrgs basierend auf dem aktuellen Knoten zurück
-        return; // applyFromUI rendert bereits den Graphen neu, daher hier zurückkehren
-      }
-      
-      // OE-Legende aktualisieren und Graph neu rendern
-      buildOrgLegend(allowedOrgs);
-      if (currentSubgraph) {
-        renderGraph(currentSubgraph);
-        updateFooterStats(currentSubgraph);
-      }
-    });
-  }
   const lbls = document.querySelector('#toggleLabels');
   if (lbls) {
     if (envConfig?.DEFAULT_LABELS != null) {
@@ -3248,7 +3229,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   const attrFileInput = document.getElementById('attributeFileInput');
   if (loadAttrBtn && attrFileInput) {
     // Klick auf Button löst File-Dialog aus
-    loadAttrBtn.addEventListener('click', () => {
+    loadAttrBtn.addEventListener('click', (e) => {
+      // Verhindere Bubbling zum Header, damit dieser nicht kollabiert wird
+      e.preventDefault();
+      e.stopPropagation();
       attrFileInput.click();
     });
     
@@ -3322,24 +3306,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (currentSubgraph) updateVisibility();
     try { applyFromUI(); } catch(_) {}
   }
-  const hideBtn = document.querySelector('#hideSubtree');
-  if (hideBtn) {
-    // Always hide the button by default
-    hideBtn.style.display = 'none';
-    if (envConfig?.HIDE_SUBTREE_BUTTON === true) {
-      hideBtn.addEventListener('click', () => {
-        let id = currentSelectedId;
-        if (!id) {
-          const input = document.querySelector(INPUT_COMBO_ID);
-          if (input && input.value) id = guessIdFromInput(input.value);
-        }
-        if (!id) { setStatus('Keine Person ausgewählt'); return; }
-        hideSubtreeFromRoot(String(id));
-      });
-    } else {
-      hideBtn.style.display = 'none';
-    }
-  }
+  // hideSubtree-Button wurde aus der Toolbar entfernt
+  // Die hideSubtreeFromRoot-Funktion bleibt für das Kontextmenü erhalten
   buildHiddenLegend();
 });
 
@@ -3610,8 +3578,21 @@ function initializeCollapsibleLegends() {
     const header = btn.closest('.legend-header');
     if (header) {
       header.addEventListener('click', (e) => {
-        // Verhindere, dass der Klick auf den Button hier nochmals behandelt wird
-        if (e.target !== btn) {
+        // Prüfe, ob auf ein Element geklickt wurde, das vom Header-Klick ausgenommen werden soll
+        let shouldIgnore = false;
+        let element = e.target;
+
+        // Prüfe, ob das Zielelement oder einer seiner Eltern das data-ignore-header-click Attribut hat
+        while (element && element !== header) {
+          if (element.hasAttribute && element.hasAttribute('data-ignore-header-click')) {
+            shouldIgnore = true;
+            break;
+          }
+          element = element.parentElement;
+        }
+        
+        // Wenn der Klick nicht auf den collapse-button selbst war und nicht auf ein zu ignorierendes Element
+        if (!shouldIgnore && e.target !== btn) {
           const isCollapsed = target.classList.toggle('collapsed');
           btn.classList.toggle('collapsed');
           saveCollapseState(targetId, isCollapsed);

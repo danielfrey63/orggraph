@@ -67,24 +67,40 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 #legendPane h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-muted); }
 
 /* Kollabierbare Legenden */
-.legend-section { margin-bottom: 16px; }
+.legend-section { margin-bottom: 0px; }
 .legend-section:last-child { margin-bottom: 0; }
 .legend-header { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; cursor: pointer; user-select: none; }
 .legend-header:hover { background-color: var(--control-hover); }
 
 .collapse-btn { 
-  border: none; 
-  background: transparent; 
-  font-size: 18px; 
-  line-height: 1; 
-  padding: 0 4px; 
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--control-border);
+  background-color: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: all 0.2s ease;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.collapse-btn:hover {
+  background-color: var(--control-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
 }
 
 .collapse-btn.collapsed { 
   transform: rotate(-90deg);
+}
+
+.collapse-btn.collapsed:hover {
+  transform: rotate(-90deg) translateY(-1px);
 }
 
 .legend-content {
@@ -187,7 +203,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   height: 32px;
   padding: 0;
   border-radius: 6px;
-  border: none;
+  border: 1px solid var(--control-border);
   background-color: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -406,15 +422,15 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--panel-border);
   padding-bottom: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 0px;
 }
 
 .legend-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0px;
 }
 
 .legend-title-group {

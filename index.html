@@ -98,16 +98,6 @@
         </svg>
       </button>
       
-      <button id="toggleGlobal" class="toggle-btn" title="Globaler Modus">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M2 12h20" />
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-        </svg>
-      </button>
-      
-      <button id="hideSubtree" class="toggle-btn" title="Ausgewählten Manager mit Team ausblenden">Ausblenden</button>
-      
       <button id="fit" class="toggle-btn" aria-label="Auf Seite einpassen" title="Auf Seite einpassen">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor">
           <!-- Vollbild-Symbol mit kürzeren diagonalen Pfeilen -->
@@ -139,13 +129,13 @@
         <div class="legend-header">
           <div class="legend-title-group">
             <h2>OEs</h2>
-            <div class="oe-filter-container">
-              <input type="text" id="oeFilter" placeholder="OE filtern..." class="oe-filter-input">
+            <div class="oe-filter-container" data-ignore-header-click="true">
+              <input type="text" id="oeFilter" placeholder="OE filtern..." class="oe-filter-input" data-ignore-header-click="true">
             </div>
-            <button id="toggleOesVisibility" class="toggle-btn active" title="OEs ausblenden">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                <circle cx="12" cy="12" r="3" />
+            <button id="toggleOesVisibility" class="toggle-btn active" title="OEs ausblenden" data-ignore-header-click="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" data-ignore-header-click="true" />
+                <circle cx="12" cy="12" r="3" data-ignore-header-click="true" />
               </svg>
             </button>
           </div>
@@ -160,12 +150,12 @@
         <div class="legend-header">
           <div class="legend-title-group">
             <h2>Attribute</h2>
-            <button id="loadAttributes" class="toggle-btn" title="Attributliste laden">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                <path d="M14 2v6h6" />
-                <path d="M9 15l3-3 3 3" />
-                <path d="M12 12v6" />
+            <button id="loadAttributes" class="toggle-btn" title="Attributliste laden" data-ignore-header-click="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" data-ignore-header-click="true" />
+                <path d="M14 2v6h6" data-ignore-header-click="true" />
+                <path d="M9 15l3-3 3 3" data-ignore-header-click="true" />
+                <path d="M12 12v6" data-ignore-header-click="true" />
               </svg>
             </button>
           </div>
@@ -183,8 +173,12 @@
       
       <div class="legend-section">
         <div class="legend-header">
-          <h2>Ausgeblendet</h2>
-          <button class="collapse-btn" data-target="hiddenLegend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+          <div class="legend-title-group">
+            <h2>Ausgeblendet</h2>
+          </div>
+          <div class="legend-controls">
+            <button class="collapse-btn" data-target="hiddenLegend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+          </div>
         </div>
         <div id="hiddenLegend" class="legend-content"></div>
       </div>
