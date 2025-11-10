@@ -320,6 +320,9 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   /* Graph-Elemente */
   --node-radius: 8;
   --node-fill: #4F46E5;
+  --node-fill-top-level: #e0e7ff;
+  --node-fill-mid-level: #818cf8;
+  --node-fill-low-level: #4F46E5;
   --node-stroke: #ffffff;
   --node-stroke-width: 1;
   --link-stroke: #cbd5e1;
@@ -377,6 +380,9 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
     --control-hover: #1b2537;
     --canvas-bg: #0f172a;
     --link-stroke: #475569;
+    --node-fill-top-level: #e0e7ff;
+    --node-fill-mid-level: #a5b4fc;
+    --node-fill-low-level: #6366f1;
     --active-toggle-bg: #818cf8;
     --active-toggle-color: #ffffff;
     --node-with-attributes-fill: #ffffff;

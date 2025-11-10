@@ -49,6 +49,42 @@ function cssNumber(varName, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/**
+ * Berechnet die Füllfarbe für einen Node basierend auf seiner hierarchischen Ebene
+ * @param {Object} node - Der Node-Datensatz
+ * @returns {string} CSS-Farbwert für die Füllung
+ */
+function getNodeFillByLevel(node) {
+  if (!node || node.type !== 'person') {
+    return getComputedStyle(document.documentElement).getPropertyValue('--node-fill') || '#4F46E5';
+  }
+  
+  const level = node.level || 0;
+  const maxLevel = Math.max(...Array.from(hierarchyLevels.values()).filter(l => l >= 0));
+  
+  // Wenn keine Hierarchie-Informationen verfügbar, Standardfarbe verwenden
+  if (maxLevel === 0 || hierarchyLevels.size === 0) {
+    return getComputedStyle(document.documentElement).getPropertyValue('--node-fill') || '#4F46E5';
+  }
+  
+  // Normalisierte Ebene (0 = top, 1 = bottom)
+  const normalizedLevel = maxLevel > 0 ? level / maxLevel : 0;
+  
+  // Hole die Gradient-Farben aus CSS-Variablen
+  const topLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-top-level') || '#e0e7ff';
+  const midLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-mid-level') || '#818cf8';
+  const lowLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-low-level') || '#4F46E5';
+  
+  // Wähle Farbe basierend auf normalisierter Ebene
+  if (normalizedLevel <= 0.33) {
+    return topLevelColor.trim();
+  } else if (normalizedLevel <= 0.67) {
+    return midLevelColor.trim();
+  } else {
+    return lowLevelColor.trim();
+  }
+}
+
 function hslaToRgba(hslaStr){
   // hsla(h, s%, l%, a)
   const m = /hsla\(([^,]+),\s*([^%]+)%\s*,\s*([^%]+)%\s*,\s*([^\)]+)\)/i.exec(hslaStr||'');
@@ -531,9 +567,9 @@ function updateAttributeCircles() {
   
   // Wenn Attribute ausgeblendet sind, nur die Kreise entfernen und den Rest überspringen
   if (!attributesVisible) {
-    // Alle Knoten auf Standard zurücksetzen
+    // Alle Knoten auf Standard zurücksetzen, aber hierarchie-basierte Fill behalten
     nodes.selectAll('circle.node-circle')
-      .style('fill', null)
+      .style('fill', d => getNodeFillByLevel(d))
       .style('stroke', null)
       .style('stroke-width', null)
       .style('opacity', 1);
@@ -546,9 +582,9 @@ function updateAttributeCircles() {
   // Set zum Speichern aller IDs von Knoten mit aktiven Attributen
   const nodesWithActiveAttributesIds = new Set();
   
-  // Alle Knoten auf Standard zurücksetzen
+  // Alle Knoten auf Standard zurücksetzen, aber hierarchie-basierte Fill behalten
   nodes.selectAll('circle.node-circle')
-    .style('fill', null)
+    .style('fill', d => getNodeFillByLevel(d))
     .style('stroke', null)
     .style('stroke-width', null)
     .style('opacity', 1);
@@ -1585,7 +1621,8 @@ function renderGraph(sub) {
   const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
   
   // Hauptkreis hinzufügen (nur einmal!)
-  node.append("circle").attr("r", nodeRadius).attr("class", "node-circle");
+  node.append("circle").attr("r", nodeRadius).attr("class", "node-circle")
+    .style("fill", d => getNodeFillByLevel(d));
   node.append("text")
     .text(d => d.label ?? d.id)
     .attr("x", 10)
