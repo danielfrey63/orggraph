@@ -447,7 +447,6 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 .legend-controls {
   display: flex;
   align-items: center;
-  gap: 4px;
   flex: 1;
   justify-content: flex-end;
 }
@@ -459,7 +458,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 }
 
 /* Rechte Gruppe mit Icons (immer gleich breit in allen Legenden) */
-.legend-controls .control-group:nth-child(2) {
+.legend-controls .control-group:last-child {
   min-width: 75px; /* Feste Mindestbreite für konsistente Ausrichtung */
   display: flex;
   justify-content: flex-end;
@@ -468,15 +467,19 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 
 /* Linke Gruppe (variabel je nach Inhalt) */
 .legend-controls .control-group:first-child {
-  margin-right: 10px;
   min-height: 32px; /* Konsistente Höhe auch wenn leer */
+}
+
+.legend-section:first-child .legend-controls .control-group:first-child {
+  flex: 1;
+  min-width: 0;
 }
 
 .legend-title-group {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
+  flex: 0 0 auto;
 }
 
 .legend-title-group h2 {
@@ -488,8 +491,9 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 .oe-filter-container {
   margin: 0;
   width: 100%;
-  max-width: 140px;
+  max-width: none;
 }
+
 
 .oe-filter-input {
   width: 100%;
