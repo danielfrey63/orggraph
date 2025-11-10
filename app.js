@@ -24,7 +24,6 @@ let currentSelectedId = null;
 let searchDebounceTimer = null;
 let zoomBehavior = null;
 let managementEnabled = true;
-let autoFitEnabled = true;
 let clusterLayer = null;
 let clusterSimById = new Map();
 let clusterPersonIds = new Set();
@@ -1768,10 +1767,8 @@ function renderGraph(sub) {
     paths.exit().remove();
   });
   
-  // Auto-Fit nach Simulation-Ende
-  simulation.on('end', () => {
-    if (autoFitEnabled) fitToViewport();
-  });
+  // No auto-fit after simulation ends
+  simulation.on('end', () => {});
 
   // Optionales radiales Layout
   const radialForceStrength = cssNumber('--radial-force', 0);
@@ -3219,22 +3216,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       applyFromUI();
     });
   }
-  const auto = document.querySelector('#toggleAutoFit');
-  if (auto) {
-    if (envConfig?.DEFAULT_AUTOFIT_ENABLED != null) {
-      autoFitEnabled = !!envConfig.DEFAULT_AUTOFIT_ENABLED;
-      if (!autoFitEnabled) auto.classList.remove('active');
-    } else {
-      autoFitEnabled = auto.classList.contains('active');
-    }
-    auto.addEventListener('click', () => {
-      auto.classList.toggle('active');
-      autoFitEnabled = auto.classList.contains('active');
-      if (autoFitEnabled) {
-        fitToViewport();
-      }
-    });
-  }
+  // Auto-fit functionality has been removed
   
   const lbls = document.querySelector('#toggleLabels');
   if (lbls) {

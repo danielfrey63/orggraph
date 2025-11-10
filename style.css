@@ -172,6 +172,11 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 .attributes-hidden .attribute-legend-item {
   opacity: 0.6;
 }
+
+/* Visuelle Anzeige des ausgeblendeten Status im Header */
+#toggleAttributesVisibility:not(.active) svg {
+  opacity: 0.5;
+}
 .attribute-legend-item:hover { background: var(--control-hover); }
 .attribute-color { 
   display: inline-block; 
@@ -442,7 +447,29 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 .legend-controls {
   display: flex;
   align-items: center;
-  gap: 0px;
+  gap: 4px;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+/* Gruppierung der Kontrollelemente für einheitliches Layout */
+.control-group {
+  display: flex;
+  align-items: center;
+}
+
+/* Rechte Gruppe mit Icons (immer gleich breit in allen Legenden) */
+.legend-controls .control-group:nth-child(2) {
+  min-width: 75px; /* Feste Mindestbreite für konsistente Ausrichtung */
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px; /* Kleinerer Abstand zwischen den Icons */
+}
+
+/* Linke Gruppe (variabel je nach Inhalt) */
+.legend-controls .control-group:first-child {
+  margin-right: 10px;
+  min-height: 32px; /* Konsistente Höhe auch wenn leer */
 }
 
 .legend-title-group {
@@ -454,23 +481,25 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 
 .legend-title-group h2 {
   margin: 0;
-  min-width: 40px;
+  min-width: 90px;
+  flex-shrink: 0;
 }
 
 .oe-filter-container {
-  flex: 1;
-  max-width: 160px;
+  margin: 0;
+  width: 100%;
+  max-width: 140px;
 }
 
 .oe-filter-input {
   width: 100%;
-  padding: 3px 6px;
+  padding: 3px 8px;
   border-radius: 4px;
   border: 1px solid var(--control-border);
-  font-size: 12px;
-  background: var(--control-bg, #ffffff);
+  background-color: var(--input-bg);
+  color: var(--text);
+  font-size: 13px;
 }
-
 
 .fuzzy-match-header {
   display: flex;

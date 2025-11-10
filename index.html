@@ -73,31 +73,6 @@
         </svg>
       </button>
       
-      <button id="toggleAutoFit" class="toggle-btn active" title="Automatisch einpassen">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <!-- Vollbild mit kürzeren diagonalen Pfeilen und Auto-Symbol -->
-          <path d="M5 5l3 3" />
-          <path d="M5 5H8" />
-          <path d="M5 5V8" />
-          
-          <path d="M19 5l-3 3" />
-          <path d="M19 5h-3" />
-          <path d="M19 5v3" />
-          
-          <path d="M5 19l3-3" />
-          <path d="M5 19h3" />
-          <path d="M5 19v-3" />
-          
-          <path d="M19 19l-3-3" />
-          <path d="M19 19h-3" />
-          <path d="M19 19v-3" />
-          
-          <circle cx="12" cy="12" r="3" stroke-dasharray="2 1" />
-          <path d="M12 9v6" stroke-width="1.5" />
-          <path d="M9 12h6" stroke-width="1.5" />
-        </svg>
-      </button>
-      
       <button id="fit" class="toggle-btn" aria-label="Auf Seite einpassen" title="Auf Seite einpassen">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor">
           <!-- Vollbild-Symbol mit kürzeren diagonalen Pfeilen -->
@@ -138,18 +113,22 @@
         <div class="legend-header">
           <div class="legend-title-group">
             <h2>OEs</h2>
-            <div class="oe-filter-container" data-ignore-header-click="true">
-              <input type="text" id="oeFilter" placeholder="OE filtern..." class="oe-filter-input" data-ignore-header-click="true">
-            </div>
-            <button id="toggleOesVisibility" class="toggle-btn active" title="OEs ausblenden" data-ignore-header-click="true">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" data-ignore-header-click="true" />
-                <circle cx="12" cy="12" r="3" data-ignore-header-click="true" />
-              </svg>
-            </button>
           </div>
           <div class="legend-controls">
-            <button class="collapse-btn" data-target="legend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+            <div class="control-group">
+              <div class="oe-filter-container" data-ignore-header-click="true">
+                <input type="text" id="oeFilter" placeholder="OE filtern..." class="oe-filter-input" data-ignore-header-click="true">
+              </div>
+            </div>
+            <div class="control-group">
+              <button id="toggleOesVisibility" class="toggle-btn active" title="OEs ausblenden" data-ignore-header-click="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" data-ignore-header-click="true" />
+                  <circle cx="12" cy="12" r="3" data-ignore-header-click="true" />
+                </svg>
+              </button>
+              <button class="collapse-btn" data-target="legend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+            </div>
           </div>
         </div>
         <div id="legend" class="legend-content"></div>
@@ -159,23 +138,27 @@
         <div class="legend-header">
           <div class="legend-title-group">
             <h2>Attribute</h2>
-            <button id="loadAttributes" class="toggle-btn" title="Attributliste laden" data-ignore-header-click="true">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" data-ignore-header-click="true" />
-                <path d="M14 2v6h6" data-ignore-header-click="true" />
-                <path d="M9 15l3-3 3 3" data-ignore-header-click="true" />
-                <path d="M12 12v6" data-ignore-header-click="true" />
-              </svg>
-            </button>
-            <button id="toggleAttributesVisibility" class="toggle-btn active" title="Attribute ausblenden" data-ignore-header-click="true">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" data-ignore-header-click="true" />
-                <circle cx="12" cy="12" r="3" data-ignore-header-click="true" />
-              </svg>
-            </button>
           </div>
           <div class="legend-controls">
-            <button class="collapse-btn" data-target="attributeContainer" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+            <div class="control-group">
+              <button id="loadAttributes" class="toggle-btn" title="Attributliste laden" data-ignore-header-click="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" data-ignore-header-click="true" />
+                  <path d="M14 2v6h6" data-ignore-header-click="true" />
+                  <path d="M9 15l3-3 3 3" data-ignore-header-click="true" />
+                  <path d="M12 12v6" data-ignore-header-click="true" />
+                </svg>
+              </button>
+            </div>
+            <div class="control-group">
+              <button id="toggleAttributesVisibility" class="toggle-btn active" title="Attribute ausblenden" data-ignore-header-click="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" data-ignore-header-click="true" />
+                  <circle cx="12" cy="12" r="3" data-ignore-header-click="true" />
+                </svg>
+              </button>
+              <button class="collapse-btn" data-target="attributeContainer" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+            </div>
           </div>
         </div>
         <div id="attributeContainer" class="legend-content">
@@ -192,7 +175,12 @@
             <h2>Ausgeblendet</h2>
           </div>
           <div class="legend-controls">
-            <button class="collapse-btn" data-target="hiddenLegend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+            <div class="control-group">
+              <!-- Platzhalter für Konsistenz -->
+            </div>
+            <div class="control-group">
+              <button class="collapse-btn" data-target="hiddenLegend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+            </div>
           </div>
         </div>
         <div id="hiddenLegend" class="legend-content"></div>
