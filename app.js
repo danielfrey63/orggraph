@@ -1692,17 +1692,25 @@ function renderGraph(sub) {
     
     // Verbindungsposition aktualisieren
     link
-      .attr("x1", d => d.target.x)
-      .attr("y1", d => d.target.y)
+      .attr("x1", d => {
+        const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+        const len = Math.hypot(dx, dy) || 1;
+        return d.target.x - (dx / len) * nodeOuter; // Startpunkt am Rand des Ziel-Knotens
+      })
+      .attr("y1", d => {
+        const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+        const len = Math.hypot(dx, dy) || 1;
+        return d.target.y - (dy / len) * nodeOuter; // Startpunkt am Rand des Ziel-Knotens
+      })
       .attr("x2", d => {
         const dx = d.source.x - d.target.x, dy = d.source.y - d.target.y;
         const len = Math.hypot(dx, dy) || 1;
-        return d.source.x - (dx / len) * backoff;
+        return d.source.x - (dx / len) * backoff; // Endpunkt am Rand des Quell-Knotens mit Platz für Pfeilspitze
       })
       .attr("y2", d => {
         const dx = d.source.x - d.target.x, dy = d.source.y - d.target.y;
         const len = Math.hypot(dx, dy) || 1;
-        return d.source.y - (dy / len) * backoff;
+        return d.source.y - (dy / len) * backoff; // Endpunkt am Rand des Quell-Knotens mit Platz für Pfeilspitze
       });
 
     // Knotenposition aktualisieren
