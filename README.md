@@ -79,11 +79,25 @@ node transform.js --help
 - **Suchfeld**: Namen oder ID eingeben (min. 2 Zeichen für große Datensätze)
   - Zeigt max. 100 Ergebnisse an
   - Debounced Search (150ms Verzögerung) für bessere Performance
+  - Mehrfach-Roots:
+    - Shift+Klick auf Treffereintrag → als weiterer Root hinzufügen
+    - Shift+Enter bei Tastenauswahl (↑/↓) → als weiterer Root hinzufügen
+    - Enter/Klick ohne Shift → ersetzt alle Roots durch den ausgewählten
 - **Tiefe**: Anzahl BFS-Stufen ab Startknoten
 - **Management-Checkbox**: Standardmäßig aktiviert - blendet Personen ohne Mitarbeiter (Blätter) aus
 - **Button „Anzeigen"**: Rendert den Teilgraphen
 - **OE-Legende**: Organisationseinheiten ein-/ausblenden (Rechtsklick für Subtree-Aktionen)
+  - Single-Root: Legende zeigt OEs im Kontext des Startknotens
+  - Multi-Root: Legende zeigt die Vereinigungsmenge aller relevanten OEs der ausgewählten Roots
 - **Attribute**: Über ENV-Datei konfigurierbar - bei Angabe von `ATTRIBUTES_URL` werden Attribute automatisch geladen und angezeigt
+
+### Kontextmenü
+
+- Rechtsklick auf Personenknoten öffnet ein kontextbezogenes Menü (Browser-Menü ist global deaktiviert):
+  - „Ausblenden“: blendet die Berichtslinie dieser Management-Person aus
+  - „Als Root entfernen“: nur sichtbar, wenn der Knoten aktueller Root ist und mindestens 2 Roots ausgewählt sind
+
+Hinweis: Das Browser-Kontextmenü ist global unterdrückt, damit die App-eigenen Menüs konsistent funktionieren.
 
 ## Beispiel
 

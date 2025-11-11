@@ -9,6 +9,7 @@ const WIDTH = 1200;
 const HEIGHT = 800;
 const MAX_DROPDOWN_ITEMS = 100;
 const MIN_SEARCH_LENGTH = 2;
+const MAX_ROOTS = 5;
 
 let raw = { nodes: [], links: [], persons: [], orgs: []};
 let personAttributes = new Map(); // Map von ID/Email zu Attribut-Maps
@@ -43,6 +44,41 @@ let envConfig = null;
 let collapsedCategories = new Set(); // Kategorien mit eingeklapptem Zustand
 let hiddenNodes = new Set();
 let hiddenByRoot = new Map();
+let selectedRootIds = [];
+let lastSingleRootId = null;
+
+function isRoot(id){ return selectedRootIds.includes(String(id)); }
+function setSingleRoot(id){
+  selectedRootIds = [String(id)];
+  lastSingleRootId = String(id);
+  try { console.log('[roots] setSingleRoot', { id: String(id) }); } catch {}
+}
+function addRoot(id){
+  const s = String(id);
+  // Wenn noch kein Multi-Root aktiv ist, aber es einen aktuellen Einzel-Root gibt, übernehme ihn als Start
+  if (selectedRootIds.length === 0) {
+    const seed = currentSelectedId ? String(currentSelectedId) : (lastSingleRootId ? String(lastSingleRootId) : null);
+    if (seed && seed !== s) {
+      selectedRootIds = [seed];
+      try { console.log('[roots] seed multi-root from', { seed, add: s }); } catch {}
+    }
+  }
+  if (selectedRootIds.includes(s)) return true;
+  if (selectedRootIds.length >= MAX_ROOTS) { showTemporaryNotification(`Maximal ${MAX_ROOTS} Roots`); return false; }
+  const before = selectedRootIds.slice();
+  selectedRootIds = selectedRootIds.concat([s]);
+  // Falls dies der erste Add ist und wir einen letzten Einzel-Root kennen, füge ihn nachträglich hinzu
+  if (before.length === 0 && lastSingleRootId && lastSingleRootId !== s) {
+    selectedRootIds = [String(lastSingleRootId)].concat(selectedRootIds);
+    try { console.log('[roots] retro-seed after add', { lastSingleRootId, add: s, after: selectedRootIds.slice() }); } catch {}
+  }
+  try { console.log('[roots] addRoot', { add: s, before, after: selectedRootIds.slice() }); } catch {}
+  return true;
+}
+function removeRoot(id){
+  const s = String(id);
+  selectedRootIds = selectedRootIds.filter(x => x !== s);
+}
 
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
@@ -999,7 +1035,9 @@ function populateCombo(filterText) {
     li.tabIndex = -1;
     li.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      chooseItem(idx);
+      // Shift-Klick fügt als weiteren Root hinzu, sonst ersetzt
+      const addMode = !!(e.shiftKey);
+      chooseItem(idx, addMode);
     });
     frag.appendChild(li);
   });
@@ -1030,14 +1068,38 @@ function setActive(idx) {
   if (idx >= 0 && items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
 }
 
-function chooseItem(idx) {
+function chooseItem(idx, addMode) {
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
   if (!input || !list) return;
   if (idx < 0 || idx >= filteredItems.length) return;
   const n = filteredItems[idx];
-  currentSelectedId = String(n.id);
-  input.value = n.label || String(n.id);
+  const nid = String(n.id);
+  if (addMode) {
+    try { console.log('[ui] chooseItem addMode', { idx, nid }); } catch {}
+    // Wenn dies der erste Shift-Add ist, initialisiere die Multi-Root-Liste
+    if (selectedRootIds.length === 0) {
+      let seed = currentSelectedId || lastSingleRootId;
+      if (!seed) {
+        // Versuche aus dem aktuellen Eingabetext einen Start zu erraten
+        const inputVal = (input && input.value) ? input.value : '';
+        const guessed = guessIdFromInput(inputVal);
+        if (guessed && guessed !== nid) seed = guessed;
+      }
+      if (seed && String(seed) !== nid) {
+        selectedRootIds = [String(seed)];
+        try { console.log('[roots] initial seed in chooseItem', { seed: String(seed) }); } catch {}
+      }
+    }
+    if (addRoot(nid)) {
+      currentSelectedId = nid;
+    }
+  } else {
+    try { console.log('[ui] chooseItem replaceMode', { idx, nid }); } catch {}
+    setSingleRoot(nid);
+    currentSelectedId = nid;
+  }
+  input.value = n.label || nid;
   list.hidden = true;
   // Auto-apply and re-center when selecting from dropdown
   applyFromUI();
@@ -1637,10 +1699,31 @@ function ensureNodeMenu() {
   document.addEventListener('click', () => { if (nodeMenuEl && nodeMenuEl.style.display === 'block') nodeMenuEl.style.display = 'none'; });
   return el;
 }
-function showNodeMenu(x, y, onHide) {
+function showNodeMenu(x, y, actionsOrOnHide) {
   const el = ensureNodeMenu();
-  const it = el.querySelector('div');
-  it.onclick = () => { el.style.display = 'none'; onHide(); };
+  // Menü dynamisch aufbauen, aber Abwärtskompatibilität für alte Signatur behalten
+  // Alte Signatur: actionsOrOnHide ist eine Funktion (Ausblenden)
+  // Neue Signatur: Objekt { onHideSubtree, onRemoveRoot, isRoot }
+  while (el.firstChild) el.removeChild(el.firstChild);
+  const addItem = (label, handler) => {
+    const it = document.createElement('div');
+    it.textContent = label;
+    it.style.padding = '6px 12px';
+    it.style.cursor = 'pointer';
+    it.addEventListener('mouseenter', () => it.style.background = '#1f2937');
+    it.addEventListener('mouseleave', () => it.style.background = 'transparent');
+    it.onclick = () => { el.style.display = 'none'; handler && handler(); };
+    el.appendChild(it);
+  };
+  if (typeof actionsOrOnHide === 'function') {
+    addItem('Ausblenden', actionsOrOnHide);
+  } else {
+    const actions = actionsOrOnHide || {};
+    if (actions.onHideSubtree) addItem('Ausblenden', actions.onHideSubtree);
+    if (actions.isRoot && actions.onRemoveRoot && Array.isArray(selectedRootIds) && selectedRootIds.length > 1) {
+      addItem('Als Root entfernen', actions.onRemoveRoot);
+    }
+  }
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
   el.style.display = 'block';
@@ -1846,11 +1929,16 @@ function renderGraph(sub) {
     showTooltip(event.clientX, event.clientY, lines);
   });
   node.on('mouseleave', hideTooltip);
-  // Context menu to hide subtree via right-click
+  // Context menu: hide subtree and (if applicable) remove as Root
   node.on('contextmenu', (event, d) => {
     if (event && typeof event.preventDefault === 'function') event.preventDefault();
     if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
-    showNodeMenu(event.clientX, event.clientY, () => hideSubtreeFromRoot(String(d.id)));
+    const pid = String(d.id);
+    showNodeMenu(event.clientX, event.clientY, {
+      onHideSubtree: () => hideSubtreeFromRoot(pid),
+      isRoot: isRoot(pid),
+      onRemoveRoot: () => { removeRoot(pid); applyFromUI(); }
+    });
   });
 
   // Force-Simulation-Parameter
@@ -2075,87 +2163,193 @@ function applyFromUI() {
     dirMode = activeDirectionButton.dataset.dir;
   }
 
-  let startId = currentSelectedId;
-  if (!startId && input && input.value) {
-    startId = guessIdFromInput(input.value);
+  // Determine roots
+  let roots = Array.isArray(selectedRootIds) && selectedRootIds.length > 0 ? selectedRootIds.slice() : [];
+  if (roots.length === 0) {
+    let startId = currentSelectedId;
+    if (!startId && input && input.value) {
+      startId = guessIdFromInput(input.value);
+    }
+    if (!startId) { setStatus("Startknoten nicht gefunden"); return; }
+    roots = [String(startId)];
   }
-  if (!startId) { setStatus("Startknoten nicht gefunden"); return; }
-  const sub = computeSubgraph(startId, Number.isFinite(depth) ? depth : 2, dirMode);
-  currentSubgraph = sub;
-  renderGraph(sub);
-  updateFooterStats(sub);
-  
-  
-  // Im normalen Modus: update legend to only include orgs related to the START node
-  const startType = byId.get(startId)?.type;
-  const scopeOrgs = new Set();
-  if (startType === 'person') {
-    // Direct memberOf orgs of the start person
-    for (const l of raw.links) {
-      const s = idOf(l.source), t = idOf(l.target);
-      if (s === startId && byId.get(t)?.type === 'org') scopeOrgs.add(t);
-    }
-    // Add ancestor orgs (orgParent upwards)
-    const parents = new Map(); // child -> parent set
-    const children = new Map(); // parent -> child set (for deepest detection and downward expansion)
-    for (const l of raw.links) {
-      const s = idOf(l.source), t = idOf(l.target);
-      if (byId.get(s)?.type === 'org' && byId.get(t)?.type === 'org') {
-        if (!parents.has(t)) parents.set(t, new Set());
-        parents.get(t).add(s);
-        if (!children.has(s)) children.set(s, new Set());
-        children.get(s).add(t);
+  try { console.log('[apply] roots determined', { roots: roots.slice() }); } catch {}
+
+  // Single-root or multi-root render
+  if (roots.length === 1) {
+    const startId = roots[0];
+    // Merke letzten Einzel-Root für zukünftiges Shift-Add Seeding
+    lastSingleRootId = String(startId);
+    currentSelectedId = String(startId);
+    const sub = computeSubgraph(startId, Number.isFinite(depth) ? depth : 2, dirMode);
+    currentSubgraph = sub;
+    renderGraph(sub);
+    updateFooterStats(sub);
+    try { console.log('[apply] single-root rendered', { startId, nodes: sub.nodes.length, links: sub.links.length }); } catch {}
+    
+    // Scoped legend for single root
+    const startType = byId.get(startId)?.type;
+    const scopeOrgs = new Set();
+    if (startType === 'person') {
+      // Direct memberOf orgs of the start person
+      for (const l of raw.links) {
+        const s = idOf(l.source), t = idOf(l.target);
+        if (s === startId && byId.get(t)?.type === 'org') scopeOrgs.add(t);
       }
-    }
-    const q = Array.from(scopeOrgs);
-    for (let i=0;i<q.length;i++) {
-      const c = q[i];
-      for (const p of (parents.get(c) || [])) {
-        if (!scopeOrgs.has(p)) { scopeOrgs.add(p); q.push(p); }
+      // Add ancestor orgs (orgParent upwards)
+      const parents = new Map(); // child -> parent set
+      const children = new Map(); // parent -> child set (for deepest detection and downward expansion)
+      for (const l of raw.links) {
+        const s = idOf(l.source), t = idOf(l.target);
+        if (byId.get(s)?.type === 'org' && byId.get(t)?.type === 'org') {
+          if (!parents.has(t)) parents.set(t, new Set());
+          parents.get(t).add(s);
+          if (!children.has(s)) children.set(s, new Set());
+          children.get(s).add(t);
+        }
       }
-    }
-    // Determine deepest memberOf orgs (those that are not parent of another memberOf in this set)
-    const memberSet = new Set(Array.from(scopeOrgs).filter(oid => {
-      // limit to original direct memberOf (exclude ancestors added above)
-      // reconstruct direct memberOf set
-      return Array.from(raw.links).some(l => idOf(l.source) === startId && idOf(l.target) === oid);
-    }));
-    const deepest = Array.from(memberSet).filter(oid => {
-      const kids = children.get(oid) || new Set();
-      // if any child is also in memberSet, then oid is not deepest
-      for (const k of kids) { if (memberSet.has(k)) return false; }
-      return true;
-    });
-    // Expand descendants from deepest
-    for (const root of deepest) {
-      const dq = [root];
-      for (let i=0;i<dq.length;i++) {
-        const cur = dq[i];
+      const q = Array.from(scopeOrgs);
+      for (let i=0;i<q.length;i++) {
+        const c = q[i];
+        for (const p of (parents.get(c) || [])) {
+          if (!scopeOrgs.has(p)) { scopeOrgs.add(p); q.push(p); }
+        }
+      }
+      // Determine deepest memberOf orgs (those that are not parent of another memberOf in this set)
+      const memberSet = new Set(Array.from(scopeOrgs).filter(oid => {
+        // limit to original direct memberOf (exclude ancestors added above)
+        // reconstruct direct memberOf set
+        return Array.from(raw.links).some(l => idOf(l.source) === startId && idOf(l.target) === oid);
+      }));
+      const deepest = Array.from(memberSet).filter(oid => {
+        const kids = children.get(oid) || new Set();
+        // if any child is also in memberSet, then oid is not deepest
+        for (const k of kids) { if (memberSet.has(k)) return false; }
+        return true;
+      });
+      // Expand descendants from deepest
+      for (const root of deepest) {
+        const dq = [root];
+        for (let i=0;i<dq.length;i++) {
+          const cur = dq[i];
+          for (const ch of (children.get(cur) || [])) {
+            if (!scopeOrgs.has(ch)) { scopeOrgs.add(ch); dq.push(ch); }
+          }
+        }
+      }
+    } else if (startType === 'org') {
+      // The start org and all descendant orgs
+      const children = new Map();
+      for (const l of raw.links) {
+        const s = idOf(l.source), t = idOf(l.target);
+        if (byId.get(s)?.type === 'org' && byId.get(t)?.type === 'org') {
+          if (!children.has(s)) children.set(s, new Set());
+          children.get(s).add(t);
+        }
+      }
+      const q = [startId];
+      scopeOrgs.add(startId);
+      for (let i=0;i<q.length;i++) {
+        const cur = q[i];
         for (const ch of (children.get(cur) || [])) {
-          if (!scopeOrgs.has(ch)) { scopeOrgs.add(ch); dq.push(ch); }
+          if (!scopeOrgs.has(ch)) { scopeOrgs.add(ch); q.push(ch); }
         }
       }
     }
-  } else if (startType === 'org') {
-    // The start org and all descendant orgs
-    const children = new Map();
+    buildOrgLegend(scopeOrgs);
+  } else {
+    // Multi-root: compute union of subgraphs
+    const nodeMap = new Map();
+    const linkSet = new Set();
+    const effDepth = Number.isFinite(depth) ? depth : 2;
+    const scopeOrgs = new Set();
+    // Hilfsstrukturen für OE-Eltern/Kind-Beziehungen
+    const orgParents = new Map(); // child -> set(parents)
+    const orgChildren = new Map(); // parent -> set(children)
     for (const l of raw.links) {
       const s = idOf(l.source), t = idOf(l.target);
       if (byId.get(s)?.type === 'org' && byId.get(t)?.type === 'org') {
-        if (!children.has(s)) children.set(s, new Set());
-        children.get(s).add(t);
+        if (!orgParents.has(t)) orgParents.set(t, new Set());
+        orgParents.get(t).add(s);
+        if (!orgChildren.has(s)) orgChildren.set(s, new Set());
+        orgChildren.get(s).add(t);
       }
     }
-    const q = [startId];
-    scopeOrgs.add(startId);
-    for (let i=0;i<q.length;i++) {
-      const cur = q[i];
-      for (const ch of (children.get(cur) || [])) {
-        if (!scopeOrgs.has(ch)) { scopeOrgs.add(ch); q.push(ch); }
+    for (const rid of roots) {
+      const sub = computeSubgraph(rid, effDepth, dirMode);
+      for (const n of sub.nodes) {
+        const id = String(n.id);
+        if (!nodeMap.has(id)) {
+          nodeMap.set(id, { ...n });
+        } else {
+          const cur = nodeMap.get(id);
+          cur.level = Math.min(cur.level || 0, n.level || 0);
+          nodeMap.set(id, cur);
+        }
+      }
+      for (const l of sub.links) {
+        const s = idOf(l.source), t = idOf(l.target);
+        linkSet.add(`${s}>${t}`);
+      }
+      // OE-Scope sammeln pro Root
+      const rType = byId.get(rid)?.type;
+      if (rType === 'person') {
+        // direkte memberOf OEs
+        const direct = new Set();
+        for (const l of raw.links) {
+          const s = idOf(l.source), t = idOf(l.target);
+          if (s === rid && byId.get(t)?.type === 'org') direct.add(t);
+        }
+        // alle Vorfahren hinzufügen
+        const all = new Set(direct);
+        const q = Array.from(direct);
+        for (let i=0;i<q.length;i++) {
+          const c = q[i];
+          for (const p of (orgParents.get(c) || [])) {
+            if (!all.has(p)) { all.add(p); q.push(p); }
+          }
+        }
+        // tiefste OEs bestimmen (ohne Kinder in direct)
+        const deepest = Array.from(direct).filter(oid => {
+          const kids = orgChildren.get(oid) || new Set();
+          for (const k of kids) if (direct.has(k)) return false;
+          return true;
+        });
+        // Nachfahren ab tiefsten erweitern
+        for (const root of deepest) {
+          const dq = [root];
+          for (let i=0;i<dq.length;i++) {
+            const cur = dq[i];
+            for (const ch of (orgChildren.get(cur) || [])) {
+              if (!all.has(ch)) { all.add(ch); dq.push(ch); }
+            }
+          }
+        }
+        all.forEach(x => scopeOrgs.add(x));
+      } else if (rType === 'org') {
+        // Root-OE und alle Nachfahren
+        const q = [rid];
+        scopeOrgs.add(rid);
+        for (let i=0;i<q.length;i++) {
+          const cur = q[i];
+          for (const ch of (orgChildren.get(cur) || [])) {
+            if (!scopeOrgs.has(ch)) { scopeOrgs.add(ch); q.push(ch); }
+          }
+        }
       }
     }
+    const nodes = Array.from(nodeMap.values());
+    const links = Array.from(linkSet).map(k => {
+      const [s, t] = k.split('>');
+      return { source: s, target: t };
+    });
+    const merged = { nodes, links };
+    currentSubgraph = merged;
+    renderGraph(merged);
+    updateFooterStats(merged);
+    // Multi-Root: Legende auf die Vereinigungsmenge der relevanten OEs einschränken
+    buildOrgLegend(scopeOrgs);
   }
-  buildOrgLegend(scopeOrgs);
 }
 
 /**
@@ -3327,6 +3521,8 @@ let savedAllowedOrgs = new Set();
 window.addEventListener("DOMContentLoaded", async () => {
   await loadEnvConfig();
   await loadData();
+  // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
+  try { document.addEventListener('contextmenu', (e) => e.preventDefault()); } catch {}
   const applyBtn = document.querySelector(BTN_APPLY_ID);
   if (applyBtn) applyBtn.addEventListener("click", applyFromUI);
   const input = document.querySelector(INPUT_COMBO_ID);
@@ -3522,7 +3718,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       switch (e.key) {
         case 'ArrowDown': e.preventDefault(); setActive(Math.min(max, activeIndex + 1)); break;
         case 'ArrowUp': e.preventDefault(); setActive(Math.max(-1, activeIndex - 1)); break;
-        case 'Enter': if (activeIndex >= 0) chooseItem(activeIndex); applyFromUI(); break;
+        case 'Enter': {
+          const addMode = !!(e.shiftKey);
+          // Wenn kein aktives Element, wähle den ersten Treffer automatisch
+          const idx = activeIndex >= 0 ? activeIndex : (filteredItems.length > 0 ? 0 : -1);
+          try { console.log('[ui] key Enter', { addMode, activeIndex, chosenIdx: idx, items: filteredItems.length }); } catch {}
+          if (idx >= 0) chooseItem(idx, addMode);
+          applyFromUI();
+          break;
+        }
         case 'Escape': list.hidden = true; break;
       }
     });
@@ -3652,17 +3856,43 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // Apply initial start node from env.json if provided
-  if (envConfig?.DEFAULT_START_ID) {
-    const startNode = byId.get(String(envConfig.DEFAULT_START_ID));
-    if (startNode) {
-      currentSelectedId = String(startNode.id);
-      if (input) {
-        input.value = startNode.label || String(startNode.id);
-        // Stelle sicher, dass die Dropdown-Liste geschlossen ist
-        list.hidden = true;
+  // Apply initial start node(s) from env.json if provided
+  if (envConfig && envConfig.DEFAULT_START_ID != null) {
+    const def = envConfig.DEFAULT_START_ID;
+    if (Array.isArray(def)) {
+      const requested = def.map(v => String(v));
+      const roots = requested.filter(id => byId.has(id));
+      const invalid = requested.filter(id => !byId.has(id));
+      if (roots.length > 0) {
+        selectedRootIds = roots.slice();
+        currentSelectedId = roots[0];
+        lastSingleRootId = roots[0];
+        const firstNode = byId.get(roots[0]);
+        if (input && firstNode) {
+          input.value = firstNode.label || String(firstNode.id);
+          list.hidden = true;
+        }
+        try { applyFromUI(); } catch(_) {}
       }
-      try { applyFromUI(); } catch(_) {}
+      if (invalid.length > 0) {
+        // Zeige Info über ungültige IDs
+        showTemporaryNotification(`Ungültige DEFAULT_START_ID Einträge ignoriert: ${invalid.join(', ')}`);
+      }
+    } else {
+      const sid = String(def);
+      const startNode = byId.get(sid);
+      if (startNode) {
+        currentSelectedId = String(startNode.id);
+        lastSingleRootId = String(startNode.id);
+        if (input) {
+          input.value = startNode.label || String(startNode.id);
+          // Stelle sicher, dass die Dropdown-Liste geschlossen ist
+          list.hidden = true;
+        }
+        try { applyFromUI(); } catch(_) {}
+      } else {
+        showTemporaryNotification(`DEFAULT_START_ID nicht gefunden: ${sid}`);
+      }
     }
   }
   // Apply default hidden roots from env
