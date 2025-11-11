@@ -42,6 +42,7 @@ let currentSimulation = null; // Global reference to D3 simulation
 let preferredData = "auto";
 let envConfig = null;
 let collapsedCategories = new Set(); // Kategorien mit eingeklapptem Zustand
+let hiddenCategories = new Set(); // Kategorien die temporär ausgeblendet sind (ohne Attribut-Status zu ändern)
 let hiddenNodes = new Set();
 let hiddenByRoot = new Map();
 let selectedRootIds = [];
@@ -656,9 +657,15 @@ function updateAttributeCircles() {
     
     // Knoten mit Attributen prüfen
     if (nodeAttrs && nodeAttrs.size > 0) {
-      // Filtere auf aktive Attribute
+      // Filtere auf aktive Attribute und nicht-ausgeblendete Kategorien
       const activeNodeAttrs = Array.from(nodeAttrs.entries())
-        .filter(([attrName]) => activeAttributes.has(attrName))
+        .filter(([attrName]) => {
+          if (!activeAttributes.has(attrName)) return false;
+          // Kategorie aus Attributnamen extrahieren
+          const [category] = String(attrName).includes('::') ? String(attrName).split('::') : ['Attribute'];
+          // Nur anzeigen, wenn Kategorie nicht ausgeblendet ist
+          return !hiddenCategories.has(category);
+        })
         .sort((a, b) => {
           const [ca, na] = String(a[0]).split('::');
           const [cb, nb] = String(b[0]).split('::');
@@ -1365,65 +1372,97 @@ function buildOrgLegend(scope) {
     const li = document.createElement('li');
     const lbl = byId.get(oid)?.label || oid;
     const idAttr = `org_${oid}`;
-    const chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.checked = allowedOrgs.has(oid);
-    chk.id = idAttr;
-    chk.addEventListener('change', () => {
-      if (chk.checked) allowedOrgs.add(oid); else allowedOrgs.delete(oid);
-      syncGraphAndLegendColors();
-    });
-    const lab = document.createElement('label');
-    lab.setAttribute('for', idAttr);
-    // label chip to show mixed active color (set later via updateLegendChips)
+    
+    // Haupt-Row mit neuem Layout
+    const row = document.createElement('div');
+    row.className = 'legend-row';
+    
+    // Linker Bereich: Chevron + Label
+    const leftArea = document.createElement('div');
+    leftArea.className = 'legend-row-left';
+    
+    // Rechter Bereich: Checkbox
+    const rightArea = document.createElement('div');
+    rightArea.className = 'legend-row-right';
+    
+    // Kinder prüfen für Chevron
+    const kids = Array.from(children.get(oid) || []).filter(id => !scopeProvided || scopeSet.has(id));
+    
+    // Chevron Icon oder Spacer
+    if (kids.length) {
+      const chevron = document.createElement('button');
+      chevron.type = 'button';
+      chevron.className = 'legend-tree-chevron expanded';
+      chevron.title = 'Ein-/Ausklappen';
+      chevron.innerHTML = getChevronSVG();
+      
+      chevron.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const sub = li.querySelector('ul');
+        const isCollapsed = sub && sub.style.display === 'none';
+        if (sub) {
+          sub.style.display = isCollapsed ? '' : 'none';
+          chevron.className = isCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
+        }
+      });
+      
+      leftArea.appendChild(chevron);
+    } else {
+      // Spacer für Items ohne Kinder
+      const spacer = document.createElement('div');
+      spacer.className = 'legend-tree-spacer';
+      leftArea.appendChild(spacer);
+    }
+    
+    // Label Chip
     const chip = document.createElement('span');
     chip.className = 'legend-label-chip';
     chip.textContent = lbl;
     chip.title = lbl; // Tooltip für den vollständigen Text bei Hover
-    // collapsible branch toggle
-    const kids = Array.from(children.get(oid) || []).filter(id => !scopeProvided || scopeSet.has(id));
-    const row = document.createElement('div');
-    row.className = 'legend-row';
-    // colorize row only when selected
-    const { stroke, fill } = colorForOrg(oid);
-    if (chk.checked) {
-      row.style.background = fill;
-      row.style.borderLeft = `3px solid ${stroke}`;
-    } else {
-      row.style.background = 'transparent';
-      row.style.borderLeft = '3px solid #e5e7eb';
-    }
-    if (kids.length) {
-      const toggle = document.createElement('button');
-      toggle.type = 'button';
-      toggle.textContent = '▾';
-      toggle.title = 'Ein-/Ausklappen';
-      toggle.className = 'twisty';
-      toggle.addEventListener('click', () => {
-        const sub = li.querySelector('ul');
-        const collapsed = sub && sub.style.display === 'none';
-        if (sub) sub.style.display = collapsed ? '' : 'none';
-        toggle.textContent = collapsed ? '▾' : '▸';
-      });
-      row.appendChild(toggle);
-    } else {
-      // placeholder to align without triangle
-      const spacer = document.createElement('span');
-      spacer.style.display = 'inline-block';
-      spacer.style.width = '12px';
-      spacer.style.flexShrink = '0';
-      row.appendChild(spacer);
-    }
-    row.appendChild(chk);
+    leftArea.appendChild(chip);
     
-    // Wrapper für den Chip, um korrekte Größenbegrenzung zu ermöglichen
-    const chipWrapper = document.createElement('div');
-    chipWrapper.style.overflow = 'hidden'; // Notwendig für text-overflow
-    chipWrapper.style.flexGrow = '1'; // Nimmt verfügbaren Platz ein
-    chipWrapper.style.minWidth = '0'; // Wichtig für text-overflow in Flexbox
-    chipWrapper.appendChild(chip);
+    // Rechter Bereich bleibt leer (keine Checkboxes mehr)
     
-    row.appendChild(chipWrapper);
+    // Bereiche zum Row hinzufügen
+    row.appendChild(leftArea);
+    row.appendChild(rightArea);
+    
+    // Row-Klick für Toggle-Funktionalität
+    const updateRowState = () => {
+      const isActive = allowedOrgs.has(oid);
+      row.title = isActive ? `${lbl} - Klicken zum Ausblenden` : `${lbl} - Klicken zum Anzeigen`;
+      // Die Farben und active-Klasse werden durch syncGraphAndLegendColors() gesetzt
+    };
+    
+    updateRowState();
+    
+    // Row-Click-Handler
+    row.addEventListener('click', (e) => {
+      // Nur reagieren wenn nicht auf Chevron geklickt wurde
+      if (e.target.closest('.legend-tree-chevron')) return;
+      
+      const isActive = allowedOrgs.has(oid);
+      if (isActive) {
+        allowedOrgs.delete(oid);
+      } else {
+        allowedOrgs.add(oid);
+      }
+      updateRowState();
+      syncGraphAndLegendColors();
+    });
+    
+    row.style.cursor = 'pointer';
+    
+    updateRowState();
+    
+    // Hidden input für Legacy-Kompatibilität
+    const hiddenInput = document.createElement('input');
+    hiddenInput.type = 'checkbox';
+    hiddenInput.id = idAttr;
+    hiddenInput.style.display = 'none';
+    hiddenInput.checked = allowedOrgs.has(oid);
+    row.appendChild(hiddenInput);
+    
     li.appendChild(row);
     if (kids.length) {
       const sub = document.createElement('ul');
@@ -1470,19 +1509,14 @@ function buildOrgLegend(scope) {
           // include the clicked parent itself
           allowedOrgs.add(oid);
           allDescendantIds.forEach(id => allowedOrgs.add(id));
-          // Update checkboxes in this subtree
-          if (subRoot) Array.from(subRoot.querySelectorAll('input[id^="org_"]')).forEach(c => c.checked = true);
-          const selfCb = li.querySelector(`#org_${oid}`);
-          if (selfCb) selfCb.checked = true;
+          // Row states werden durch syncGraphAndLegendColors() aktualisiert
           syncGraphAndLegendColors();
         },
         onHideAll: () => {
           // include the clicked parent itself
           allowedOrgs.delete(oid);
           allDescendantIds.forEach(id => allowedOrgs.delete(id));
-          if (subRoot) Array.from(subRoot.querySelectorAll('input[id^="org_"]')).forEach(c => c.checked = false);
-          const selfCb = li.querySelector(`#org_${oid}`);
-          if (selfCb) selfCb.checked = false;
+          // Row states werden durch syncGraphAndLegendColors() aktualisiert
           syncGraphAndLegendColors();
         },
         onShowDirectChildrenOnly: () => {
@@ -1497,15 +1531,7 @@ function buildOrgLegend(scope) {
           allowedOrgs.add(oid);
           directChildrenIds.forEach(id => allowedOrgs.add(id));
           
-          // Checkboxen aktualisieren
-          const selfCb = li.querySelector(`#org_${oid}`);
-          if (selfCb) selfCb.checked = true;
-          
-          // Nur direkte Kind-Checkboxen aktivieren
-          directChildrenIds.forEach(id => {
-            const cb = subRoot.querySelector(`#org_${id}`);
-            if (cb) cb.checked = true;
-          });
+          // Row states werden durch syncGraphAndLegendColors() aktualisiert
           
           // Direkte Kind-Unterbäume kollabieren
           if (subRoot) {
@@ -1513,9 +1539,9 @@ function buildOrgLegend(scope) {
               const childUl = childLi.querySelector('ul');
               if (childUl) {
                 childUl.style.display = 'none';
-                const twisty = childLi.querySelector('.twisty');
-                if (twisty && twisty.textContent === '▾') { // ▾ = ▾
-                  twisty.textContent = '▸'; // ▸ = ▸
+                const chevron = childLi.querySelector('.legend-tree-chevron');
+                if (chevron) {
+                  chevron.className = 'legend-tree-chevron collapsed';
                 }
               }
             });
@@ -1584,12 +1610,20 @@ function updateLegendRowColors(rootEl) {
     if (!row || !cb) return;
     const oid = cb.id.replace('org_','');
     const { stroke, fill } = colorForOrg(oid);
+    
+    // Synchronisiere Hidden Input mit allowedOrgs
+    cb.checked = allowedOrgs.has(oid);
+    
     if (cb.checked && allowedOrgs.has(oid)) {
-      row.style.background = fill;
-      row.style.borderLeft = `3px solid ${stroke}`;
+      // Active state: Set individual org colors as CSS custom properties
+      row.style.setProperty('--org-fill', fill);
+      row.style.setProperty('--org-stroke', stroke);
+      row.classList.add('active');
     } else {
-      row.style.background = 'transparent';
-      row.style.borderLeft = '3px solid #e5e7eb';
+      // Inactive state: Remove active class and custom properties
+      row.style.removeProperty('--org-fill');
+      row.style.removeProperty('--org-stroke');
+      row.classList.remove('active');
     }
   });
 }
@@ -2808,7 +2842,54 @@ async function loadAttributesFromFile(file) {
 }
 
 /**
- * Erstellt die Attribut-Legende basierend auf den geladenen Attributtypen
+ * Hilfsfunktionen für SVG-Icons
+ */
+function getCheckboxSVG(checked = false) {
+  if (checked) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+      <path d="M19 19 H280 V280 H19 V19 Z M19 19 L280 280 M280 19 L19 280" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>`;
+  } else {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+      <path d="M19 19 H280 V280 H19 V19 Z" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+  }
+}
+
+function getChevronSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+    <path d="M75 110 L150 185 L225 110" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+function getCheckAllSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" aria-hidden="true">
+    <path d="M232 68Q229 66 225.0 66.0Q221 66 218 68L126 161L139 174L232 82Q234 79 234.0 75.0Q234 71 232 68ZM35 153Q32 150 28.0 150.0Q24 150 21.5 152.5Q19 155 19.0 159.0Q19 163 22 166L78 222Q80 225 84.0 225.0Q88 225 91 222L98 216ZM141 225Q137 225 134 222L78 166Q75 163 75.0 159.0Q75 155 77.5 152.5Q80 150 84.0 150.0Q88 150 91 153L141 202L275 68Q277 66 281.0 66.0Q285 66 288.0 68.5Q291 71 291.0 75.0Q291 79 288 82L147 222Q144 225 141 225Z" fill="currentColor"/>
+  </svg>`;
+}
+
+function getEyeSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" aria-hidden="true">
+    <path d="M56 162Q55 166 51.5 167.5Q48 169 43.5 168.0Q39 167 38 162Q37 159 38 157L43 144Q50 129 60 116Q75 98 94 88Q119 75 150.0 75.0Q181 75 206 88Q225 98 240 116Q250 129 257 144L262 157Q263 161 261.0 164.0Q259 167 255.5 168.0Q252 169 248.5 167.5Q245 166 244 162L240 152Q234 139 226 128Q213 113 197 104Q176 94 150.0 94.0Q124 94 103 104Q87 113 74 128Q66 139 60 152ZM150 131Q131 131 117.0 145.0Q103 159 103.0 178.5Q103 198 117.0 211.5Q131 225 150.0 225.0Q169 225 183.0 211.5Q197 198 197.0 178.5Q197 159 183.0 145.0Q169 131 150 131ZM122 178Q122 166 130.0 158.0Q138 150 150.0 150.0Q162 150 170.0 158.0Q178 166 178.0 178.0Q178 190 170.0 198.0Q162 206 150.0 206.0Q138 206 130.0 198.0Q122 190 122 178Z" fill="currentColor"/>
+  </svg>`;
+}
+
+function updateCheckboxIcon(checkboxElement, checked) {
+  checkboxElement.innerHTML = getCheckboxSVG(checked);
+  checkboxElement.className = checked ? 
+    checkboxElement.className.replace(/\s*checked/, '') + ' checked' : 
+    checkboxElement.className.replace(/\s*checked/, '');
+}
+
+function initializeChevronIcons() {
+  // Aktualisiere alle Chevron-Buttons im HTML mit dem zentralen SVG
+  document.querySelectorAll('.legend-chevron').forEach(chevronBtn => {
+    chevronBtn.innerHTML = getChevronSVG();
+  });
+}
+
+/**
+ * Erstellt die Attribut-Legende basierend auf den geladenen Attributtypen im neuen Tree-Layout
  */
 function buildAttributeLegend() {
   const legend = document.getElementById('attributeLegend');
@@ -2842,109 +2923,213 @@ function buildAttributeLegend() {
     });
   }
 
+  // Tree-Liste erstellen
+  const ul = document.createElement('ul');
+  ul.className = 'attribute-tree-list';
+
   const sortedCats = Array.from(categories.keys()).sort();
   for (const cat of sortedCats) {
     const items = categories.get(cat).sort((a,b)=> a.name.localeCompare(b.name));
-    const catDiv = document.createElement('div');
-    catDiv.className = 'attribute-category';
-
-    const header = document.createElement('div');
-    header.className = 'attribute-category-header';
-
-    const caret = document.createElement('button');
-    caret.className = 'collapse-btn';
-    const collapsed = collapsedCategories.has(cat);
-    caret.setAttribute('aria-label', 'Ein-/Ausklappen');
-    caret.title = 'Ein-/Ausklappen';
-    caret.textContent = collapsed ? '▸' : '▾';
-
-    const catToggle = document.createElement('input');
-    catToggle.type = 'checkbox';
-    catToggle.className = 'attribute-category-toggle';
-    catToggle.checked = items.every(it => activeAttributes.has(it.key));
-    if (!attributesVisible) catToggle.disabled = true;
-
-    const label = document.createElement('span');
-    label.className = 'attribute-category-name';
-    label.textContent = cat;
-
-    const total = items.reduce((s,it)=> s + (it.count||0), 0);
-    const countSpan = document.createElement('span');
-    countSpan.className = 'attribute-category-count';
-    countSpan.textContent = `(${total})`;
-
-    header.appendChild(caret);
-    header.appendChild(catToggle);
-    header.appendChild(label);
-    header.appendChild(countSpan);
-    catDiv.appendChild(header);
-
-    const list = document.createElement('div');
-    list.className = 'attribute-category-items';
-    list.style.display = collapsed ? 'none' : '';
-
-    caret.addEventListener('click', () => {
-      if (collapsedCategories.has(cat)) {
-        collapsedCategories.delete(cat);
-        list.style.display = '';
-        caret.textContent = '▾';
-      } else {
-        collapsedCategories.add(cat);
-        list.style.display = 'none';
-        caret.textContent = '▸';
+    
+    // Kategorie-Listenelement
+    const catLi = document.createElement('li');
+    
+    // Haupt-Row für Kategorie
+    const catRow = document.createElement('div');
+    catRow.className = 'attribute-tree-row';
+    
+    // Linker Bereich: Chevron + Label
+    const catLeftArea = document.createElement('div');
+    catLeftArea.className = 'attribute-tree-left';
+    
+    // Rechter Bereich: Checkbox
+    const catRightArea = document.createElement('div');
+    catRightArea.className = 'attribute-tree-right';
+    
+    // Chevron für Kategorie
+    const chevron = document.createElement('button');
+    chevron.type = 'button';
+    chevron.className = collapsedCategories.has(cat) ? 'attribute-tree-chevron collapsed' : 'attribute-tree-chevron expanded';
+    chevron.title = 'Ein-/Ausklappen';
+    chevron.innerHTML = getChevronSVG();
+    
+    chevron.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const sub = catLi.querySelector('ul');
+      const isCollapsed = sub && sub.style.display === 'none';
+      
+      if (sub) {
+        sub.style.display = isCollapsed ? '' : 'none';
+        chevron.className = isCollapsed ? 'attribute-tree-chevron expanded' : 'attribute-tree-chevron collapsed';
+        
+        if (isCollapsed) {
+          collapsedCategories.delete(cat);
+        } else {
+          collapsedCategories.add(cat);
+        }
       }
     });
-
-    catToggle.addEventListener('change', () => {
-      if (catToggle.checked) {
-        for (const it of items) activeAttributes.add(it.key);
-      } else {
+    
+    catLeftArea.appendChild(chevron);
+    
+    // Kategorie-Label mit Anzahl
+    const catLabel = document.createElement('span');
+    catLabel.className = 'legend-label-chip';
+    const total = items.reduce((s,it)=> s + (it.count||0), 0);
+    catLabel.textContent = `${cat} (${total})`;
+    catLabel.title = `${cat} - ${total} Einträge`;
+    catLeftArea.appendChild(catLabel);
+    
+    // Check-All Icon-Button (versteckt, zeigt sich bei Hover)
+    const checkAllBtn = document.createElement('button');
+    checkAllBtn.type = 'button';
+    checkAllBtn.className = 'attribute-check-all-btn';
+    checkAllBtn.title = 'Alle Attribute der Kategorie umschalten';
+    checkAllBtn.innerHTML = getCheckAllSVG();
+    
+    checkAllBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isChecked = items.every(it => activeAttributes.has(it.key));
+      
+      if (isChecked) {
+        // Alle deaktivieren
         for (const it of items) activeAttributes.delete(it.key);
+      } else {
+        // Alle aktivieren
+        for (const it of items) activeAttributes.add(it.key);
       }
+      
+      // Legende neu aufbauen, um alle Checkboxen zu aktualisieren
       buildAttributeLegend();
+      updateAttributeStats();
       updateAttributeCircles();
     });
-
+    
+    catRightArea.appendChild(checkAllBtn);
+    
+    // Eye-Toggle Button (rechts) - blendet Kategorie temporär aus
+    const eyeBtn = document.createElement('button');
+    eyeBtn.type = 'button';
+    const isHidden = hiddenCategories.has(cat);
+    eyeBtn.className = isHidden ? 'attribute-eye-btn hidden' : 'attribute-eye-btn';
+    eyeBtn.title = isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden';
+    eyeBtn.innerHTML = getEyeSVG();
+    
+    eyeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isCurrentlyHidden = hiddenCategories.has(cat);
+      
+      if (isCurrentlyHidden) {
+        // Einblenden - Attribute der Kategorie werden wieder im Graph gerendert
+        hiddenCategories.delete(cat);
+        eyeBtn.className = 'attribute-eye-btn';
+        eyeBtn.title = 'Kategorie ausblenden';
+      } else {
+        // Ausblenden - Attribute der Kategorie werden temporär nicht im Graph gerendert
+        hiddenCategories.add(cat);
+        eyeBtn.className = 'attribute-eye-btn hidden';
+        eyeBtn.title = 'Kategorie einblenden';
+      }
+      
+      // Graph-Attribut-Kreise neu rendern
+      updateAttributeCircles();
+    });
+    
+    catRightArea.appendChild(eyeBtn);
+    
+    // Bereiche zu Kategorie-Row hinzufügen
+    catRow.appendChild(catLeftArea);
+    catRow.appendChild(catRightArea);
+    catLi.appendChild(catRow);
+    
+    // Unter-Liste für Attribute-Items
+    const itemsUl = document.createElement('ul');
+    itemsUl.style.display = collapsedCategories.has(cat) ? 'none' : '';
+    
     for (const it of items) {
-      const row = document.createElement('div');
-      row.className = 'attribute-legend-item';
-
+      const itemLi = document.createElement('li');
+      
+      // Item-Row
+      const itemRow = document.createElement('div');
+      itemRow.className = 'attribute-tree-row';
+      
+      // Linker Bereich: Spacer + Farbe + Label
+      const itemLeftArea = document.createElement('div');
+      itemLeftArea.className = 'attribute-tree-left';
+      
+      // Rechter Bereich: Checkbox
+      const itemRightArea = document.createElement('div');
+      itemRightArea.className = 'attribute-tree-right';
+      
+      // Spacer (keine Kinder für Attribute-Items)
+      const spacer = document.createElement('div');
+      spacer.className = 'attribute-tree-spacer';
+      itemLeftArea.appendChild(spacer);
+      
+      // Farb-Indikator
       const colorSpan = document.createElement('span');
-      colorSpan.className = 'attribute-color';
+      colorSpan.style.display = 'inline-block';
+      colorSpan.style.width = '12px';
+      colorSpan.style.height = '12px';
+      colorSpan.style.borderRadius = '50%';
       colorSpan.style.backgroundColor = it.color;
-
-      const nameSpan = document.createElement('span');
-      nameSpan.className = 'attribute-name';
-      nameSpan.textContent = it.name;
-      nameSpan.title = `${cat} :: ${it.name}`;
-
-      const cnt = document.createElement('span');
-      cnt.className = 'attribute-count';
-      cnt.textContent = `(${it.count})`;
-
-      const toggle = document.createElement('input');
-      toggle.type = 'checkbox';
-      toggle.className = 'attribute-toggle';
-      toggle.checked = activeAttributes.has(it.key);
-      if (!attributesVisible) toggle.disabled = true;
-      toggle.addEventListener('change', () => {
-        if (toggle.checked) activeAttributes.add(it.key); else activeAttributes.delete(it.key);
-        catToggle.checked = items.every(child => activeAttributes.has(child.key));
+      colorSpan.style.border = '1px solid rgba(0,0,0,0.1)';
+      colorSpan.style.marginRight = '8px';
+      colorSpan.style.flexShrink = '0';
+      itemLeftArea.appendChild(colorSpan);
+      
+      // Item-Label mit Count
+      const itemLabel = document.createElement('span');
+      itemLabel.className = 'legend-label-chip';
+      itemLabel.textContent = `${it.name} (${it.count})`;
+      itemLabel.title = `${cat} :: ${it.name} - ${it.count} Einträge`;
+      itemLeftArea.appendChild(itemLabel);
+      
+      // Item-Checkbox Icon (rechts)
+      const itemCheckbox = document.createElement('button');
+      itemCheckbox.type = 'button';
+      const isItemActive = activeAttributes.has(it.key);
+      itemCheckbox.className = isItemActive ? 'attribute-tree-checkbox checked' : 'attribute-tree-checkbox';
+      itemCheckbox.title = isItemActive ? `${it.name} ausblenden` : `${it.name} anzeigen`;
+      
+      updateCheckboxIcon(itemCheckbox, isItemActive);
+      
+      itemCheckbox.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isChecked = activeAttributes.has(it.key);
+        
+        if (isChecked) {
+          activeAttributes.delete(it.key);
+          updateCheckboxIcon(itemCheckbox, false);
+          itemCheckbox.title = `${it.name} anzeigen`;
+        } else {
+          activeAttributes.add(it.key);
+          updateCheckboxIcon(itemCheckbox, true);
+          itemCheckbox.title = `${it.name} ausblenden`;
+        }
+        
+        // Kategorie-Checkbox aktualisieren
+        const allCatItemsActiveNow = items.every(item => activeAttributes.has(item.key));
+        updateCatCheckboxIcon(allCatItemsActiveNow);
+        
         updateAttributeStats();
         updateAttributeCircles();
       });
-
-      row.appendChild(colorSpan);
-      row.appendChild(nameSpan);
-      row.appendChild(cnt);
-      row.appendChild(toggle);
-      list.appendChild(row);
+      
+      itemRightArea.appendChild(itemCheckbox);
+      
+      // Bereiche zu Item-Row hinzufügen
+      itemRow.appendChild(itemLeftArea);
+      itemRow.appendChild(itemRightArea);
+      itemLi.appendChild(itemRow);
+      itemsUl.appendChild(itemLi);
     }
-
-    catDiv.appendChild(list);
-    legend.appendChild(catDiv);
+    
+    catLi.appendChild(itemsUl);
+    ul.appendChild(catLi);
   }
 
+  legend.appendChild(ul);
   updateAttributeStats();
 }
 
@@ -3521,6 +3706,8 @@ let savedAllowedOrgs = new Set();
 window.addEventListener("DOMContentLoaded", async () => {
   await loadEnvConfig();
   await loadData();
+  // Initialisiere Chevron-Icons im HTML
+  initializeChevronIcons();
   // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
   try { document.addEventListener('contextmenu', (e) => e.preventDefault()); } catch {}
   const applyBtn = document.querySelector(BTN_APPLY_ID);
@@ -4141,53 +4328,107 @@ function initializeCollapsibleLegends() {
     return false; // Standardmäßig aufgeklappt
   };
   
-  // Alle Schaltflächen und Inhalte initialisieren
-  const buttons = document.querySelectorAll('.collapse-btn');
+  // Alle Schaltflächen und Inhalte initialisieren (alte und neue Buttons)
+  const buttons = document.querySelectorAll('.collapse-btn, .legend-chevron');
   buttons.forEach(btn => {
     const targetId = btn.dataset.target;
     const target = document.getElementById(targetId);
     if (!target) return;
     
+    const isChevron = btn.classList.contains('legend-chevron');
+    
     // Initialen Zustand aus localStorage laden
     const isInitiallyCollapsed = loadCollapseState(targetId);
     if (isInitiallyCollapsed) {
       target.classList.add('collapsed');
-      btn.classList.add('collapsed');
+      if (isChevron) {
+        btn.classList.remove('expanded');
+        btn.classList.add('collapsed');
+      } else {
+        btn.classList.add('collapsed');
+      }
+    } else {
+      if (isChevron) {
+        btn.classList.remove('collapsed');
+        btn.classList.add('expanded');
+      }
     }
     
     // Klick-Event für den Button
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const isCollapsed = target.classList.toggle('collapsed');
-      btn.classList.toggle('collapsed');
+      
+      if (isChevron) {
+        if (isCollapsed) {
+          btn.classList.remove('expanded');
+          btn.classList.add('collapsed');
+        } else {
+          btn.classList.remove('collapsed');
+          btn.classList.add('expanded');
+        }
+      } else {
+        btn.classList.toggle('collapsed');
+      }
+      
       saveCollapseState(targetId, isCollapsed);
     });
     
-    // Klick-Event für die Überschrift
-    const header = btn.closest('.legend-header');
-    if (header) {
-      header.addEventListener('click', (e) => {
-        // Prüfe, ob auf ein Element geklickt wurde, das vom Header-Klick ausgenommen werden soll
-        let shouldIgnore = false;
-        let element = e.target;
+    // Klick-Event für die Überschrift (nur für Chevron-Buttons)
+    if (isChevron) {
+      const header = btn.closest('.legend-header');
+      if (header) {
+        header.addEventListener('click', (e) => {
+          // Prüfe, ob auf ein Element geklickt wurde, das vom Header-Klick ausgenommen werden soll
+          let shouldIgnore = false;
+          let element = e.target;
 
-        // Prüfe, ob das Zielelement oder einer seiner Eltern das data-ignore-header-click Attribut hat
-        while (element && element !== header) {
-          if (element.hasAttribute && element.hasAttribute('data-ignore-header-click')) {
-            shouldIgnore = true;
-            break;
+          // Prüfe, ob das Zielelement oder einer seiner Eltern das data-ignore-header-click Attribut hat
+          while (element && element !== header) {
+            if (element.hasAttribute && element.hasAttribute('data-ignore-header-click')) {
+              shouldIgnore = true;
+              break;
+            }
+            element = element.parentElement;
           }
-          element = element.parentElement;
-        }
-        
-        // Wenn der Klick nicht auf den collapse-button selbst war und nicht auf ein zu ignorierendes Element
-        if (!shouldIgnore && e.target !== btn) {
-          const isCollapsed = target.classList.toggle('collapsed');
-          btn.classList.toggle('collapsed');
-          saveCollapseState(targetId, isCollapsed);
-        }
-      });
+          
+          // Wenn der Klick nicht auf den collapse-button selbst war und nicht auf ein zu ignorierendes Element
+          if (!shouldIgnore && e.target !== btn) {
+            const isCollapsed = target.classList.toggle('collapsed');
+            
+            if (isCollapsed) {
+              btn.classList.remove('expanded');
+              btn.classList.add('collapsed');
+            } else {
+              btn.classList.remove('collapsed');
+              btn.classList.add('expanded');
+            }
+            
+            saveCollapseState(targetId, isCollapsed);
+          }
+        });
+      }
     }
   });
+  
+  // Ausschiebbares Suchfeld-Verhalten
+  const oeFilter = document.getElementById('oeFilter');
+  if (oeFilter) {
+    // Überwache Wertänderungen für has-value Klasse
+    const updateSearchFieldState = () => {
+      if (oeFilter.value.trim()) {
+        oeFilter.classList.add('has-value');
+      } else {
+        oeFilter.classList.remove('has-value');
+      }
+    };
+    
+    oeFilter.addEventListener('input', updateSearchFieldState);
+    oeFilter.addEventListener('focus', updateSearchFieldState);
+    oeFilter.addEventListener('blur', updateSearchFieldState);
+    
+    // Initialer Zustand
+    updateSearchFieldState();
+  }
 }
 

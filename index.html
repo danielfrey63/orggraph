@@ -111,23 +111,27 @@
     <aside id="legendPane" aria-label="Organisationseinheiten">
       <div class="legend-section">
         <div class="legend-header">
-          <div class="legend-title-group">
-            <h2>OEs</h2>
-          </div>
-          <div class="legend-controls">
-            <div class="control-group">
-              <div class="oe-filter-container" data-ignore-header-click="true">
-                <input type="text" id="oeFilter" placeholder="OE filtern..." class="oe-filter-input" data-ignore-header-click="true">
-              </div>
+          <div class="legend-header-layout">
+            <div class="legend-collapse-area">
+              <button class="legend-chevron expanded" data-target="legend" aria-label="Ein-/Ausklappen">
+                <!-- SVG wird durch JavaScript gesetzt -->
+              </button>
+              <h2 class="legend-title">OEs</h2>
             </div>
-            <div class="control-group">
-              <button id="toggleOesVisibility" class="toggle-btn active" title="OEs ausblenden" data-ignore-header-click="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" data-ignore-header-click="true" />
-                  <circle cx="12" cy="12" r="3" data-ignore-header-click="true" />
+            <div class="legend-actions-area">
+              <div class="legend-search-container" data-ignore-header-click="true">
+                <input type="text" id="oeFilter" placeholder="OE filtern..." class="legend-search-input" data-ignore-header-click="true">
+                <button class="legend-icon-btn" id="oeFilterBtn" title="OE filtern" data-ignore-header-click="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+                    <path d="M38 66Q38 62 40.5 59.0Q43 56 47 56H253Q257 56 260.0 59.0Q263 62 263.0 66.0Q263 70 260.0 72.5Q257 75 253 75H47Q43 75 40.5 72.5Q38 70 37 66ZM75 141Q75 137 77.5 134.0Q80 131 84 131H216Q220 131 222.5 134.0Q225 137 225.0 141.0Q225 145 222.5 147.5Q220 150 216 150H84Q80 150 77.5 147.5Q75 145 75 141ZM113 216Q112 212 115.0 209.0Q118 206 122 206H178Q182 206 185.0 209.0Q188 212 187.5 216.0Q187 220 184.5 222.5Q182 225 178 225H122Q118 225 115.0 222.5Q112 220 112 216Z" fill="currentColor"/>
+                  </svg>
+                </button>
+              </div>
+              <button id="toggleOesVisibility" class="legend-icon-btn active" title="OEs ausblenden" data-ignore-header-click="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+                  <path d="M56 162Q55 166 51.5 167.5Q48 169 43.5 168.0Q39 167 38 162Q37 159 38 157L43 144Q50 129 60 116Q75 98 94 88Q119 75 150.0 75.0Q181 75 206 88Q225 98 240 116Q250 129 257 144L262 157Q263 161 261.0 164.0Q259 167 255.5 168.0Q252 169 248.5 167.5Q245 166 244 162L240 152Q234 139 226 128Q213 113 197 104Q176 94 150.0 94.0Q124 94 103 104Q87 113 74 128Q66 139 60 152ZM150 131Q131 131 117.0 145.0Q103 159 103.0 178.5Q103 198 117.0 211.5Q131 225 150.0 225.0Q169 225 183.0 211.5Q197 198 197.0 178.5Q197 159 183.0 145.0Q169 131 150 131ZM122 178Q122 166 130.0 158.0Q138 150 150.0 150.0Q162 150 170.0 158.0Q178 166 178.0 178.0Q178 190 170.0 198.0Q162 206 150.0 206.0Q138 206 130.0 198.0Q122 190 122 178Z" fill="currentColor"/>
                 </svg>
               </button>
-              <button class="collapse-btn" data-target="legend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
             </div>
           </div>
         </div>
@@ -136,26 +140,24 @@
       
       <div class="legend-section">
         <div class="legend-header">
-          <div class="legend-title-group">
-            <h2>Attribute</h2>
-          </div>
-          <div class="legend-controls">
-            <div class="control-group">
-              <button id="loadAttributes" class="toggle-btn" title="Attributliste laden" data-ignore-header-click="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
-                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" data-ignore-header-click="true" />
-                  <path d="M14 2v6h6" data-ignore-header-click="true" />
-                  <path d="M9 15l3-3 3 3" data-ignore-header-click="true" />
-                  <path d="M12 12v6" data-ignore-header-click="true" />
+          <div class="legend-header-layout">
+            <div class="legend-collapse-area">
+              <button class="legend-chevron expanded" data-target="attributeContainer" aria-label="Ein-/Ausklappen">
+                <!-- SVG wird durch JavaScript gesetzt -->
+              </button>
+              <h2 class="legend-title">Attribute</h2>
+            </div>
+            <div class="legend-actions-area">
+              <button id="loadAttributes" class="legend-icon-btn" title="Attributliste laden" data-ignore-header-click="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+                  <path d="M150 56Q127 56 110.5 72.5Q94 89 94 112Q94 116 91.0 119.0Q88 122 84 122H80Q62 122 50.0 134.5Q38 147 38.0 164.5Q38 182 50.0 194.0Q62 206 80 206H94Q95 216 98 225H80Q63 225 49.0 217.0Q35 209 27.0 195.0Q19 181 19 164Q19 140 35.5 122.5Q52 105 76 103Q79 75 100.0 56.0Q121 37 149.0 37.0Q177 37 197.5 54.0Q218 71 223 97Q213 95 203 94Q197 77 182.5 66.5Q168 56 150 56ZM281 197Q281 220 270.0 239.5Q259 259 239.5 270.0Q220 281 197.0 281.0Q174 281 154.5 270.0Q135 259 123.5 239.5Q112 220 112.5 197.0Q113 174 124.0 154.5Q135 135 154.5 123.5Q174 112 197.0 112.5Q220 113 239.5 124.0Q259 135 270.0 154.5Q281 174 281 197ZM190 153 153 190Q150 193 150.0 197.0Q150 201 152.5 203.5Q155 206 159.0 206.0Q163 206 166 204L188 182V234Q188 238 190.5 241.0Q193 244 197.0 244.0Q201 244 203.5 241.0Q206 238 206 234V182L228 204Q230 206 234.0 206.0Q238 206 241.0 203.5Q244 201 244.0 197.0Q244 193 241 190L204 153Q202 151 200.5 150.5Q199 150 197 150Q195 150 193.5 150.5Q192 151 190 153Z" fill="currentColor"/>
                 </svg>
               </button>
-              <button id="toggleAttributesVisibility" class="toggle-btn active" title="Attribute ausblenden" data-ignore-header-click="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" data-ignore-header-click="true">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" data-ignore-header-click="true" />
-                  <circle cx="12" cy="12" r="3" data-ignore-header-click="true" />
+              <button id="toggleAttributesVisibility" class="legend-icon-btn active" title="Attribute ausblenden" data-ignore-header-click="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+                  <path d="M56 162Q55 166 51.5 167.5Q48 169 43.5 168.0Q39 167 38 162Q37 159 38 157L43 144Q50 129 60 116Q75 98 94 88Q119 75 150.0 75.0Q181 75 206 88Q225 98 240 116Q250 129 257 144L262 157Q263 161 261.0 164.0Q259 167 255.5 168.0Q252 169 248.5 167.5Q245 166 244 162L240 152Q234 139 226 128Q213 113 197 104Q176 94 150.0 94.0Q124 94 103 104Q87 113 74 128Q66 139 60 152ZM150 131Q131 131 117.0 145.0Q103 159 103.0 178.5Q103 198 117.0 211.5Q131 225 150.0 225.0Q169 225 183.0 211.5Q197 198 197.0 178.5Q197 159 183.0 145.0Q169 131 150 131ZM122 178Q122 166 130.0 158.0Q138 150 150.0 150.0Q162 150 170.0 158.0Q178 166 178.0 178.0Q178 190 170.0 198.0Q162 206 150.0 206.0Q138 206 130.0 198.0Q122 190 122 178Z" fill="currentColor"/>
                 </svg>
               </button>
-              <button class="collapse-btn" data-target="attributeContainer" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
             </div>
           </div>
         </div>
@@ -169,15 +171,15 @@
       
       <div class="legend-section">
         <div class="legend-header">
-          <div class="legend-title-group">
-            <h2>Ausgeblendet</h2>
-          </div>
-          <div class="legend-controls">
-            <div class="control-group">
-              <!-- Platzhalter für Konsistenz -->
+          <div class="legend-header-layout">
+            <div class="legend-collapse-area">
+              <button class="legend-chevron expanded" data-target="hiddenLegend" aria-label="Ein-/Ausklappen">
+                <!-- SVG wird durch JavaScript gesetzt -->
+              </button>
+              <h2 class="legend-title">Ausgeblendet</h2>
             </div>
-            <div class="control-group">
-              <button class="collapse-btn" data-target="hiddenLegend" aria-label="Ein-/Ausklappen" title="Ein-/Ausklappen">▾</button>
+            <div class="legend-actions-area">
+              <!-- Platzhalter für Konsistenz -->
             </div>
           </div>
         </div>

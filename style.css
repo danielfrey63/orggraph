@@ -66,41 +66,82 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 #legendPane { border-left: 1px solid var(--panel-border); padding: 10px; overflow: auto; background: var(--panel-bg); color: var(--text); width: 320px; }
 #legendPane h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-muted); }
 
-/* Kollabierbare Legenden */
+/* Kollabierbare Legenden - Neues Design */
 .legend-section { margin-bottom: 0px; }
 .legend-section:last-child { margin-bottom: 0; }
-.legend-header { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; cursor: pointer; user-select: none; }
-.legend-header:hover { background-color: var(--control-hover); }
 
-.collapse-btn { 
+.legend-header { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 8px 8px; 
+  cursor: pointer; 
+  user-select: none;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+  position: relative;
+}
+
+.legend-header:hover { 
+  background-color: var(--control-hover); 
+}
+
+/* Neue Layout-Struktur für Header */
+.legend-header-layout {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+}
+
+.legend-collapse-area {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.legend-actions-area {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Chevron Icons für Expand/Collapse (links) */
+.legend-chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  border-radius: 6px;
-  border: 1px solid var(--control-border);
-  background-color: transparent;
+  border: none;
+  background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 18px;
-  line-height: 1;
+  border-radius: 3px;
 }
 
-.collapse-btn:hover {
+.legend-chevron:hover {
+  color: var(--text);
   background-color: var(--control-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
 }
 
-.collapse-btn.collapsed { 
+.legend-chevron svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.legend-chevron.expanded svg {
+  transform: rotate(0deg);
+}
+
+.legend-chevron.collapsed svg {
   transform: rotate(-90deg);
-}
-
-.collapse-btn.collapsed:hover {
-  transform: rotate(-90deg) translateY(-1px);
 }
 
 .legend-content {
@@ -112,40 +153,358 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 .legend-content.collapsed {
   display: none;
 }
-.legend-list, .legend-list ul { list-style: none; padding-left: 8px; margin: 0; }
+.legend-list, .legend-list ul { list-style: none; padding-left: 0; margin: 0; }
 .legend-list > li { margin: 0; }
 .legend-list li { display: block; }
+
+/* Neues Layout für Legend-List Items */
 .legend-list .legend-row { 
   display: flex; 
   align-items: center; 
-  gap: 2px; 
-  padding: 2px 4px; 
-  border-radius: 3px; 
-  min-height: 22px; /* Konsistente Mindesthöhe */ 
+  padding: 4px 8px; 
+  border-radius: 6px; 
+  min-height: 28px;
+  transition: background-color 0.2s ease;
+  position: relative;
 }
-.legend-list .twisty { 
-  border: none; 
-  background: transparent; 
-  padding: 0 2px; 
-  cursor: pointer; 
-  font-size: 18px; 
-  line-height: 1; 
-  color: var(--text-muted); 
-  flex-shrink: 0; /* Verhindert Schrumpfen */ 
+
+.legend-list .legend-row:hover {
+  background-color: var(--control-hover);
 }
-.legend-list .twisty:focus { outline: none; }
-.legend-list input { 
-  margin-right: 4px; 
-  flex-shrink: 0; /* Verhindert Schrumpfen */ 
+
+/* Linker Bereich: Chevron + Label */
+.legend-row-left {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
 }
+
+/* Rechter Bereich: Checkbox */
+.legend-row-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Chevron Icons für Tree-Strukturen (links) */
+.legend-tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.legend-tree-chevron:hover {
+  color: var(--text);
+  background-color: transparent;
+}
+
+.legend-tree-chevron svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.legend-tree-chevron.expanded svg {
+  transform: rotate(0deg);
+}
+
+.legend-tree-chevron.collapsed svg {
+  transform: rotate(-90deg);
+}
+
+/* Spacer für Items ohne Chevron */
+.legend-tree-spacer {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Checkbox Icons (rechts) */
+.legend-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.legend-checkbox:hover {
+  color: var(--text);
+  background-color: transparent;
+}
+
+.legend-checkbox.checked {
+  color: var(--active-toggle-bg);
+}
+
+.legend-checkbox svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Label im neuen Format */
 .legend-list .legend-label-chip { 
   display: inline-block; 
-  padding: 2px 4px; 
-  border-radius: 3px; 
+  border-radius: 4px; 
   white-space: nowrap; 
   overflow: hidden; 
   text-overflow: ellipsis; 
-  max-width: 100%; /* Maximale Breite */ 
+  min-width: 0;
+  font-size: 13px;
+}
+
+/* Aktive Row-States für klickbare Baumelemente */
+.legend-row.active {
+  background-color: var(--org-fill, var(--active-toggle-bg));
+  color: white;
+  border-left: 3px solid var(--org-stroke, var(--active-toggle-bg));
+}
+
+.legend-row.active .legend-label-chip {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.legend-row:not(.active):hover {
+  background-color: var(--control-hover);
+}
+
+/* Verschachtelte Liste mit Einrückung */
+.legend-list ul {
+  padding-left: 26px; /* Einrückung für Kinder */
+  margin-top: 2px;
+}
+
+/* Attribut-Tree Layout (ähnlich zu OE-Tree) */
+.attribute-tree-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  min-height: 26px;
+  transition: background-color 0.2s ease;
+  position: relative;
+}
+
+.attribute-tree-row:hover {
+  background-color: var(--control-hover);
+}
+
+.attribute-tree-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.attribute-tree-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.attribute-tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.attribute-tree-chevron:hover {
+  color: var(--text);
+  background-color: transparent;
+}
+
+.attribute-tree-chevron svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.attribute-tree-chevron.expanded svg {
+  transform: rotate(0deg);
+}
+
+.attribute-tree-chevron.collapsed svg {
+  transform: rotate(-90deg);
+}
+
+.attribute-tree-spacer {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.attribute-tree-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.attribute-tree-checkbox:hover {
+  color: var(--text);
+  background-color: transparent;
+}
+
+.attribute-tree-checkbox.checked {
+  color: var(--active-toggle-bg);
+}
+
+.attribute-tree-checkbox svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Check-All Button für Attribut-Kategorien (versteckt, bei Hover sichtbar) */
+.attribute-check-all-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 3px;
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.attribute-tree-row:hover .attribute-check-all-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.attribute-check-all-btn:hover {
+  color: var(--text);
+  background-color: transparent;
+  transform: translateY(-1px);
+}
+
+.attribute-check-all-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Eye-Toggle Button für Attribut-Kategorien (versteckt, bei Hover sichtbar) */
+.attribute-eye-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 3px;
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.attribute-tree-row:hover .attribute-eye-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.attribute-eye-btn:hover {
+  color: var(--text);
+  background-color: transparent;
+}
+
+.attribute-eye-btn.hidden {
+  opacity: 0.3;
+}
+
+.attribute-tree-row:hover .attribute-eye-btn.hidden {
+  opacity: 0.3;
+  pointer-events: auto;
+}
+
+.attribute-eye-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Legacy Support für alte Twisty-Buttons (werden durch Chevrons ersetzt) */
+.legend-list .twisty { 
+  display: none; /* Verstecken da durch Chevron ersetzt */
+}
+
+/* Legacy Support für alte Attribute Collapse-Buttons */
+.attribute-category-header .collapse-btn {
+  display: none; /* Verstecken da durch Chevron ersetzt */
+}
+
+/* Legacy Input-Checkboxes (werden durch Icon-Checkboxes ersetzt) */
+.legend-list input[type="checkbox"] { 
+  display: none; /* Verstecken da durch Icon-Checkboxes ersetzt */
+}
+
+/* Spezielle Attribute-Liste mit Tree-Layout */
+.attribute-tree-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.attribute-tree-list > li {
+  margin: 0;
+}
+
+.attribute-tree-list ul {
+  padding-left: 24px;
+  margin-top: 2px;
+  list-style: none;
 }
 .label { font-size: 8px; fill: var(--text); pointer-events: none; }
 .labels-hidden .label { display: none; }
@@ -463,35 +822,160 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   align-items: center;
 }
 
-/* Rechte Gruppe mit Icons (immer gleich breit in allen Legenden) */
-.legend-controls .control-group:last-child {
-  min-width: 75px; /* Feste Mindestbreite für konsistente Ausrichtung */
-  display: flex;
-  justify-content: flex-end;
-  gap: 4px; /* Kleinerer Abstand zwischen den Icons */
+/* Neue Icon-Buttons mit Hover-Verhalten */
+.legend-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+  opacity: 0;
+  pointer-events: none;
 }
 
-/* Linke Gruppe (variabel je nach Inhalt) */
-.legend-controls .control-group:first-child {
-  min-height: 32px; /* Konsistente Höhe auch wenn leer */
+.legend-header:hover .legend-icon-btn {
+  opacity: 1;
+  pointer-events: auto;
 }
 
-.legend-section:first-child .legend-controls .control-group:first-child {
-  flex: 1;
-  min-width: 0;
+.legend-icon-btn:hover {
+  color: var(--text);
+  background-color: transparent;
+  transform: translateY(-1px);
 }
 
-.legend-title-group {
+.legend-icon-btn.active {
+  color: var(--active-toggle-bg);
+  background-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.legend-header:hover .legend-icon-btn.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.legend-icon-btn svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s ease;
+}
+
+/* Ellipsis Dropdown */
+.legend-ellipsis {
+  position: relative;
+}
+
+.legend-ellipsis-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1000;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 160px;
+  padding: 4px 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: all 0.2s ease;
+}
+
+.legend-ellipsis.open .legend-ellipsis-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.legend-ellipsis-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 0 auto;
+  padding: 8px 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
-.legend-title-group h2 {
+.legend-ellipsis-item:hover {
+  background-color: var(--control-hover);
+}
+
+.legend-ellipsis-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+/* Ausschiebbares Suchfeld */
+.legend-search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 24px;
+  transition: all 0.3s ease;
+}
+
+.legend-search-input {
+  position: absolute;
+  right: 28px; /* Startet hinter dem Icon */
+  width: 0;
+  height: 24px;
+  border: 1px solid var(--control-border);
+  border-radius: 12px;
+  background: var(--control-bg);
+  color: var(--text);
+  font-size: 12px;
+  padding: 0 8px;
+  outline: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+
+.legend-search-container:hover .legend-search-input,
+.legend-search-input:focus,
+.legend-search-input.has-value {
+  width: 120px;
+  opacity: 1;
+  visibility: visible;
+  right: 28px; /* Ausgeschobene Position */
+}
+
+.legend-search-input:focus {
+  border-color: var(--active-toggle-bg);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Ensure ALL Toggle-Icons are hidden by default and only show on hover */
+.legend-icon-btn {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.legend-header:hover .legend-icon-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.legend-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
   margin: 0;
-  min-width: 90px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
 }
 
 .oe-filter-container {
