@@ -518,6 +518,47 @@ function mixedActiveFillColorForOids(oids) {
   return `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${uiAlpha})`;
 }
 
+/**
+ * Konvertiert eine Farbe in ein transparentes RGBA-Format (wie bei OEs)
+ * @param {string} color - Farbe im Format hsl(...) oder rgb(...) oder #hex
+ * @param {number} alpha - Alpha-Wert (0-1), default 0.25 wie bei OEs
+ * @returns {string} RGBA-Farbe mit Transparenz
+ */
+function colorToTransparent(color, alpha = 0.25) {
+  // Parse HSL
+  const hslMatch = /hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/.exec(color);
+  if (hslMatch) {
+    const h = parseInt(hslMatch[1]);
+    const s = parseInt(hslMatch[2]);
+    const l = parseInt(hslMatch[3]);
+    return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
+  }
+  
+  // Fallback: gib die ursprüngliche Farbe zurück
+  return color;
+}
+
+/**
+ * Passt die Helligkeit einer Farbe an (HSL-basiert)
+ * @param {string} color - Farbe im Format hsl(...) oder rgb(...) oder #hex
+ * @param {number} amount - Betrag in % (-100 bis 100)
+ * @returns {string} Angepasste Farbe im gleichen Format
+ */
+function adjustColorBrightness(color, amount) {
+  // Parse HSL
+  const hslMatch = /hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/.exec(color);
+  if (hslMatch) {
+    const h = parseInt(hslMatch[1]);
+    const s = parseInt(hslMatch[2]);
+    let l = parseInt(hslMatch[3]);
+    l = Math.max(0, Math.min(100, l + amount));
+    return `hsl(${h}, ${s}%, ${l}%)`;
+  }
+  
+  // Fallback: gib die ursprüngliche Farbe zurück
+  return color;
+}
+
 function hslToRgb(h, s, l) {
   const a = s * Math.min(l, 1 - l);
   function f(n){
@@ -916,11 +957,13 @@ async function loadAttributesFromUrl(url) {
       if (!attributeTypes.has(composite)) {
         const color = colorForCategoryAttribute(category, type, existingInCategory + i);
         attributeTypes.set(composite, color);
+        // Neue Attribute standardmäßig aktivieren
+        activeAttributes.add(composite);
       }
       i++;
     }
     
-    // Alle geladenen Attributtypen standardmäßig aktivieren, wenn noch keine Auswahl besteht
+    // Beim ersten Laden: alle Attribute aktivieren
     if (activeAttributes.size === 0 && attributeTypes.size > 0) {
       activeAttributes = new Set(attributeTypes.keys());
     }
@@ -1328,18 +1371,45 @@ function buildHiddenLegend() {
   for (const [root, setIds] of hiddenByRoot.entries()) {
     const li = document.createElement('li');
     const row = document.createElement('div');
-    row.className = 'legend-row';
+    row.className = 'legend-row'; // Kein .active State für ausgeblendete Items
+    
+    // Linker Bereich: Spacer + Label
+    const leftArea = document.createElement('div');
+    leftArea.className = 'legend-row-left';
+    
+    // Rechter Bereich: X-Button
+    const rightArea = document.createElement('div');
+    rightArea.className = 'legend-row-right';
+    
+    // Spacer statt Chevron
+    const spacer = document.createElement('div');
+    spacer.className = 'legend-tree-spacer';
+    leftArea.appendChild(spacer);
+    
+    // Label
     const name = byId.get(root)?.label || root;
     const chip = document.createElement('span');
     chip.className = 'legend-label-chip';
     chip.textContent = `${name} (${setIds.size})`;
     chip.title = name;
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.textContent = 'Einblenden';
-    btn.addEventListener('click', () => unhideSubtree(root));
-    row.appendChild(chip);
-    row.appendChild(btn);
+    leftArea.appendChild(chip);
+    
+    // X-Button zum Entfernen (unhide)
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'legend-icon-btn';
+    removeBtn.title = 'Wieder einblenden';
+    removeBtn.innerHTML = '<i class="codicon codicon-close" aria-hidden="true"></i>';
+    removeBtn.setAttribute('data-ignore-header-click', 'true');
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      unhideSubtree(root);
+    });
+    
+    rightArea.appendChild(removeBtn);
+    
+    row.appendChild(leftArea);
+    row.appendChild(rightArea);
     li.appendChild(row);
     ul.appendChild(li);
   }
@@ -2876,7 +2946,7 @@ function initializeChevronIcons() {
 }
 
 /**
- * Erstellt die Attribut-Legende basierend auf den geladenen Attributtypen im neuen Tree-Layout
+ * Erstellt die Attribut-Legende mit einheitlichem legend-row Layout (wie OEs)
  */
 function buildAttributeLegend() {
   const legend = document.getElementById('attributeLegend');
@@ -2910,9 +2980,9 @@ function buildAttributeLegend() {
     });
   }
 
-  // Tree-Liste erstellen
+  // Liste erstellen mit legend-list (wie OEs)
   const ul = document.createElement('ul');
-  ul.className = 'attribute-tree-list';
+  ul.className = 'legend-list';
 
   const sortedCats = Array.from(categories.keys()).sort();
   for (const cat of sortedCats) {
@@ -2923,20 +2993,20 @@ function buildAttributeLegend() {
     
     // Haupt-Row für Kategorie
     const catRow = document.createElement('div');
-    catRow.className = 'attribute-tree-row';
+    catRow.className = 'legend-row';
     
     // Linker Bereich: Chevron + Label
     const catLeftArea = document.createElement('div');
-    catLeftArea.className = 'attribute-tree-left';
+    catLeftArea.className = 'legend-row-left';
     
-    // Rechter Bereich: Checkbox
+    // Rechter Bereich: Action-Buttons
     const catRightArea = document.createElement('div');
-    catRightArea.className = 'attribute-tree-right';
+    catRightArea.className = 'legend-row-right';
     
     // Chevron für Kategorie
     const chevron = document.createElement('button');
     chevron.type = 'button';
-    chevron.className = collapsedCategories.has(cat) ? 'attribute-tree-chevron collapsed' : 'attribute-tree-chevron expanded';
+    chevron.className = collapsedCategories.has(cat) ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
     chevron.title = 'Ein-/Ausklappen';
     chevron.innerHTML = getChevronSVG();
     
@@ -2947,7 +3017,7 @@ function buildAttributeLegend() {
       
       if (sub) {
         sub.style.display = isCollapsed ? '' : 'none';
-        chevron.className = isCollapsed ? 'attribute-tree-chevron expanded' : 'attribute-tree-chevron collapsed';
+        chevron.className = isCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
         
         if (isCollapsed) {
           collapsedCategories.delete(cat);
@@ -2967,40 +3037,14 @@ function buildAttributeLegend() {
     catLabel.title = `${cat} - ${total} Einträge`;
     catLeftArea.appendChild(catLabel);
     
-    // Check-All Icon-Button (versteckt, zeigt sich bei Hover)
-    const checkAllBtn = document.createElement('button');
-    checkAllBtn.type = 'button';
-    checkAllBtn.className = 'attribute-check-all-btn';
-    checkAllBtn.title = 'Alle Attribute der Kategorie umschalten';
-    checkAllBtn.innerHTML = getCheckAllSVG();
-    
-    checkAllBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isChecked = items.every(it => activeAttributes.has(it.key));
-      
-      if (isChecked) {
-        // Alle deaktivieren
-        for (const it of items) activeAttributes.delete(it.key);
-      } else {
-        // Alle aktivieren
-        for (const it of items) activeAttributes.add(it.key);
-      }
-      
-      // Legende neu aufbauen, um alle Checkboxen zu aktualisieren
-      buildAttributeLegend();
-      updateAttributeStats();
-      updateAttributeCircles();
-    });
-    
-    catRightArea.appendChild(checkAllBtn);
-    
     // Eye-Toggle Button (rechts) - blendet Kategorie temporär aus
     const eyeBtn = document.createElement('button');
     eyeBtn.type = 'button';
     const isHidden = hiddenCategories.has(cat);
-    eyeBtn.className = isHidden ? 'attribute-eye-btn hidden' : 'attribute-eye-btn';
+    eyeBtn.className = isHidden ? 'legend-icon-btn hidden' : 'legend-icon-btn';
     eyeBtn.title = isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden';
     eyeBtn.innerHTML = getEyeSVG(isHidden);
+    eyeBtn.setAttribute('data-ignore-header-click', 'true');
     
     eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -3008,18 +3052,18 @@ function buildAttributeLegend() {
       const icon = eyeBtn.querySelector('.codicon');
       
       if (isCurrentlyHidden) {
-        // Einblenden - Attribute der Kategorie werden wieder im Graph gerendert
+        // Einblenden
         hiddenCategories.delete(cat);
-        eyeBtn.className = 'attribute-eye-btn';
+        eyeBtn.className = 'legend-icon-btn';
         eyeBtn.title = 'Kategorie ausblenden';
         if (icon) {
           icon.classList.remove('codicon-eye-closed');
           icon.classList.add('codicon-eye');
         }
       } else {
-        // Ausblenden - Attribute der Kategorie werden temporär nicht im Graph gerendert
+        // Ausblenden
         hiddenCategories.add(cat);
-        eyeBtn.className = 'attribute-eye-btn hidden';
+        eyeBtn.className = 'legend-icon-btn hidden';
         eyeBtn.title = 'Kategorie einblenden';
         if (icon) {
           icon.classList.remove('codicon-eye');
@@ -3045,31 +3089,45 @@ function buildAttributeLegend() {
     for (const it of items) {
       const itemLi = document.createElement('li');
       
-      // Item-Row
+      // Item-Row (ganze Zeile klickbar)
       const itemRow = document.createElement('div');
-      itemRow.className = 'attribute-tree-row';
+      const isItemActive = activeAttributes.has(it.key);
+      itemRow.className = isItemActive ? 'legend-row active' : 'legend-row';
+      itemRow.setAttribute('data-attribute-color', it.color);
+      
+      // Setze die Attribut-Farbe als CSS-Variable für den Hintergrund (transparent wie bei OEs)
+      const transparentBg = colorToTransparent(it.color, 0.25);
+      const transparentHoverBg = colorToTransparent(it.color, 0.35);
+      itemRow.style.setProperty('--attribute-bg', transparentBg);
+      itemRow.style.setProperty('--attribute-bg-hover', transparentHoverBg);
       
       // Linker Bereich: Spacer + Farbe + Label
       const itemLeftArea = document.createElement('div');
-      itemLeftArea.className = 'attribute-tree-left';
+      itemLeftArea.className = 'legend-row-left';
       
-      // Rechter Bereich: Checkbox
-      const itemRightArea = document.createElement('div');
-      itemRightArea.className = 'attribute-tree-right';
+      // Tiefe-Spacer für Einrückung (16px wie bei OEs)
+      const depthSpacer = document.createElement('div');
+      depthSpacer.className = 'legend-depth-spacer';
+      depthSpacer.style.width = '16px';
+      itemLeftArea.appendChild(depthSpacer);
       
-      // Spacer (keine Kinder für Attribute-Items)
+      // Spacer statt Chevron
       const spacer = document.createElement('div');
-      spacer.className = 'attribute-tree-spacer';
+      spacer.className = 'legend-tree-spacer';
       itemLeftArea.appendChild(spacer);
       
-      // Farb-Indikator
+      // Farb-Indikator (nur Border, wie Attribut-Ringe im Graphen)
       const colorSpan = document.createElement('span');
+      colorSpan.className = 'attribute-color-dot';
+      const circleDiameter = 12;
       colorSpan.style.display = 'inline-block';
-      colorSpan.style.width = '12px';
-      colorSpan.style.height = '12px';
+      colorSpan.style.width = `${circleDiameter}px`;
+      colorSpan.style.height = `${circleDiameter}px`;
       colorSpan.style.borderRadius = '50%';
-      colorSpan.style.backgroundColor = it.color;
-      colorSpan.style.border = '1px solid rgba(0,0,0,0.1)';
+      colorSpan.style.backgroundColor = 'transparent';
+      // Border = 50% des Radius = 1/4 des Durchmessers
+      const borderWidth = circleDiameter / 4;
+      colorSpan.style.border = `${borderWidth}px solid ${it.color}`;
       colorSpan.style.marginRight = '8px';
       colorSpan.style.flexShrink = '0';
       itemLeftArea.appendChild(colorSpan);
@@ -3081,42 +3139,24 @@ function buildAttributeLegend() {
       itemLabel.title = `${cat} :: ${it.name} - ${it.count} Einträge`;
       itemLeftArea.appendChild(itemLabel);
       
-      // Item-Checkbox Icon (rechts)
-      const itemCheckbox = document.createElement('button');
-      itemCheckbox.type = 'button';
-      const isItemActive = activeAttributes.has(it.key);
-      itemCheckbox.className = isItemActive ? 'attribute-tree-checkbox checked' : 'attribute-tree-checkbox';
-      itemCheckbox.title = isItemActive ? `${it.name} ausblenden` : `${it.name} anzeigen`;
-      
-      updateCheckboxIcon(itemCheckbox, isItemActive);
-      
-      itemCheckbox.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const isChecked = activeAttributes.has(it.key);
+      // Ganze Zeile klickbar für Toggle
+      itemRow.addEventListener('click', (e) => {
+        const isActive = activeAttributes.has(it.key);
         
-        if (isChecked) {
+        if (isActive) {
           activeAttributes.delete(it.key);
-          updateCheckboxIcon(itemCheckbox, false);
-          itemCheckbox.title = `${it.name} anzeigen`;
+          itemRow.classList.remove('active');
         } else {
           activeAttributes.add(it.key);
-          updateCheckboxIcon(itemCheckbox, true);
-          itemCheckbox.title = `${it.name} ausblenden`;
+          itemRow.classList.add('active');
         }
-        
-        // Kategorie-Checkbox aktualisieren
-        const allCatItemsActiveNow = items.every(item => activeAttributes.has(item.key));
-        updateCatCheckboxIcon(allCatItemsActiveNow);
         
         updateAttributeStats();
         updateAttributeCircles();
       });
       
-      itemRightArea.appendChild(itemCheckbox);
-      
       // Bereiche zu Item-Row hinzufügen
       itemRow.appendChild(itemLeftArea);
-      itemRow.appendChild(itemRightArea);
       itemLi.appendChild(itemRow);
       itemsUl.appendChild(itemLi);
     }
@@ -3750,21 +3790,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   }
   
-  // Attribute-Sichtbarkeit-Toggle
+  // Attribute-Sichtbarkeit-Toggle (nur Graph-Sichtbarkeit, keine Selektion ändern)
   const attributesVisibilityBtn = document.getElementById('toggleAttributesVisibility');
   if (attributesVisibilityBtn) {
     // Anfangs aktiv (Attribute sichtbar)
     attributesVisible = attributesVisibilityBtn.classList.contains('active');
-    
-    // Initialen Zustand des Container-Styles setzen
-    const attributeContainer = document.getElementById('attributeContainer');
-    if (attributeContainer) {
-      if (attributesVisible) {
-        attributeContainer.classList.remove('attributes-hidden');
-      } else {
-        attributeContainer.classList.add('attributes-hidden');
-      }
-    }
     
     attributesVisibilityBtn.addEventListener('click', () => {
       // Toggle Button-Status
@@ -3783,32 +3813,12 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
       }
       
-      // CSS-Klasse für visuelles Feedback auf Container anwenden
-      const attributeContainer = document.getElementById('attributeContainer');
-      if (attributeContainer) {
-        if (attributesVisible) {
-          attributeContainer.classList.remove('attributes-hidden');
-        } else {
-          attributeContainer.classList.add('attributes-hidden');
-        }
-      }
+      // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:
+      // - activeAttributes (bleiben wie sie sind)
+      // - hiddenCategories (bleiben wie sie sind)
+      // - Legende (bleibt wie sie ist)
       
-      if (attributesVisible) {
-        // Attribute einblenden - gespeicherte Auswahl wiederherstellen
-        if (savedActiveAttributes.size > 0) {
-          savedActiveAttributes.forEach(attr => activeAttributes.add(attr));
-          savedActiveAttributes.clear();
-        }
-      } else {
-        // Attribute ausblenden - aktuelle Auswahl speichern
-        activeAttributes.forEach(attr => savedActiveAttributes.add(attr));
-        activeAttributes.clear();
-      }
-      
-      // Attributlegende aktualisieren um Checkboxen zu aktivieren/deaktivieren
-      buildAttributeLegend();
-      
-      // Attribut-Kreise aktualisieren ohne Layout-Neuberechnung
+      // Nur Attribut-Kreise im Graph aktualisieren
       updateAttributeCircles();
     });
   }

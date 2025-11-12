@@ -154,7 +154,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 }
 .legend-list, .legend-list ul { list-style: none; padding-left: 0; margin: 0; }
 .legend-list > li { margin: 0; }
-.legend-list li { display: block; }
+.legend-list li { display: block; margin-bottom: 1px; }
 
 /* Neues Layout für Legend-List Items */
 .legend-list .legend-row { 
@@ -286,12 +286,27 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   color: white;
 }
 
+/* Attribut-Zeilen: Transparenter farbiger Hintergrund OHNE border-left */
+.legend-row.active[data-attribute-color] {
+  background-color: var(--attribute-bg);
+  border-left: none;
+  padding-left: 4px; /* Standard Padding ohne Border */
+}
+
+.legend-row.active[data-attribute-color] .legend-label-chip {
+  color: var(--text-strong); /* Textfarbe bleibt normal wegen Transparenz */
+}
+
 .legend-row:not(.active):hover {
   background-color: color-mix(in srgb, var(--org-fill, var(--control-hover)) 50%, transparent);
 }
 
 .legend-row.active:hover {
   background-color: color-mix(in srgb, var(--org-fill, var(--active-toggle-bg)) 50%, transparent);
+}
+
+.legend-row.active[data-attribute-color]:hover {
+  background-color: var(--attribute-bg-hover);
 }
 
 /* Verschachtelte Liste mit Einrückung */
@@ -837,7 +852,8 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   font-size: 14px;
 }
 
-.legend-header:hover .legend-icon-btn {
+.legend-header:hover .legend-icon-btn,
+.legend-row:hover .legend-icon-btn {
   opacity: 1;
   pointer-events: auto;
 }
@@ -846,6 +862,17 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   color: var(--text);
   background-color: transparent;
   transform: translateY(-1px);
+}
+
+/* Spezielle Styles für ausgeblendete Kategorie-Eye-Buttons */
+.legend-icon-btn.hidden {
+  opacity: 0.3;
+}
+
+.legend-row:hover .legend-icon-btn.hidden,
+.legend-header:hover .legend-icon-btn.hidden {
+  opacity: 0.5;
+  pointer-events: auto;
 }
 
 .legend-icon-btn.active {
