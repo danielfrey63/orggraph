@@ -232,7 +232,8 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   flex-shrink: 0;
 }
 
-/* Checkbox Icons (rechts) */
+/* Chec
+kbox Icons (rechts) */
 .legend-checkbox {
   display: inline-flex;
   align-items: center;
