@@ -625,57 +625,108 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   box-shadow: 0 2px 5px rgba(99,102,241,0.4);
 }
 
-.toggle-btn svg {
-  width: 22px;
-  height: 22px;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  fill: transparent;
-  background: transparent;
+.toggle-btn .codicon {
+  font-size: 18px;
 }
 
-/* Direction Selector */
-.direction-toggle {
-  display: flex;
-  gap: 5px;
+/* Direction Selector - Split Component */
+.direction-split {
+  display: inline-flex;
+  flex-direction: column;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  position: relative;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  overflow: hidden;
+  gap: 0;
 }
 
-.direction-toggle button {
+.direction-half {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 100%;
+  height: 50%;
   padding: 0;
-  border-radius: 6px;
-  border: none;
+  margin: 0;
+  border: 0 !important;
+  border-width: 0 !important;
   background-color: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
-.direction-toggle button:hover {
+/* Gerundete Ecken nur außen */
+.direction-half.direction-up {
+  border-radius: 5px 5px 0 0;
+}
+
+.direction-half.direction-down {
+  border-radius: 0 0 5px 5px;
+}
+
+/* Trennlinie zwischen den Hälften mit Pseudo-Element - nur wenn nicht beide aktiv */
+.direction-half.direction-up:not(.active)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: var(--control-border);
+}
+
+.direction-half.direction-up.active + .direction-half.direction-down:not(.active)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: var(--control-border);
+}
+
+.direction-half:hover {
   background-color: var(--control-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
 }
 
-.direction-toggle button.active {
+.direction-half.active {
   background-color: var(--active-toggle-bg, #6366f1);
   color: var(--active-toggle-color, white);
-  box-shadow: 0 2px 5px rgba(99,102,241,0.4);
 }
 
-.direction-toggle button svg {
-  width: 22px;
-  height: 22px;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  fill: transparent;
-  background: transparent;
+/* Icon Clipping für halbe Darstellung */
+.direction-half .codicon {
+  font-size: 20px;
+  line-height: 1;
+  position: relative;
+}
+
+/* Up-Pfeil: Zeige obere Hälfte des Icons - etwas mehr als 50% */
+.direction-up .codicon {
+  clip-path: inset(0 0 30% 0);
+  margin-bottom: -13px;
+  transform: translateY(-2px);
+}
+
+/* Down-Pfeil: Zeige untere Hälfte des Icons - etwas mehr als 50% */
+.direction-down .codicon {
+  clip-path: inset(30% 0 0 0);
+  margin-top: -13px;
+  transform: translateY(2px);
+}
+
+/* Hover-Effekt für die gesamte Komponente */
+.direction-split:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
 }
 
 /* Konfigurationsparameter */

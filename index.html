@@ -20,88 +20,33 @@
     <div class="controls">
       <input id="depth" type="number" min="0" max="6" value="2" step="1" inputmode="numeric" />
       
-      <div class="direction-toggle" id="directionToggle">
-        <button data-dir="both" class="active" title="Beide Richtungen">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M7 17l5 5 5-5"/>
-            <path d="M7 7l5-5 5 5"/>
-            <path d="M12 2v20"/>
-          </svg>
+      <div class="direction-split" id="directionToggle">
+        <button class="direction-half direction-up active" data-dir="up" title="Aufwärts">
+          <i class="codicon codicon-arrow-up"></i>
         </button>
-        <button data-dir="down" title="Abwärts">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M7 13l5 5 5-5"/>
-            <path d="M12 8v10"/>
-          </svg>
-        </button>
-        <button data-dir="up" title="Aufwärts">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M7 11l5-5 5 5"/>
-            <path d="M12 6v10"/>
-          </svg>
+        <button class="direction-half direction-down active" data-dir="down" title="Abwärts">
+          <i class="codicon codicon-arrow-down"></i>
         </button>
       </div>
       
       <button id="toggleManagement" class="toggle-btn active" title="Management">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <!-- Organigramm mit Person Symbol und kleineren Kreisen unten -->
-          <circle cx="12" cy="6" r="4" />
-          <path d="M12 10v4" />
-          <circle cx="6" cy="20" r="1.5" />
-          <circle cx="12" cy="20" r="1.5" />
-          <circle cx="18" cy="20" r="1.5" />
-          <path d="M12 14h-6v4" />
-          <path d="M12 14h6v4" />
-        </svg>
+        <i class="codicon codicon-organization"></i>
       </button>
       
       <button id="toggleHierarchy" class="toggle-btn active" title="Hierarchie">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <!-- Hierarchie-Symbol mit 4 vertikalen Linien -->
-          <path d="M12 4v8" />
-          <path d="M4 12v8" />
-          <path d="M12 12v8" />
-          <path d="M20 12v8" />
-          <path d="M4 12h16" />
-        </svg>
+        <i class="codicon codicon-type-hierarchy"></i>
       </button>
       
       <button id="toggleLabels" class="toggle-btn active" title="Namen anzeigen">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <!-- Tag-Symbol, das mehr wie ein klassisches Tag aussieht -->
-          <path d="M19 16l-5 5a2 2 0 0 1-2.83 0L2 12V4h8l9 9a2 2 0 0 1 0 3z" />
-  <circle cx="7" cy="9" r="1.5" />
-        </svg>
+        <i class="codicon codicon-tag"></i>
       </button>
       
       <button id="fit" class="toggle-btn" aria-label="Auf Seite einpassen" title="Auf Seite einpassen">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor">
-          <!-- Vollbild-Symbol mit kürzeren diagonalen Pfeilen -->
-          <path d="M5 5l3 3" />
-          <path d="M5 5H8" />
-          <path d="M5 5V8" />
-          
-          <path d="M19 5l-3 3" />
-          <path d="M19 5h-3" />
-          <path d="M19 5v3" />
-          
-          <path d="M5 19l3-3" />
-          <path d="M5 19h3" />
-          <path d="M5 19v-3" />
-          
-          <path d="M19 19l-3-3" />
-          <path d="M19 19h-3" />
-          <path d="M19 19v-3" />
-        </svg>
+        <i class="codicon codicon-screen-full"></i>
       </button>
       
       <button id="exportBtn" class="toggle-btn" aria-label="Grafik exportieren" title="Grafik exportieren">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <!-- Download/Export-Symbol -->
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
+        <i class="codicon codicon-export"></i>
       </button>
     </div>
   </header>

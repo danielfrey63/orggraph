@@ -2290,11 +2290,20 @@ function applyFromUI() {
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
   const depth = depthEl ? parseInt(depthEl.value, 10) || 0 : 0;
 
-  // Get direction mode
+  // Get direction mode from split component
   let dirMode = 'both';
-  const activeDirectionButton = document.querySelector('#directionToggle button.active');
-  if (activeDirectionButton) {
-    dirMode = activeDirectionButton.dataset.dir;
+  const upHalf = document.querySelector('#directionToggle .direction-up');
+  const downHalf = document.querySelector('#directionToggle .direction-down');
+  if (upHalf && downHalf) {
+    const upActive = upHalf.classList.contains('active');
+    const downActive = downHalf.classList.contains('active');
+    if (upActive && downActive) {
+      dirMode = 'both';
+    } else if (upActive) {
+      dirMode = 'up';
+    } else if (downActive) {
+      dirMode = 'down';
+    }
   }
 
   // Determine roots
@@ -4042,38 +4051,81 @@ window.addEventListener("DOMContentLoaded", async () => {
     depthEl.addEventListener('change', applyFromUI);
     depthEl.addEventListener('input', applyFromUI);
   }
-  // Direction Buttons
-  const dirButtons = document.querySelectorAll('#directionToggle button');
+  // Direction Split Component
+  const upHalf = document.querySelector('#directionToggle .direction-up');
+  const downHalf = document.querySelector('#directionToggle .direction-down');
   let currentDir = 'both';
+  
+  // Helper function to get current direction state
+  const getCurrentDirection = () => {
+    if (!upHalf || !downHalf) return 'both';
+    const upActive = upHalf.classList.contains('active');
+    const downActive = downHalf.classList.contains('active');
+    if (upActive && downActive) return 'both';
+    if (upActive) return 'up';
+    if (downActive) return 'down';
+    return 'both';
+  };
   
   // Initialize direction from config
   if (envConfig?.DEFAULT_DIR) {
     currentDir = envConfig.DEFAULT_DIR;
-    dirButtons.forEach(btn => {
-      if (btn.dataset.dir === currentDir) {
-        btn.classList.add('active');
-      } else {
-        btn.classList.remove('active');
+    if (upHalf && downHalf) {
+      if (currentDir === 'both') {
+        upHalf.classList.add('active');
+        downHalf.classList.add('active');
+      } else if (currentDir === 'up') {
+        upHalf.classList.add('active');
+        downHalf.classList.remove('active');
+      } else if (currentDir === 'down') {
+        upHalf.classList.remove('active');
+        downHalf.classList.add('active');
       }
-    });
+    }
   }
   
-  // Direction button click handlers
-  dirButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      // Remove active class from all buttons
-      dirButtons.forEach(b => b.classList.remove('active'));
+  // Direction half click handlers with constraint: at least one must be active
+  if (upHalf && downHalf) {
+    upHalf.addEventListener('click', () => {
+      const upActive = upHalf.classList.contains('active');
+      const downActive = downHalf.classList.contains('active');
       
-      // Add active class to clicked button
-      btn.classList.add('active');
+      if (upActive && !downActive) {
+        // Only up active - switch to only down
+        upHalf.classList.remove('active');
+        downHalf.classList.add('active');
+      } else if (upActive && downActive) {
+        // Both active - deactivate up
+        upHalf.classList.remove('active');
+      } else {
+        // Up inactive - activate it
+        upHalf.classList.add('active');
+      }
       
-      // Update current direction
-      currentDir = btn.dataset.dir;
-      
-      // Apply changes
+      currentDir = getCurrentDirection();
       applyFromUI();
     });
-  });
+    
+    downHalf.addEventListener('click', () => {
+      const upActive = upHalf.classList.contains('active');
+      const downActive = downHalf.classList.contains('active');
+      
+      if (downActive && !upActive) {
+        // Only down active - switch to only up
+        downHalf.classList.remove('active');
+        upHalf.classList.add('active');
+      } else if (upActive && downActive) {
+        // Both active - deactivate down
+        downHalf.classList.remove('active');
+      } else {
+        // Down inactive - activate it
+        downHalf.classList.add('active');
+      }
+      
+      currentDir = getCurrentDirection();
+      applyFromUI();
+    });
+  }
   
   // Hierarchy toggle button
   const hier = document.querySelector('#toggleHierarchy');
