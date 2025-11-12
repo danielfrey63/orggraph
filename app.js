@@ -1581,24 +1581,12 @@ function updateLegendChips(rootEl) {
     allowedOrgs = newAllowed;
   }
   // Wenn OEs ausgeblendet sind (oesVisible=false), dann bleibt allowedOrgs leer
-  // For each legend entry (li), compute active OEs from its checked ancestor chain (including self)
+  // For each legend entry (li), ensure chips have transparent background
   root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
-    const selfCb = li.querySelector(':scope > .legend-row input[id^="org_"]');
-    if (!selfCb) return;
-    const selfOid = selfCb.id.replace('org_','');
     const chip = li.querySelector(':scope > .legend-row .legend-label-chip');
     if (!chip) return;
-    if (!selfCb.checked || !allowedOrgs.has(selfOid)) {
-      chip.style.background = 'transparent';
-      return;
-    }
-    const chain = Array.from(getActiveAncestorChain(selfOid));
-    if (chain.length > 0) {
-      const chipColor = flattenToWhiteOrdered(chain);
-      chip.style.background = chipColor;
-    } else {
-      chip.style.background = 'transparent';
-    }
+    // Immer transparent, damit CSS-Hover funktioniert
+    chip.style.background = 'transparent';
   });
 } 
 
@@ -1614,15 +1602,15 @@ function updateLegendRowColors(rootEl) {
     // Synchronisiere Hidden Input mit allowedOrgs
     cb.checked = allowedOrgs.has(oid);
     
+    // Setze Farben immer als CSS-Custom-Properties (für Hover-Effekt bei inaktiven Rows)
+    row.style.setProperty('--org-fill', fill);
+    row.style.setProperty('--org-stroke', stroke);
+    
     if (cb.checked && allowedOrgs.has(oid)) {
-      // Active state: Set individual org colors as CSS custom properties
-      row.style.setProperty('--org-fill', fill);
-      row.style.setProperty('--org-stroke', stroke);
+      // Active state
       row.classList.add('active');
     } else {
-      // Inactive state: Remove active class and custom properties
-      row.style.removeProperty('--org-fill');
-      row.style.removeProperty('--org-stroke');
+      // Inactive state
       row.classList.remove('active');
     }
   });
@@ -2842,36 +2830,29 @@ async function loadAttributesFromFile(file) {
 }
 
 /**
- * Hilfsfunktionen für SVG-Icons
+ * Hilfsfunktionen für Codicon-Icons
  */
 function getCheckboxSVG(checked = false) {
   if (checked) {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
-      <path d="M19 19 H280 V280 H19 V19 Z M19 19 L280 280 M280 19 L19 280" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>`;
+    return `<i class="codicon codicon-check" aria-hidden="true"></i>`;
   } else {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
-      <path d="M19 19 H280 V280 H19 V19 Z" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`;
+    return `<i class="codicon codicon-close" aria-hidden="true"></i>`;
   }
 }
 
 function getChevronSVG() {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
-    <path d="M75 110 L150 185 L225 110" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;
+  return `<i class="codicon codicon-chevron-down" aria-hidden="true"></i>`;
 }
 
 function getCheckAllSVG() {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" aria-hidden="true">
-    <path d="M232 68Q229 66 225.0 66.0Q221 66 218 68L126 161L139 174L232 82Q234 79 234.0 75.0Q234 71 232 68ZM35 153Q32 150 28.0 150.0Q24 150 21.5 152.5Q19 155 19.0 159.0Q19 163 22 166L78 222Q80 225 84.0 225.0Q88 225 91 222L98 216ZM141 225Q137 225 134 222L78 166Q75 163 75.0 159.0Q75 155 77.5 152.5Q80 150 84.0 150.0Q88 150 91 153L141 202L275 68Q277 66 281.0 66.0Q285 66 288.0 68.5Q291 71 291.0 75.0Q291 79 288 82L147 222Q144 225 141 225Z" fill="currentColor"/>
-  </svg>`;
+  return `<i class="codicon codicon-check-all" aria-hidden="true"></i>`;
 }
 
-function getEyeSVG() {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" aria-hidden="true">
-    <path d="M56 162Q55 166 51.5 167.5Q48 169 43.5 168.0Q39 167 38 162Q37 159 38 157L43 144Q50 129 60 116Q75 98 94 88Q119 75 150.0 75.0Q181 75 206 88Q225 98 240 116Q250 129 257 144L262 157Q263 161 261.0 164.0Q259 167 255.5 168.0Q252 169 248.5 167.5Q245 166 244 162L240 152Q234 139 226 128Q213 113 197 104Q176 94 150.0 94.0Q124 94 103 104Q87 113 74 128Q66 139 60 152ZM150 131Q131 131 117.0 145.0Q103 159 103.0 178.5Q103 198 117.0 211.5Q131 225 150.0 225.0Q169 225 183.0 211.5Q197 198 197.0 178.5Q197 159 183.0 145.0Q169 131 150 131ZM122 178Q122 166 130.0 158.0Q138 150 150.0 150.0Q162 150 170.0 158.0Q178 166 178.0 178.0Q178 190 170.0 198.0Q162 206 150.0 206.0Q138 206 130.0 198.0Q122 190 122 178Z" fill="currentColor"/>
-  </svg>`;
+function getEyeSVG(closed = false) {
+  if (closed) {
+    return `<i class="codicon codicon-eye-closed" aria-hidden="true"></i>`;
+  }
+  return `<i class="codicon codicon-eye" aria-hidden="true"></i>`;
 }
 
 function updateCheckboxIcon(checkboxElement, checked) {
@@ -3013,25 +2994,34 @@ function buildAttributeLegend() {
     const isHidden = hiddenCategories.has(cat);
     eyeBtn.className = isHidden ? 'attribute-eye-btn hidden' : 'attribute-eye-btn';
     eyeBtn.title = isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden';
-    eyeBtn.innerHTML = getEyeSVG();
+    eyeBtn.innerHTML = getEyeSVG(isHidden);
     
     eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const isCurrentlyHidden = hiddenCategories.has(cat);
+      const icon = eyeBtn.querySelector('.codicon');
       
       if (isCurrentlyHidden) {
         // Einblenden - Attribute der Kategorie werden wieder im Graph gerendert
         hiddenCategories.delete(cat);
         eyeBtn.className = 'attribute-eye-btn';
         eyeBtn.title = 'Kategorie ausblenden';
+        if (icon) {
+          icon.classList.remove('codicon-eye-closed');
+          icon.classList.add('codicon-eye');
+        }
       } else {
         // Ausblenden - Attribute der Kategorie werden temporär nicht im Graph gerendert
         hiddenCategories.add(cat);
         eyeBtn.className = 'attribute-eye-btn hidden';
         eyeBtn.title = 'Kategorie einblenden';
+        if (icon) {
+          icon.classList.remove('codicon-eye');
+          icon.classList.add('codicon-eye-closed');
+        }
       }
       
-      // Graph-Attribut-Kreise neu rendern
+      // Attribut-Kreise neu zeichnen
       updateAttributeCircles();
     });
     
@@ -3725,6 +3715,18 @@ window.addEventListener("DOMContentLoaded", async () => {
       oeVisibilityBtn.classList.toggle('active');
       oesVisible = oeVisibilityBtn.classList.contains('active');
       
+      // Icon wechseln zwischen eye und eye-closed
+      const icon = oeVisibilityBtn.querySelector('.codicon');
+      if (icon) {
+        if (oesVisible) {
+          icon.classList.remove('codicon-eye-closed');
+          icon.classList.add('codicon-eye');
+        } else {
+          icon.classList.remove('codicon-eye');
+          icon.classList.add('codicon-eye-closed');
+        }
+      }
+      
       if (oesVisible) {
         // OEs einblenden - gespeicherte Auswahl wiederherstellen
         if (savedAllowedOrgs.size > 0) {
@@ -3762,6 +3764,18 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Toggle Button-Status
       attributesVisibilityBtn.classList.toggle('active');
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
+      
+      // Icon wechseln zwischen eye und eye-closed
+      const icon = attributesVisibilityBtn.querySelector('.codicon');
+      if (icon) {
+        if (attributesVisible) {
+          icon.classList.remove('codicon-eye-closed');
+          icon.classList.add('codicon-eye');
+        } else {
+          icon.classList.remove('codicon-eye');
+          icon.classList.add('codicon-eye-closed');
+        }
+      }
       
       // CSS-Klasse für visuelles Feedback auf Container anwenden
       const attributeContainer = document.getElementById('attributeContainer');

@@ -123,6 +123,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   cursor: pointer;
   transition: all 0.2s ease;
   border-radius: 3px;
+  font-size: 16px;
 }
 
 .legend-chevron:hover {
@@ -130,17 +131,15 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   background-color: var(--control-hover);
 }
 
-.legend-chevron svg {
-  width: 16px;
-  height: 16px;
+.legend-chevron .codicon {
   transition: transform 0.2s ease;
 }
 
-.legend-chevron.expanded svg {
+.legend-chevron.expanded .codicon {
   transform: rotate(0deg);
 }
 
-.legend-chevron.collapsed svg {
+.legend-chevron.collapsed .codicon {
   transform: rotate(-90deg);
 }
 
@@ -204,6 +203,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   transition: all 0.2s ease;
   border-radius: 3px;
   flex-shrink: 0;
+  font-size: 16px;
 }
 
 .legend-tree-chevron:hover {
@@ -211,17 +211,15 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   background-color: transparent;
 }
 
-.legend-tree-chevron svg {
-  width: 16px;
-  height: 16px;
+.legend-tree-chevron .codicon {
   transition: transform 0.2s ease;
 }
 
-.legend-tree-chevron.expanded svg {
+.legend-tree-chevron.expanded .codicon {
   transform: rotate(0deg);
 }
 
-.legend-tree-chevron.collapsed svg {
+.legend-tree-chevron.collapsed .codicon {
   transform: rotate(-90deg);
 }
 
@@ -232,8 +230,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   flex-shrink: 0;
 }
 
-/* Chec
-kbox Icons (rechts) */
+/* Checkbox Icons (rechts) */
 .legend-checkbox {
   display: inline-flex;
   align-items: center;
@@ -248,6 +245,7 @@ kbox Icons (rechts) */
   transition: all 0.2s ease;
   border-radius: 3px;
   flex-shrink: 0;
+  font-size: 14px;
 }
 
 .legend-checkbox:hover {
@@ -259,15 +257,10 @@ kbox Icons (rechts) */
   color: var(--active-toggle-bg);
 }
 
-.legend-checkbox svg {
-  width: 14px;
-  height: 14px;
-}
-
 /* Label im neuen Format */
 .legend-list .legend-label-chip { 
   display: inline-block; 
-  border-radius: 4px; 
+  background-color: transparent;
   white-space: nowrap; 
   overflow: hidden; 
   text-overflow: ellipsis; 
@@ -280,15 +273,20 @@ kbox Icons (rechts) */
   background-color: var(--org-fill, var(--active-toggle-bg));
   color: white;
   border-left: 3px solid var(--org-stroke, var(--active-toggle-bg));
+  padding-left: 5px; /* 8px Standard - 3px Border = 5px, verhindert Layout-Shift */
 }
 
 .legend-row.active .legend-label-chip {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: transparent;
   color: white;
 }
 
 .legend-row:not(.active):hover {
-  background-color: var(--control-hover);
+  background-color: color-mix(in srgb, var(--org-fill, var(--control-hover)) 50%, transparent);
+}
+
+.legend-row.active:hover {
+  background-color: color-mix(in srgb, var(--org-fill, var(--active-toggle-bg)) 50%, transparent);
 }
 
 /* Verschachtelte Liste mit Einrückung */
@@ -341,6 +339,7 @@ kbox Icons (rechts) */
   transition: all 0.2s ease;
   border-radius: 3px;
   flex-shrink: 0;
+  font-size: 16px;
 }
 
 .attribute-tree-chevron:hover {
@@ -348,17 +347,15 @@ kbox Icons (rechts) */
   background-color: transparent;
 }
 
-.attribute-tree-chevron svg {
-  width: 16px;
-  height: 16px;
+.attribute-tree-chevron .codicon {
   transition: transform 0.2s ease;
 }
 
-.attribute-tree-chevron.expanded svg {
+.attribute-tree-chevron.expanded .codicon {
   transform: rotate(0deg);
 }
 
-.attribute-tree-chevron.collapsed svg {
+.attribute-tree-chevron.collapsed .codicon {
   transform: rotate(-90deg);
 }
 
@@ -382,6 +379,7 @@ kbox Icons (rechts) */
   transition: all 0.2s ease;
   border-radius: 3px;
   flex-shrink: 0;
+  font-size: 12px;
 }
 
 .attribute-tree-checkbox:hover {
@@ -391,11 +389,6 @@ kbox Icons (rechts) */
 
 .attribute-tree-checkbox.checked {
   color: var(--active-toggle-bg);
-}
-
-.attribute-tree-checkbox svg {
-  width: 12px;
-  height: 12px;
 }
 
 /* Check-All Button für Attribut-Kategorien (versteckt, bei Hover sichtbar) */
@@ -428,9 +421,8 @@ kbox Icons (rechts) */
   transform: translateY(-1px);
 }
 
-.attribute-check-all-btn svg {
-  width: 14px;
-  height: 14px;
+.attribute-check-all-btn {
+  font-size: 14px;
 }
 
 /* Eye-Toggle Button für Attribut-Kategorien (versteckt, bei Hover sichtbar) */
@@ -471,9 +463,8 @@ kbox Icons (rechts) */
   pointer-events: auto;
 }
 
-.attribute-eye-btn svg {
-  width: 14px;
-  height: 14px;
+.attribute-eye-btn {
+  font-size: 14px;
 }
 
 /* Legacy Support für alte Twisty-Buttons (werden durch Chevrons ersetzt) */
@@ -839,6 +830,7 @@ kbox Icons (rechts) */
   border-radius: 4px;
   opacity: 0;
   pointer-events: none;
+  font-size: 14px;
 }
 
 .legend-header:hover .legend-icon-btn {
@@ -862,12 +854,6 @@ kbox Icons (rechts) */
 .legend-header:hover .legend-icon-btn.active {
   opacity: 1;
   pointer-events: auto;
-}
-
-.legend-icon-btn svg {
-  width: 14px;
-  height: 14px;
-  transition: transform 0.2s ease;
 }
 
 /* Ellipsis Dropdown */
@@ -912,9 +898,8 @@ kbox Icons (rechts) */
   background-color: var(--control-hover);
 }
 
-.legend-ellipsis-item svg {
-  width: 16px;
-  height: 16px;
+.legend-ellipsis-item .codicon {
+  font-size: 16px;
   color: var(--text-muted);
 }
 
@@ -933,7 +918,7 @@ kbox Icons (rechts) */
   width: 0;
   height: 24px;
   border: 1px solid var(--control-border);
-  border-radius: 12px;
+  border-radius: 2px;
   background: var(--control-bg);
   color: var(--text);
   font-size: 12px;
