@@ -3790,6 +3790,46 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   }
   
+  // Alle Attribut-Kategorien expandieren
+  const expandAllAttributesBtn = document.getElementById('expandAllAttributes');
+  if (expandAllAttributesBtn) {
+    expandAllAttributesBtn.addEventListener('click', () => {
+      // 1. Legende selbst expandieren (falls kollabiert)
+      const attributeContainer = document.getElementById('attributeContainer');
+      const chevron = document.querySelector('[data-target="attributeContainer"]');
+      if (attributeContainer && chevron) {
+        attributeContainer.classList.remove('collapsed');
+        chevron.classList.remove('collapsed');
+        chevron.classList.add('expanded');
+      }
+      
+      // 2. Alle Kategorien aus collapsedCategories entfernen VORHER
+      collapsedCategories.clear();
+      
+      // 3. Legende neu aufbauen, um alle Kategorien expandiert anzuzeigen
+      buildAttributeLegend();
+      
+      // 4. Nach einem kurzen Timeout alle Listen und Items explizit einblenden
+      setTimeout(() => {
+        const attributeLegend = document.getElementById('attributeLegend');
+        if (attributeLegend) {
+          // ALLE verschachtelten Listen sichtbar machen (Kategorien UND Attribute-Items)
+          const allLists = attributeLegend.querySelectorAll('ul');
+          allLists.forEach(ul => {
+            ul.style.display = 'block';
+          });
+          
+          // Alle Chevrons auf expanded setzen
+          const categoryChevrons = attributeLegend.querySelectorAll('.legend-tree-chevron');
+          categoryChevrons.forEach(chev => {
+            chev.classList.remove('collapsed');
+            chev.classList.add('expanded');
+          });
+        }
+      }, 100);
+    });
+  }
+  
   // Attribute-Sichtbarkeit-Toggle (nur Graph-Sichtbarkeit, keine Selektion ändern)
   const attributesVisibilityBtn = document.getElementById('toggleAttributesVisibility');
   if (attributesVisibilityBtn) {
