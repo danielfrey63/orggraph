@@ -4443,19 +4443,37 @@ function initializeCollapsibleLegends() {
   
   // Ausschiebbares Suchfeld-Verhalten
   const oeFilter = document.getElementById('oeFilter');
-  if (oeFilter) {
+  const oeFilterBtn = document.getElementById('oeFilterBtn');
+  if (oeFilter && oeFilterBtn) {
     // Überwache Wertänderungen für has-value Klasse
     const updateSearchFieldState = () => {
       if (oeFilter.value.trim()) {
         oeFilter.classList.add('has-value');
+        // Filter-Icon auch ohne Hover sichtbar wenn Wert vorhanden
+        oeFilterBtn.classList.add('visible');
       } else {
         oeFilter.classList.remove('has-value');
+        // Filter-Icon nur bei Hover sichtbar wenn leer
+        oeFilterBtn.classList.remove('visible');
       }
     };
     
     oeFilter.addEventListener('input', updateSearchFieldState);
     oeFilter.addEventListener('focus', updateSearchFieldState);
     oeFilter.addEventListener('blur', updateSearchFieldState);
+    
+    // Click auf Filter-Icon: Feld leeren und schließen wenn gefüllt
+    oeFilterBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (oeFilter.value.trim()) {
+        oeFilter.value = '';
+        // Trigger input event für Filter-Reset
+        oeFilter.dispatchEvent(new Event('input'));
+        updateSearchFieldState();
+        // Blur um Feld zu schließen
+        oeFilter.blur();
+      }
+    });
     
     // Initialer Zustand
     updateSearchFieldState();

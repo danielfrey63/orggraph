@@ -98,7 +98,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   display: flex;
   align-items: center;
   gap: 1px;
-  flex: 1;
+  flex: 0 1 auto; /* Nur nötigen Platz für Chevron + Titel */
   min-width: 0;
 }
 
@@ -106,7 +106,9 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   display: flex;
   align-items: center;
   gap: 4px;
-  flex-shrink: 0;
+  flex: 1; /* Nimmt restlichen Platz für Suchfeld */
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 /* Chevron Icons für Expand/Collapse (links) */
@@ -939,14 +941,18 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   height: 24px;
+  flex: 1;
+  min-width: 0;
   transition: all 0.3s ease;
 }
 
 .legend-search-input {
   position: absolute;
-  right: 28px; /* Startet hinter dem Icon */
+  right: 28px; /* Platz für Icon rechts */
   width: 0;
+  max-width: calc(100% - 30px); /* Gesamter verfügbarer Platz minus Icon + minimaler Abstand */
   height: 21px;
   border: 1px solid var(--control-border);
   border-radius: 2px;
@@ -958,16 +964,15 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   opacity: 0;
   visibility: hidden;
   transition: all 0.3s ease;
-  z-index: 1;
+  z-index: 0; /* Unter dem Icon */
 }
 
 .legend-search-container:hover .legend-search-input,
 .legend-search-input:focus,
 .legend-search-input.has-value {
-  width: 120px;
+  width: calc(100% - 30px); /* Nutzt gesamten verfügbaren Platz minus Icon */
   opacity: 1;
   visibility: visible;
-  right: 28px; /* Ausgeschobene Position */
 }
 
 .legend-search-input:focus {
@@ -981,7 +986,9 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   pointer-events: none;
 }
 
-.legend-header:hover .legend-icon-btn {
+.legend-header:hover .legend-icon-btn,
+.legend-row:hover .legend-icon-btn,
+.legend-icon-btn.visible {
   opacity: 1;
   pointer-events: auto;
 }
@@ -991,8 +998,8 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   font-weight: 600;
   color: var(--text-muted);
   margin: 0;
-  flex: 1;
-  min-width: 0;
+  flex: 0 1 auto; /* Nur nötigen Platz für Text */
+  white-space: nowrap;
 }
 
 .oe-filter-container {
