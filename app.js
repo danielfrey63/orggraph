@@ -1358,6 +1358,19 @@ function unhideSubtree(rootId) {
 function buildHiddenLegend() {
   const legend = document.getElementById('hiddenLegend');
   if (!legend) return;
+  
+  // Berechne Gesamtanzahl der ausgeblendeten Personen
+  let totalHidden = 0;
+  for (const setIds of hiddenByRoot.values()) {
+    totalHidden += setIds.size;
+  }
+  
+  // Update Titel mit Anzahl
+  const titleElement = document.getElementById('hiddenLegendTitle');
+  if (titleElement) {
+    titleElement.textContent = totalHidden > 0 ? `Ausgeblendet (${totalHidden})` : 'Ausgeblendet';
+  }
+  
   legend.innerHTML = '';
   if (hiddenByRoot.size === 0) {
     const empty = document.createElement('div');
