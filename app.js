@@ -1368,7 +1368,7 @@ function buildOrgLegend(scope) {
 
   const ul = document.createElement('ul');
   ul.className = 'legend-list';
-  function renderNode(oid) {
+  function renderNode(oid, depth = 0) {
     const li = document.createElement('li');
     const lbl = byId.get(oid)?.label || oid;
     const idAttr = `org_${oid}`;
@@ -1385,6 +1385,12 @@ function buildOrgLegend(scope) {
     const rightArea = document.createElement('div');
     rightArea.className = 'legend-row-right';
     
+    // Tiefe-Spacer für Einrückung ohne UL-Padding
+    const depthSpacer = document.createElement('div');
+    depthSpacer.className = 'legend-depth-spacer';
+    depthSpacer.style.width = `${Math.max(0, Number(depth) || 0) * 16}px`;
+    leftArea.appendChild(depthSpacer);
+
     // Kinder prüfen für Chevron
     const kids = Array.from(children.get(oid) || []).filter(id => !scopeProvided || scopeSet.has(id));
     
@@ -1466,7 +1472,7 @@ function buildOrgLegend(scope) {
     li.appendChild(row);
     if (kids.length) {
       const sub = document.createElement('ul');
-      kids.forEach(k => sub.appendChild(renderNode(k)));
+      kids.forEach(k => sub.appendChild(renderNode(k, (depth || 0) + 1)));
       li.appendChild(sub);
     }
     // Context menu for subtree show/hide
@@ -1559,10 +1565,10 @@ function buildOrgLegend(scope) {
   }
   
   if (roots.length) {
-    roots.forEach(r => ul.appendChild(renderNode(r)));
+    roots.forEach(r => ul.appendChild(renderNode(r, 0)));
   } else if (scopeProvided) {
     // Fallback: render flat list of scoped orgs (no parent-child within scope)
-    Array.from(scopeSet || []).forEach(oid => ul.appendChild(renderNode(oid)));
+    Array.from(scopeSet || []).forEach(oid => ul.appendChild(renderNode(oid, 0)));
   }
   legend.appendChild(ul);
   syncGraphAndLegendColors();
