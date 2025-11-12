@@ -1043,6 +1043,19 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
 }
 
+/* Doppel-Chevron für Expand-All Button */
+#expandAllAttributes {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+#expandAllAttributes .codicon {
+  line-height: 1;
+}
+
 /* Ensure ALL Toggle-Icons are hidden by default and only show on hover */
 .legend-icon-btn {
   opacity: 0;
