@@ -45,6 +45,7 @@ let collapsedCategories = new Set(); // Kategorien mit eingeklapptem Zustand
 let hiddenCategories = new Set(); // Kategorien die temporär ausgeblendet sind (ohne Attribut-Status zu ändern)
 let hiddenNodes = new Set();
 let hiddenByRoot = new Map();
+let currentHiddenCount = 0; // Anzahl der ausgeblendeten Knoten in der aktuellen Ansicht
 let selectedRootIds = [];
 let lastSingleRootId = null;
 
@@ -1271,8 +1272,13 @@ function computeSubgraph(startId, depth, mode) {
       return { ...n, level: dist.get(id) || 0 };
     })
     .filter(Boolean);
+  
+  // Zähle ausgeblendete Knoten in der aktuellen Ansicht
   if (hiddenNodes && hiddenNodes.size > 0) {
+    const beforeCount = nodes.length;
     nodes = nodes.filter(n => !hiddenNodes.has(String(n.id)));
+    const hiddenInThisCall = beforeCount - nodes.length;
+    currentHiddenCount += hiddenInThisCall; // Addieren statt überschreiben für Multi-Root
   }
   if (managementEnabled) {
     // Filter out basis persons (leaf nodes without direct reports)
@@ -1300,6 +1306,7 @@ function computeSubgraph(startId, depth, mode) {
     .map(l => ({ s: idOf(l.source), t: idOf(l.target) }))
     .filter(x => nodeSet.has(x.s) && nodeSet.has(x.t))
     .map(x => ({ source: x.s, target: x.t }));
+  
   return { nodes, links };
 }
 
@@ -1355,21 +1362,34 @@ function unhideSubtree(rootId) {
   applyFromUI();
 }
 
-function buildHiddenLegend() {
-  const legend = document.getElementById('hiddenLegend');
-  if (!legend) return;
-  
+// Aktualisiert den Titel der Hidden-Legende mit den aktuellen Zahlen
+function updateHiddenLegendTitle() {
   // Berechne Gesamtanzahl der ausgeblendeten Personen
   let totalHidden = 0;
   for (const setIds of hiddenByRoot.values()) {
     totalHidden += setIds.size;
   }
   
-  // Update Titel mit Anzahl
+  // Berechne Anzahl ausgeblendeter Knoten die in der aktuellen Ansicht wären
+  let countInView = currentHiddenCount;
+  
+  // Update Titel mit Anzahl: (aktuell sichtbar ausgeblendet / gesamt ausgeblendet)
   const titleElement = document.getElementById('hiddenLegendTitle');
   if (titleElement) {
-    titleElement.textContent = totalHidden > 0 ? `Ausgeblendet (${totalHidden})` : 'Ausgeblendet';
+    if (totalHidden > 0) {
+      titleElement.textContent = `Ausgeblendet (${countInView}/${totalHidden})`;
+    } else {
+      titleElement.textContent = 'Ausgeblendet';
+    }
   }
+}
+
+function buildHiddenLegend() {
+  const legend = document.getElementById('hiddenLegend');
+  if (!legend) return;
+  
+  // Titel wird separat aktualisiert nach Graph-Berechnung
+  updateHiddenLegendTitle();
   
   legend.innerHTML = '';
   if (hiddenByRoot.size === 0) {
@@ -2259,6 +2279,9 @@ function applyFromUI() {
   if (!raw || !raw.links || !raw.nodes) return;
   if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
   
+  // Reset hidden count für neue Berechnung
+  currentHiddenCount = 0;
+  
   // Get current search input value
   const input = document.querySelector(INPUT_COMBO_ID);
   const inputValue = input?.value.trim() || '';
@@ -2284,7 +2307,6 @@ function applyFromUI() {
     if (!startId) { setStatus("Startknoten nicht gefunden"); return; }
     roots = [String(startId)];
   }
-  try { console.log('[apply] roots determined', { roots: roots.slice() }); } catch {}
 
   // Single-root or multi-root render
   if (roots.length === 1) {
@@ -2296,7 +2318,6 @@ function applyFromUI() {
     currentSubgraph = sub;
     renderGraph(sub);
     updateFooterStats(sub);
-    try { console.log('[apply] single-root rendered', { startId, nodes: sub.nodes.length, links: sub.links.length }); } catch {}
     
     // Scoped legend for single root
     const startType = byId.get(startId)?.type;
@@ -2461,6 +2482,9 @@ function applyFromUI() {
     // Multi-Root: Legende auf die Vereinigungsmenge der relevanten OEs einschränken
     buildOrgLegend(scopeOrgs);
   }
+  
+  // Titel der Hidden-Legende aktualisieren nach allen Graph-Berechnungen
+  updateHiddenLegendTitle();
 }
 
 /**
