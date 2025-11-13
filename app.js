@@ -673,6 +673,11 @@ function updateAttributeCircles() {
       .style('stroke', null)
       .style('stroke-width', null)
       .style('opacity', 1);
+    
+    // Labels auf Standard-Position zurücksetzen
+    nodes.selectAll('text.label')
+      .attr('x', 10);
+    
     return;
   }
   
@@ -689,6 +694,10 @@ function updateAttributeCircles() {
     .style('stroke-width', null)
     .style('opacity', 1);
   
+  // Labels auf Standard-Position zurücksetzen (werden später für Knoten mit Attributen angepasst)
+  nodes.selectAll('text.label')
+    .attr('x', 10);
+  
   // Neue Attribut-Kreise hinzufügen und Knoten mit Attributen identifizieren
   nodes.each(function(d) {
     if (!d) return; // Sicherheitsprüfung
@@ -696,6 +705,9 @@ function updateAttributeCircles() {
     const nodeGroup = d3.select(this);
     const personId = String(d.id);
     const nodeAttrs = personAttributes.get(personId);
+    
+    // Standardwert für Label-Position (ohne Attribute)
+    let outerMostRadius = nodeRadius;
     
     // Knoten mit Attributen prüfen
     if (nodeAttrs && nodeAttrs.size > 0) {
@@ -723,6 +735,13 @@ function updateAttributeCircles() {
           .style('fill', nodeWithAttributesFill)
           .style('stroke', nodeWithAttributesStroke)
           .style('stroke-width', nodeWithAttributesStrokeWidth);
+        
+        // Berechne äußersten Radius für Label-Positionierung
+        const attrCount = activeNodeAttrs.length;
+        if (attrCount > 0) {
+          // Äußerster Radius: nodeRadius + nodeStroke/2 + attrCount * (gap + width)
+          outerMostRadius = nodeRadius + (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth));
+        }
       }
       
       // Füge Attribute-Kreise von innen nach außen hinzu
@@ -745,6 +764,13 @@ function updateAttributeCircles() {
           .style("stroke-width", circleWidth);
       });
     }
+    
+    // Label-Position basierend auf dem äußersten Radius anpassen
+    // Füge einen kleinen Abstand hinzu (z.B. 3 Pixel)
+    const labelOffset = 3;
+    const labelPos = (outerMostRadius === nodeRadius) ? 10 : (outerMostRadius + labelOffset);
+    nodeGroup.select('text.label')
+      .attr('x', labelPos);
   });
   
   // Wenn es aktive Attribute gibt, wende Transparenz auf alle Knoten ohne Attribute an
