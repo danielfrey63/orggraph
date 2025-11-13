@@ -3964,6 +3964,60 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   }
   
+  // Toggle-All für OEs
+  const toggleAllOesBtn = document.getElementById('toggleAllOes');
+  if (toggleAllOesBtn) {
+    toggleAllOesBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      
+      // Prüfe ob mindestens eine OE ausgewählt ist
+      const hasAnySelected = allowedOrgs.size > 0;
+      
+      if (hasAnySelected) {
+        // Mindestens eine OE ist ausgewählt -> Alle abwählen
+        allowedOrgs.clear();
+        showTemporaryNotification('Alle OEs abgewählt');
+      } else {
+        // Keine OE ist ausgewählt -> Alle auswählen
+        raw.orgs.forEach(o => {
+          if (o && o.id) allowedOrgs.add(String(o.id));
+        });
+        showTemporaryNotification('Alle OEs ausgewählt');
+      }
+      
+      // Graph und Legende aktualisieren
+      syncGraphAndLegendColors();
+    });
+  }
+  
+  // Toggle-All für Attribute
+  const toggleAllAttributesBtn = document.getElementById('toggleAllAttributes');
+  if (toggleAllAttributesBtn) {
+    toggleAllAttributesBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      
+      // Prüfe ob mindestens ein Attribut ausgewählt ist
+      const hasAnySelected = activeAttributes.size > 0;
+      
+      if (hasAnySelected) {
+        // Mindestens ein Attribut ist ausgewählt -> Alle abwählen
+        activeAttributes.clear();
+        showTemporaryNotification('Alle Attribute abgewählt');
+      } else {
+        // Kein Attribut ist ausgewählt -> Alle auswählen
+        attributeTypes.forEach((color, key) => {
+          activeAttributes.add(key);
+        });
+        showTemporaryNotification('Alle Attribute ausgewählt');
+      }
+      
+      // Legende und Graph aktualisieren
+      buildAttributeLegend();
+      updateAttributeCircles();
+      updateAttributeStats();
+    });
+  }
+  
   // OE-Filter initialisieren
   const oeFilter = document.getElementById('oeFilter');
   if (oeFilter) {
