@@ -15,6 +15,9 @@ let raw = { nodes: [], links: [], persons: [], orgs: []};
 let personAttributes = new Map(); // Map von ID/Email zu Attribut-Maps
 let attributeTypes = new Map(); // Map von Attributnamen zu Farbwerten
 let activeAttributes = new Set(); // Menge der aktiven Attribute für die Anzeige
+let emptyCategories = new Set(); // Kategorien ohne Attribute (nur Platzhalter)
+let categorySourceFiles = new Map(); // Map Kategorie -> {filename, url, originalData}
+let modifiedCategories = new Set(); // Set von Kategorien mit Änderungen
 let byId = new Map();
 let allNodesUnique = [];
 let attributesVisible = true; // Flag für die Sichtbarkeit der Attribute
@@ -886,6 +889,9 @@ function applyLoadedDataObject(data, sourceName) {
       personAttributes = new Map();
       attributeTypes = new Map();
       activeAttributes = new Set();
+      emptyCategories = new Set();
+      categorySourceFiles = new Map();
+      modifiedCategories = new Set();
       buildAttributeLegend();
       document.getElementById('stats-attributes-count').textContent = '0';
     }
@@ -932,8 +938,36 @@ async function loadAttributesFromUrl(url) {
       throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     const text = await res.text();
-    const { attributes, types, count } = parseAttributeList(text);
+    const { attributes, types, count, isEmpty } = parseAttributeList(text);
     const category = categoryFromUrl(url);
+    
+    // Leere Datei = nur Kategorie ohne Attribute
+    if (isEmpty) {
+      // Registriere die leere Kategorie
+      emptyCategories.add(category);
+      
+      // Speichere Quell-Informationen auch für leere Kategorien
+      const filename = url.split('/').pop().split('?')[0];
+      categorySourceFiles.set(category, {
+        filename: filename || `${category}.txt`,
+        url: url,
+        originalText: text,
+        format: 'comma' // Default für leere Dateien
+      });
+      
+      // Update UI
+      buildAttributeLegend();
+      updateAttributeStats();
+      
+      return {
+        loaded: true,
+        matchedCount: 0,
+        unmatchedCount: 0,
+        totalAttributes: 0,
+        isEmpty: true,
+        category
+      };
+    }
     
     // Verknüpfe die geladenen Attribute mit den Personen-IDs
     const newPersonAttributes = new Map();
@@ -995,6 +1029,15 @@ async function loadAttributesFromUrl(url) {
       activeAttributes = new Set(attributeTypes.keys());
     }
     
+    // Speichere Quell-Informationen für späteres Speichern
+    const filename = url.split('/').pop().split('?')[0];
+    categorySourceFiles.set(category, {
+      filename: filename || `${category}.txt`,
+      url: url,
+      originalText: text,
+      format: text.includes('\t') ? 'tab' : 'comma'
+    });
+    
     // Update UI
     buildAttributeLegend();
     updateAttributeStats();
@@ -1054,7 +1097,12 @@ async function loadData() {
       try {
         const result = await loadAttributesFromUrl(u);
         if (result.loaded) {
-          showTemporaryNotification(`Attribute geladen (${categoryFromUrl(u)}): ${result.matchedCount} zugeordnet, ${result.unmatchedCount} nicht gefunden`, 2500);
+          const catName = categoryFromUrl(u);
+          if (result.isEmpty) {
+            showTemporaryNotification(`Kategorie "${catName}" geladen (leer - nur Platzhalter)`, 2500);
+          } else {
+            showTemporaryNotification(`Attribute geladen (${catName}): ${result.matchedCount} zugeordnet, ${result.unmatchedCount} nicht gefunden`, 2500);
+          }
         }
       } catch (error) {
         console.error('Automatisches Laden der Attribute fehlgeschlagen:', error);
@@ -1831,25 +1879,383 @@ function showLegendMenu(x, y, actions) {
 }
 function hideLegendMenu() { if (legendMenuEl) legendMenuEl.style.display = 'none'; }
 
+/**
+ * Fügt einen Knoten zu einem Attribut hinzu
+ */
+function addNodeToAttribute(nodeId, categoryKey, attributeName, attributeValue = '1') {
+  const personId = String(nodeId);
+  
+  // Erstelle Attribut-Key im Format "Kategorie::Attribut"
+  const attrKey = `${categoryKey}::${attributeName}`;
+  
+  // Füge Attribut zur Person hinzu
+  if (!personAttributes.has(personId)) {
+    personAttributes.set(personId, new Map());
+  }
+  personAttributes.get(personId).set(attrKey, attributeValue);
+  
+  // Füge Attributtyp hinzu, falls noch nicht vorhanden
+  if (!attributeTypes.has(attrKey)) {
+    const existingInCategory = Array.from(attributeTypes.keys())
+      .filter(k => String(k).startsWith(categoryKey + '::')).length;
+    const color = colorForCategoryAttribute(categoryKey, attributeName, existingInCategory);
+    attributeTypes.set(attrKey, color);
+    
+    // Falls dies das erste Attribut in einer leeren Kategorie ist, entferne sie aus emptyCategories
+    if (emptyCategories.has(categoryKey)) {
+      emptyCategories.delete(categoryKey);
+    }
+  }
+  
+  // Aktiviere das Attribut automatisch
+  activeAttributes.add(attrKey);
+  
+  // Markiere Kategorie als geändert
+  modifiedCategories.add(categoryKey);
+  console.log(`Kategorie "${categoryKey}" als geändert markiert. Hat Quelle:`, categorySourceFiles.has(categoryKey));
+  
+  // UI aktualisieren
+  buildAttributeLegend();
+  updateAttributeStats();
+  updateAttributeCircles();
+  
+  const nodeName = byId.get(personId)?.label || personId;
+  showTemporaryNotification(`"${attributeName}" zu ${nodeName} hinzugefügt`);
+}
+
+/**
+ * Erstellt ein hierarchisches Attribut-Menü als Submenu
+ */
+function addAttributeSubmenu(parentItem, mainMenu, nodeId) {
+  let submenu = null;
+  let submenuVisible = false;
+  
+  const showSubmenu = () => {
+    if (submenuVisible) return;
+    
+    // Erstelle Submenu
+    submenu = document.createElement('div');
+    submenu.className = 'node-context-menu';
+    submenu.setAttribute('data-level', '2');
+    submenu.style.display = 'block';
+    
+    // Position rechts neben dem Parent-Item
+    const rect = parentItem.getBoundingClientRect();
+    submenu.style.left = `${rect.right}px`;
+    submenu.style.top = `${rect.top}px`;
+    
+    // Kategorien sammeln
+    const categories = new Map();
+    for (const key of attributeTypes.keys()) {
+      const [cat, name] = String(key).includes('::') ? String(key).split('::') : ['Attribute', String(key)];
+      if (!categories.has(cat)) categories.set(cat, []);
+      categories.get(cat).push({ key, name });
+    }
+    
+    // Leere Kategorien hinzufügen
+    for (const cat of emptyCategories) {
+      if (!categories.has(cat)) {
+        categories.set(cat, []);
+      }
+    }
+    
+    // Falls keine Attribute und keine leeren Kategorien vorhanden, nur "neue Kategorie" anzeigen
+    if (categories.size === 0) {
+      const item = createSubmenuItem('+ neue Kategorie ...', () => {
+        hideAllMenus();
+        promptNewCategory(nodeId);
+      });
+      submenu.appendChild(item);
+    } else {
+      // Kategorien sortieren und rendern - HIERARCHISCH
+      const sortedCats = Array.from(categories.keys()).sort();
+      
+      for (const cat of sortedCats) {
+        const attrs = categories.get(cat).sort((a, b) => a.name.localeCompare(b.name));
+        
+        // Kategorie als klickbares Item mit Pfeil (öffnet Sub-Submenu)
+        const catItem = createCategorySubmenuItem(cat, attrs, nodeId, hideAllMenus);
+        submenu.appendChild(catItem);
+      }
+      
+      // Trennlinie vor "neue Kategorie"
+      const divider = document.createElement('div');
+      divider.className = 'menu-divider';
+      submenu.appendChild(divider);
+      
+      // "neue Kategorie..." am Ende
+      const newCatItem = createSubmenuItem('+ neue Kategorie ...', () => {
+        hideAllMenus();
+        promptNewCategory(nodeId);
+      });
+      submenu.appendChild(newCatItem);
+    }
+    
+    document.body.appendChild(submenu);
+    submenuVisible = true;
+  };
+  
+  const hideSubmenu = () => {
+    if (submenu && submenu.parentNode) {
+      submenu.parentNode.removeChild(submenu);
+    }
+    submenu = null;
+    submenuVisible = false;
+  };
+  
+  const hideAllMenus = () => {
+    // Verstecke alle Kategorie-Submenus
+    document.querySelectorAll('.node-context-menu[data-level="3"]').forEach(sub => sub.remove());
+    hideSubmenu();
+    mainMenu.style.display = 'none';
+  };
+  
+  // Event-Handler für Parent-Item
+  parentItem.addEventListener('mouseenter', showSubmenu);
+  parentItem.addEventListener('mouseleave', (e) => {
+    // Prüfe, ob Maus zum Submenu gewechselt hat
+    setTimeout(() => {
+      const hasActiveCategoryMenu = document.querySelector('.node-context-menu[data-level="3"]');
+      const isCategoryMenuHovered = hasActiveCategoryMenu && hasActiveCategoryMenu.matches(':hover');
+      
+      if (submenu && !submenu.matches(':hover') && !parentItem.matches(':hover') && !isCategoryMenuHovered) {
+        hideSubmenu();
+      }
+    }, 100);
+  });
+  
+  // Klick auf Parent öffnet/schließt Submenu
+  parentItem.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (submenuVisible) {
+      hideSubmenu();
+    } else {
+      showSubmenu();
+    }
+  });
+  
+  // Event-Handler für Submenu (falls erstellt)
+  const setupSubmenuHandlers = () => {
+    if (!submenu) return;
+    
+    submenu.addEventListener('mouseleave', (e) => {
+      setTimeout(() => {
+        // Prüfe ob ein Kategorie-Submenu (Ebene 3) aktiv ist
+        const hasActiveCategoryMenu = document.querySelector('.node-context-menu[data-level="3"]');
+        const isCategoryMenuHovered = hasActiveCategoryMenu && hasActiveCategoryMenu.matches(':hover');
+        
+        if (!submenu.matches(':hover') && !parentItem.matches(':hover') && !isCategoryMenuHovered) {
+          hideSubmenu();
+        }
+      }, 100);
+    });
+  };
+  
+  // Setup-Handler nach Delay, damit Submenu erstellt wurde
+  parentItem.addEventListener('mouseenter', () => {
+    setTimeout(setupSubmenuHandlers, 10);
+  });
+}
+
+/**
+ * Erstellt ein Submenu-Item mit Hover-Effekt
+ */
+function createSubmenuItem(label, handler) {
+  const item = document.createElement('div');
+  item.className = 'menu-item';
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'menu-item-label';
+  labelSpan.textContent = label;
+  item.appendChild(labelSpan);
+  item.onclick = handler;
+  return item;
+}
+
+/**
+ * Erstellt ein hierarchisches Kategorie-Item mit eigenem Submenu
+ */
+function createCategorySubmenuItem(categoryName, attributes, nodeId, hideAllMenus) {
+  const item = document.createElement('div');
+  item.className = 'menu-item';
+  
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'menu-item-label';
+  labelSpan.textContent = categoryName;
+  item.appendChild(labelSpan);
+  
+  const arrow = document.createElement('span');
+  arrow.className = 'menu-item-arrow';
+  arrow.textContent = '▶';
+  item.appendChild(arrow);
+  
+  let categorySubmenu = null;
+  let categorySubmenuVisible = false;
+  
+  const showCategorySubmenu = () => {
+    if (categorySubmenuVisible) return;
+    
+    // Verstecke alle anderen Kategorie-Submenus
+    document.querySelectorAll('.node-context-menu[data-level="3"]').forEach(sub => {
+      if (sub !== categorySubmenu) {
+        sub.remove();
+      }
+    });
+    
+    // Erstelle Kategorie-Submenu
+    categorySubmenu = document.createElement('div');
+    categorySubmenu.className = 'node-context-menu';
+    categorySubmenu.setAttribute('data-level', '3');
+    categorySubmenu.style.display = 'block';
+    
+    // Position rechts neben dem Kategorie-Item
+    const rect = item.getBoundingClientRect();
+    categorySubmenu.style.left = `${rect.right}px`;
+    categorySubmenu.style.top = `${rect.top}px`;
+    
+    // Attribute der Kategorie hinzufügen
+    if (attributes.length > 0) {
+      for (const attr of attributes) {
+        const attrItem = createSubmenuItem(attr.name, () => {
+          hideAllMenus();
+          addNodeToAttribute(nodeId, categoryName, attr.name);
+        });
+        categorySubmenu.appendChild(attrItem);
+      }
+      
+      // Trennlinie
+      const divider = document.createElement('div');
+      divider.className = 'menu-divider';
+      categorySubmenu.appendChild(divider);
+    }
+    
+    // "neues Attribut..." für diese Kategorie
+    const newAttrItem = createSubmenuItem('+ neues Attribut ...', () => {
+      hideAllMenus();
+      promptNewAttribute(nodeId, categoryName);
+    });
+    categorySubmenu.appendChild(newAttrItem);
+    
+    document.body.appendChild(categorySubmenu);
+    categorySubmenuVisible = true;
+    
+    // Event-Handler für Kategorie-Submenu
+    categorySubmenu.addEventListener('mouseleave', (e) => {
+      setTimeout(() => {
+        // Schließe nur das Kategorie-Submenu, nicht das Parent-Submenu
+        if (!categorySubmenu.matches(':hover') && !item.matches(':hover')) {
+          hideCategorySubmenu();
+        }
+      }, 100);
+    });
+  };
+  
+  const hideCategorySubmenu = () => {
+    if (categorySubmenu && categorySubmenu.parentNode) {
+      categorySubmenu.parentNode.removeChild(categorySubmenu);
+    }
+    categorySubmenu = null;
+    categorySubmenuVisible = false;
+  };
+  
+  // Event-Handler für Kategorie-Item
+  item.addEventListener('mouseenter', () => {
+    showCategorySubmenu();
+  });
+  
+  item.addEventListener('mouseleave', (e) => {
+    setTimeout(() => {
+      if (categorySubmenu && !categorySubmenu.matches(':hover') && !item.matches(':hover')) {
+        hideCategorySubmenu();
+      }
+    }, 100);
+  });
+  
+  return item;
+}
+
+/**
+ * Exportiert die Attribute einer Kategorie als CSV/TSV Datei
+ */
+function exportCategoryAttributes(categoryName) {
+  const sourceInfo = categorySourceFiles.get(categoryName);
+  if (!sourceInfo) {
+    showTemporaryNotification(`Keine Quell-Informationen für Kategorie "${categoryName}" gefunden`, 3000);
+    return;
+  }
+  
+  const separator = sourceInfo.format === 'tab' ? '\t' : ',';
+  const lines = [];
+  
+  // Sammle alle Personen mit Attributen in dieser Kategorie
+  for (const [personId, attrs] of personAttributes.entries()) {
+    for (const [attrKey, attrValue] of attrs.entries()) {
+      const [cat, attrName] = String(attrKey).includes('::') ? String(attrKey).split('::') : ['Attribute', String(attrKey)];
+      
+      if (cat === categoryName) {
+        // Versuche E-Mail oder ID zu finden
+        const person = byId.get(personId);
+        const identifier = person?.email || personId;
+        
+        // Nur 2 Spalten: ID/Email und Attributname (ohne Wert)
+        lines.push(`${identifier}${separator}${attrName}`);
+      }
+    }
+  }
+  
+  // Sortiere alphabetisch
+  lines.sort();
+  
+  const content = lines.join('\n');
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = sourceInfo.filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  // Markiere Kategorie als nicht mehr geändert
+  modifiedCategories.delete(categoryName);
+  buildAttributeLegend();
+  
+  showTemporaryNotification(`"${sourceInfo.filename}" heruntergeladen`, 2000);
+}
+
+/**
+ * Prompt für neues Attribut in bestehender Kategorie
+ */
+function promptNewAttribute(nodeId, category) {
+  const name = prompt(`Neues Attribut für Kategorie "${category}":`, '');
+  if (!name || !name.trim()) return;
+  
+  // Wert ist immer "1" - wird für Zählzwecke verwendet
+  addNodeToAttribute(nodeId, category, name.trim(), '1');
+}
+
+/**
+ * Prompt für neue Kategorie
+ */
+function promptNewCategory(nodeId) {
+  const category = prompt('Name der neuen Kategorie:', '');
+  if (!category || !category.trim()) return;
+  
+  const attrName = prompt(`Attributname für "${category.trim()}":`, '');
+  if (!attrName || !attrName.trim()) return;
+  
+  // Wert ist immer "1" - wird für Zählzwecke verwendet
+  addNodeToAttribute(nodeId, category.trim(), attrName.trim(), '1');
+}
+
 function ensureNodeMenu() {
   if (nodeMenuEl) return nodeMenuEl;
   const el = document.createElement('div');
-  el.style.position = 'fixed';
-  el.style.background = '#111';
-  el.style.color = '#fff';
-  el.style.fontSize = '12px';
-  el.style.padding = '6px 0';
-  el.style.borderRadius = '6px';
-  el.style.minWidth = '160px';
-  el.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)';
-  el.style.zIndex = 2000;
-  el.style.display = 'none';
+  el.className = 'node-context-menu';
   const it = document.createElement('div');
+  it.className = 'menu-item';
   it.textContent = 'Ausblenden';
-  it.style.padding = '6px 12px';
-  it.style.cursor = 'pointer';
-  it.addEventListener('mouseenter', () => it.style.background = '#1f2937');
-  it.addEventListener('mouseleave', () => it.style.background = 'transparent');
   el.appendChild(it);
   document.body.appendChild(el);
   nodeMenuEl = el;
@@ -1860,18 +2266,32 @@ function showNodeMenu(x, y, actionsOrOnHide) {
   const el = ensureNodeMenu();
   // Menü dynamisch aufbauen, aber Abwärtskompatibilität für alte Signatur behalten
   // Alte Signatur: actionsOrOnHide ist eine Funktion (Ausblenden)
-  // Neue Signatur: Objekt { onHideSubtree, onRemoveRoot, isRoot }
+  // Neue Signatur: Objekt { onHideSubtree, onRemoveRoot, isRoot, nodeId }
   while (el.firstChild) el.removeChild(el.firstChild);
-  const addItem = (label, handler) => {
+  
+  const addItem = (label, handler, hasSubmenu = false) => {
     const it = document.createElement('div');
-    it.textContent = label;
-    it.style.padding = '6px 12px';
-    it.style.cursor = 'pointer';
-    it.addEventListener('mouseenter', () => it.style.background = '#1f2937');
-    it.addEventListener('mouseleave', () => it.style.background = 'transparent');
-    it.onclick = () => { el.style.display = 'none'; handler && handler(); };
+    it.className = 'menu-item';
+    
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'menu-item-label';
+    labelSpan.textContent = label;
+    it.appendChild(labelSpan);
+    
+    if (hasSubmenu) {
+      const arrow = document.createElement('span');
+      arrow.className = 'menu-item-arrow';
+      arrow.textContent = '▶';
+      it.appendChild(arrow);
+    }
+    
+    if (!hasSubmenu) {
+      it.onclick = () => { el.style.display = 'none'; handler && handler(); };
+    }
     el.appendChild(it);
+    return it;
   };
+  
   if (typeof actionsOrOnHide === 'function') {
     addItem('Ausblenden', actionsOrOnHide);
   } else {
@@ -1879,6 +2299,12 @@ function showNodeMenu(x, y, actionsOrOnHide) {
     if (actions.onHideSubtree) addItem('Ausblenden', actions.onHideSubtree);
     if (actions.isRoot && actions.onRemoveRoot && Array.isArray(selectedRootIds) && selectedRootIds.length > 1) {
       addItem('Als Root entfernen', actions.onRemoveRoot);
+    }
+    
+    // Attribute-Menü hinzufügen
+    if (actions.nodeId) {
+      const attrMenuItem = addItem('Attribute', null, true);
+      addAttributeSubmenu(attrMenuItem, el, actions.nodeId);
     }
   }
   el.style.left = `${x}px`;
@@ -2094,7 +2520,8 @@ function renderGraph(sub) {
     showNodeMenu(event.clientX, event.clientY, {
       onHideSubtree: () => hideSubtreeFromRoot(pid),
       isRoot: isRoot(pid),
-      onRemoveRoot: () => { removeRoot(pid); applyFromUI(); }
+      onRemoveRoot: () => { removeRoot(pid); applyFromUI(); },
+      nodeId: pid
     });
   });
 
@@ -2535,6 +2962,16 @@ function parseAttributeList(text) {
   const foundAttributes = new Set();
   let count = 0;
   
+  // Leere Dateien sind erlaubt - repräsentieren eine Kategorie ohne Attribute
+  if (lines.length === 0) {
+    return { 
+      attributes: result, 
+      types: Array.from(foundAttributes),
+      count: 0,
+      isEmpty: true
+    };
+  }
+  
   for (const line of lines) {
     // Zeilenweise das Trennzeichen erkennen (Tab oder Komma)
     let separator = ',';
@@ -2566,7 +3003,8 @@ function parseAttributeList(text) {
   return { 
     attributes: result, 
     types: Array.from(foundAttributes),
-    count
+    count,
+    isEmpty: false
   };
 }
 
@@ -2751,7 +3189,31 @@ function findPersonIdsByIdentifier(identifier) {
 async function loadAttributesFromFile(file) {
   try {
     const text = await file.text();
-    const { attributes, types, count } = parseAttributeList(text);
+    const { attributes, types, count, isEmpty } = parseAttributeList(text);
+    
+    // Leere Datei = nur Kategorie ohne Attribute
+    if (isEmpty) {
+      const category = file.name.replace(/\.[^/.]+$/, ''); // Dateiname ohne Extension
+      
+      // Registriere die leere Kategorie
+      emptyCategories.add(category);
+      
+      // Speichere Quell-Informationen auch für leere Kategorien
+      categorySourceFiles.set(category, {
+        filename: file.name,
+        url: null, // Von Datei geladen, nicht von URL
+        originalText: text,
+        format: 'comma' // Default für leere Dateien
+      });
+      
+      showTemporaryNotification(`Kategorie "${category}" geladen (leer - nur Platzhalter)`, 3000);
+      
+      // UI aktualisieren
+      buildAttributeLegend();
+      updateAttributeStats();
+      
+      return true;
+    }
     
     // Erkenne das verwendete Format für die Statusmeldung
     const hasTabFormat = text.includes('\t');
@@ -2958,6 +3420,15 @@ async function loadAttributesFromFile(file) {
     // Setze die neuen Attribute und aktualisiere
     personAttributes = newPersonAttributes;
     
+    // Speichere Quell-Informationen für späteres Speichern
+    const category = file.name.replace(/\.[^/.]+$/, '');
+    categorySourceFiles.set(category, {
+      filename: file.name,
+      url: null, // Von Datei geladen, nicht von URL
+      originalText: text,
+      format: hasTabFormat ? 'tab' : 'comma'
+    });
+    
     // UI aktualisieren
     buildAttributeLegend();
     updateAttributeStats();
@@ -3003,6 +3474,10 @@ function getEyeSVG(closed = false) {
   return `<i class="codicon codicon-eye" aria-hidden="true"></i>`;
 }
 
+function getSaveSVG() {
+  return `<i class="codicon codicon-save" aria-hidden="true"></i>`;
+}
+
 function updateCheckboxIcon(checkboxElement, checked) {
   checkboxElement.innerHTML = getCheckboxSVG(checked);
   checkboxElement.className = checked ? 
@@ -3025,7 +3500,7 @@ function buildAttributeLegend() {
   if (!legend) return;
 
   legend.innerHTML = '';
-  if (attributeTypes.size === 0) {
+  if (attributeTypes.size === 0 && emptyCategories.size === 0) {
     legend.innerHTML = '<div class="attribute-empty">Keine Attribute geladen</div>';
     updateAttributeStats();
     return;
@@ -3050,6 +3525,13 @@ function buildAttributeLegend() {
       color: attributeTypes.get(key),
       count: typeCount.get(key) || 0
     });
+  }
+  
+  // Leere Kategorien hinzufügen (ohne Attribute)
+  for (const cat of emptyCategories) {
+    if (!categories.has(cat)) {
+      categories.set(cat, []);
+    }
   }
 
   // Liste erstellen mit legend-list (wie OEs)
@@ -3148,6 +3630,31 @@ function buildAttributeLegend() {
     });
     
     catRightArea.appendChild(eyeBtn);
+    
+    // Save-Button (nur sichtbar wenn Kategorie geändert wurde)
+    const isModified = modifiedCategories.has(cat);
+    const hasSource = categorySourceFiles.has(cat);
+    
+    // Debug: Log wenn eine Kategorie geändert wurde aber keinen Source hat
+    if (isModified && !hasSource) {
+      console.log(`Kategorie "${cat}" ist geändert, hat aber keine Quelldatei. Verfügbare Quellen:`, Array.from(categorySourceFiles.keys()));
+    }
+    
+    if (isModified && hasSource) {
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'legend-icon-btn save-btn';
+      saveBtn.title = `Änderungen in "${cat}" speichern`;
+      saveBtn.innerHTML = getSaveSVG();
+      saveBtn.setAttribute('data-ignore-header-click', 'true');
+      
+      saveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        exportCategoryAttributes(cat);
+      });
+      
+      catRightArea.appendChild(saveBtn);
+    }
     
     // Bereiche zu Kategorie-Row hinzufügen
     catRow.appendChild(catLeftArea);

@@ -163,54 +163,32 @@
         <div class="export-options">
           <div class="export-option-group">
             <h3>Format</h3>
-            <div class="radio-group">
-              <label>
-                <input type="radio" name="exportFormat" value="svg" checked>
-                <span>SVG</span>
-              </label>
-              <label>
-                <input type="radio" name="exportFormat" value="png">
-                <span>PNG</span>
-              </label>
+            <div class="format-button-group">
+              <button class="format-btn" data-format="svg">SVG</button>
+              <button class="format-btn active" data-format="png">PNG</button>
             </div>
           </div>
           
-          <div id="svgOptions" class="export-option-group">
-            <button id="downloadSvg" class="export-btn">SVG herunterladen</button>
+          <div id="svgOptions" class="export-option-group" style="display:none;">
+            <button id="downloadSvg" class="export-btn-large">SVG herunterladen</button>
           </div>
           
-          <div id="pngOptions" class="export-option-group" style="display:none;">
+          <div id="pngOptions" class="export-option-group">
             <h3>Auflösung</h3>
-            <div class="resolution-options">
-              <div class="resolution-presets">
-                <button class="resolution-preset" data-width="1200" data-height="800">1200 × 800</button>
-                <button class="resolution-preset" data-width="1920" data-height="1080">1920 × 1080</button>
-                <button class="resolution-preset" data-width="2560" data-height="1440">2560 × 1440</button>
-                <button class="resolution-preset" data-width="3840" data-height="2160">3840 × 2160</button>
-              </div>
-              <div class="custom-resolution">
-                <h4>Benutzerdefiniert</h4>
-                <div class="resolution-inputs">
-                  <div class="resolution-input-group">
-                    <label for="customWidth">Breite</label>
-                    <input type="number" id="customWidth" value="1200" min="100" max="10000">
-                  </div>
-                  <div class="resolution-input-group">
-                    <label for="customHeight">Höhe</label>
-                    <input type="number" id="customHeight" value="800" min="100" max="10000">
-                  </div>
-                </div>
-              </div>
+            <div class="resolution-grid">
+              <button class="resolution-preset active" data-width="1200" data-height="800">1200 × 800</button>
+              <button class="resolution-preset" data-width="1920" data-height="1080">1920 × 1080</button>
+              <button class="resolution-preset" data-width="2560" data-height="1440">2560 × 1440</button>
+              <button class="resolution-preset" data-width="3840" data-height="2160">3840 × 2160</button>
             </div>
-            <h3>Qualität</h3>
-            <div class="quality-slider">
-              <input type="range" id="qualitySlider" min="1" max="4" step="0.5" value="2">
-              <div class="quality-labels">
-                <span>Schneller</span>
-                <span>Besser</span>
-              </div>
+            
+            <h3>Benutzerdefiniert</h3>
+            <div class="custom-resolution-inline">
+              <input type="number" id="customWidth" value="1200" min="100" max="10000">
+              <input type="number" id="customHeight" value="800" min="100" max="10000">
             </div>
-            <button id="downloadPng" class="export-btn">PNG herunterladen</button>
+            
+            <button id="downloadPng" class="export-btn-large">PNG herunterladen</button>
           </div>
         </div>
       </div>

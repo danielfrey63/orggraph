@@ -1451,16 +1451,16 @@ body > .combo-list li {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(2px);
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
 }
 
 .modal-container {
   background-color: var(--panel-bg);
-  border-radius: 8px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   width: 90%;
-  max-width: 600px;
+  max-width: 300px;
   max-height: 90vh;
   overflow: auto;
   position: relative;
@@ -1471,13 +1471,13 @@ body > .combo-list li {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 24px 32px;
   border-bottom: 1px solid var(--panel-border);
 }
 
 .modal-header h2 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   font-weight: 600;
   color: var(--text-strong);
 }
@@ -1485,11 +1485,12 @@ body > .combo-list li {
 .modal-close-btn {
   background: transparent;
   border: none;
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   line-height: 1;
   padding: 0;
   color: var(--text-muted);
   cursor: pointer;
+  transition: color 0.2s;
 }
 
 .modal-close-btn:hover {
@@ -1497,7 +1498,7 @@ body > .combo-list li {
 }
 
 .modal-content {
-  padding: 20px;
+  padding: 24px;
 }
 
 .export-options {
@@ -1507,117 +1508,205 @@ body > .combo-list li {
 }
 
 .export-option-group {
-  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .export-option-group h3 {
-  margin: 0 0 12px 0;
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: 0.02em;
+}
+
+.export-option-group h3:not(:first-child) {
+  margin-top: 20px;
+}
+
+/* Format Button Group - Pill Style */
+.format-button-group {
+  display: flex;
+  gap: 12px;
+}
+
+.format-btn {
+  flex: 1;
+  padding: 12px 24px;
+  border-radius: 8px;
+  border: 1px solid var(--control-border);
+  background-color: var(--control-bg);
+  color: var(--text);
   font-size: 1rem;
   font-weight: 600;
-  color: var(--text-strong);
-}
-
-.export-option-group h4 {
-  margin: 12px 0 8px 0;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.radio-group {
-  display: flex;
-  gap: 16px;
-}
-
-.radio-group label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.resolution-options {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.format-btn:hover {
+  background-color: var(--control-hover);
+  border-color: var(--active-toggle-bg);
 }
 
-.resolution-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.format-btn.active {
+  background-color: var(--active-toggle-bg);
+  color: white;
+  border-color: var(--active-toggle-bg);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+}
+
+/* Resolution Grid - 2x2 Layout */
+.resolution-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
 }
 
 .resolution-preset {
+  padding: 12px 16px;
+  border-radius: 8px;
   border: 1px solid var(--control-border);
   background-color: var(--control-bg);
   color: var(--text);
-  padding: 6px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.resolution-preset:hover, .resolution-preset.active {
-  background-color: var(--active-toggle-bg);
-  color: var(--active-toggle-color);
-  border-color: transparent;
-}
-
-.resolution-inputs {
-  display: flex;
-  gap: 16px;
-}
-
-.resolution-input-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.resolution-input-group label {
-  font-size: 0.9rem;
-  color: var(--text-muted);
-}
-
-.resolution-input-group input {
-  width: 120px;
-  padding: 6px;
-  border-radius: 4px;
-  border: 1px solid var(--control-border);
-  background-color: var(--control-bg);
-  color: var(--text);
-}
-
-.quality-slider {
-  margin-bottom: 16px;
-}
-
-.quality-slider input[type="range"] {
-  width: 100%;
-  margin: 8px 0;
-}
-
-.quality-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.export-btn {
-  background-color: var(--active-toggle-bg);
-  color: var(--active-toggle-color);
-  border: none;
-  padding: 10px 16px;
-  border-radius: 6px;
+  font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
-  font-size: 1rem;
-  transition: background-color 0.2s, transform 0.1s;
+  transition: all 0.2s ease;
 }
 
-.export-btn:hover {
-  background-color: var(--button-primary-hover, #3a5bd7);
-  transform: translateY(-1px);
+.resolution-preset:hover {
+  background-color: var(--control-hover);
+  border-color: var(--active-toggle-bg);
+}
+
+.resolution-preset.active {
+  background-color: var(--active-toggle-bg);
+  color: white;
+  border-color: var(--active-toggle-bg);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+}
+
+/* Custom Resolution - Inline with Spinner */
+.custom-resolution-inline {
+  display: flex;
+  gap: 12px;
+}
+
+.custom-resolution-inline input {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--control-border);
+  background-color: var(--control-bg);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 500;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.custom-resolution-inline input:focus {
+  outline: none;
+  border-color: var(--active-toggle-bg);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.custom-resolution-inline input::-webkit-outer-spin-button,
+.custom-resolution-inline input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Large Download Button */
+.export-btn-large {
+  width: 100%;
+  padding: 16px 24px;
+  border-radius: 8px;
+  border: none;
+  background-color: var(--active-toggle-bg);
+  color: white;
+  font-size: 1.125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  margin-top: 8px;
+}
+
+.export-btn-large:hover {
+  background-color: var(--button-primary-hover, #5558e3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.export-btn-large:active {
+  transform: translateY(0);
+}
+
+/* Context Menus */
+.node-context-menu {
+  position: fixed;
+  background: #111;
+  color: #fff;
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 0px 3px;
+  min-width: 160px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  z-index: 2000;
+  display: none;
+}
+
+.menu-item {
+  padding: 0px 6px;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.menu-item:hover {
+  background: #1f2937;
+}
+
+.menu-item-label {
+  flex: 1;
+}
+
+.menu-item-arrow {
+  font-size: 10px;
+  margin-left: 8px;
+}
+
+/* Submenüs nutzen höhere z-index Werte */
+.node-context-menu[data-level="2"] {
+  z-index: 2001;
+  min-width: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.node-context-menu[data-level="3"] {
+  z-index: 2002;
+  min-width: 180px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.menu-divider {
+  border-top: 1px solid #374151;
+  margin: 4px 0;
+}
+
+/* Save Button für geänderte Kategorien - gleiche Farbe wie andere Icons */
+.legend-icon-btn.save-btn {
+  /* Nutzt dieselbe Farbe wie andere legend-icon-btn */
+}
+
+.legend-icon-btn.save-btn:hover {
+  /* Nutzt dasselbe Hover-Verhalten wie andere legend-icon-btn */
 }

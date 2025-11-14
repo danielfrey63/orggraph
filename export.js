@@ -6,7 +6,7 @@
 let exportModal = null;
 let exportOverlay = null;
 let exportCloseBtn = null;
-let exportFormatRadios = null;
+let exportFormatBtns = null;
 let svgOptionsDiv = null;
 let pngOptionsDiv = null;
 let downloadSvgBtn = null;
@@ -14,7 +14,6 @@ let downloadPngBtn = null;
 let resolutionPresets = null;
 let customWidthInput = null;
 let customHeightInput = null;
-let qualitySlider = null;
 
 /**
  * Initialisiere den Export-Dialog und die zugehörigen Event-Listener
@@ -24,7 +23,7 @@ function initializeExport() {
   exportModal = document.getElementById('exportModal');
   exportOverlay = exportModal.querySelector('.modal-overlay');
   exportCloseBtn = exportModal.querySelector('.modal-close-btn');
-  exportFormatRadios = exportModal.querySelectorAll('input[name="exportFormat"]');
+  exportFormatBtns = exportModal.querySelectorAll('.format-btn');
   svgOptionsDiv = document.getElementById('svgOptions');
   pngOptionsDiv = document.getElementById('pngOptions');
   downloadSvgBtn = document.getElementById('downloadSvg');
@@ -32,7 +31,6 @@ function initializeExport() {
   resolutionPresets = document.querySelectorAll('.resolution-preset');
   customWidthInput = document.getElementById('customWidth');
   customHeightInput = document.getElementById('customHeight');
-  qualitySlider = document.getElementById('qualitySlider');
   
   // Export-Button Event-Listener
   const exportBtn = document.getElementById('exportBtn');
@@ -50,10 +48,41 @@ function initializeExport() {
     exportOverlay.addEventListener('click', hideExportDialog);
   }
   
-  // Format-Umschaltung zwischen SVG und PNG
-  exportFormatRadios.forEach(radio => {
-    radio.addEventListener('change', () => {
-      const format = radio.value;
+  // Keyboard-Event-Listener für Enter-Taste
+  document.addEventListener('keydown', (e) => {
+    // Nur wenn Modal geöffnet ist
+    if (exportModal && exportModal.style.display === 'flex') {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        
+        // Bestimme welches Format aktiv ist
+        const activeFormatBtn = exportModal.querySelector('.format-btn.active');
+        const format = activeFormatBtn ? activeFormatBtn.dataset.format : 'png';
+        
+        // Trigger entsprechenden Download
+        if (format === 'svg') {
+          exportAsSvg();
+        } else {
+          exportAsPng();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        hideExportDialog();
+      }
+    }
+  });
+  
+  // Format-Umschaltung zwischen SVG und PNG mit Buttons
+  exportFormatBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const format = btn.dataset.format;
+      
+      // Aktiven Zustand für alle Buttons entfernen
+      exportFormatBtns.forEach(b => b.classList.remove('active'));
+      // Aktiven Zustand für geklickten Button setzen
+      btn.classList.add('active');
+      
+      // Optionen anzeigen/verstecken
       if (format === 'svg') {
         svgOptionsDiv.style.display = 'block';
         pngOptionsDiv.style.display = 'none';
@@ -77,6 +106,36 @@ function initializeExport() {
       customHeightInput.value = preset.dataset.height;
     });
   });
+  
+  // Event-Listener für Custom-Resolution-Eingabefelder
+  if (customWidthInput) {
+    // Entferne active von Presets bei Eingabe
+    customWidthInput.addEventListener('input', () => {
+      resolutionPresets.forEach(p => p.classList.remove('active'));
+    });
+    // Auto-Select beim Focus
+    customWidthInput.addEventListener('focus', function() {
+      this.select();
+    });
+    // Auto-Select beim Klick (für den Fall, dass bereits fokussiert)
+    customWidthInput.addEventListener('click', function() {
+      this.select();
+    });
+  }
+  if (customHeightInput) {
+    // Entferne active von Presets bei Eingabe
+    customHeightInput.addEventListener('input', () => {
+      resolutionPresets.forEach(p => p.classList.remove('active'));
+    });
+    // Auto-Select beim Focus
+    customHeightInput.addEventListener('focus', function() {
+      this.select();
+    });
+    // Auto-Select beim Klick (für den Fall, dass bereits fokussiert)
+    customHeightInput.addEventListener('click', function() {
+      this.select();
+    });
+  }
   
   // SVG-Download
   downloadSvgBtn.addEventListener('click', exportAsSvg);
@@ -198,8 +257,8 @@ function exportAsPng() {
     const width = parseInt(customWidthInput.value, 10) || 1200;
     const height = parseInt(customHeightInput.value, 10) || 800;
     
-    // Qualitätsfaktor (Pixeldichte) aus dem Slider abrufen
-    const quality = parseFloat(qualitySlider.value) || 2.0;
+    // Qualitätsfaktor (Pixeldichte) - immer Maximum für beste Qualität
+    const quality = 4.0;
     
     // Aktuellen Inhalt des SVGs klonen und für Export aufbereiten
     const svgClone = svgElement.cloneNode(true);
