@@ -2465,108 +2465,98 @@ function renderGraph(sub) {
     });
   }
   
-  // Hilfsfunktion: Finde Parent eines Knotens im Graph [SF]
-  const findParentInGraph = (nodeId, links) => {
-    // Suche Link wo nodeId das Target ist (Down-Link: Parent -> Kind)
-    for (const link of links) {
-      if (idOf(link.target) === nodeId) {
-        return idOf(link.source);
-      }
+  // Hilfsfunktion: Positioniere Knoten gleichmäßig im Kreis um Parent [SF]
+  const positionNodesInCircle = (nodes, centerX, centerY, radius, startAngle = 0) => {
+    if (nodes.length === 0) return;
+    
+    if (nodes.length === 1) {
+      // Einzelner Knoten: direkt beim Winkel positionieren
+      nodes[0].x = centerX + radius * Math.cos(startAngle);
+      nodes[0].y = centerY + radius * Math.sin(startAngle);
+    } else {
+      // Mehrere Knoten: gleichmäßig verteilt
+      const angleStep = (2 * Math.PI) / nodes.length;
+      nodes.forEach((node, idx) => {
+        const angle = startAngle + (idx * angleStep);
+        node.x = centerX + radius * Math.cos(angle);
+        node.y = centerY + radius * Math.sin(angle);
+      });
     }
-    return null;
   };
   
   // Radiale Initialisierung: Root im Zentrum, Kinder kreisförmig angeordnet [SF]
   const initializeRadialLayout = () => {
-    // Finde Root-Knoten
+    // Root-Knoten finden (Root bleibt Root, egal ob Manager dargestellt werden)
     const rootIds = selectedRootIds.length > 0 ? selectedRootIds : [currentSelectedId].filter(Boolean);
     if (rootIds.length === 0) return false;
     
-    // Build parent-child map (Down-Links: source -> target)
-    const childrenOf = new Map(); // Down-Kinder (Mitarbeiter)
-    const parentsOf = new Map();  // Up-Kinder (Manager)
+    // Build parent-child map
+    const childrenOf = new Map();
+    const parentsOf = new Map();
     
     linksPP.forEach(l => {
       const s = idOf(l.source), t = idOf(l.target);
-      
-      // Down-Link: source hat target als Kind
       if (!childrenOf.has(s)) childrenOf.set(s, []);
       childrenOf.get(s).push(t);
-      
-      // Up-Link: target hat source als Parent (umgekehrte Richtung)
       if (!parentsOf.has(t)) parentsOf.set(t, []);
       parentsOf.get(t).push(s);
     });
     
-    // Setze Root im Zentrum
     const centerX = WIDTH / 2;
     const centerY = HEIGHT / 2;
-    const radius = 150; // Abstand der ersten Ebene vom Root
+    const baseRadius = 150;
     
     rootIds.forEach(rootId => {
+      // Root im Zentrum fixieren
       const rootNode = personNodes.find(n => String(n.id) === rootId);
       if (rootNode) {
         rootNode.x = centerX;
         rootNode.y = centerY;
-        rootNode.fx = centerX; // Fixiere Root-Position
+        rootNode.fx = centerX;
         rootNode.fy = centerY;
       }
       
-      // Hole Up-Kinder (Manager/Parents) und Down-Kinder (Mitarbeiter)
-      const upChildren = parentsOf.get(rootId) || [];
-      const downChildren = childrenOf.get(rootId) || [];
-      
-      // Rekursive Funktion für alle Nachkommen-Ebenen [SF]
-      const positionDescendants = (parentId, parentX, parentY, parentAngle, level) => {
-        const descendants = childrenOf.get(parentId) || [];
-        if (descendants.length === 0) return;
+      // Rekursive Funktion für Nachkommen [SF]
+      const positionDescendantsRecursive = (parentId, parentX, parentY, currentRadius, level) => {
+        const children = childrenOf.get(parentId) || [];
+        if (children.length === 0) return;
         
-        const descendantRadius = radius / (10 * level); // Jede Ebene 1/10 kleiner
+        // Hole Node-Objekte
+        const childNodes = children.map(cid => personNodes.find(n => String(n.id) === cid)).filter(Boolean);
         
-        descendants.forEach((descId, descIdx) => {
-          const descNode = personNodes.find(n => String(n.id) === descId);
-          if (!descNode) return;
-          
-          // Verteile Nachkommen gleichmäßig um den Elternknoten herum
-          const descAngleStep = (2 * Math.PI) / descendants.length;
-          const descAngle = parentAngle + (descIdx * descAngleStep);
-          descNode.x = parentX + descendantRadius * Math.cos(descAngle);
-          descNode.y = parentY + descendantRadius * Math.sin(descAngle);
-          
-          // Rekursiv für nächste Ebene
-          positionDescendants(descId, descNode.x, descNode.y, descAngle, level + 1);
+        // Positioniere im Kreis um Parent
+        positionNodesInCircle(childNodes, parentX, parentY, currentRadius);
+        
+        // Rekursiv für nächste Ebene mit Radius / 4
+        const nextRadius = currentRadius / 4;
+        childNodes.forEach(childNode => {
+          positionDescendantsRecursive(String(childNode.id), childNode.x, childNode.y, nextRadius, level + 1);
         });
       };
       
-      // Platziere Up-Kinder oben
-      upChildren.forEach((childId, idx) => {
-        const childNode = personNodes.find(n => String(n.id) === childId);
-        if (!childNode) return;
+      // Up-Kind (Manager) bei -90° (Norden)
+      const upParents = parentsOf.get(rootId) || [];
+      if (upParents.length > 0) {
+        const upNodes = upParents.map(pid => personNodes.find(n => String(n.id) === pid)).filter(Boolean);
+        positionNodesInCircle(upNodes, centerX, centerY, baseRadius, -Math.PI / 2);
         
-        const angle = -Math.PI / 2; // 270° (oben)
-        childNode.x = centerX + radius * Math.cos(angle);
-        childNode.y = centerY + radius * Math.sin(angle);
-        
-        // Rekursive Positionierung aller Nachkommen ab Ebene 2
-        positionDescendants(childId, childNode.x, childNode.y, angle, 2);
-      });
+        // Nachkommen der Up-Parents
+        upNodes.forEach(upNode => {
+          positionDescendantsRecursive(String(upNode.id), upNode.x, upNode.y, baseRadius / 4, 2);
+        });
+      }
       
-      // Platziere Down-Kinder gleichmäßig im Kreis (beginnend rechts, gegen Uhrzeigersinn)
-      downChildren.forEach((childId, idx) => {
-        const childNode = personNodes.find(n => String(n.id) === childId);
-        if (!childNode) return;
+      // Down-Kinder (Mitarbeiter) gleichmäßig 360° verteilt
+      const downChildren = childrenOf.get(rootId) || [];
+      if (downChildren.length > 0) {
+        const downNodes = downChildren.map(cid => personNodes.find(n => String(n.id) === cid)).filter(Boolean);
+        positionNodesInCircle(downNodes, centerX, centerY, baseRadius);
         
-        // Gleichmäßige Verteilung: 360° / Anzahl Kinder
-        // Starte bei 0° (rechts) und verteile gegen Uhrzeigersinn
-        const angleStep = (2 * Math.PI) / downChildren.length;
-        const angle = idx * angleStep;
-        
-        childNode.x = centerX + radius * Math.cos(angle);
-        childNode.y = centerY + radius * Math.sin(angle);
-        
-        // Rekursive Positionierung aller Nachkommen ab Ebene 2
-        positionDescendants(childId, childNode.x, childNode.y, angle, 2);
-      });
+        // Nachkommen der Down-Children
+        downNodes.forEach(downNode => {
+          positionDescendantsRecursive(String(downNode.id), downNode.x, downNode.y, baseRadius / 4, 2);
+        });
+      }
     });
     
     return true;
@@ -2585,28 +2575,45 @@ function renderGraph(sub) {
         n.y = p.y;
         n.vx = p.vx;
         n.vy = p.vy;
-      } else {
-        // NEUER Knoten (durch Expansion) - radiale Position um Parent
-        const parentId = findParentInGraph(String(n.id), linksPP);
-        if (parentId) {
-          const parentNode = personNodes.find(pn => String(pn.id) === parentId);
-          const parentPrevPos = prevPos.get(parentId);
-          if (parentNode && parentPrevPos) {
-            // Platziere neuen Knoten in kleinem Kreis um Parent
-            const angle = Math.random() * 2 * Math.PI;
-            const radius = 15; // Kleiner Abstand vom Parent
-            n.x = parentPrevPos.x + radius * Math.cos(angle);
-            n.y = parentPrevPos.y + radius * Math.sin(angle);
-          } else {
-            // Fallback: Nähe zum Zentrum
-            n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
-            n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
+      }
+    });
+    
+    // Sammle neue Knoten nach Parent gruppiert [SF]
+    const newNodesByParent = new Map();
+    personNodes.forEach(n => {
+      if (!prevPos.has(String(n.id))) {
+        // Neuer Knoten - finde Parent
+        const parentLink = linksPP.find(l => idOf(l.target) === String(n.id));
+        if (parentLink) {
+          const parentId = idOf(parentLink.source);
+          if (!newNodesByParent.has(parentId)) {
+            newNodesByParent.set(parentId, []);
           }
-        } else {
-          // Kein Parent gefunden - Fallback
+          newNodesByParent.get(parentId).push(n);
+        }
+      }
+    });
+    
+    // Positioniere neue Knoten gleichmäßig um ihre Parents (5px Radius) [SF]
+    newNodesByParent.forEach((newNodes, parentId) => {
+      const parentPrevPos = prevPos.get(parentId);
+      if (parentPrevPos && Number.isFinite(parentPrevPos.x) && Number.isFinite(parentPrevPos.y)) {
+        // Gleichmäßige Verteilung im Kreis um Parent
+        positionNodesInCircle(newNodes, parentPrevPos.x, parentPrevPos.y, 5);
+      } else {
+        // Fallback: Zentrum
+        newNodes.forEach(n => {
           n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
           n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
-        }
+        });
+      }
+    });
+    
+    // Fallback für neue Knoten ohne Parent
+    personNodes.forEach(n => {
+      if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
+        n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
+        n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
       }
     });
   } else {
