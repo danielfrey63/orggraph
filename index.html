@@ -18,7 +18,15 @@
       </div>
     </div>
     <div class="controls">
-      <input id="depth" type="number" min="0" max="6" value="2" step="1" inputmode="numeric" />
+      <div class="depth-control" id="depthControl">
+        <button class="depth-half depth-up" data-action="increase" title="Tiefe erhöhen"></button>
+        <div class="depth-display">
+          <i class="codicon codicon-layers"></i>
+          <span class="depth-value">2</span>
+        </div>
+        <button class="depth-half depth-down" data-action="decrease" title="Tiefe verringern"></button>
+      </div>
+      <input id="depth" type="number" min="0" max="6" value="2" step="1" inputmode="numeric" hidden />
       
       <div class="direction-split" id="directionToggle">
         <button class="direction-half direction-up active" data-dir="up" title="Aufwärts">

@@ -5234,5 +5234,70 @@ function initializeCollapsibleLegends() {
     // Initialer Zustand
     updateSearchFieldState();
   }
+  
+  // ========== DEPTH CONTROL ==========
+  const depthControl = document.getElementById('depthControl');
+  const depthInput = document.getElementById('depth');
+  const depthValueDisplay = depthControl?.querySelector('.depth-value');
+  const depthUpBtn = depthControl?.querySelector('.depth-up');
+  const depthDownBtn = depthControl?.querySelector('.depth-down');
+  
+  if (depthControl && depthInput && depthValueDisplay) {
+    const MIN_DEPTH = 0;
+    const MAX_DEPTH = 6;
+    
+    // Funktion zum Aktualisieren der Anzeige
+    const updateDepthDisplay = (value) => {
+      depthValueDisplay.textContent = value;
+      depthInput.value = value;
+      
+      // Animation triggern
+      depthControl.classList.add('changed');
+      setTimeout(() => depthControl.classList.remove('changed'), 300);
+      
+      // Tooltip aktualisieren
+      const plural = value === 1 ? 'Ebene' : 'Ebenen';
+      depthControl.title = `Hierarchietiefe: ${value} ${plural}`;
+    };
+    
+    // Up-Button: Tiefe erhöhen
+    if (depthUpBtn) {
+      depthUpBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const current = parseInt(depthInput.value) || 0;
+        if (current < MAX_DEPTH) {
+          updateDepthDisplay(current + 1);
+          // Trigger change event für bestehende Handler
+          depthInput.dispatchEvent(new Event('change'));
+        }
+      });
+    }
+    
+    // Down-Button: Tiefe verringern
+    if (depthDownBtn) {
+      depthDownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const current = parseInt(depthInput.value) || 0;
+        if (current > MIN_DEPTH) {
+          updateDepthDisplay(current - 1);
+          // Trigger change event für bestehende Handler
+          depthInput.dispatchEvent(new Event('change'));
+        }
+      });
+    }
+    
+    // Synchronisiere Anzeige mit Input-Feld (falls extern geändert)
+    depthInput.addEventListener('change', () => {
+      const value = parseInt(depthInput.value) || 0;
+      const clamped = Math.max(MIN_DEPTH, Math.min(MAX_DEPTH, value));
+      depthValueDisplay.textContent = clamped;
+    });
+    
+    // Initiale Anzeige setzen
+    const initialValue = parseInt(depthInput.value) || 2;
+    depthValueDisplay.textContent = initialValue;
+    const plural = initialValue === 1 ? 'Ebene' : 'Ebenen';
+    depthControl.title = `Hierarchietiefe: ${initialValue} ${plural}`;
+  }
 }
 
