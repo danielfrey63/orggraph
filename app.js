@@ -2306,6 +2306,10 @@ function showNodeMenu(x, y, actionsOrOnHide) {
   } else {
     const actions = actionsOrOnHide || {};
     if (actions.onHideSubtree) addItem('Ausblenden', actions.onHideSubtree);
+    
+    // Neuer Root-Eintrag [SF]
+    if (actions.onSetAsRoot) addItem('Ins Zentrum stellen', actions.onSetAsRoot);
+    
     if (actions.isRoot && actions.onRemoveRoot && Array.isArray(selectedRootIds) && selectedRootIds.length > 1) {
       addItem('Als Root entfernen', actions.onRemoveRoot);
     }
@@ -2691,6 +2695,20 @@ function renderGraph(sub) {
     const pid = String(d.id);
     showNodeMenu(event.clientX, event.clientY, {
       onHideSubtree: () => hideSubtreeFromRoot(pid),
+      onSetAsRoot: () => {
+        // Setze als neue Root mit radialem Re-Layout [SF][DRY]
+        setSingleRoot(pid);
+        currentSelectedId = pid;
+        const input = document.querySelector(INPUT_COMBO_ID);
+        if (input) input.value = d.label || pid;
+        
+        // Stoppe Simulation für Fresh-Layout
+        if (currentSimulation) {
+          currentSimulation.stop();
+          currentSimulation = null;
+        }
+        applyFromUI();
+      },
       isRoot: isRoot(pid),
       onRemoveRoot: () => { removeRoot(pid); applyFromUI(); },
       nodeId: pid
@@ -2861,9 +2879,27 @@ function renderGraph(sub) {
 
   // Doppelklick auf Knoten setzt neues Zentrum
   node.on('dblclick', (event, d) => {
-    currentSelectedId = String(d.id);
+    event.stopPropagation(); // Verhindert Zoom-Konflikt
+    
+    // Setze geklickten Knoten als neuen Root [SF]
+    const nodeId = String(d.id);
+    setSingleRoot(nodeId);
+    currentSelectedId = nodeId;
+    
+    // Aktualisiere UI-Input
     const input = document.querySelector(INPUT_COMBO_ID);
-    if (input) input.value = d.label || String(d.id);
+    if (input) input.value = d.label || nodeId;
+    
+    // Stoppe aktuelle Simulation für komplettes Re-Layout [SF]
+    // Dies erzwingt radiales Initial-Layout mit neuem Root im Zentrum
+    if (currentSimulation) {
+      currentSimulation.stop();
+      currentSimulation = null;
+    }
+    
+    // Graph mit neuem Root neu berechnen und rendern
+    // - Knoten außerhalb der Tiefe werden automatisch ausgeblendet
+    // - Neu sichtbare Knoten werden über radiales Layout positioniert
     applyFromUI();
   });
 
