@@ -1117,6 +1117,15 @@ function populateCombo(filterText) {
   if (!input || !list) return;
   const term = (filterText || "").toLowerCase().trim();
   
+  // Bei leerem Suchbegriff keine Vorschlagsliste anzeigen
+  if (!term) {
+    list.innerHTML = "";
+    list.hidden = true;
+    filteredItems = [];
+    activeIndex = -1;
+    return;
+  }
+
   // Require minimum search length for large datasets
   if (term.length > 0 && term.length < MIN_SEARCH_LENGTH) {
     list.innerHTML = '<li style="padding: 8px; color: #666; font-style: italic;">Mindestens ' + MIN_SEARCH_LENGTH + ' Zeichen eingeben...</li>';
@@ -4829,12 +4838,13 @@ window.addEventListener("DOMContentLoaded", async () => {
         selectedRootIds = roots.slice();
         currentSelectedId = roots[0];
         lastSingleRootId = roots[0];
-        const firstNode = byId.get(roots[0]);
-        if (input && firstNode) {
-          input.value = firstNode.label || String(firstNode.id);
+        try { applyFromUI(); } catch(_) {}
+        // Nach Initial-Apply das Suchfeld leeren und Dropdown schließen
+        if (input && list) {
+          input.value = "";
+          list.innerHTML = "";
           list.hidden = true;
         }
-        try { applyFromUI(); } catch(_) {}
       }
       if (invalid.length > 0) {
         // Zeige Info über ungültige IDs
@@ -4846,12 +4856,13 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (startNode) {
         currentSelectedId = String(startNode.id);
         lastSingleRootId = String(startNode.id);
-        if (input) {
-          input.value = startNode.label || String(startNode.id);
-          // Stelle sicher, dass die Dropdown-Liste geschlossen ist
+        try { applyFromUI(); } catch(_) {}
+        // Nach Initial-Apply das Suchfeld leeren und Dropdown schließen
+        if (input && list) {
+          input.value = "";
+          list.innerHTML = "";
           list.hidden = true;
         }
-        try { applyFromUI(); } catch(_) {}
       } else {
         showTemporaryNotification(`DEFAULT_START_ID nicht gefunden: ${sid}`);
       }
