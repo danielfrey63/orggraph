@@ -34,6 +34,7 @@ let clusterPersonIds = new Set();
 let clusterPolygons = new Map();
 let currentZoomTransform = null;
 let labelsVisible = true;
+let debugMode = false;
 let legendMenuEl = null;
 let nodeMenuEl = null;
 let simAllById = new Map();
@@ -2424,6 +2425,20 @@ function renderGraph(sub) {
     .attr("class", "link")
     .attr("marker-end", "url(#arrow)");
 
+  // Debug-Link-Labels (optional)
+  const linkLabelGroup = gZoom.append("g").attr("class", "link-labels");
+  const linkLabel = linkLabelGroup
+    .selectAll("text")
+    .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
+    .join("text")
+    .attr("class", "link-label")
+    .attr("text-anchor", "middle")
+    .attr("dy", -3)
+    .style("display", (debugMode && labelsVisible) ? "block" : "none")
+    .style("font-size", "10px")
+    .style("fill", "#666")
+    .style("pointer-events", "none");
+
   // Nur Personen-Knoten rendern
   const personNodes = sub.nodes.filter(n => byId.get(String(n.id))?.type === 'person');
   const simById = new Map(personNodes.map(d => [String(d.id), d]));
@@ -2449,7 +2464,7 @@ function renderGraph(sub) {
   node.append("circle").attr("r", nodeRadius).attr("class", "node-circle")
     .style("fill", d => getNodeFillByLevel(d));
   node.append("text")
-    .text(d => d.label ?? d.id)
+    .text(d => debugMode ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})` : (d.label ?? d.id))
     .attr("x", 10)
     .attr("y", 4)
     .attr("class", "label");
@@ -2595,12 +2610,32 @@ function renderGraph(sub) {
       }
     });
     
-    // Positioniere neue Knoten gleichmäßig um ihre Parents (5px Radius) [SF]
+    // Positioniere neue Knoten gleichmäßig um ihre Parents (Radius = 10% vom Abstand des Parents zu seinem Parent) [SF]
+    const linkDistanceForNewNodes = cssNumber('--link-distance', 60);
+    const fallbackRadius = linkDistanceForNewNodes * 0.1;
+    
     newNodesByParent.forEach((newNodes, parentId) => {
       const parentPrevPos = prevPos.get(parentId);
       if (parentPrevPos && Number.isFinite(parentPrevPos.x) && Number.isFinite(parentPrevPos.y)) {
+        // Finde den Parent des zu erweiternden Knotens (Grandparent) [SF]
+        const grandparentLink = linksPP.find(l => idOf(l.target) === parentId);
+        
+        let radius = fallbackRadius;
+        if (grandparentLink) {
+          const grandparentId = idOf(grandparentLink.source);
+          const grandparentPos = prevPos.get(grandparentId);
+          
+          if (grandparentPos && Number.isFinite(grandparentPos.x) && Number.isFinite(grandparentPos.y)) {
+            // Berechne Abstand des zu erweiternden Knotens zu seinem Parent
+            const dx = parentPrevPos.x - grandparentPos.x;
+            const dy = parentPrevPos.y - grandparentPos.y;
+            const distanceToParent = Math.sqrt(dx * dx + dy * dy);
+            radius = distanceToParent * 0.1; // 10% vom Abstand zum eigenen Parent
+          }
+        }
+        
         // Gleichmäßige Verteilung im Kreis um Parent
-        positionNodesInCircle(newNodes, parentPrevPos.x, parentPrevPos.y, 5);
+        positionNodesInCircle(newNodes, parentPrevPos.x, parentPrevPos.y, radius);
       } else {
         // Fallback: Zentrum
         newNodes.forEach(n => {
@@ -2716,6 +2751,8 @@ function renderGraph(sub) {
   const linkDistance = cssNumber('--link-distance', 60);
   const linkStrength = cssNumber('--link-strength', 0.4);
   const chargeStrength = cssNumber('--charge-strength', -200);
+  const alphaDecay = cssNumber('--alpha-decay', 0.0228);
+  const velocityDecay = cssNumber('--velocity-decay', 0.4);
 
   // Simulation erstellen
   const simulation = d3.forceSimulation(personNodes)
@@ -2745,7 +2782,9 @@ function renderGraph(sub) {
         ? (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth))
         : 0;
       return nodeRadius + collidePadding + outerExtra;
-    }));
+    }))
+    .alphaDecay(alphaDecay)
+    .velocityDecay(velocityDecay);
   
   // Tick-Handler für Animation
   simulation.on("tick", () => {
@@ -2754,6 +2793,11 @@ function renderGraph(sub) {
     
     // Funktion zur Berechnung des äussersten Attributring-Radius für einen Knoten
     const getOutermostAttributeRadius = (d) => {
+      // Wenn Attribute ausgeblendet sind, nur Hauptknoten-Radius verwenden [SF]
+      if (!attributesVisible) {
+        return nodeRadius;
+      }
+      
       const personId = String(d.id);
       const nodeAttrs = personAttributes.get(personId);
       const circleGap = cssNumber('--attribute-circle-gap', 2);
@@ -2804,6 +2848,23 @@ function renderGraph(sub) {
 
     // Knotenposition aktualisieren
     node.attr("transform", d => `translate(${d.x},${d.y})`);
+    
+    // Node-Labels aktualisieren (für Debug-Modus mit Koordinaten)
+    if (debugMode) {
+      node.selectAll("text.label")
+        .text(d => `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})`);
+    }
+    
+    // Link-Labels aktualisieren (Mittelpunkt + Länge)
+    linkLabel
+      .attr("x", d => (d.source.x + d.target.x) / 2)
+      .attr("y", d => (d.source.y + d.target.y) / 2)
+      .text(d => {
+        const dx = d.target.x - d.source.x;
+        const dy = d.target.y - d.source.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        return Math.round(dist) + 'px';
+      });
 
     // Cluster (OE-Hüllen) aktualisieren
     const pad = cssNumber('--cluster-pad', 12);
@@ -4673,6 +4734,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       
       // Nur Attribut-Kreise im Graph aktualisieren
       updateAttributeCircles();
+      
+      // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
+      if (currentSimulation) {
+        currentSimulation.alpha(0.1).restart();
+        // Nach kurzer Zeit wieder stoppen
+        setTimeout(() => {
+          if (currentSimulation) currentSimulation.alpha(0);
+        }, 100);
+      }
     });
   }
   
@@ -4828,6 +4898,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       labelsVisible = lbls.classList.contains('active');
       const svg = document.querySelector('#graph');
       if (svg) svg.classList.toggle('labels-hidden', !labelsVisible);
+      
+      // Link-Labels auch aktualisieren (nur sichtbar wenn Debug UND Labels aktiv) [SF]
+      d3.select('#graph').selectAll('.link-label')
+        .style('display', (debugMode && labelsVisible) ? 'block' : 'none');
     });
   }
   if (input && list) {
@@ -4862,6 +4936,28 @@ window.addEventListener("DOMContentLoaded", async () => {
   const fitBtn = document.querySelector('#fit');
   if (fitBtn) {
     fitBtn.addEventListener('click', fitToViewport);
+  }
+  
+  const debugBtn = document.querySelector('#debugBtn');
+  if (debugBtn) {
+    debugBtn.addEventListener('click', () => {
+      debugBtn.classList.toggle('active');
+      debugMode = debugBtn.classList.contains('active');
+      
+      // Aktualisiere Labels und Link-Labels sofort [SF]
+      const svg = d3.select('#graph');
+      
+      // Node-Labels aktualisieren
+      svg.selectAll('.node text.label').text(d => {
+        return debugMode 
+          ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})`
+          : (d.label ?? d.id);
+      });
+      
+      // Link-Labels ein/ausblenden (nur wenn auch Labels sichtbar)
+      svg.selectAll('.link-label')
+        .style('display', (debugMode && labelsVisible) ? 'block' : 'none');
+    });
   }
   // Auto-apply on depth change and direction change
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
@@ -5169,18 +5265,30 @@ function computeHierarchyLevels(nodes, links) {
 function configureLayout(nodes, links, simulation, mode) {
   // Spezifische Parameter für Hierarchie-Layout
   const LEVEL_HEIGHT = 200; // Vertikaler Abstand zwischen Hierarchie-Ebenen
-  const LEVEL_FORCE_STRENGTH = 0.25; // Stärke der Ebenen-Ausrichtungskraft (0.1-0.5)
+  const LEVEL_FORCE_STRENGTH = 0.5; // Stärke der vertikalen Anziehungskraft
   
-  // Fixierte Positionen zurücksetzen [DRY]
+  // Manager-Parent-Map aufbauen für radiales Layout
+  const pMap = new Map();
+  for (const l of links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    const sNode = byId.get(s), tNode = byId.get(t);
+    if (sNode?.type === 'person' && tNode?.type === 'person') {
+      pMap.set(t, s);
+    }
+  }
+  parentOf = pMap;
+  
+  // IMMER Hierarchie-Ebenen berechnen (für Farb-Gradienten) [SF]
+  hierarchyLevels = computeHierarchyLevels(nodes, links);
+  
+  // Levels den Node-Objekten zuweisen damit getNodeFillByLevel() funktioniert [SF]
   nodes.forEach(n => {
-    n.fx = null;
-    n.fy = null;
+    const nodeId = String(n.id);
+    n.level = hierarchyLevels.get(nodeId) ?? 0;
   });
   
   // Spezifische Konfiguration je nach Modus
   if (mode === 'hierarchy') {
-    // Hierarchie-Ebenen berechnen [SF]
-    hierarchyLevels = computeHierarchyLevels(nodes, links);
     
     // Ziel-Y-Position für jede Ebene berechnen [SF]
     const sortedLevels = Array.from(new Set(Array.from(hierarchyLevels.values()))).sort((a, b) => a - b);

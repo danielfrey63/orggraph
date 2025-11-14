@@ -7,10 +7,11 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .footer-stats .stat-separator { color: var(--text-muted); }
 .footer-stats strong { color: var(--text-strong); font-weight: 600; }
 .app-footer #status { cursor: pointer; }
-.app-header { display: flex; align-items: center; flex-wrap: wrap; }
+.app-header { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; width: 100%; }
 .app-header-main { display: flex; align-items: center; gap: 16px; margin-right: 16px; }
 .app-header h1 { margin: 0; font-size: 18px; color: var(--text-strong); flex-shrink: 0; }
-.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1; }
+#debugBtn { margin-left: auto; }
 .controls label { display: inline-flex; gap: 6px; align-items: center; }
 .controls input, .controls select, .controls button { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--control-border); background: var(--control-bg); color: var(--text); }
 
@@ -881,7 +882,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   --nodes-without-attributes-opacity: 0.2;
 
   /* Simulation-Parameter */
-  --link-distance: 80;
+  --link-distance: 20;
   --link-strength: 0.7;
   --charge-strength: -250;
   --collide-radius: 15;
