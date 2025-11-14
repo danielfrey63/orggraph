@@ -2405,9 +2405,6 @@ function renderGraph(sub) {
     .attr("fill", getComputedStyle(document.documentElement).getPropertyValue('--link-stroke') || '#bbb')
     .attr("fill-opacity", parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')) || 1);
 
-  // SVG-Tooltip einrichten
-  d3.select("svg").append("title").text("Klicke auf eine Person im Graph, um sie als Startpunkt zu setzen");
-
   // Zoom-Container
   const gZoom = svg.append("g");
 
