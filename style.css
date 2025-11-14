@@ -35,7 +35,21 @@ input#depth {
 
 /* Custom combobox */
 .combo { position: relative; display: inline-block; }
-.combo > input { padding: 6px 6px; min-width: 260px; width: 100%; }
+.combo > input {
+  padding: 6px 6px;
+  min-width: 260px;
+  width: 100%;
+  border: 1px solid var(--control-border);
+  border-radius: 2px;
+  background: var(--control-bg);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.combo > input:focus {
+  border-color: var(--active-toggle-bg);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
 .app-header-main .combo { min-width: 300px; flex-grow: 1; }
 .combo-list {
   position: absolute;
