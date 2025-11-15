@@ -2481,7 +2481,53 @@ function renderGraph(sub) {
     });
   }
   
-  // Hilfsfunktion: Positioniere Knoten gleichmäßig im Kreis um Parent [SF]
+  // ============================================================================
+  // RADIALES LAYOUT-SYSTEM MIT BREADTH-FIRST EXPANSION [SF]
+  // ============================================================================
+  
+  /**
+   * Berechnet den äußersten sichtbaren Radius eines Knotens
+   * (Node-Radius + Stroke + Attributringe)
+   * @param {Object} node - Node-Objekt
+   * @returns {number} Äußerster Radius in Pixeln
+   */
+  const getNodeOuterRadius = (node) => {
+    const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
+    
+    // Basis: Node-Radius + halber Stroke
+    let outerRadius = nodeRadius + (nodeStrokeWidth / 2);
+    
+    // Wenn Attribute sichtbar sind, addiere Attributringe
+    if (attributesVisible) {
+      const personId = String(node.id);
+      const nodeAttrs = personAttributes.get(personId);
+      const circleGap = cssNumber('--attribute-circle-gap', 4);
+      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+      
+      let attrCount = 0;
+      if (nodeAttrs && nodeAttrs.size > 0) {
+        for (const attrName of nodeAttrs.keys()) {
+          if (activeAttributes.has(attrName)) {
+            attrCount++;
+          }
+        }
+      }
+      
+      // Attributringe hinzufügen
+      outerRadius += attrCount * (circleGap + circleWidth);
+    }
+    
+    return outerRadius;
+  };
+  
+  /**
+   * Hilfsfunktion: Positioniere Knoten gleichmäßig im Kreis um Parent
+   * @param {Array} nodes - Array von Node-Objekten
+   * @param {number} centerX - X-Koordinate des Zentrums
+   * @param {number} centerY - Y-Koordinate des Zentrums
+   * @param {number} radius - Radius des Kreises
+   * @param {number} startAngle - Startwinkel in Radiant (default: 0)
+   */
   const positionNodesInCircle = (nodes, centerX, centerY, radius, startAngle = 0) => {
     if (nodes.length === 0) return;
     
@@ -2500,11 +2546,109 @@ function renderGraph(sub) {
     }
   };
   
-  // Radiale Initialisierung: Root im Zentrum, Kinder kreisförmig angeordnet [SF]
+  /**
+   * Berechnet die konvexe Hülle (Convex Hull) einer Menge von Punkten
+   * Verwendet Graham Scan Algorithmus
+   * @param {Array} points - Array von {x, y} Objekten
+   * @returns {Array} Sortierte Punkte der konvexen Hülle
+   */
+  const computeConvexHull = (points) => {
+    if (points.length < 3) return points;
+    
+    // Finde Punkt mit niedrigstem Y (bei Gleichstand: niedrigstes X)
+    let start = points[0];
+    for (let i = 1; i < points.length; i++) {
+      if (points[i].y < start.y || (points[i].y === start.y && points[i].x < start.x)) {
+        start = points[i];
+      }
+    }
+    
+    // Sortiere Punkte nach Polarwinkel relativ zum Startpunkt
+    const sorted = points.slice().sort((a, b) => {
+      if (a === start) return -1;
+      if (b === start) return 1;
+      
+      const angleA = Math.atan2(a.y - start.y, a.x - start.x);
+      const angleB = Math.atan2(b.y - start.y, b.x - start.x);
+      
+      if (angleA !== angleB) return angleA - angleB;
+      
+      // Bei gleichem Winkel: näherer Punkt zuerst
+      const distA = (a.x - start.x) ** 2 + (a.y - start.y) ** 2;
+      const distB = (b.x - start.x) ** 2 + (b.y - start.y) ** 2;
+      return distA - distB;
+    });
+    
+    // Graham Scan
+    const hull = [sorted[0], sorted[1]];
+    
+    const ccw = (p1, p2, p3) => {
+      return (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
+    };
+    
+    for (let i = 2; i < sorted.length; i++) {
+      while (hull.length >= 2 && ccw(hull[hull.length - 2], hull[hull.length - 1], sorted[i]) <= 0) {
+        hull.pop();
+      }
+      hull.push(sorted[i]);
+    }
+    
+    return hull;
+  };
+  
+  /**
+   * Findet eine Position außerhalb der konvexen Hülle für einen sekundären Root
+   * @param {Array} existingNodes - Array von bereits positionierten Nodes
+   * @param {number} margin - Mindestabstand zur Hülle
+   * @returns {Object} {x, y} Position für den neuen Root
+   */
+  const findPositionOutsideHull = (existingNodes, margin = 200) => {
+    if (existingNodes.length === 0) {
+      return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
+    }
+    
+    // Sammle alle Positionen
+    const points = existingNodes
+      .filter(n => Number.isFinite(n.x) && Number.isFinite(n.y))
+      .map(n => ({ x: n.x, y: n.y }));
+    
+    if (points.length === 0) {
+      return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
+    }
+    
+    // Berechne Bounding Box
+    const minX = Math.min(...points.map(p => p.x));
+    const maxX = Math.max(...points.map(p => p.x));
+    const minY = Math.min(...points.map(p => p.y));
+    const maxY = Math.max(...points.map(p => p.y));
+    
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const width = maxX - minX;
+    const height = maxY - minY;
+    
+    // Platziere neuen Root rechts außerhalb der Bounding Box
+    return {
+      x: maxX + margin + width * 0.2,
+      y: centerY
+    };
+  };
+  
+  /**
+   * Neues radiales Layout-System mit Breadth-First Expansion
+   * - Root(s) exakt im Zentrum (oder außerhalb der Hülle für sekundäre Roots)
+   * - Level 1: Alle Kinder auf Kreis um Root
+   * - Weitere Levels: Breadth-First, Kinder auf Kreis um Parent
+   * - Force-Simulation läuft auf diesen Startpositionen
+   */
   const initializeRadialLayout = () => {
-    // Root-Knoten finden (Root bleibt Root, egal ob Manager dargestellt werden)
+    // Root-Knoten finden
     const rootIds = selectedRootIds.length > 0 ? selectedRootIds : [currentSelectedId].filter(Boolean);
     if (rootIds.length === 0) return false;
+    
+    if (debugMode) {
+      console.log('[Layout] Radiales Initial-Layout', { rootIds, nodeCount: personNodes.length });
+    }
     
     // Build parent-child map
     const childrenOf = new Map();
@@ -2518,64 +2662,207 @@ function renderGraph(sub) {
       parentsOf.get(t).push(s);
     });
     
-    const centerX = WIDTH / 2;
-    const centerY = HEIGHT / 2;
-    const baseRadius = 150;
+    // Padding zwischen Parent-Rand und Child-Position
+    const childPadding = 4;
     
-    rootIds.forEach(rootId => {
-      // Root im Zentrum fixieren
+    // Track welche Knoten bereits positioniert wurden
+    const positioned = new Set();
+    
+    // Positioniere jeden Root
+    rootIds.forEach((rootId, rootIndex) => {
+      let rootX, rootY;
+      
+      if (rootIndex === 0) {
+        // Erster Root: Zentrum
+        rootX = WIDTH / 2;
+        rootY = HEIGHT / 2;
+      } else {
+        // Sekundärer Root: Außerhalb der Hülle der bereits positionierten Knoten
+        const alreadyPositioned = personNodes.filter(n => positioned.has(String(n.id)));
+        const pos = findPositionOutsideHull(alreadyPositioned, baseRadius * 1.5);
+        rootX = pos.x;
+        rootY = pos.y;
+      }
+      
+      // Root-Knoten positionieren
       const rootNode = personNodes.find(n => String(n.id) === rootId);
       if (rootNode) {
-        rootNode.x = centerX;
-        rootNode.y = centerY;
-        rootNode.fx = centerX;
-        rootNode.fy = centerY;
+        rootNode.x = rootX;
+        rootNode.y = rootY;
+        // Keine Fixierung (fx/fy) - Root kann sich mit Force-Simulation bewegen
+        positioned.add(rootId);
       }
       
-      // Rekursive Funktion für Nachkommen [SF]
-      const positionDescendantsRecursive = (parentId, parentX, parentY, currentRadius, level) => {
-        const children = childrenOf.get(parentId) || [];
-        if (children.length === 0) return;
-        
-        // Hole Node-Objekte
-        const childNodes = children.map(cid => personNodes.find(n => String(n.id) === cid)).filter(Boolean);
-        
-        // Positioniere im Kreis um Parent
-        positionNodesInCircle(childNodes, parentX, parentY, currentRadius);
-        
-        // Rekursiv für nächste Ebene mit Radius / 4
-        const nextRadius = currentRadius / 4;
-        childNodes.forEach(childNode => {
-          positionDescendantsRecursive(String(childNode.id), childNode.x, childNode.y, nextRadius, level + 1);
-        });
-      };
+      // Breadth-First Expansion von diesem Root aus
+      const queue = [{ nodeId: rootId, x: rootX, y: rootY, level: 0 }];
       
-      // Up-Kind (Manager) bei -90° (Norden)
-      const upParents = parentsOf.get(rootId) || [];
-      if (upParents.length > 0) {
-        const upNodes = upParents.map(pid => personNodes.find(n => String(n.id) === pid)).filter(Boolean);
-        positionNodesInCircle(upNodes, centerX, centerY, baseRadius, -Math.PI / 2);
+      while (queue.length > 0) {
+        const current = queue.shift();
         
-        // Nachkommen der Up-Parents
-        upNodes.forEach(upNode => {
-          positionDescendantsRecursive(String(upNode.id), upNode.x, upNode.y, baseRadius / 4, 2);
-        });
-      }
-      
-      // Down-Kinder (Mitarbeiter) gleichmäßig 360° verteilt
-      const downChildren = childrenOf.get(rootId) || [];
-      if (downChildren.length > 0) {
-        const downNodes = downChildren.map(cid => personNodes.find(n => String(n.id) === cid)).filter(Boolean);
-        positionNodesInCircle(downNodes, centerX, centerY, baseRadius);
+        // Hole alle Kinder (Down-Links)
+        const children = childrenOf.get(current.nodeId) || [];
         
-        // Nachkommen der Down-Children
-        downNodes.forEach(downNode => {
-          positionDescendantsRecursive(String(downNode.id), downNode.x, downNode.y, baseRadius / 4, 2);
-        });
+        // Hole auch Parents (Up-Links) nur für Level 0 (Root)
+        let parents = [];
+        if (current.level === 0) {
+          parents = parentsOf.get(current.nodeId) || [];
+        }
+        
+        // Kombiniere Children und Parents für dieses Level
+        const allDescendants = [...children, ...parents];
+        
+        if (allDescendants.length > 0) {
+          // Filtere bereits positionierte Knoten aus
+          const unpositionedIds = allDescendants.filter(id => !positioned.has(id));
+          
+          if (unpositionedIds.length > 0) {
+            // Hole Node-Objekte
+            const descendantNodes = unpositionedIds
+              .map(id => personNodes.find(n => String(n.id) === id))
+              .filter(Boolean);
+            
+            // Berechne Radius: Äußerer Rand des Parent-Knotens + Padding
+            const parentNode = personNodes.find(n => String(n.id) === current.nodeId);
+            let parentRadius = 40; // Fallback
+            
+            if (parentNode) {
+              const outerRadius = getNodeOuterRadius(parentNode);
+              parentRadius = outerRadius + childPadding;
+            }
+            
+            // Positioniere im Kreis um Parent (auf dem Rand)
+            // Parents (Up-Links) bei -90° (Norden) starten
+            const startAngle = (current.level === 0 && parents.length > 0) ? -Math.PI / 2 : 0;
+            positionNodesInCircle(descendantNodes, current.x, current.y, parentRadius, startAngle);
+            
+            // Markiere als positioniert und füge zur Queue hinzu
+            descendantNodes.forEach(node => {
+              positioned.add(String(node.id));
+              
+              // Füge zur Queue für nächstes Level hinzu
+              queue.push({
+                nodeId: String(node.id),
+                x: node.x,
+                y: node.y,
+                level: current.level + 1
+              });
+            });
+          }
+        }
       }
     });
     
     return true;
+  };
+  
+  /**
+   * Erweitert bestehendes Layout mit neuen Knoten (Breadth-First)
+   * Neue Knoten werden Generation für Generation hinzugefügt
+   */
+  const extendLayoutWithNewNodes = () => {
+    // Build parent-child map
+    const childrenOf = new Map();
+    const parentsOf = new Map();
+    
+    linksPP.forEach(l => {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (!childrenOf.has(s)) childrenOf.set(s, []);
+      childrenOf.get(s).push(t);
+      if (!parentsOf.has(t)) parentsOf.set(t, []);
+      parentsOf.get(t).push(s);
+    });
+    
+    // Identifiziere neue Knoten
+    const newNodeIds = new Set();
+    personNodes.forEach(n => {
+      if (!prevPos.has(String(n.id))) {
+        newNodeIds.add(String(n.id));
+      }
+    });
+    
+    if (newNodeIds.size === 0) return; // Keine neuen Knoten
+    
+    if (debugMode) {
+      console.log('[Layout] Erweitere Layout mit neuen Knoten', { newCount: newNodeIds.size });
+    }
+    
+    // Finde Blattknoten (Leaf Nodes) im bestehenden Layout
+    // Ein Blattknoten hat keine Kinder oder alle Kinder sind neu
+    const leafNodes = [];
+    personNodes.forEach(n => {
+      const nodeId = String(n.id);
+      if (prevPos.has(nodeId)) {
+        const children = childrenOf.get(nodeId) || [];
+        const existingChildren = children.filter(cid => !newNodeIds.has(cid));
+        
+        // Blattknoten: keine existierenden Kinder
+        if (existingChildren.length === 0 && children.length > 0) {
+          leafNodes.push({ nodeId, x: n.x, y: n.y });
+        }
+      }
+    });
+    
+    // Breadth-First Expansion von Blattknoten aus
+    // Neue Knoten werden auf dem äußeren Rand des Parent platziert
+    const childPadding = 4; // Kleiner Puffer zwischen Parent-Rand und Child
+    
+    const queue = leafNodes.map(leaf => ({
+      nodeId: leaf.nodeId,
+      x: leaf.x,
+      y: leaf.y,
+      level: 0
+    }));
+    
+    const positioned = new Set();
+    
+    while (queue.length > 0) {
+      const current = queue.shift();
+      
+      // Hole alle Kinder
+      const children = childrenOf.get(current.nodeId) || [];
+      
+      // Filtere nur neue Knoten
+      const newChildren = children.filter(cid => newNodeIds.has(cid) && !positioned.has(cid));
+      
+      if (newChildren.length > 0) {
+        // Hole Node-Objekte
+        const childNodes = newChildren
+          .map(cid => personNodes.find(n => String(n.id) === cid))
+          .filter(Boolean);
+        
+        // Berechne Radius: Äußerer Rand des Parent-Knotens + Padding
+        const parentNode = personNodes.find(n => String(n.id) === current.nodeId);
+        let parentRadius = 40; // Fallback
+        
+        if (parentNode) {
+          const outerRadius = getNodeOuterRadius(parentNode);
+          parentRadius = outerRadius + childPadding;
+        }
+        
+        // Positioniere im Kreis um Parent (auf dem Rand)
+        positionNodesInCircle(childNodes, current.x, current.y, parentRadius);
+        
+        // Markiere als positioniert und füge zur Queue hinzu
+        childNodes.forEach(node => {
+          positioned.add(String(node.id));
+          
+          queue.push({
+            nodeId: String(node.id),
+            x: node.x,
+            y: node.y,
+            level: current.level + 1
+          });
+        });
+      }
+    }
+    
+    // Fallback für neue Knoten ohne Parent (sollte selten vorkommen)
+    personNodes.forEach(n => {
+      if (newNodeIds.has(String(n.id)) && !positioned.has(String(n.id))) {
+        n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
+        n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
+      }
+    });
   };
   
   // Prüfe ob es vorherige Positionen gibt (= nicht erstes Laden)
@@ -2594,58 +2881,10 @@ function renderGraph(sub) {
       }
     });
     
-    // Sammle neue Knoten nach Parent gruppiert [SF]
-    const newNodesByParent = new Map();
-    personNodes.forEach(n => {
-      if (!prevPos.has(String(n.id))) {
-        // Neuer Knoten - finde Parent
-        const parentLink = linksPP.find(l => idOf(l.target) === String(n.id));
-        if (parentLink) {
-          const parentId = idOf(parentLink.source);
-          if (!newNodesByParent.has(parentId)) {
-            newNodesByParent.set(parentId, []);
-          }
-          newNodesByParent.get(parentId).push(n);
-        }
-      }
-    });
+    // Erweitere Layout mit neuen Knoten (Breadth-First)
+    extendLayoutWithNewNodes();
     
-    // Positioniere neue Knoten gleichmäßig um ihre Parents (Radius = 10% vom Abstand des Parents zu seinem Parent) [SF]
-    const linkDistanceForNewNodes = cssNumber('--link-distance', 60);
-    const fallbackRadius = linkDistanceForNewNodes * 0.1;
-    
-    newNodesByParent.forEach((newNodes, parentId) => {
-      const parentPrevPos = prevPos.get(parentId);
-      if (parentPrevPos && Number.isFinite(parentPrevPos.x) && Number.isFinite(parentPrevPos.y)) {
-        // Finde den Parent des zu erweiternden Knotens (Grandparent) [SF]
-        const grandparentLink = linksPP.find(l => idOf(l.target) === parentId);
-        
-        let radius = fallbackRadius;
-        if (grandparentLink) {
-          const grandparentId = idOf(grandparentLink.source);
-          const grandparentPos = prevPos.get(grandparentId);
-          
-          if (grandparentPos && Number.isFinite(grandparentPos.x) && Number.isFinite(grandparentPos.y)) {
-            // Berechne Abstand des zu erweiternden Knotens zu seinem Parent
-            const dx = parentPrevPos.x - grandparentPos.x;
-            const dy = parentPrevPos.y - grandparentPos.y;
-            const distanceToParent = Math.sqrt(dx * dx + dy * dy);
-            radius = distanceToParent * 0.1; // 10% vom Abstand zum eigenen Parent
-          }
-        }
-        
-        // Gleichmäßige Verteilung im Kreis um Parent
-        positionNodesInCircle(newNodes, parentPrevPos.x, parentPrevPos.y, radius);
-      } else {
-        // Fallback: Zentrum
-        newNodes.forEach(n => {
-          n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
-          n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
-        });
-      }
-    });
-    
-    // Fallback für neue Knoten ohne Parent
+    // Fallback für Knoten ohne Position
     personNodes.forEach(n => {
       if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
         n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
@@ -2747,6 +2986,10 @@ function renderGraph(sub) {
     });
   });
 
+  // ============================================================================
+  // FORCE-SIMULATION KONFIGURATION [SF][PA]
+  // ============================================================================
+  
   // Force-Simulation-Parameter
   const linkDistance = cssNumber('--link-distance', 60);
   const linkStrength = cssNumber('--link-strength', 0.4);
@@ -2755,10 +2998,12 @@ function renderGraph(sub) {
   const velocityDecay = cssNumber('--velocity-decay', 0.4);
 
   // Simulation erstellen
+  // Die Simulation arbeitet auf den radialen Startpositionen und verfeinert das Layout
   const simulation = d3.forceSimulation(personNodes)
     .force("link", d3.forceLink(linksPP).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
     .force("charge", d3.forceManyBody().strength(chargeStrength))
-    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2))
+    // Schwächere Center-Force für mehr Stabilität mit radialem Layout
+    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
     .force("collide", d3.forceCollide().radius(d => {
       // Kollisionsradius basierend auf Attribut-Kreisen berechnen
       const personId = String(d.id);
@@ -2782,7 +3027,7 @@ function renderGraph(sub) {
         ? (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth))
         : 0;
       return nodeRadius + collidePadding + outerExtra;
-    }))
+    }).strength(0.8)) // Stärkere Kollisionsvermeidung
     .alphaDecay(alphaDecay)
     .velocityDecay(velocityDecay);
   
