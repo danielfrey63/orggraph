@@ -5843,10 +5843,11 @@ function initializeCollapsibleLegends() {
     });
     
     // Initiale Anzeige setzen
-    const initialValue = parseInt(depthInput.value) || 2;
-    depthValueDisplay.textContent = initialValue;
-    const plural = initialValue === 1 ? 'Ebene' : 'Ebenen';
-    depthControl.title = `Hierarchietiefe: ${initialValue} ${plural}`;
+    const initialValue = parseInt(depthInput.value, 10);
+    const displayValue = isNaN(initialValue) ? 2 : initialValue;
+    depthValueDisplay.textContent = displayValue;
+    const plural = displayValue === 1 ? 'Ebene' : 'Ebenen';
+    depthControl.title = `Hierarchietiefe: ${displayValue} ${plural}`;
   }
 }
 
