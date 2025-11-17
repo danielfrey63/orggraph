@@ -4953,7 +4953,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   const attributesVisibilityBtn = document.getElementById('toggleAttributesVisibility');
   if (attributesVisibilityBtn) {
     // Anfangs aktiv (Attribute sichtbar)
-    attributesVisible = attributesVisibilityBtn.classList.contains('active');
+    if (envConfig?.DEFAULT_ATTRIBUTES != null) {
+      attributesVisible = !!envConfig.DEFAULT_ATTRIBUTES;
+      if (!attributesVisible) attributesVisibilityBtn.classList.remove('active');
+    } else {
+      attributesVisible = attributesVisibilityBtn.classList.contains('active');
+    }
     
     attributesVisibilityBtn.addEventListener('click', () => {
       // Toggle Button-Status
@@ -5185,6 +5190,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   
   const debugBtn = document.querySelector('#debugBtn');
   if (debugBtn) {
+    if (envConfig?.DEFAULT_DEBUG != null) {
+      debugMode = !!envConfig.DEFAULT_DEBUG;
+      if (debugMode) debugBtn.classList.add('active');
+    } else {
+      debugMode = debugBtn.classList.contains('active');
+    }
     debugBtn.addEventListener('click', () => {
       debugBtn.classList.toggle('active');
       debugMode = debugBtn.classList.contains('active');

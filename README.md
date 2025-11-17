@@ -19,6 +19,8 @@ cp env.example.json env.json
   "DEFAULT_MANAGEMENT": true,
   "DEFAULT_LABELS": true,
   "DEFAULT_HIERARCHY": true,
+  "DEFAULT_DEBUG": false,
+  "DEFAULT_ATTRIBUTES": true,
   "DEFAULT_HIDDEN_ROOTS": ["p-1"],
   "ATTRIBUTES_URL": "./attributes.tsv.txt"
 }
@@ -33,6 +35,8 @@ cp env.example.json env.json
 - **`DEFAULT_MANAGEMENT`**: Management-Filter standardmäßig aktiviert
 - **`DEFAULT_LABELS`**: Knoten-Labels standardmäßig sichtbar
 - **`DEFAULT_HIERARCHY`**: Hierarchie-Layout standardmäßig aktiviert
+- **`DEFAULT_DEBUG`**: Debug-Modus standardmäßig aktiviert (zeigt Koordinaten statt Namen)
+- **`DEFAULT_ATTRIBUTES`**: Attribut-Sichtbarkeit standardmäßig aktiviert
 - **`DEFAULT_HIDDEN_ROOTS`**: Array von Knoten-IDs, die standardmäßig ausgeblendet werden
 - **`ATTRIBUTES_URL`**: URL zur Attributdatei (TSV/CSV-Format, optional)
 
