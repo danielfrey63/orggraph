@@ -899,7 +899,7 @@ function applyLoadedDataObject(data, sourceName) {
   }
   
   populateCombo("");
-  buildOrgLegend(new Set());
+  buildOrgLegend(allowedOrgs);
   buildHiddenLegend();
   setStatus(sourceName);
   updateFooterStats(null);
@@ -1313,8 +1313,6 @@ function computeSubgraph(startId, depth, mode) {
         const wType = byId.get(w)?.type;
         // Suppress Person->Org in down mode
         if (vType === 'person' && wType === 'org') continue;
-        // If target is org and it's disabled, skip
-        if (wType === 'org' && !allowedOrgs.has(w)) continue;
         if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
       }
       // Additionally: Org -> Persons via inverse memberOf (Org gets its members)
@@ -1333,8 +1331,6 @@ function computeSubgraph(startId, depth, mode) {
         const wType = byId.get(w)?.type;
         // For org nodes, only climb to parent orgs via inn
         if (vType === 'org' && wType !== 'org') continue;
-        // If target is org and it's disabled, skip
-        if (wType === 'org' && !allowedOrgs.has(w)) continue;
         if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
       }
       // Additionally: Person -> Org via forward memberOf in up mode
@@ -1343,12 +1339,41 @@ function computeSubgraph(startId, depth, mode) {
           const wType = byId.get(w)?.type;
           if (wType !== 'org') continue;
           // If target is org and it's disabled, skip
-          if (wType === 'org' && !allowedOrgs.has(w)) continue;
+          // if (wType === 'org' && !allowedOrgs.has(w)) continue;
           if (!seen.has(w)) { seen.add(w); dist.set(w, d + 1); q.push(w); }
         }
       }
     }
   }
+  
+  // Collect Orgs for Legend FIRST (before any filtering)
+  // Include both: OEs reached via BFS AND OEs connected to persons in the subgraph
+  const legendOrgs = new Set();
+  
+  // 1. Add OEs that were reached via BFS
+  for (const id of seen) {
+    const n = byId.get(id);
+    if (n && n.type === 'org') {
+      legendOrgs.add(String(id));
+    }
+  }
+  
+  // 2. Add OEs connected to persons in the subgraph (memberOf relationships)
+  //    This ensures OEs appear in legend even when Person->Org is suppressed in down mode
+  for (const id of seen) {
+    const n = byId.get(id);
+    if (n && n.type === 'person') {
+      // Find all OEs this person belongs to
+      for (const l of raw.links) {
+        const s = idOf(l.source);
+        const t = idOf(l.target);
+        if (s === id && byId.get(t)?.type === 'org') {
+          legendOrgs.add(t);
+        }
+      }
+    }
+  }
+  
   let nodes = Array.from(seen)
     .map(id => {
       const n = byId.get(id);
@@ -1383,6 +1408,7 @@ function computeSubgraph(startId, depth, mode) {
       }
     }
   }
+  
   // Drop orgs that are disabled
   nodes = nodes.filter(n => n.type !== 'org' || allowedOrgs.has(String(n.id)));
   const nodeSet = new Set(nodes.map(n => String(n.id)));
@@ -1391,7 +1417,7 @@ function computeSubgraph(startId, depth, mode) {
     .filter(x => nodeSet.has(x.s) && nodeSet.has(x.t))
     .map(x => ({ source: x.s, target: x.t }));
   
-  return { nodes, links };
+  return { nodes, links, legendOrgs };
 }
 
 function recomputeHiddenNodes() {
@@ -1533,6 +1559,8 @@ function buildHiddenLegend() {
   legend.appendChild(ul);
 }
 
+let legendCollapsedItems = new Set();
+
 function buildOrgLegend(scope) {
   const legend = document.querySelector('#legend');
   if (!legend) return;
@@ -1585,17 +1613,24 @@ function buildOrgLegend(scope) {
     if (kids.length) {
       const chevron = document.createElement('button');
       chevron.type = 'button';
-      chevron.className = 'legend-tree-chevron expanded';
+      // Check state: collapsed if in set
+      const isCollapsed = legendCollapsedItems.has(oid);
+      chevron.className = isCollapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
       chevron.title = 'Ein-/Ausklappen';
       chevron.innerHTML = getChevronSVG();
       
       chevron.addEventListener('click', (e) => {
         e.stopPropagation();
         const sub = li.querySelector('ul');
-        const isCollapsed = sub && sub.style.display === 'none';
+        const currentlyCollapsed = sub && sub.style.display === 'none';
         if (sub) {
-          sub.style.display = isCollapsed ? '' : 'none';
-          chevron.className = isCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
+          sub.style.display = currentlyCollapsed ? '' : 'none';
+          chevron.className = currentlyCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
+          if (currentlyCollapsed) {
+            legendCollapsedItems.delete(oid);
+          } else {
+            legendCollapsedItems.add(oid);
+          }
         }
       });
       
@@ -1659,6 +1694,9 @@ function buildOrgLegend(scope) {
     li.appendChild(row);
     if (kids.length) {
       const sub = document.createElement('ul');
+      if (legendCollapsedItems.has(oid)) {
+        sub.style.display = 'none';
+      }
       kids.forEach(k => sub.appendChild(renderNode(k, (depth || 0) + 1)));
       li.appendChild(sub);
     }
@@ -3293,81 +3331,14 @@ function applyFromUI() {
     updateFooterStats(sub);
     
     // Scoped legend for single root
-    const startType = byId.get(startId)?.type;
-    const scopeOrgs = new Set();
-    if (startType === 'person') {
-      // Direct memberOf orgs of the start person
-      for (const l of raw.links) {
-        const s = idOf(l.source), t = idOf(l.target);
-        if (s === startId && byId.get(t)?.type === 'org') scopeOrgs.add(t);
-      }
-      // Add ancestor orgs (orgParent upwards)
-      const parents = new Map(); // child -> parent set
-      const children = new Map(); // parent -> child set (for deepest detection and downward expansion)
-      for (const l of raw.links) {
-        const s = idOf(l.source), t = idOf(l.target);
-        if (byId.get(s)?.type === 'org' && byId.get(t)?.type === 'org') {
-          if (!parents.has(t)) parents.set(t, new Set());
-          parents.get(t).add(s);
-          if (!children.has(s)) children.set(s, new Set());
-          children.get(s).add(t);
-        }
-      }
-      const q = Array.from(scopeOrgs);
-      for (let i=0;i<q.length;i++) {
-        const c = q[i];
-        for (const p of (parents.get(c) || [])) {
-          if (!scopeOrgs.has(p)) { scopeOrgs.add(p); q.push(p); }
-        }
-      }
-      // Determine deepest memberOf orgs (those that are not parent of another memberOf in this set)
-      const memberSet = new Set(Array.from(scopeOrgs).filter(oid => {
-        // limit to original direct memberOf (exclude ancestors added above)
-        // reconstruct direct memberOf set
-        return Array.from(raw.links).some(l => idOf(l.source) === startId && idOf(l.target) === oid);
-      }));
-      const deepest = Array.from(memberSet).filter(oid => {
-        const kids = children.get(oid) || new Set();
-        // if any child is also in memberSet, then oid is not deepest
-        for (const k of kids) { if (memberSet.has(k)) return false; }
-        return true;
-      });
-      // Expand descendants from deepest
-      for (const root of deepest) {
-        const dq = [root];
-        for (let i=0;i<dq.length;i++) {
-          const cur = dq[i];
-          for (const ch of (children.get(cur) || [])) {
-            if (!scopeOrgs.has(ch)) { scopeOrgs.add(ch); dq.push(ch); }
-          }
-        }
-      }
-    } else if (startType === 'org') {
-      // The start org and all descendant orgs
-      const children = new Map();
-      for (const l of raw.links) {
-        const s = idOf(l.source), t = idOf(l.target);
-        if (byId.get(s)?.type === 'org' && byId.get(t)?.type === 'org') {
-          if (!children.has(s)) children.set(s, new Set());
-          children.get(s).add(t);
-        }
-      }
-      const q = [startId];
-      scopeOrgs.add(startId);
-      for (let i=0;i<q.length;i++) {
-        const cur = q[i];
-        for (const ch of (children.get(cur) || [])) {
-          if (!scopeOrgs.has(ch)) { scopeOrgs.add(ch); q.push(ch); }
-        }
-      }
-    }
-    buildOrgLegend(scopeOrgs);
+    // Use the OEs that are actually reachable in the subgraph (before filtering)
+    buildOrgLegend(sub.legendOrgs);
   } else {
     // Multi-root: compute union of subgraphs
     const nodeMap = new Map();
     const linkSet = new Set();
     const effDepth = Number.isFinite(depth) ? depth : 2;
-    const scopeOrgs = new Set();
+    const scopeOrgs = new Set(); // Union of all legendOrgs
     // Hilfsstrukturen für OE-Eltern/Kind-Beziehungen
     const orgParents = new Map(); // child -> set(parents)
     const orgChildren = new Map(); // parent -> set(children)
@@ -3396,51 +3367,9 @@ function applyFromUI() {
         const s = idOf(l.source), t = idOf(l.target);
         linkSet.add(`${s}>${t}`);
       }
-      // OE-Scope sammeln pro Root
-      const rType = byId.get(rid)?.type;
-      if (rType === 'person') {
-        // direkte memberOf OEs
-        const direct = new Set();
-        for (const l of raw.links) {
-          const s = idOf(l.source), t = idOf(l.target);
-          if (s === rid && byId.get(t)?.type === 'org') direct.add(t);
-        }
-        // alle Vorfahren hinzufügen
-        const all = new Set(direct);
-        const q = Array.from(direct);
-        for (let i=0;i<q.length;i++) {
-          const c = q[i];
-          for (const p of (orgParents.get(c) || [])) {
-            if (!all.has(p)) { all.add(p); q.push(p); }
-          }
-        }
-        // tiefste OEs bestimmen (ohne Kinder in direct)
-        const deepest = Array.from(direct).filter(oid => {
-          const kids = orgChildren.get(oid) || new Set();
-          for (const k of kids) if (direct.has(k)) return false;
-          return true;
-        });
-        // Nachfahren ab tiefsten erweitern
-        for (const root of deepest) {
-          const dq = [root];
-          for (let i=0;i<dq.length;i++) {
-            const cur = dq[i];
-            for (const ch of (orgChildren.get(cur) || [])) {
-              if (!all.has(ch)) { all.add(ch); dq.push(ch); }
-            }
-          }
-        }
-        all.forEach(x => scopeOrgs.add(x));
-      } else if (rType === 'org') {
-        // Root-OE und alle Nachfahren
-        const q = [rid];
-        scopeOrgs.add(rid);
-        for (let i=0;i<q.length;i++) {
-          const cur = q[i];
-          for (const ch of (orgChildren.get(cur) || [])) {
-            if (!scopeOrgs.has(ch)) { scopeOrgs.add(ch); q.push(ch); }
-          }
-        }
+      // Add legend orgs from this subgraph
+      if (sub.legendOrgs) {
+        sub.legendOrgs.forEach(o => scopeOrgs.add(o));
       }
     }
     const nodes = Array.from(nodeMap.values());
