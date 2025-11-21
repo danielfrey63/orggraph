@@ -40,6 +40,10 @@ let legendMenuEl = null;
 let nodeMenuEl = null;
 let simAllById = new Map();
 let parentOf = new Map();
+let orgParent = new Map();      // childOrgId -> parentOrgId
+let orgChildren = new Map();    // parentOrgId -> Set(childOrgId)
+let orgRoots = [];              // Array der Wurzel-OEs (ohne Eltern)
+let orgLegendNodes = new Map();
 let currentSubgraph = null;
 let currentLayoutMode = 'force'; // 'force' or 'hierarchy'
 let hierarchyLevels = new Map(); // nodeId -> level number
@@ -764,12 +768,28 @@ function applyLoadedDataObject(data, sourceName) {
   raw = { nodes, links: norm, persons, orgs };
   byId = new Map(raw.nodes.map(n => [String(n.id), n]));
   allNodesUnique = Array.from(byId.values());
-  parentOf = new Map();
-  for (const l of raw.links) {
-    const s = idOf(l.source), t = idOf(l.target);
-    if (byId.get(s)?.type === 'org' && byId.get(t)?.type === 'org') {
+
+  // OE-Hierarchie global initialisieren (Org->Org-Kanten) [CA]
+  parentOf = new Map();       // Bestehende Nutzung für Org-Tiefe und Tooltips
+  orgParent = new Map();
+  orgChildren = new Map();
+  orgRoots = [];
+  if (raw && Array.isArray(raw.orgs) && Array.isArray(raw.links)) {
+    const orgIds = new Set(raw.orgs.map(o => String(o.id)));
+    const hasParent = new Set();
+    for (const l of raw.links) {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (!orgIds.has(s) || !orgIds.has(t)) continue;
+      // child -> parent
       parentOf.set(t, s);
+      orgParent.set(t, s);
+      // parent -> children
+      if (!orgChildren.has(s)) orgChildren.set(s, new Set());
+      orgChildren.get(s).add(t);
+      hasParent.add(t);
     }
+    const allOrgIds = Array.from(orgIds);
+    orgRoots = allOrgIds.filter(id => !hasParent.has(id));
   }
   // Anfangszustand: keine OE ist ausgewählt; Auswahl entsteht nur durch Benutzerinteraktion
   allowedOrgs = new Set();
@@ -1488,23 +1508,32 @@ function buildOrgLegend() {
   const legend = document.querySelector('#legend');
   if (!legend) return;
   legend.innerHTML = '';
-  // Build org parent relationships
-  const children = new Map();
-  const hasParent = new Set();
-  for (const l of raw.links) {
-    const s = idOf(l.source), t = idOf(l.target);
-    if (byId.get(s)?.type !== 'org' || byId.get(t)?.type !== 'org') continue;
-    if (!children.has(s)) children.set(s, new Set());
-    children.get(s).add(t);
-    hasParent.add(t);
+  // Bestehende OE-Hierarchie verwenden, falls vorhanden, sonst Fallback aus raw.links [CA]
+  let children = orgChildren;
+  let roots = Array.isArray(orgRoots) && orgRoots.length > 0 ? orgRoots.slice() : [];
+  if (!children || children.size === 0 || roots.length === 0) {
+    const localChildren = new Map();
+    const hasParent = new Set();
+    for (const l of raw.links || []) {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (byId.get(s)?.type !== 'org' || byId.get(t)?.type !== 'org') continue;
+      if (!localChildren.has(s)) localChildren.set(s, new Set());
+      localChildren.get(s).add(t);
+      hasParent.add(t);
+    }
+    const allOrgs = raw && Array.isArray(raw.orgs) ? raw.orgs.map(o => String(o.id)) : [];
+    roots = allOrgs.filter(id => !hasParent.has(id));
+    children = localChildren;
   }
-  const allOrgs = raw && Array.isArray(raw.orgs) ? raw.orgs.map(o => String(o.id)) : [];
-  const roots = allOrgs.filter(id => !hasParent.has(id));
+
+  // Legendennode-Index zurücksetzen [CA]
+  orgLegendNodes = new Map();
 
   const ul = document.createElement('ul');
   ul.className = 'legend-list';
   function renderNode(oid, depth = 0) {
     const li = document.createElement('li');
+    li.dataset.oid = String(oid);
     const lbl = byId.get(oid)?.label || oid;
     const idAttr = `org_${oid}`;
     
@@ -1708,13 +1737,160 @@ function buildOrgLegend() {
     row.addEventListener('contextmenu', onCtx);
     return li;
   }
-  
-  if (roots.length) {
-    roots.forEach(r => ul.appendChild(renderNode(r, 0)));
-  } else if (scopeProvided) {
-    // Fallback: render flat list of scoped orgs (no parent-child within scope)
-    Array.from(scopeSet || []).forEach(oid => ul.appendChild(renderNode(oid, 0)));
+
+  for (const r of roots) {
+    const li = renderNode(r, 0);
+    if (li) ul.appendChild(li);
   }
+
+  legend.appendChild(ul);
+  syncGraphAndLegendColors();
+}
+
+// Baut eine OE-Legende nur fuer die angegebenen sichtbaren OEs (visibleSet)
+// unter Verwendung der globalen OE-Hierarchie orgParent/orgChildren. [CA][SF]
+function buildScopedOrgLegend(visibleSet) {
+  const legend = document.querySelector('#legend');
+  if (!legend) return;
+
+  const scopeSet = new Set(Array.from(visibleSet || []).map(String));
+  legend.innerHTML = '';
+  orgLegendNodes = new Map();
+
+  if (!raw || !Array.isArray(raw.orgs) || scopeSet.size === 0) {
+    return;
+  }
+
+  // Wurzeln innerhalb des sichtbaren Teilbaums: OEs ohne sichtbaren Parent
+  const roots = [];
+  for (const oid of scopeSet) {
+    const p = orgParent.get(oid);
+    if (!p || !scopeSet.has(String(p))) {
+      roots.push(String(oid));
+    }
+  }
+
+  const ul = document.createElement('ul');
+  ul.className = 'legend-list';
+
+  function renderScopedNode(oid, depth = 0) {
+    const id = String(oid);
+    if (!scopeSet.has(id)) return null;
+
+    const li = document.createElement('li');
+    li.dataset.oid = id;
+    const lbl = byId.get(id)?.label || id;
+    const idAttr = `org_${id}`;
+
+    const row = document.createElement('div');
+    row.className = 'legend-row';
+
+    const leftArea = document.createElement('div');
+    leftArea.className = 'legend-row-left';
+
+    const rightArea = document.createElement('div');
+    rightArea.className = 'legend-row-right';
+
+    const depthSpacer = document.createElement('div');
+    depthSpacer.className = 'legend-depth-spacer';
+    depthSpacer.style.width = `${Math.max(0, Number(depth) || 0) * 16}px`;
+    leftArea.appendChild(depthSpacer);
+
+    // Kinder im sichtbaren Teilbaum
+    const kidsAll = Array.from(orgChildren.get(id) || []);
+    const kids = kidsAll.filter(k => scopeSet.has(String(k)));
+
+    if (kids.length) {
+      const chevron = document.createElement('button');
+      chevron.type = 'button';
+      const isCollapsed = legendCollapsedItems.has(id);
+      chevron.className = isCollapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
+      chevron.title = 'Ein-/Ausklappen';
+      chevron.innerHTML = getChevronSVG();
+
+      chevron.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const sub = li.querySelector('ul');
+        const currentlyCollapsed = sub && sub.style.display === 'none';
+        if (sub) {
+          sub.style.display = currentlyCollapsed ? '' : 'none';
+          chevron.className = currentlyCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
+          if (currentlyCollapsed) {
+            legendCollapsedItems.delete(id);
+          } else {
+            legendCollapsedItems.add(id);
+          }
+        }
+      });
+
+      leftArea.appendChild(chevron);
+    } else {
+      const spacer = document.createElement('div');
+      spacer.className = 'legend-tree-spacer';
+      leftArea.appendChild(spacer);
+    }
+
+    const chip = document.createElement('span');
+    chip.className = 'legend-label-chip';
+    chip.textContent = lbl;
+    chip.title = lbl;
+    leftArea.appendChild(chip);
+
+    row.appendChild(leftArea);
+    row.appendChild(rightArea);
+
+    const updateRowState = () => {
+      const isActive = allowedOrgs.has(id);
+      row.title = isActive ? `${lbl} - Klicken zum Ausblenden` : `${lbl} - Klicken zum Anzeigen`;
+      // Farben/Klassen werden in syncGraphAndLegendColors gesetzt
+    };
+
+    updateRowState();
+
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.legend-tree-chevron')) return;
+      const isActive = allowedOrgs.has(id);
+      if (isActive) {
+        allowedOrgs.delete(id);
+      } else {
+        allowedOrgs.add(id);
+      }
+      updateRowState();
+      syncGraphAndLegendColors();
+    });
+
+    row.style.cursor = 'pointer';
+
+    const hiddenInput = document.createElement('input');
+    hiddenInput.type = 'checkbox';
+    hiddenInput.id = idAttr;
+    hiddenInput.style.display = 'none';
+    hiddenInput.checked = allowedOrgs.has(id);
+    row.appendChild(hiddenInput);
+
+    li.appendChild(row);
+
+    if (kids.length) {
+      const sub = document.createElement('ul');
+      if (legendCollapsedItems.has(id)) {
+        sub.style.display = 'none';
+      }
+      for (const k of kids) {
+        const childLi = renderScopedNode(k, (depth || 0) + 1);
+        if (childLi) sub.appendChild(childLi);
+      }
+      li.appendChild(sub);
+    }
+
+    orgLegendNodes.set(id, li);
+    return li;
+  }
+
+  for (const r of roots) {
+    const li = renderScopedNode(r, 0);
+    if (li) ul.appendChild(li);
+  }
+
   legend.appendChild(ul);
   syncGraphAndLegendColors();
 }
@@ -1722,26 +1898,9 @@ function buildOrgLegend() {
 let currentLegendScope = new Set();
 
 function applyLegendScope(scope) {
-  const legend = document.querySelector('#legend');
-  if (!legend) return;
-
   const scopeSet = new Set(Array.from(scope || []).map(String));
   currentLegendScope = scopeSet;
 
-  // Org-Hierarchie (child -> parent) aus Org->Org-Kanten aufbauen
-  const orgParent = new Map();
-  if (raw && Array.isArray(raw.orgs) && Array.isArray(raw.links)) {
-    const orgIds = new Set(raw.orgs.map(o => String(o.id)));
-    for (const l of raw.links) {
-      if (!l) continue;
-      const s = idOf(l.source), t = idOf(l.target);
-      if (orgIds.has(s) && orgIds.has(t)) {
-        orgParent.set(t, s);
-      }
-    }
-  }
-
-  // Sichtbare OEs: Scope + alle ihre Vorfahren
   const visible = new Set();
   if (scopeSet.size > 0) {
     for (const oid of scopeSet) {
@@ -1755,13 +1914,7 @@ function applyLegendScope(scope) {
     }
   }
 
-  legend.querySelectorAll('.legend-list input[id^="org_"]').forEach(cb => {
-    const oid = cb.id.replace('org_', '');
-    const li = cb.closest('li');
-    if (!li) return;
-    const show = scopeSet.size > 0 ? visible.has(oid) : false;
-    li.style.display = show ? '' : 'none';
-  });
+  buildScopedOrgLegend(visible);
 }
 
 function updateLegendChips(rootEl) {
