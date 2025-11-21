@@ -820,8 +820,17 @@ async function loadEnvConfig() {
     if (res.ok) {
       envConfig = await res.json();
       return true;
+    } else {
+      // Keine gültige env.json gefunden (HTTP-Fehler)
+      console.warn('env.json konnte nicht geladen werden:', res.status, res.statusText);
+      setStatus('Keine gültige env.json gefunden – manuelles Laden über den Status möglich.');
     }
-  } catch(_) {}
+  } catch (e) {
+    // Fehler beim Laden oder Parsen von env.json
+    console.error('Fehler beim Laden von env.json:', e);
+    setStatus('Fehler beim Laden von env.json – manuelles Laden über den Status möglich.');
+  }
+  envConfig = null;
   return false;
 }
 
@@ -971,33 +980,40 @@ async function loadData() {
   setStatus("Lade Daten...");
   let data = null;
   let sourceName = '(keine Daten)';
+
   const dataUrl = envConfig?.DATA_URL || null;
-  if (dataUrl) {
-    try {
-      const res = await fetch(dataUrl, { cache: "no-store" });
-      if (res.ok) { data = await res.json(); sourceName = dataUrl; }
-    } catch(_) {}
+
+  // Wenn keine Datenquelle über ENV konfiguriert ist, kein Autoload durchführen [SF][REH]
+  if (!dataUrl) {
+    setStatus('Keine automatische Datenquelle konfiguriert – manuelles Laden über den Status möglich.');
+    return false;
   }
-  if (!data && (preferredData === 'generated' || preferredData === 'auto')) {
-    try {
-      const resGen = await fetch("./data.json", { cache: "no-store" });
-      if (resGen.ok) { data = await resGen.json(); sourceName = 'data.json'; }
-    } catch(_) {}
+
+  try {
+    const res = await fetch(dataUrl, { cache: "no-store" });
+    if (res.ok) {
+      data = await res.json();
+      sourceName = dataUrl;
+    } else {
+      console.warn('Automatisches Laden der Daten fehlgeschlagen:', res.status, res.statusText);
+    }
+  } catch (e) {
+    console.error('Fehler beim automatischen Laden der Daten:', e);
   }
-  if (!data && (preferredData === 'default' || preferredData === 'auto')) {
-    try {
-      const resDef = await fetch("./data.default.json", { cache: "no-store" });
-      if (resDef.ok) { data = await resDef.json(); sourceName = 'data.default.json'; }
-    } catch(_) {}
+
+  if (!data) {
+    setStatus('Automatisches Laden der Daten fehlgeschlagen – bitte Daten manuell laden.');
+    return false;
   }
-  if (!data && preferredData === 'auto') {
-    try {
-      const resBase = await fetch("./data.json", { cache: "no-store" });
-      if (resBase.ok) { data = await resBase.json(); sourceName = 'data.json'; }
-    } catch(_) {}
+
+  try {
+    applyLoadedDataObject(data, sourceName);
+  } catch (e) {
+    console.error('Fehler beim Anwenden der geladenen Daten:', e);
+    setStatus('Fehler beim Verarbeiten der geladenen Daten – bitte Daten manuell laden.');
+    return false;
   }
-  applyLoadedDataObject(data, sourceName);
-  
+
   // Lade Attribute automatisch, falls in ENV konfiguriert (string oder string[])
   const attrCfg = envConfig?.ATTRIBUTES_URL;
   if (attrCfg) {
@@ -1019,6 +1035,8 @@ async function loadData() {
       }
     }
   }
+
+  return true;
 }
 
 function populateCombo(filterText) {
@@ -4823,8 +4841,16 @@ let oesVisible = true;
 let savedAllowedOrgs = new Set();
 
 window.addEventListener("DOMContentLoaded", async () => {
-  await loadEnvConfig();
-  await loadData();
+  const envLoaded = await loadEnvConfig();
+  let dataLoaded = false;
+
+  // Nur versuchen automatisch zu laden, wenn ENV erfolgreich geladen wurde und eine Datenquelle konfiguriert ist [SF][REH]
+  if (envLoaded && envConfig?.DATA_URL) {
+    dataLoaded = await loadData();
+    if (!dataLoaded) {
+      showTemporaryNotification('Automatisches Laden der Daten ist fehlgeschlagen – bitte unten manuell eine Datei wählen.', 5000);
+    }
+  }
   // Initialisiere Chevron-Icons im HTML
   initializeChevronIcons();
   // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
