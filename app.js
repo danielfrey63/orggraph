@@ -4968,12 +4968,28 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Attribute-Sichtbarkeit-Toggle (nur Graph-Sichtbarkeit, keine Selektion ändern)
   const attributesVisibilityBtn = document.getElementById('toggleAttributesVisibility');
   if (attributesVisibilityBtn) {
-    // Anfangs aktiv (Attribute sichtbar)
-    if (envConfig?.DEFAULT_ATTRIBUTES != null) {
-      attributesVisible = !!envConfig.DEFAULT_ATTRIBUTES;
+    // Anfangszustand aus ENV lesen (ATTRIBUTES_VISIBLE)
+    const envAttrVisible = (envConfig && envConfig.ATTRIBUTES_VISIBLE != null)
+      ? envConfig.ATTRIBUTES_VISIBLE
+      : null;
+
+    if (envAttrVisible != null) {
+      attributesVisible = !!envAttrVisible;
       if (!attributesVisible) attributesVisibilityBtn.classList.remove('active');
     } else {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
+    }
+
+    // Icon initial korrekt setzen (eye vs. eye-closed)
+    const initialIcon = attributesVisibilityBtn.querySelector('.codicon');
+    if (initialIcon) {
+      if (attributesVisible) {
+        initialIcon.classList.remove('codicon-eye-closed');
+        initialIcon.classList.add('codicon-eye');
+      } else {
+        initialIcon.classList.remove('codicon-eye');
+        initialIcon.classList.add('codicon-eye-closed');
+      }
     }
     
     attributesVisibilityBtn.addEventListener('click', () => {
@@ -5137,8 +5153,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   
   const mgmt = document.querySelector('#toggleManagement');
   if (mgmt) {
-    if (envConfig?.DEFAULT_MANAGEMENT != null) {
-      managementEnabled = !!envConfig.DEFAULT_MANAGEMENT;
+    // Management-Modus aus ENV lesen (MANAGEMENT_ONLY)
+    const envMgmtOnly = (envConfig && envConfig.MANAGEMENT_ONLY != null)
+      ? envConfig.MANAGEMENT_ONLY
+      : null;
+
+    if (envMgmtOnly != null) {
+      managementEnabled = !!envMgmtOnly;
       if (!managementEnabled) mgmt.classList.remove('active');
     } else {
       managementEnabled = mgmt.classList.contains('active');
@@ -5159,8 +5180,13 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   const lbls = document.querySelector('#toggleLabels');
   if (lbls) {
-    if (envConfig?.DEFAULT_LABELS != null) {
-      labelsVisible = !!envConfig.DEFAULT_LABELS;
+    // Label-Sichtbarkeit aus ENV lesen (LABELS_VISIBLE)
+    const envLabelsVisible = (envConfig && envConfig.LABELS_VISIBLE != null)
+      ? envConfig.LABELS_VISIBLE
+      : null;
+
+    if (envLabelsVisible != null) {
+      labelsVisible = !!envLabelsVisible;
       if (!labelsVisible) lbls.classList.remove('active');
     } else {
       labelsVisible = lbls.classList.contains('active');
@@ -5211,8 +5237,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   
   const debugBtn = document.querySelector('#debugBtn');
   if (debugBtn) {
-    if (envConfig?.DEFAULT_DEBUG != null) {
-      debugMode = !!envConfig.DEFAULT_DEBUG;
+    // Debug-Flag aus ENV lesen (DEBUG_ON)
+    const envDebugOn = (envConfig && envConfig.DEBUG_ON != null)
+      ? envConfig.DEBUG_ON
+      : null;
+
+    if (envDebugOn != null) {
+      debugMode = !!envDebugOn;
       if (debugMode) debugBtn.classList.add('active');
     } else {
       debugMode = debugBtn.classList.contains('active');
@@ -5323,8 +5354,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Hierarchy toggle button
   const hier = document.querySelector('#toggleHierarchy');
   if (hier) {
-    if (envConfig?.DEFAULT_HIERARCHY != null) {
-      const hierEnabled = !!envConfig.DEFAULT_HIERARCHY;
+    // Layout-Modus aus ENV lesen (HIERARCHICAL_LAYOUT)
+    const envHierLayout = (envConfig && envConfig.HIERARCHICAL_LAYOUT != null)
+      ? envConfig.HIERARCHICAL_LAYOUT
+      : null;
+
+    if (envHierLayout != null) {
+      const hierEnabled = !!envHierLayout;
       if (!hierEnabled) hier.classList.remove('active');
       currentLayoutMode = hierEnabled ? 'hierarchy' : 'force';
     } else {
