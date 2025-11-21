@@ -880,6 +880,8 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   --node-with-attributes-stroke: #4682b4;
   --node-with-attributes-stroke-width: 6;
   --nodes-without-attributes-opacity: 0.2;
+  --root-node-stroke: #f97316;
+  --root-node-stroke-width: 3;
 
   /* Simulation-Parameter */
   --link-distance: 20;
@@ -1477,7 +1479,6 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 .fuzzy-match-dialog .match-source {
   color: var(--text-muted);
   font-size: 0.9em;
-  font-style: italic;
 }
 
 /* Globaler Stil für alle Dropdowns im Dialog, um maximale Sichtbarkeit zu garantieren */
@@ -1776,6 +1777,16 @@ body > .combo-list li {
 
 .menu-item:hover {
   background: #1f2937;
+}
+
+.menu-item.disabled {
+  cursor: default;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.menu-item.disabled:hover {
+  background: transparent;
 }
 
 .menu-item-label {

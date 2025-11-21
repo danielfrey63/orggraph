@@ -555,6 +555,24 @@ function updateAttributeCircles() {
   // Alle Knoten im SVG auswählen
   const nodes = d3.selectAll(SVG_ID + ' .node');
   
+  const applyRootStyling = () => {
+    nodes.each(function(d) {
+      if (!d) return;
+      const personId = String(d.id);
+      const sid = String(personId);
+      const hasExplicitRoots = Array.isArray(selectedRootIds) && selectedRootIds.length > 0;
+      const isVisualRoot = hasExplicitRoots
+        ? selectedRootIds.includes(sid)
+        : (currentSelectedId != null && String(currentSelectedId) === sid);
+      if (!isVisualRoot) return;
+      const nodeGroup = d3.select(this);
+      nodeGroup.select('circle.node-circle')
+        .style('stroke', 'var(--root-node-stroke)')
+        .style('stroke-width', cssNumber('--root-node-stroke-width', 3))
+        .style('opacity', 1);
+    });
+  };
+  
   // Alle bestehenden Attribut-Kreise entfernen
   nodes.selectAll('circle.attribute-circle').remove();
   
@@ -571,6 +589,7 @@ function updateAttributeCircles() {
     nodes.selectAll('text.label')
       .attr('x', 10);
     
+    applyRootStyling();
     return;
   }
   
@@ -680,6 +699,8 @@ function updateAttributeCircles() {
       }
     });
   }
+  
+  applyRootStyling();
 }
 
 function updateFooterStats(subgraph) {
@@ -2322,6 +2343,7 @@ function ensureNodeMenu() {
   document.addEventListener('click', () => { if (nodeMenuEl && nodeMenuEl.style.display === 'block') nodeMenuEl.style.display = 'none'; });
   return el;
 }
+
 function showNodeMenu(x, y, actionsOrOnHide) {
   const el = ensureNodeMenu();
   // Menü dynamisch aufbauen, aber Abwärtskompatibilität für alte Signatur behalten
@@ -2329,9 +2351,9 @@ function showNodeMenu(x, y, actionsOrOnHide) {
   // Neue Signatur: Objekt { onHideSubtree, onRemoveRoot, isRoot, nodeId }
   while (el.firstChild) el.removeChild(el.firstChild);
   
-  const addItem = (label, handler, hasSubmenu = false) => {
+  const addItem = (label, handler, hasSubmenu = false, disabled = false) => {
     const it = document.createElement('div');
-    it.className = 'menu-item';
+    it.className = 'menu-item' + (disabled ? ' disabled' : '');
     
     const labelSpan = document.createElement('span');
     labelSpan.className = 'menu-item-label';
@@ -2345,8 +2367,8 @@ function showNodeMenu(x, y, actionsOrOnHide) {
       it.appendChild(arrow);
     }
     
-    if (!hasSubmenu) {
-      it.onclick = () => { el.style.display = 'none'; handler && handler(); };
+    if (!hasSubmenu && !disabled && handler) {
+      it.onclick = () => { el.style.display = 'none'; handler(); };
     }
     el.appendChild(it);
     return it;
@@ -2359,9 +2381,10 @@ function showNodeMenu(x, y, actionsOrOnHide) {
     if (actions.onHideSubtree) addItem('Ausblenden', actions.onHideSubtree);
     
     // Neuer Root-Eintrag [SF]
-    if (actions.onSetAsRoot) addItem('Ins Zentrum stellen', actions.onSetAsRoot);
+    const isRootFlag = !!actions.isRoot;
+    if (actions.onSetAsRoot) addItem('Als Root definieren', actions.onSetAsRoot, false, isRootFlag);
     
-    if (actions.isRoot && actions.onRemoveRoot && Array.isArray(selectedRootIds) && selectedRootIds.length > 1) {
+    if (isRootFlag && actions.onRemoveRoot && Array.isArray(selectedRootIds) && selectedRootIds.length > 1) {
       addItem('Als Root entfernen', actions.onRemoveRoot);
     }
     
