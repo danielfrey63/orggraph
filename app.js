@@ -10,6 +10,7 @@ const HEIGHT = 800;
 const MAX_DROPDOWN_ITEMS = 100;
 const MIN_SEARCH_LENGTH = 2;
 const MAX_ROOTS = 5;
+const BFS_LEVEL_ANIMATION_DELAY_MS = 100;
 
 let raw = { nodes: [], links: [], persons: [], orgs: []};
 let personAttributes = new Map(); // Map von ID/Email zu Attribut-Maps
@@ -52,11 +53,19 @@ let hiddenByRoot = new Map();
 let currentHiddenCount = 0; // Anzahl der ausgeblendeten Knoten in der aktuellen Ansicht
 let selectedRootIds = [];
 let lastSingleRootId = null;
+let lastRenderRoots = [];
+let lastRenderDepth = null;
+let lastRenderDirMode = 'both';
 
 function isRoot(id){ return selectedRootIds.includes(String(id)); }
 function setSingleRoot(id){
   selectedRootIds = [String(id)];
   lastSingleRootId = String(id);
+  // Voll-Reset der Simulation bei Root-Wechsel [SF][PA]
+  if (typeof currentSimulation !== 'undefined' && currentSimulation) {
+    try { currentSimulation.stop(); } catch(_) {}
+    currentSimulation = null;
+  }
   try { console.log('[roots] setSingleRoot', { id: String(id) }); } catch {}
 }
 function addRoot(id){
@@ -137,7 +146,7 @@ function getNodeFillByLevel(node) {
   const midLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-mid-level') || '#818cf8';
   const lowLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-low-level') || '#4F46E5';
   
-  // Wähle Farbe basierend auf normalisierter Ebene
+  // Whle Farbe basierend auf normalisierter Ebene
   if (normalizedLevel <= 0.33) {
     return topLevelColor.trim();
   } else if (normalizedLevel <= 0.67) {
@@ -147,71 +156,6 @@ function getNodeFillByLevel(node) {
   }
 }
 
-function hslaToRgba(hslaStr){
-  // hsla(h, s%, l%, a)
-  const m = /hsla\(([^,]+),\s*([^%]+)%\s*,\s*([^%]+)%\s*,\s*([^\)]+)\)/i.exec(hslaStr||'');
-  if (!m) return { r:1, g:1, b:1, a:0 };
-  const h = (parseFloat(m[1])||0)/360;
-  const s = (parseFloat(m[2])||0)/100;
-  const l = (parseFloat(m[3])||0)/100;
-  const a = Math.max(0, Math.min(1, parseFloat(m[4])||0));
-  const [r,g,b] = hslToRgb(h,s,l);
-  return { r, g, b, a };
-}
-
-function hslaToRgbaInt(hslaStr){
-  const rgba = hslaToRgba(hslaStr);
-  return `rgba(${Math.round(rgba.r * 255)},${Math.round(rgba.g * 255)},${Math.round(rgba.b * 255)},${rgba.a})`;
-}
-
-// Basic CSS color parser supporting #hex, rgb(a), hsl(a)
-function parseColorToRgba(str){
-  if (!str) return { r:1, g:1, b:1, a:1 };
-  const s = String(str).trim();
-  // Hex
-  if (s[0] === '#') {
-    const h = s.slice(1);
-    if (h.length === 3) {
-      const r = parseInt(h[0] + h[0], 16) / 255;
-      const g = parseInt(h[1] + h[1], 16) / 255;
-      const b = parseInt(h[2] + h[2], 16) / 255;
-      return { r, g, b, a: 1 };
-    }
-    if (h.length >= 6) {
-      const r = parseInt(h.slice(0,2), 16) / 255;
-      const g = parseInt(h.slice(2,4), 16) / 255;
-      const b = parseInt(h.slice(4,6), 16) / 255;
-      return { r, g, b, a: 1 };
-    }
-  }
-  // rgba/rgb
-  let m = /^rgba?\(([^\)]+)\)/i.exec(s);
-  if (m) {
-    const parts = m[1].split(',').map(x => x.trim());
-    const r = Math.max(0, Math.min(255, parseFloat(parts[0]))) / 255;
-    const g = Math.max(0, Math.min(255, parseFloat(parts[1]))) / 255;
-    const b = Math.max(0, Math.min(255, parseFloat(parts[2]))) / 255;
-    const a = parts[3] != null ? Math.max(0, Math.min(1, parseFloat(parts[3]))) : 1;
-    return { r, g, b, a };
-  }
-  // hsla/hsl
-  m = /^hsla?\(([^\)]+)\)/i.exec(s);
-  if (m) {
-    const parts = m[1].split(',').map(x => x.trim());
-    const h = (parseFloat(parts[0]) || 0) / 360;
-    const sP = (parseFloat(parts[1]) || 0) / 100;
-    const lP = (parseFloat(parts[2]) || 0) / 100;
-    const a = parts[3] != null ? Math.max(0, Math.min(1, parseFloat(parts[3]))) : 1;
-    const [r,g,b] = hslToRgb(h, sP, lP);
-    return { r, g, b, a };
-  }
-  return { r:1, g:1, b:1, a:1 };
-}
-
-function canvasBgRgba(){
-  const bg = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg') || '#ffffff';
-  return parseColorToRgba(bg);
-}
 function clustersAtPoint(p) {
   // Sammle OEs mit ihren IDs und Labels
   const orgItems = [];
@@ -301,6 +245,55 @@ function showTooltip(x, y, lines) {
   tooltipEl.style.display = 'block';
 }
 function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
+
+/**
+ * Erstellt Tooltip-Zeilen für eine Person mit Attributen und OE-Zugehörigkeiten
+ * @param {string} personId - ID der Person
+ * @param {string} nodeLabel - Label des Knotens
+ * @param {Array} visibleOrgs - Array von sichtbaren OE-Labels am Cursor
+ * @returns {Array} Array von Tooltip-Zeilen
+ */
+function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
+  const lines = [];
+  
+  // Section header for node
+  lines.push(`👤 ${nodeLabel}`);
+  
+  // Zeige Attribute für diese Person an
+  if (personId && personAttributes.has(personId)) {
+    const attrs = personAttributes.get(personId);
+    lines.push('📊 Attribute:');
+    let hasAttributes = false;
+    for (const [attrName, attrValue] of attrs.entries()) {
+      if (activeAttributes.has(attrName)) {
+        const displayValue = attrValue !== '1' ? `: ${attrValue}` : '';
+        lines.push(`  • ${attrName}${displayValue}`);
+        hasAttributes = true;
+      }
+    }
+    if (!hasAttributes) {
+      lines.push('  • Keine aktiven Attribute');
+    }
+  }
+  
+  // Get all OEs this person belongs to (not just visible ones)
+  const allPersonOrgs = findAllPersonOrgs(personId);
+  
+  // Add visible org memberships (at mouse point) with a header
+  if (visibleOrgs.length > 0) {
+    lines.push('🔍 OEs am Cursor:');
+    visibleOrgs.forEach(org => lines.push(`  • ${org}`));
+  }
+  
+  // Add all org memberships with header
+  if (allPersonOrgs.length > 0) {
+    lines.push('🏢 Alle OE-Zugehörigkeiten:');
+    allPersonOrgs.forEach(org => lines.push(`  • ${org}`));
+  }
+  
+  return lines;
+}
+
 /**
  * Tooltips für Cluster-Hover
  */
@@ -312,7 +305,6 @@ function handleClusterHover(event, svgSel) {
   
   const [mx, my] = d3.pointer(event, svgSel.node());
   const p = currentZoomTransform.invert([mx, my]);
-  const hits = [];
   
   const r = cssNumber('--node-radius', 8) + 6;
   let nodeLabel = null;
@@ -328,52 +320,14 @@ function handleClusterHover(event, svgSel) {
     }
   }
   
-  for (const [oid, poly] of clusterPolygons.entries()) {
-    if (!allowedOrgs.has(oid)) continue;
-    if (poly && poly.length >= 3 && d3.polygonContains(poly, p)) {
-      const lbl = byId.get(oid)?.label || oid;
-      hits.push(lbl);
-    }
-  }
+  // Verwende die sortierte clustersAtPoint Funktion
+  const hits = clustersAtPoint(p);
   
-  const lines = [];
+  let lines = [];
   
   // Person information or cluster information
   if (nodeLabel) {
-    // Section header for node
-    lines.push(`👤 ${nodeLabel}`);
-    
-    // Zeige Attribute für diese Person an
-    if (personId && personAttributes.has(personId)) {
-      const attrs = personAttributes.get(personId);
-      lines.push('📊 Attribute:');
-      let hasAttributes = false;
-      for (const [attrName, attrValue] of attrs.entries()) {
-        if (activeAttributes.has(attrName)) {
-          const displayValue = attrValue !== '1' ? `: ${attrValue}` : '';
-          lines.push(`  • ${attrName}${displayValue}`);
-          hasAttributes = true;
-        }
-      }
-      if (!hasAttributes) {
-        lines.push('  • Keine aktiven Attribute');
-      }
-    }
-    
-    // Get all OEs this person belongs to (not just visible ones)
-    const allPersonOrgs = findAllPersonOrgs(personId);
-    
-    // Add visible org memberships (at mouse point) with a header
-    if (hits.length > 0) {
-      lines.push('🔍 OEs am Cursor:');
-      hits.forEach(hit => lines.push(`  • ${hit}`));
-    }
-    
-    // Add all org memberships with header
-    if (allPersonOrgs.length > 0) {
-      lines.push('🏢 Alle OE-Zugehörigkeiten:');
-      allPersonOrgs.forEach(org => lines.push(`  • ${org}`));
-    }
+    lines = buildPersonTooltipLines(personId, nodeLabel, hits);
   } else if (hits.length) {
     // Display cluster information with header
     lines.push('🏢 OE-Bereiche:');
@@ -394,34 +348,76 @@ function handleClusterHover(event, svgSel) {
  * @returns {string[]} - Array of organization labels ordered by hierarchy (smallest/lowest unit first)
  */
 function findAllPersonOrgs(personId) {
-  if (!personId) return [];
-  // Map speichert Zuordnung von OE-Labels zu ihren IDs für die spätere Tiefenberechnung
-  const orgMap = new Map(); // Map: label -> id
-  
-  // Suche nach direkten Verbindungen von Person zu OEs
+  if (!personId || !raw || !Array.isArray(raw.links) || !Array.isArray(raw.orgs)) return [];
+
+  const pid = String(personId);
+  const orgIds = new Set(raw.orgs.map(o => String(o.id)));
+
+  // OE-Hierarchie aus den Org->Org-Kanten aufbauen: child -> parent
+  const orgParent = new Map();
   for (const link of raw.links) {
-    const sourceId = idOf(link.source);
-    const targetId = idOf(link.target);
-    
-    // Person -> Org Verbindungen
-    if (sourceId === personId && byId.has(targetId)) {
-      const targetNode = byId.get(targetId);
-      if (targetNode && targetNode.type === 'org') {
-        // Alle OEs einschließen, unabhängig davon, ob sie in allowedOrgs sind
-        const label = targetNode.label || String(targetId);
-        orgMap.set(label, targetId);
-      }
+    if (!link) continue;
+    const s = idOf(link.source);
+    const t = idOf(link.target);
+    if (orgIds.has(s) && orgIds.has(t)) {
+      orgParent.set(t, s);
     }
   }
-  
-  // Nach Tiefe sortieren (kleinere OEs haben eine höhere Tiefe)
-  return Array.from(orgMap.entries())
-    .map(([label, id]) => ({ label, id, depth: orgDepth(id) }))
-    .sort((a, b) => {
-      // Zuerst nach Tiefe absteigend sortieren (höhere Tiefe = kleinere OE zuerst)
-      return b.depth - a.depth || a.label.localeCompare(b.label);
-    })
-    .map(item => item.label);
+
+  // Basis-OEs der Person: direkte Person->Org Kanten
+  const baseOrgs = new Set();
+  for (const link of raw.links) {
+    if (!link) continue;
+    const s = idOf(link.source);
+    const t = idOf(link.target);
+    if (s === pid && orgIds.has(t)) {
+      baseOrgs.add(t);
+    }
+  }
+
+  // Alle OEs entlang der Aufwärts-Kette (Basis-OE + alle Eltern) einsammeln
+  const orgMap = new Map(); // label -> { id, depth }
+
+  // Tiefe innerhalb der OE-Hierarchie cachen (Abstand zur Wurzel)
+  const depthCache = new Map();
+  const computeDepth = (oid) => {
+    const key = String(oid);
+    if (depthCache.has(key)) return depthCache.get(key);
+    let d = 0;
+    let cur = key;
+    const seen = new Set();
+    while (orgParent.has(cur) && !seen.has(cur)) {
+      seen.add(cur);
+      cur = orgParent.get(cur);
+      d++;
+    }
+    depthCache.set(key, d);
+    return d;
+  };
+
+  for (const baseId of baseOrgs) {
+    let cur = String(baseId);
+    const chainSeen = new Set();
+    while (cur && !chainSeen.has(cur)) {
+      chainSeen.add(cur);
+      const node = byId.get(cur);
+      if (node && node.type === 'org') {
+        const label = node.label || cur;
+        if (!orgMap.has(label)) {
+          orgMap.set(label, { id: cur, depth: computeDepth(cur) });
+        }
+      }
+      cur = orgParent.get(cur);
+    }
+  }
+
+  // Nach Tiefe sortieren (kleinere/basisnähere OEs haben eine höhere Tiefe)
+  return Array.from(orgMap.values())
+    .sort((a, b) => b.depth - a.depth || String(a.id).localeCompare(String(b.id)))
+    .map(item => {
+      const node = byId.get(String(item.id));
+      return (node && node.label) ? node.label : String(item.id);
+    });
 }
 
 function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; } return h>>>0; }
@@ -455,75 +451,6 @@ function orgDepth(oid){
 }
 
 /**
- * Mischt mehrere OE-Farben mit dem Canvas-Hintergrund für eine einheitliche Darstellung
- * @param {string[]} oids - IDs der zu mischenden Organisationseinheiten
- * @returns {string} CSS-Farbwert als RGB-String oder 'transparent' wenn keine IDs gegeben
- */
-function flattenToWhiteOrdered(oids){
-  // Konvertiere zu Array und prüfe auf leere Eingabe
-  const arr = Array.from(oids || []);
-  if (!arr.length) return 'transparent';
-  
-  // Sortiere nach Tiefe in der Hierarchie und dann alphabetisch
-  const ordered = arr
-    .map(oid => ({ oid, depth: orgDepth(oid) }))
-    .sort((a,b) => (a.depth - b.depth) || String(a.oid).localeCompare(String(b.oid)));
-  
-  // Starte mit der Canvas-Hintergrundfarbe
-  const bg = canvasBgRgba();
-  let r = bg.r, g = bg.g, b = bg.b;
-  
-  // Wende nacheinander alle Farben mit Alpha-Blending an
-  for (const item of ordered) {
-    const rgba = hslaToRgba(colorForOrg(item.oid).fill);
-    const { r: sr, g: sg, b: sb, a: sa } = rgba;
-    // Alpha-Blending-Formel
-    r = sr * sa + r * (1 - sa);
-    g = sg * sa + g * (1 - sa);
-    b = sb * sa + b * (1 - sa);
-  }
-  
-  // Rückgabe als CSS-RGB-Farbe
-  return `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
-}
-
-/**
- * Berechnet eine gemischte Farbe aus allen aktiven OEs mit angepasster Transparenz für UI-Elemente
- * @param {string[]} oids - Array oder Set von Organisations-IDs
- * @returns {string} CSS-RGBA-Farbwert oder 'transparent' wenn keine IDs gegeben
- */
-function mixedActiveFillColorForOids(oids) {
-  // Bereite Eingabedaten vor und prüfe auf leere Eingabe
-  const list = Array.from(oids || []).map(oid => ({ oid, hsla: colorForOrg(oid).fill }));
-  if (!list.length) return 'transparent';
-  
-  // Sortiere für konsistente Ergebnisse
-  list.sort((a,b) => String(a.oid).localeCompare(String(b.oid)));
-  
-  // Starte mit dem Hintergrund
-  const bg = canvasBgRgba();
-  let r = bg.r, g = bg.g, b = bg.b;
-  let alphaSum = 0;
-  
-  // Alpha-Blending für alle Farben
-  for (const item of list) {
-    const rgba = hslaToRgba(item.hsla);
-    const { r: sr, g: sg, b: sb, a: sa } = rgba;
-    // Alpha-Blending-Formel
-    r = sr * sa + r * (1 - sa);
-    g = sg * sa + g * (1 - sa);
-    b = sb * sa + b * (1 - sa);
-    alphaSum += sa;
-  }
-  
-  // Begrenzte Alpha-Transparenz für UI-Elemente (nicht zu transparent oder zu deckend)
-  const uiAlpha = Math.max(0.08, Math.min(alphaSum, 0.35));
-  
-  // Rückgabe als CSS-RGBA-Farbe
-  return `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${uiAlpha})`;
-}
-
-/**
  * Konvertiert eine Farbe in ein transparentes RGBA-Format (wie bei OEs)
  * @param {string} color - Farbe im Format hsl(...) oder rgb(...) oder #hex
  * @param {number} alpha - Alpha-Wert (0-1), default 0.25 wie bei OEs
@@ -541,37 +468,6 @@ function colorToTransparent(color, alpha = 0.25) {
   
   // Fallback: gib die ursprüngliche Farbe zurück
   return color;
-}
-
-/**
- * Passt die Helligkeit einer Farbe an (HSL-basiert)
- * @param {string} color - Farbe im Format hsl(...) oder rgb(...) oder #hex
- * @param {number} amount - Betrag in % (-100 bis 100)
- * @returns {string} Angepasste Farbe im gleichen Format
- */
-function adjustColorBrightness(color, amount) {
-  // Parse HSL
-  const hslMatch = /hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/.exec(color);
-  if (hslMatch) {
-    const h = parseInt(hslMatch[1]);
-    const s = parseInt(hslMatch[2]);
-    let l = parseInt(hslMatch[3]);
-    l = Math.max(0, Math.min(100, l + amount));
-    return `hsl(${h}, ${s}%, ${l}%)`;
-  }
-  
-  // Fallback: gib die ursprüngliche Farbe zurück
-  return color;
-}
-
-function hslToRgb(h, s, l) {
-  const a = s * Math.min(l, 1 - l);
-  function f(n){
-    const k = (n + h*12) % 12;
-    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return color;
-  }
-  return [f(0), f(8), f(4)];
 }
 
 function setStatus(msg) {
@@ -875,7 +771,8 @@ function applyLoadedDataObject(data, sourceName) {
       parentOf.set(t, s);
     }
   }
-  allowedOrgs = new Set(orgs.map(o => String(o.id)));
+  // Anfangszustand: keine OE ist ausgewählt; Auswahl entsteht nur durch Benutzerinteraktion
+  allowedOrgs = new Set();
   hiddenNodes = new Set();
   hiddenByRoot = new Map();
 
@@ -899,7 +796,10 @@ function applyLoadedDataObject(data, sourceName) {
   }
   
   populateCombo("");
-  buildOrgLegend(allowedOrgs);
+  // Globalen OE-Baum einmalig aufbauen; Sichtbarkeit wird separat über applyLegendScope gesteuert
+  buildOrgLegend();
+  // Initialer Zustand: kein Scope -> alle OEs ausgeblendet
+  applyLegendScope(new Set());
   buildHiddenLegend();
   setStatus(sourceName);
   updateFooterStats(null);
@@ -1346,29 +1246,55 @@ function computeSubgraph(startId, depth, mode) {
     }
   }
   
-  // Collect Orgs for Legend FIRST (before any filtering)
-  // Include both: OEs reached via BFS AND OEs connected to persons in the subgraph
+  // Collect Orgs for Legend: Only the LOWEST (leaf) OEs,
+  // verbunden mit Personen im Subgraph
   const legendOrgs = new Set();
+  const legendOrgLevels = new Map(); // oid -> minimaler Personen-Level, der diese OE "aktiviert"
   
-  // 1. Add OEs that were reached via BFS
-  for (const id of seen) {
-    const n = byId.get(id);
-    if (n && n.type === 'org') {
-      legendOrgs.add(String(id));
+  // Build efficient lookup: person -> set of OEs
+  const personToOrgs = new Map();
+  for (const l of raw.links) {
+    const s = idOf(l.source);
+    const t = idOf(l.target);
+    if (byId.get(s)?.type === 'person' && byId.get(t)?.type === 'org') {
+      if (!personToOrgs.has(s)) personToOrgs.set(s, new Set());
+      personToOrgs.get(s).add(t);
     }
   }
   
-  // 2. Add OEs connected to persons in the subgraph (memberOf relationships)
-  //    This ensures OEs appear in legend even when Person->Org is suppressed in down mode
+  // Build set of OEs that have children (are not leaf nodes)
+  const orgsWithChildren = new Set();
+  for (const [child, parent] of parentOf.entries()) {
+    if (parent) orgsWithChildren.add(parent);
+  }
+  
+  // For each person in the subgraph, find their lowest OE(s)
   for (const id of seen) {
     const n = byId.get(id);
     if (n && n.type === 'person') {
-      // Find all OEs this person belongs to
-      for (const l of raw.links) {
-        const s = idOf(l.source);
-        const t = idOf(l.target);
-        if (s === id && byId.get(t)?.type === 'org') {
-          legendOrgs.add(t);
+      const orgs = personToOrgs.get(id);
+      if (!orgs) continue;
+      
+      // Find the lowest OE(s) for this person
+      // An OE is "lowest" if it has no children OR all its children are not in the person's org set
+      for (const oid of orgs) {
+        // Check if this OE is a leaf (has no children in the person's org hierarchy)
+        let isLowest = true;
+        for (const otherOid of orgs) {
+          if (otherOid !== oid && parentOf.get(otherOid) === oid) {
+            // otherOid is a child of oid, so oid is not the lowest
+            isLowest = false;
+            break;
+          }
+        }
+        
+        if (isLowest) {
+          legendOrgs.add(oid);
+          const personLevel = dist.get(id) || 0;
+          const prevLevel = legendOrgLevels.get(oid);
+          if (prevLevel == null || personLevel < prevLevel) {
+            legendOrgLevels.set(oid, personLevel);
+          }
         }
       }
     }
@@ -1410,14 +1336,13 @@ function computeSubgraph(startId, depth, mode) {
   }
   
   // Drop orgs that are disabled
-  nodes = nodes.filter(n => n.type !== 'org' || allowedOrgs.has(String(n.id)));
   const nodeSet = new Set(nodes.map(n => String(n.id)));
   const links = raw.links
     .map(l => ({ s: idOf(l.source), t: idOf(l.target) }))
     .filter(x => nodeSet.has(x.s) && nodeSet.has(x.t))
     .map(x => ({ source: x.s, target: x.t }));
   
-  return { nodes, links, legendOrgs };
+  return { nodes, links, legendOrgs, legendOrgLevels };
 }
 
 function recomputeHiddenNodes() {
@@ -1457,7 +1382,6 @@ function hideSubtreeFromRoot(rootId) {
   hiddenByRoot.set(rid, sub);
   recomputeHiddenNodes();
   buildHiddenLegend();
-  updateVisibility();
   applyFromUI();
 }
 
@@ -1468,7 +1392,6 @@ function unhideSubtree(rootId) {
     recomputeHiddenNodes();
   }
   buildHiddenLegend();
-  updateVisibility();
   applyFromUI();
 }
 
@@ -1561,24 +1484,21 @@ function buildHiddenLegend() {
 
 let legendCollapsedItems = new Set();
 
-function buildOrgLegend(scope) {
+function buildOrgLegend() {
   const legend = document.querySelector('#legend');
   if (!legend) return;
   legend.innerHTML = '';
   // Build org parent relationships
   const children = new Map();
   const hasParent = new Set();
-  const scopeProvided = typeof scope !== 'undefined';
-  const scopeSet = scopeProvided ? new Set(Array.from(scope || []).map(String)) : null;
   for (const l of raw.links) {
     const s = idOf(l.source), t = idOf(l.target);
     if (byId.get(s)?.type !== 'org' || byId.get(t)?.type !== 'org') continue;
-    if (scopeProvided && (!scopeSet.has(s) || !scopeSet.has(t))) continue;
     if (!children.has(s)) children.set(s, new Set());
     children.get(s).add(t);
     hasParent.add(t);
   }
-  let allOrgs = scopeProvided ? Array.from(scopeSet) : raw.orgs.map(o => String(o.id));
+  const allOrgs = raw && Array.isArray(raw.orgs) ? raw.orgs.map(o => String(o.id)) : [];
   const roots = allOrgs.filter(id => !hasParent.has(id));
 
   const ul = document.createElement('ul');
@@ -1607,7 +1527,7 @@ function buildOrgLegend(scope) {
     leftArea.appendChild(depthSpacer);
 
     // Kinder prüfen für Chevron
-    const kids = Array.from(children.get(oid) || []).filter(id => !scopeProvided || scopeSet.has(id));
+    const kids = Array.from(children.get(oid) || []);
     
     // Chevron Icon oder Spacer
     if (kids.length) {
@@ -1797,6 +1717,51 @@ function buildOrgLegend(scope) {
   }
   legend.appendChild(ul);
   syncGraphAndLegendColors();
+}
+
+let currentLegendScope = new Set();
+
+function applyLegendScope(scope) {
+  const legend = document.querySelector('#legend');
+  if (!legend) return;
+
+  const scopeSet = new Set(Array.from(scope || []).map(String));
+  currentLegendScope = scopeSet;
+
+  // Org-Hierarchie (child -> parent) aus Org->Org-Kanten aufbauen
+  const orgParent = new Map();
+  if (raw && Array.isArray(raw.orgs) && Array.isArray(raw.links)) {
+    const orgIds = new Set(raw.orgs.map(o => String(o.id)));
+    for (const l of raw.links) {
+      if (!l) continue;
+      const s = idOf(l.source), t = idOf(l.target);
+      if (orgIds.has(s) && orgIds.has(t)) {
+        orgParent.set(t, s);
+      }
+    }
+  }
+
+  // Sichtbare OEs: Scope + alle ihre Vorfahren
+  const visible = new Set();
+  if (scopeSet.size > 0) {
+    for (const oid of scopeSet) {
+      let cur = String(oid);
+      const seen = new Set();
+      while (cur && !seen.has(cur)) {
+        seen.add(cur);
+        visible.add(cur);
+        cur = orgParent.get(cur);
+      }
+    }
+  }
+
+  legend.querySelectorAll('.legend-list input[id^="org_"]').forEach(cb => {
+    const oid = cb.id.replace('org_', '');
+    const li = cb.closest('li');
+    if (!li) return;
+    const show = scopeSet.size > 0 ? visible.has(oid) : false;
+    li.style.display = show ? '' : 'none';
+  });
 }
 
 function updateLegendChips(rootEl) {
@@ -2053,7 +2018,11 @@ function addAttributeSubmenu(parentItem, mainMenu, nodeId) {
   
   const hideAllMenus = () => {
     // Verstecke alle Kategorie-Submenus
-    document.querySelectorAll('.node-context-menu[data-level="3"]').forEach(sub => sub.remove());
+    document.querySelectorAll('.node-context-menu[data-level="3"]').forEach(sub => {
+      if (sub !== submenu) {
+        sub.remove();
+      }
+    });
     hideSubmenu();
     mainMenu.style.display = 'none';
   };
@@ -2364,19 +2333,6 @@ function showNodeMenu(x, y, actionsOrOnHide) {
   el.style.display = 'block';
 }
 
-// Aktualisiert nur die Sichtbarkeit der Knoten im DOM ohne Layout-Änderung
-function updateVisibility() {
-  // Versteckte Knoten unsichtbar machen
-  d3.selectAll(SVG_ID + ' .node').style('opacity', d => 
-    hiddenNodes.has(String(d.id)) ? '0' : null);
-  
-  // Links, die zu versteckten Knoten führen, ebenfalls ausblenden
-  d3.selectAll(SVG_ID + ' .link').style('opacity', d => {
-    const s = idOf(d.source);
-    const t = idOf(d.target);
-    return (hiddenNodes.has(s) || hiddenNodes.has(t)) ? '0' : null;
-  });
-}
 
 function refreshClusters() {
   if (!clusterLayer) return;
@@ -2384,15 +2340,67 @@ function refreshClusters() {
   const pad = cssNumber('--cluster-pad', 12);
   const membersByOrg = new Map();
   
+  if (!raw || !Array.isArray(raw.orgs) || !Array.isArray(raw.links)) return;
+
+  // OE-Hierarchie (Parent -> Kinder) aus Org->Org-Kanten aufbauen
+  const orgChildren = new Map();
+  const orgIds = new Set(raw.orgs.map(o => String(o.id)));
   for (const l of raw.links) {
+    if (!l) continue;
+    const s = idOf(l.source), t = idOf(l.target);
+    if (!orgIds.has(s) || !orgIds.has(t)) continue;
+    if (!orgChildren.has(s)) orgChildren.set(s, new Set());
+    orgChildren.get(s).add(t);
+  }
+
+  // Cache: für jedes OE alle Nachfahren inkl. sich selbst
+  const descendantsCache = new Map();
+  const getDescendants = (root) => {
+    const key = String(root);
+    if (descendantsCache.has(key)) return descendantsCache.get(key);
+    const res = new Set([key]);
+    const q = [key];
+    while (q.length) {
+      const cur = q.shift();
+      const kids = orgChildren.get(cur);
+      if (!kids) continue;
+      for (const k of kids) {
+        if (!res.has(k)) {
+          res.add(k);
+          q.push(k);
+        }
+      }
+    }
+    descendantsCache.set(key, res);
+    return res;
+  };
+
+  // Mapping: jede OE -> Menge aktiver Wurzel-OEs, deren Unterbaum sie angehört
+  const rootForOrg = new Map();
+  for (const root of allowedOrgs) {
+    const rootId = String(root);
+    if (!orgIds.has(rootId)) continue;
+    const desc = getDescendants(rootId);
+    for (const oid of desc) {
+      if (!rootForOrg.has(oid)) rootForOrg.set(oid, new Set());
+      rootForOrg.get(oid).add(rootId);
+    }
+  }
+
+  // Personen den Clustern der Wurzel-OEs ihrer Basis-OEs zuordnen
+  for (const l of raw.links) {
+    if (!l) continue;
     const s = idOf(l.source), t = idOf(l.target);
     if (!clusterPersonIds.has(s)) continue;
-    const tType = byId.get(t)?.type;
-    if (tType !== 'org') continue;
-    if (!allowedOrgs.has(t)) continue;
-    if (!membersByOrg.has(t)) membersByOrg.set(t, []);
+    if (!orgIds.has(t)) continue;
+    const roots = rootForOrg.get(t);
+    if (!roots || roots.size === 0) continue;
     const nd = clusterSimById.get(s);
-    if (nd && nd.x != null && nd.y != null) membersByOrg.get(t).push(nd);
+    if (!nd || nd.x == null || nd.y == null) continue;
+    for (const rid of roots) {
+      if (!membersByOrg.has(rid)) membersByOrg.set(rid, []);
+      membersByOrg.get(rid).push(nd);
+    }
   }
   
   const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }))
@@ -2415,56 +2423,270 @@ function refreshClusters() {
 }
 
 /**
+ * Berechnet den äußersten sichtbaren Radius eines Knotens
+ * (Node-Radius + Stroke + Attributringe)
+ */
+function getNodeOuterRadius(node) {
+  const nodeRadius = cssNumber('--node-radius', 8);
+  const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
+  
+  // Basis: Node-Radius + halber Stroke
+  let outerRadius = nodeRadius + (nodeStrokeWidth / 2);
+  
+  // Wenn Attribute sichtbar sind, addiere Attributringe
+  if (attributesVisible) {
+    const personId = String(node.id);
+    const nodeAttrs = personAttributes.get(personId);
+    const circleGap = cssNumber('--attribute-circle-gap', 4);
+    const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+    
+    let attrCount = 0;
+    if (nodeAttrs && nodeAttrs.size > 0) {
+      for (const attrName of nodeAttrs.keys()) {
+        if (activeAttributes.has(attrName)) {
+          attrCount++;
+        }
+      }
+    }
+    
+    // Attributringe hinzufügen
+    outerRadius += attrCount * (circleGap + circleWidth);
+  }
+  
+  return outerRadius;
+}
+
+/**
+ * Hilfsfunktion: Positioniere Knoten gleichmäßig im Kreis um Parent
+ */
+function positionNodesInCircle(nodes, centerX, centerY, radius, startAngle = 0) {
+  if (nodes.length === 0) return;
+  
+  if (nodes.length === 1) {
+    // Einzelner Knoten: direkt beim Winkel positionieren
+    nodes[0].x = centerX + radius * Math.cos(startAngle);
+    nodes[0].y = centerY + radius * Math.sin(startAngle);
+  } else {
+    // Mehrere Knoten: gleichmäßig verteilt
+    const angleStep = (2 * Math.PI) / nodes.length;
+    nodes.forEach((node, idx) => {
+      const angle = startAngle + (idx * angleStep);
+      node.x = centerX + radius * Math.cos(angle);
+      node.y = centerY + radius * Math.sin(angle);
+    });
+  }
+}
+
+/**
+ * Findet eine Position außerhalb der konvexen Hülle für einen sekundären Root
+ */
+function findPositionOutsideHull(existingNodes, margin = 200) {
+  if (existingNodes.length === 0) {
+    return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
+  }
+  
+  // Sammle alle Positionen
+  const points = existingNodes
+    .filter(n => Number.isFinite(n.x) && Number.isFinite(n.y))
+    .map(n => ({ x: n.x, y: n.y }));
+  
+  if (points.length === 0) {
+    return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
+  }
+  
+  // Berechne Bounding Box
+  const minX = Math.min(...points.map(p => p.x));
+  const maxX = Math.max(...points.map(p => p.x));
+  const minY = Math.min(...points.map(p => p.y));
+  const maxY = Math.max(...points.map(p => p.y));
+  
+  const centerY = (minY + maxY) / 2;
+  const width = maxX - minX;
+  
+  // Platziere neuen Root rechts außerhalb der Bounding Box
+  return {
+    x: maxX + margin + width * 0.2,
+    y: centerY
+  };
+}
+
+/**
+ * Führt eine Breadth-First Expansion für das radiale Layout durch
+ */
+function radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positionedSet, includeParents = false) {
+  const childPadding = 4;
+  
+  while (queue.length > 0) {
+    const current = queue.shift();
+    
+    // Children (Down-Links)
+    const children = childrenOf.get(current.nodeId) || [];
+    
+    // Parents (Up-Links) only if level 0 and includeParents is true
+    let parents = [];
+    if (includeParents && current.level === 0) {
+      parents = parentsOf.get(current.nodeId) || [];
+    }
+    
+    const allDescendants = [...children, ...parents];
+    
+    if (allDescendants.length > 0) {
+      const unpositionedIds = allDescendants.filter(id => !positionedSet.has(id));
+      
+      if (unpositionedIds.length > 0) {
+        const descendantNodes = unpositionedIds
+          .map(id => personNodes.find(n => String(n.id) === id))
+          .filter(Boolean);
+        
+        const parentNode = personNodes.find(n => String(n.id) === current.nodeId);
+        let parentRadius = 40; 
+        if (parentNode) {
+          parentRadius = getNodeOuterRadius(parentNode) + childPadding;
+        }
+        
+        // Parents start at -90deg (North)
+        const startAngle = (includeParents && current.level === 0 && parents.length > 0) ? -Math.PI / 2 : 0;
+        
+        positionNodesInCircle(descendantNodes, current.x, current.y, parentRadius, startAngle);
+        
+        descendantNodes.forEach(node => {
+          positionedSet.add(String(node.id));
+          queue.push({
+            nodeId: String(node.id),
+            x: node.x,
+            y: node.y,
+            level: current.level + 1
+          });
+        });
+      }
+    }
+  }
+}
+
+/**
+ * Erstellt und konfiguriert die D3-Simulation
+ */
+function createSimulation(nodes, links) {
+  // Force-Simulation-Parameter
+  const linkDistance = cssNumber('--link-distance', 60);
+  const linkStrength = cssNumber('--link-strength', 0.4);
+  const chargeStrength = cssNumber('--charge-strength', -200);
+  const alphaDecay = cssNumber('--alpha-decay', 0.0228);
+  const velocityDecay = cssNumber('--velocity-decay', 0.4);
+  const nodeRadius = cssNumber('--node-radius', 8);
+  const collidePadding = cssNumber('--collide-padding', 6);
+  const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
+
+  return d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
+    .force("charge", d3.forceManyBody().strength(chargeStrength))
+    // Schwächere Center-Force für mehr Stabilität mit radialem Layout
+    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
+    .force("collide", d3.forceCollide().radius(d => {
+      // Kollisionsradius basierend auf Attribut-Kreisen berechnen
+      const personId = String(d.id);
+      const nodeAttrs = personAttributes.get(personId);
+      const circleGap = cssNumber('--attribute-circle-gap', 4);
+      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+      
+      // Zähle aktive Attribute für diese Person
+      let attrCount = 0;
+      if (nodeAttrs && nodeAttrs.size > 0) {
+        for (const attrName of nodeAttrs.keys()) {
+          if (activeAttributes.has(attrName)) {
+            attrCount++;
+          }
+        }
+      }
+      
+      // Äußerer Radius der Attributringe relativ zum Knotenzentrum:
+      // outer = nodeRadius + nodeStroke/2 + attrCount * (gap + width)
+      const outerExtra = (attrCount > 0)
+        ? (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth))
+        : 0;
+      return nodeRadius + collidePadding + outerExtra;
+    }).strength(0.8)) // Stärkere Kollisionsvermeidung
+    .alphaDecay(alphaDecay)
+    .velocityDecay(velocityDecay);
+}
+
+/**
  * Rendert den Graphen basierend auf dem berechneten Subgraphen
  */
 function renderGraph(sub) {
   // Aktuellen Zoom-Zustand speichern
   const savedZoomTransform = currentZoomTransform;
 
-  // SVG-Element vorbereiten
+  // SVG-Element vorbereiten (ohne komplettes Leeren des DOM)
   const svg = d3.select(SVG_ID);
-  svg.selectAll("*").remove();
   svg.attr("viewBox", [0, 0, WIDTH, HEIGHT]);
 
-  // Pfeilspitzen-Definitionen
-  const defs = svg.append("defs");
+  // Pfeilspitzen-Definitionen (einmalig anlegen/aktualisieren)
+  let defs = svg.select("defs");
+  if (defs.empty()) {
+    defs = svg.append("defs");
+  }
   const arrowLen = cssNumber('--arrow-length', 10);
   const linkStroke = cssNumber('--link-stroke-width', 3);
-  defs.append("marker")
-    .attr("id", "arrow")
+  let arrow = defs.select("marker#arrow");
+  if (arrow.empty()) {
+    arrow = defs.append("marker").attr("id", "arrow");
+  }
+  arrow
     .attr("viewBox", "0 0 10 10")
     .attr("refX", 0)
     .attr("refY", 5)
     .attr("markerWidth", arrowLen)
     .attr("markerHeight", arrowLen + linkStroke)
     .attr("markerUnits", "userSpaceOnUse")
-    .attr("orient", "auto-start-reverse")
-    .append("path")
+    .attr("orient", "auto-start-reverse");
+  let arrowPath = arrow.select("path");
+  if (arrowPath.empty()) {
+    arrowPath = arrow.append("path");
+  }
+  arrowPath
     .attr("d", "M 0 0 L 10 5 L 0 10 z")
     .attr("fill", getComputedStyle(document.documentElement).getPropertyValue('--link-stroke') || '#bbb')
     .attr("fill-opacity", parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')) || 1);
 
-  // Zoom-Container
-  const gZoom = svg.append("g");
+  // Zoom-Container (einmalig)
+  let gZoom = svg.select("g.zoom-layer");
+  if (gZoom.empty()) {
+    gZoom = svg.append("g").attr("class", "zoom-layer");
+  }
 
   // Nur Personen-zu-Personen-Verbindungen anzeigen
   const personIdsInSub = new Set(sub.nodes.filter(n => byId.get(String(n.id))?.type === 'person').map(n => String(n.id)));
   const linksPP = sub.links.filter(l => personIdsInSub.has(idOf(l.source)) && personIdsInSub.has(idOf(l.target)));
 
   // Cluster-Ebene (hinter Links und Knoten)
-  const gClusters = gZoom.append("g").attr("class", "clusters");
+  let gClusters = gZoom.select("g.clusters");
+  if (gClusters.empty()) {
+    gClusters = gZoom.append("g").attr("class", "clusters");
+  }
   clusterLayer = gClusters;
 
-  // Verbindungen rendern
-  const link = gZoom.append("g")
+  // Verbindungen rendern (inkrementell)
+  let linkGroup = gZoom.select("g.links");
+  if (linkGroup.empty()) {
+    linkGroup = gZoom.append("g").attr("class", "links");
+  }
+  const link = linkGroup
     .selectAll("line")
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
-    .join("line")
-    .attr("class", "link")
-    .attr("marker-end", "url(#arrow)");
+    .join(
+      enter => enter.append("line")
+        .attr("class", "link")
+        .attr("marker-end", "url(#arrow)"),
+      update => update,
+      exit => exit.remove()
+    );
 
   // Debug-Link-Labels (optional)
-  const linkLabelGroup = gZoom.append("g").attr("class", "link-labels");
+  let linkLabelGroup = gZoom.select("g.link-labels");
+  if (linkLabelGroup.empty()) {
+    linkLabelGroup = gZoom.append("g").attr("class", "link-labels");
+  }
   const linkLabel = linkLabelGroup
     .selectAll("text")
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
@@ -2484,12 +2706,22 @@ function renderGraph(sub) {
   clusterPersonIds = new Set(personNodes.map(d => String(d.id)));
   simAllById = new Map(personNodes.map(d => [String(d.id), d]));
   
-  // Knoten erstellen
-  const node = gZoom.append("g")
-    .selectAll("g")
+  // Knoten erstellen (inkrementell)
+  let nodeGroup = gZoom.select("g.nodes");
+  if (nodeGroup.empty()) {
+    nodeGroup = gZoom.append("g").attr("class", "nodes");
+  }
+  const node = nodeGroup
+    .selectAll("g.node")
     .data(personNodes, d => String(d.id))
-    .join("g")
-    .attr("class", "node");
+    .join(
+      enter => {
+        const g = enter.append("g").attr("class", "node");
+        return g;
+      },
+      update => update,
+      exit => exit.remove()
+    );
 
   // Styling-Parameter
   const nodeRadius = cssNumber('--node-radius', 8);
@@ -2498,10 +2730,11 @@ function renderGraph(sub) {
   const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
   const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
   
-  // Hauptkreis hinzufügen (nur einmal!)
-  node.append("circle").attr("r", nodeRadius).attr("class", "node-circle")
+  // Hauptkreis und Label nur für neue Knoten hinzufügen
+  const nodeEnter = node.filter(function() { return this.childElementCount === 0; });
+  nodeEnter.append("circle").attr("r", nodeRadius).attr("class", "node-circle")
     .style("fill", d => getNodeFillByLevel(d));
-  node.append("text")
+  nodeEnter.append("text")
     .text(d => debugMode ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})` : (d.label ?? d.id))
     .attr("x", 10)
     .attr("y", 4)
@@ -2522,155 +2755,6 @@ function renderGraph(sub) {
   // ============================================================================
   // RADIALES LAYOUT-SYSTEM MIT BREADTH-FIRST EXPANSION [SF]
   // ============================================================================
-  
-  /**
-   * Berechnet den äußersten sichtbaren Radius eines Knotens
-   * (Node-Radius + Stroke + Attributringe)
-   * @param {Object} node - Node-Objekt
-   * @returns {number} Äußerster Radius in Pixeln
-   */
-  const getNodeOuterRadius = (node) => {
-    const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
-    
-    // Basis: Node-Radius + halber Stroke
-    let outerRadius = nodeRadius + (nodeStrokeWidth / 2);
-    
-    // Wenn Attribute sichtbar sind, addiere Attributringe
-    if (attributesVisible) {
-      const personId = String(node.id);
-      const nodeAttrs = personAttributes.get(personId);
-      const circleGap = cssNumber('--attribute-circle-gap', 4);
-      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-      
-      let attrCount = 0;
-      if (nodeAttrs && nodeAttrs.size > 0) {
-        for (const attrName of nodeAttrs.keys()) {
-          if (activeAttributes.has(attrName)) {
-            attrCount++;
-          }
-        }
-      }
-      
-      // Attributringe hinzufügen
-      outerRadius += attrCount * (circleGap + circleWidth);
-    }
-    
-    return outerRadius;
-  };
-  
-  /**
-   * Hilfsfunktion: Positioniere Knoten gleichmäßig im Kreis um Parent
-   * @param {Array} nodes - Array von Node-Objekten
-   * @param {number} centerX - X-Koordinate des Zentrums
-   * @param {number} centerY - Y-Koordinate des Zentrums
-   * @param {number} radius - Radius des Kreises
-   * @param {number} startAngle - Startwinkel in Radiant (default: 0)
-   */
-  const positionNodesInCircle = (nodes, centerX, centerY, radius, startAngle = 0) => {
-    if (nodes.length === 0) return;
-    
-    if (nodes.length === 1) {
-      // Einzelner Knoten: direkt beim Winkel positionieren
-      nodes[0].x = centerX + radius * Math.cos(startAngle);
-      nodes[0].y = centerY + radius * Math.sin(startAngle);
-    } else {
-      // Mehrere Knoten: gleichmäßig verteilt
-      const angleStep = (2 * Math.PI) / nodes.length;
-      nodes.forEach((node, idx) => {
-        const angle = startAngle + (idx * angleStep);
-        node.x = centerX + radius * Math.cos(angle);
-        node.y = centerY + radius * Math.sin(angle);
-      });
-    }
-  };
-  
-  /**
-   * Berechnet die konvexe Hülle (Convex Hull) einer Menge von Punkten
-   * Verwendet Graham Scan Algorithmus
-   * @param {Array} points - Array von {x, y} Objekten
-   * @returns {Array} Sortierte Punkte der konvexen Hülle
-   */
-  const computeConvexHull = (points) => {
-    if (points.length < 3) return points;
-    
-    // Finde Punkt mit niedrigstem Y (bei Gleichstand: niedrigstes X)
-    let start = points[0];
-    for (let i = 1; i < points.length; i++) {
-      if (points[i].y < start.y || (points[i].y === start.y && points[i].x < start.x)) {
-        start = points[i];
-      }
-    }
-    
-    // Sortiere Punkte nach Polarwinkel relativ zum Startpunkt
-    const sorted = points.slice().sort((a, b) => {
-      if (a === start) return -1;
-      if (b === start) return 1;
-      
-      const angleA = Math.atan2(a.y - start.y, a.x - start.x);
-      const angleB = Math.atan2(b.y - start.y, b.x - start.x);
-      
-      if (angleA !== angleB) return angleA - angleB;
-      
-      // Bei gleichem Winkel: näherer Punkt zuerst
-      const distA = (a.x - start.x) ** 2 + (a.y - start.y) ** 2;
-      const distB = (b.x - start.x) ** 2 + (b.y - start.y) ** 2;
-      return distA - distB;
-    });
-    
-    // Graham Scan
-    const hull = [sorted[0], sorted[1]];
-    
-    const ccw = (p1, p2, p3) => {
-      return (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
-    };
-    
-    for (let i = 2; i < sorted.length; i++) {
-      while (hull.length >= 2 && ccw(hull[hull.length - 2], hull[hull.length - 1], sorted[i]) <= 0) {
-        hull.pop();
-      }
-      hull.push(sorted[i]);
-    }
-    
-    return hull;
-  };
-  
-  /**
-   * Findet eine Position außerhalb der konvexen Hülle für einen sekundären Root
-   * @param {Array} existingNodes - Array von bereits positionierten Nodes
-   * @param {number} margin - Mindestabstand zur Hülle
-   * @returns {Object} {x, y} Position für den neuen Root
-   */
-  const findPositionOutsideHull = (existingNodes, margin = 200) => {
-    if (existingNodes.length === 0) {
-      return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
-    }
-    
-    // Sammle alle Positionen
-    const points = existingNodes
-      .filter(n => Number.isFinite(n.x) && Number.isFinite(n.y))
-      .map(n => ({ x: n.x, y: n.y }));
-    
-    if (points.length === 0) {
-      return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
-    }
-    
-    // Berechne Bounding Box
-    const minX = Math.min(...points.map(p => p.x));
-    const maxX = Math.max(...points.map(p => p.x));
-    const minY = Math.min(...points.map(p => p.y));
-    const maxY = Math.max(...points.map(p => p.y));
-    
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const width = maxX - minX;
-    const height = maxY - minY;
-    
-    // Platziere neuen Root rechts außerhalb der Bounding Box
-    return {
-      x: maxX + margin + width * 0.2,
-      y: centerY
-    };
-  };
   
   /**
    * Neues radiales Layout-System mit Breadth-First Expansion
@@ -2700,9 +2784,6 @@ function renderGraph(sub) {
       parentsOf.get(t).push(s);
     });
     
-    // Padding zwischen Parent-Rand und Child-Position
-    const childPadding = 4;
-    
     // Track welche Knoten bereits positioniert wurden
     const positioned = new Set();
     
@@ -2717,7 +2798,7 @@ function renderGraph(sub) {
       } else {
         // Sekundärer Root: Außerhalb der Hülle der bereits positionierten Knoten
         const alreadyPositioned = personNodes.filter(n => positioned.has(String(n.id)));
-        const pos = findPositionOutsideHull(alreadyPositioned, baseRadius * 1.5);
+        const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius', 8) * 1.5); // baseRadius * 1.5 approximated
         rootX = pos.x;
         rootY = pos.y;
       }
@@ -2733,61 +2814,7 @@ function renderGraph(sub) {
       
       // Breadth-First Expansion von diesem Root aus
       const queue = [{ nodeId: rootId, x: rootX, y: rootY, level: 0 }];
-      
-      while (queue.length > 0) {
-        const current = queue.shift();
-        
-        // Hole alle Kinder (Down-Links)
-        const children = childrenOf.get(current.nodeId) || [];
-        
-        // Hole auch Parents (Up-Links) nur für Level 0 (Root)
-        let parents = [];
-        if (current.level === 0) {
-          parents = parentsOf.get(current.nodeId) || [];
-        }
-        
-        // Kombiniere Children und Parents für dieses Level
-        const allDescendants = [...children, ...parents];
-        
-        if (allDescendants.length > 0) {
-          // Filtere bereits positionierte Knoten aus
-          const unpositionedIds = allDescendants.filter(id => !positioned.has(id));
-          
-          if (unpositionedIds.length > 0) {
-            // Hole Node-Objekte
-            const descendantNodes = unpositionedIds
-              .map(id => personNodes.find(n => String(n.id) === id))
-              .filter(Boolean);
-            
-            // Berechne Radius: Äußerer Rand des Parent-Knotens + Padding
-            const parentNode = personNodes.find(n => String(n.id) === current.nodeId);
-            let parentRadius = 40; // Fallback
-            
-            if (parentNode) {
-              const outerRadius = getNodeOuterRadius(parentNode);
-              parentRadius = outerRadius + childPadding;
-            }
-            
-            // Positioniere im Kreis um Parent (auf dem Rand)
-            // Parents (Up-Links) bei -90° (Norden) starten
-            const startAngle = (current.level === 0 && parents.length > 0) ? -Math.PI / 2 : 0;
-            positionNodesInCircle(descendantNodes, current.x, current.y, parentRadius, startAngle);
-            
-            // Markiere als positioniert und füge zur Queue hinzu
-            descendantNodes.forEach(node => {
-              positioned.add(String(node.id));
-              
-              // Füge zur Queue für nächstes Level hinzu
-              queue.push({
-                nodeId: String(node.id),
-                x: node.x,
-                y: node.y,
-                level: current.level + 1
-              });
-            });
-          }
-        }
-      }
+      radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positioned, true);
     });
     
     return true;
@@ -2841,9 +2868,6 @@ function renderGraph(sub) {
     });
     
     // Breadth-First Expansion von Blattknoten aus
-    // Neue Knoten werden auf dem äußeren Rand des Parent platziert
-    const childPadding = 4; // Kleiner Puffer zwischen Parent-Rand und Child
-    
     const queue = leafNodes.map(leaf => ({
       nodeId: leaf.nodeId,
       x: leaf.x,
@@ -2851,48 +2875,20 @@ function renderGraph(sub) {
       level: 0
     }));
     
+    // Wir markieren alle *nicht* neuen Knoten als "positioniert", damit wir nicht in sie hinein expandieren
+    // Aber `radialLayoutExpansion` filtert `!positionedSet.has(id)`.
+    // Wir wollen nur in neue Knoten expandieren.
+    // Also müssen wir `positioned` mit allen bestehenden Knoten initialisieren (oder allen außer den neuen).
+    // Einfacher: `positioned` enthält alle `!newNodeIds`.
     const positioned = new Set();
-    
-    while (queue.length > 0) {
-      const current = queue.shift();
-      
-      // Hole alle Kinder
-      const children = childrenOf.get(current.nodeId) || [];
-      
-      // Filtere nur neue Knoten
-      const newChildren = children.filter(cid => newNodeIds.has(cid) && !positioned.has(cid));
-      
-      if (newChildren.length > 0) {
-        // Hole Node-Objekte
-        const childNodes = newChildren
-          .map(cid => personNodes.find(n => String(n.id) === cid))
-          .filter(Boolean);
-        
-        // Berechne Radius: Äußerer Rand des Parent-Knotens + Padding
-        const parentNode = personNodes.find(n => String(n.id) === current.nodeId);
-        let parentRadius = 40; // Fallback
-        
-        if (parentNode) {
-          const outerRadius = getNodeOuterRadius(parentNode);
-          parentRadius = outerRadius + childPadding;
+    personNodes.forEach(n => {
+        if (!newNodeIds.has(String(n.id))) {
+            positioned.add(String(n.id));
         }
-        
-        // Positioniere im Kreis um Parent (auf dem Rand)
-        positionNodesInCircle(childNodes, current.x, current.y, parentRadius);
-        
-        // Markiere als positioniert und füge zur Queue hinzu
-        childNodes.forEach(node => {
-          positioned.add(String(node.id));
-          
-          queue.push({
-            nodeId: String(node.id),
-            x: node.x,
-            y: node.y,
-            level: current.level + 1
-          });
-        });
-      }
-    }
+    });
+    
+    // Expansion ohne Parents (includeParents = false)
+    radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positioned, false);
     
     // Fallback für neue Knoten ohne Parent (sollte selten vorkommen)
     personNodes.forEach(n => {
@@ -2956,44 +2952,11 @@ function renderGraph(sub) {
     const [mx, my] = d3.pointer(event, svg.node());
     const p = currentZoomTransform ? currentZoomTransform.invert([mx, my]) : [mx, my];
     
-    // Sammle alle Informationen für den Tooltip
-    const lines = [];
-    
-    // Node header with name/ID
-    lines.push(`👤 ${d.label || String(d.id)}`);
-    
-    // Attribute-Informationen hinzufügen, wenn vorhanden
     const personId = String(d.id);
-    if (personAttributes.has(personId)) {
-      const attrs = personAttributes.get(personId);
-      lines.push('📊 Attribute:');
-      let hasAttributes = false;
-      for (const [attrName, attrValue] of attrs.entries()) {
-        if (activeAttributes.has(attrName)) {
-          const displayValue = attrValue !== '1' ? `: ${attrValue}` : '';
-          lines.push(`  • ${attrName}${displayValue}`);
-          hasAttributes = true;
-        }
-      }
-      if (!hasAttributes) {
-        lines.push('  • Keine aktiven Attribute');
-      }
-    }
-    
-    // OE-Zugehörigkeiten hinzufügen
+    const nodeLabel = d.label || personId;
     const clusters = clustersAtPoint(p);
-    if (clusters.length > 0) {
-      lines.push('🔍 OEs am Cursor:');
-      clusters.forEach(cluster => lines.push(`  • ${cluster}`));
-    }
     
-    // Alle OE-Zugehörigkeiten hinzufügen
-    const allOrgs = findAllPersonOrgs(personId);
-    if (allOrgs.length > 0) {
-      lines.push('🏢 Alle OE-Zugehörigkeiten:');
-      allOrgs.forEach(org => lines.push(`  • ${org}`));
-    }
-    
+    const lines = buildPersonTooltipLines(personId, nodeLabel, clusters);
     showTooltip(event.clientX, event.clientY, lines);
   });
   node.on('mouseleave', hideTooltip);
@@ -3028,47 +2991,84 @@ function renderGraph(sub) {
   // FORCE-SIMULATION KONFIGURATION [SF][PA]
   // ============================================================================
   
-  // Force-Simulation-Parameter
-  const linkDistance = cssNumber('--link-distance', 60);
-  const linkStrength = cssNumber('--link-strength', 0.4);
-  const chargeStrength = cssNumber('--charge-strength', -200);
-  const alphaDecay = cssNumber('--alpha-decay', 0.0228);
-  const velocityDecay = cssNumber('--velocity-decay', 0.4);
-
-  // Simulation erstellen
+  // Simulation erstellen oder wiederverwenden
   // Die Simulation arbeitet auf den radialen Startpositionen und verfeinert das Layout
-  const simulation = d3.forceSimulation(personNodes)
-    .force("link", d3.forceLink(linksPP).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
-    .force("charge", d3.forceManyBody().strength(chargeStrength))
-    // Schwächere Center-Force für mehr Stabilität mit radialem Layout
-    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
-    .force("collide", d3.forceCollide().radius(d => {
-      // Kollisionsradius basierend auf Attribut-Kreisen berechnen
-      const personId = String(d.id);
-      const nodeAttrs = personAttributes.get(personId);
-      const circleGap = cssNumber('--attribute-circle-gap', 4);
-      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-      
-      // Zähle aktive Attribute für diese Person
-      let attrCount = 0;
-      if (nodeAttrs && nodeAttrs.size > 0) {
-        for (const attrName of nodeAttrs.keys()) {
-          if (activeAttributes.has(attrName)) {
-            attrCount++;
-          }
+  let simulation;
+  if (currentSimulation && typeof currentSimulation.nodes === 'function' && typeof currentSimulation.force === 'function') {
+    simulation = currentSimulation;
+    simulation.nodes(personNodes);
+    const linkForce = simulation.force("link");
+    if (linkForce && typeof linkForce.links === 'function') {
+      linkForce.links(linksPP);
+    }
+    simulation.alpha(0.5).restart();
+  } else {
+    simulation = createSimulation(personNodes, linksPP);
+  }
+
+  // Optionale BFS-Level-Animation für Single-Root-Subgraphen
+  if (sub && sub.animateLevels) {
+    const levelById = new Map();
+    personNodes.forEach(n => {
+      levelById.set(String(n.id), n.level || 0);
+    });
+    let maxLevel = 0;
+    levelById.forEach(lvl => { if (lvl > maxLevel) maxLevel = lvl; });
+
+    // Legendenscope pro Level berechnen (auf Basis von legendOrgLevels)
+    const legendOrgLevels = sub.legendOrgLevels instanceof Map ? sub.legendOrgLevels : null;
+    const updateLegendForLevel = (level) => {
+      if (!legendOrgLevels) return;
+      const legendEl = document.querySelector('#legend');
+      if (!legendEl) return;
+
+      // Aktuelle Auswahl (Checkboxen) zurück nach allowedOrgs spiegeln
+      updateLegendChips(legendEl);
+
+      const scope = new Set();
+      legendOrgLevels.forEach((lvl, oid) => {
+        if (lvl <= level) scope.add(oid);
+      });
+
+      applyLegendScope(scope);
+      syncGraphAndLegendColors();
+    };
+
+    // Starte mit Root-Level sichtbar, restliche Knoten ausblenden
+    node.style('opacity', d => (levelById.get(String(d.id)) || 0) === 0 ? 1 : 0);
+    link.style('opacity', 0);
+
+    // Initiale Legende für Level 0
+    if (legendOrgLevels) {
+      updateLegendForLevel(0);
+    }
+
+    if (maxLevel > 0) {
+      let currentLevel = 0;
+      const revealNextLevel = () => {
+        currentLevel += 1;
+        node.filter(d => (levelById.get(String(d.id)) || 0) === currentLevel)
+          .style('opacity', 1);
+        link.filter(d => {
+          const sLevel = levelById.get(idOf(d.source)) || 0;
+          const tLevel = levelById.get(idOf(d.target)) || 0;
+          return Math.max(sLevel, tLevel) <= currentLevel;
+        }).style('opacity', 1);
+
+        if (legendOrgLevels) {
+          updateLegendForLevel(currentLevel);
         }
-      }
-      
-      // Äußerer Radius der Attributringe relativ zum Knotenzentrum:
-      // outer = nodeRadius + nodeStroke/2 + attrCount * (gap + width)
-      const outerExtra = (attrCount > 0)
-        ? (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth))
-        : 0;
-      return nodeRadius + collidePadding + outerExtra;
-    }).strength(0.8)) // Stärkere Kollisionsvermeidung
-    .alphaDecay(alphaDecay)
-    .velocityDecay(velocityDecay);
-  
+        if (currentLevel < maxLevel) {
+          setTimeout(revealNextLevel, BFS_LEVEL_ANIMATION_DELAY_MS);
+        }
+      };
+      setTimeout(revealNextLevel, BFS_LEVEL_ANIMATION_DELAY_MS);
+    }
+  } else {
+    node.style('opacity', 1);
+    link.style('opacity', 1);
+  }
+
   // Tick-Handler für Animation
   simulation.on("tick", () => {
     const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
@@ -3152,16 +3152,68 @@ function renderGraph(sub) {
     // Cluster (OE-Hüllen) aktualisieren
     const pad = cssNumber('--cluster-pad', 12);
     const membersByOrg = new Map();
-    
-    // Mitgliedschaften sammeln
-    for (const l of raw.links) {
-      const s = idOf(l.source), t = idOf(l.target);
-      if (!personIdsInSub.has(s)) continue;
-      const tType = byId.get(t)?.type;
-      if (tType !== 'org' || !allowedOrgs.has(t)) continue;
-      if (!membersByOrg.has(t)) membersByOrg.set(t, []);
-      const nd = simById.get(s);
-      if (nd && nd.x != null && nd.y != null) membersByOrg.get(t).push(nd);
+
+    if (raw && Array.isArray(raw.orgs) && Array.isArray(raw.links)) {
+      // OE-Hierarchie (Parent -> Kinder) aus Org->Org-Kanten aufbauen
+      const orgChildren = new Map();
+      const orgIds = new Set(raw.orgs.map(o => String(o.id)));
+      for (const l of raw.links) {
+        if (!l) continue;
+        const s = idOf(l.source), t = idOf(l.target);
+        if (!orgIds.has(s) || !orgIds.has(t)) continue;
+        if (!orgChildren.has(s)) orgChildren.set(s, new Set());
+        orgChildren.get(s).add(t);
+      }
+
+      // Cache: für jedes OE alle Nachfahren inkl. sich selbst
+      const descendantsCache = new Map();
+      const getDescendants = (root) => {
+        const key = String(root);
+        if (descendantsCache.has(key)) return descendantsCache.get(key);
+        const res = new Set([key]);
+        const q = [key];
+        while (q.length) {
+          const cur = q.shift();
+          const kids = orgChildren.get(cur);
+          if (!kids) continue;
+          for (const k of kids) {
+            if (!res.has(k)) {
+              res.add(k);
+              q.push(k);
+            }
+          }
+        }
+        descendantsCache.set(key, res);
+        return res;
+      };
+
+      // Mapping: jede OE -> Menge aktiver Wurzel-OEs, deren Unterbaum sie angehört
+      const rootForOrg = new Map();
+      for (const rootOid of allowedOrgs) {
+        const rootId = String(rootOid);
+        if (!orgIds.has(rootId)) continue;
+        const desc = getDescendants(rootId);
+        for (const oid of desc) {
+          if (!rootForOrg.has(oid)) rootForOrg.set(oid, new Set());
+          rootForOrg.get(oid).add(rootId);
+        }
+      }
+
+      // Personen den Clustern der Wurzel-OEs ihrer Basis-OEs zuordnen
+      for (const l of raw.links) {
+        if (!l) continue;
+        const s = idOf(l.source), t = idOf(l.target);
+        if (!personIdsInSub.has(s)) continue;
+        if (!orgIds.has(t)) continue;
+        const roots = rootForOrg.get(t);
+        if (!roots || roots.size === 0) continue;
+        const nd = simById.get(s);
+        if (!nd || nd.x == null || nd.y == null) continue;
+        for (const rid of roots) {
+          if (!membersByOrg.has(rid)) membersByOrg.set(rid, []);
+          membersByOrg.get(rid).push(nd);
+        }
+      }
     }
 
     // Cluster-Pfade aktualisieren
@@ -3319,6 +3371,11 @@ function applyFromUI() {
     roots = [String(startId)];
   }
 
+  // Prüfen, ob sich die Root-Auswahl geändert hat (für BFS-Animation)
+  const rootsKey = JSON.stringify(roots.slice().sort());
+  const lastRootsKey = JSON.stringify((lastRenderRoots || []).slice().sort());
+  const isNewRootSelection = rootsKey !== lastRootsKey;
+
   // Single-root or multi-root render
   if (roots.length === 1) {
     const startId = roots[0];
@@ -3326,13 +3383,19 @@ function applyFromUI() {
     lastSingleRootId = String(startId);
     currentSelectedId = String(startId);
     const sub = computeSubgraph(startId, Number.isFinite(depth) ? depth : 2, dirMode);
+    if (isNewRootSelection) {
+      // Nur bei echter Root-Änderung BFS-Animation aktivieren
+      sub.animateLevels = true;
+    }
     currentSubgraph = sub;
     renderGraph(sub);
     updateFooterStats(sub);
-    
-    // Scoped legend for single root
-    // Use the OEs that are actually reachable in the subgraph (before filtering)
-    buildOrgLegend(sub.legendOrgs);
+
+    // Bei reinen Parameteränderungen (Tiefe/Richtung) Legenden-Scope direkt anwenden
+    if (!sub.animateLevels && sub.legendOrgs) {
+      applyLegendScope(sub.legendOrgs);
+      syncGraphAndLegendColors();
+    }
   } else {
     // Multi-root: compute union of subgraphs
     const nodeMap = new Map();
@@ -3382,19 +3445,24 @@ function applyFromUI() {
     renderGraph(merged);
     updateFooterStats(merged);
     // Multi-Root: Legende auf die Vereinigungsmenge der relevanten OEs einschränken
-    buildOrgLegend(scopeOrgs);
+    applyLegendScope(scopeOrgs);
+    syncGraphAndLegendColors();
   }
-  
+
+  // Letzten Render-Zustand merken (für zukünftige Root-Wechsel-Erkennung)
+  lastRenderRoots = roots.slice();
+  lastRenderDepth = depth;
+  lastRenderDirMode = dirMode;
+
   // Titel der Hidden-Legende aktualisieren nach allen Graph-Berechnungen
   updateHiddenLegendTitle();
 }
 
 /**
- * Parst eine Liste von E-Mails/IDs mit Attributen
- * Unterstützte Formate:
- * - Komma-separiert: ID/Email,AttributName[,AttributWert]
- * - Tab-separiert: ID/Email\tAttributName[\tAttributWert]
- * - Gemischte Formate (zeilenweise Erkennung)
+ * Parse a list of attributes from a text string.
+ * 
+ * @param {string} text - The text string to parse.
+ * @returns {object} An object containing the parsed attributes.
  */
 function parseAttributeList(text) {
   const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
@@ -5064,6 +5132,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   // Auto-fit functionality has been removed
   
+  function updateLinkLabelVisibility() {
+    const display = (debugMode && labelsVisible) ? 'block' : 'none';
+    d3.select('#graph').selectAll('.link-label')
+      .style('display', display);
+  }
+
   const lbls = document.querySelector('#toggleLabels');
   if (lbls) {
     if (envConfig?.DEFAULT_LABELS != null) {
@@ -5079,8 +5153,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (svg) svg.classList.toggle('labels-hidden', !labelsVisible);
       
       // Link-Labels auch aktualisieren (nur sichtbar wenn Debug UND Labels aktiv) [SF]
-      d3.select('#graph').selectAll('.link-label')
-        .style('display', (debugMode && labelsVisible) ? 'block' : 'none');
+      updateLinkLabelVisibility();
     });
   }
   if (input && list) {
@@ -5140,8 +5213,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       });
       
       // Link-Labels ein/ausblenden (nur wenn auch Labels sichtbar)
-      svg.selectAll('.link-label')
-        .style('display', (debugMode && labelsVisible) ? 'block' : 'none');
+      updateLinkLabelVisibility();
     });
   }
   // Auto-apply on depth change and direction change
@@ -5354,7 +5426,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
     recomputeHiddenNodes();
     buildHiddenLegend();
-    if (currentSubgraph) updateVisibility();
     try { applyFromUI(); } catch(_) {}
   }
   // hideSubtree-Button wurde aus der Toolbar entfernt
@@ -5790,4 +5861,3 @@ function initializeCollapsibleLegends() {
     depthControl.title = `Hierarchietiefe: ${displayValue} ${plural}`;
   }
 }
-

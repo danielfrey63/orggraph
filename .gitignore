@@ -1,8 +1,9 @@
-data.json
-data.generated.json
-env.json
+data*.json
+!data.example.json
+env*.json
+!env.example.json
 attributes
-icons
+helpers
 
 .windsurf/rules/kluster-code-verify.md
 .kluster
