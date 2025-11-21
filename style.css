@@ -344,8 +344,8 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 
 /* Spacer für Items ohne Chevron */
 .legend-tree-spacer {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
 }
 
