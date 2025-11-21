@@ -1453,10 +1453,6 @@ function buildHiddenLegend() {
   
   legend.innerHTML = '';
   if (hiddenByRoot.size === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'legend-empty';
-    empty.textContent = 'Keine ausgeblendeten Personen';
-    legend.appendChild(empty);
     return;
   }
   const ul = document.createElement('ul');
@@ -4023,7 +4019,6 @@ function buildAttributeLegend() {
 
   legend.innerHTML = '';
   if (attributeTypes.size === 0 && emptyCategories.size === 0) {
-    legend.innerHTML = '<div class="attribute-empty">Keine Attribute geladen</div>';
     updateAttributeStats();
     return;
   }
