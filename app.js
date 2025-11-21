@@ -51,7 +51,7 @@ let currentSimulation = null; // Global reference to D3 simulation
 let preferredData = "auto";
 let envConfig = null;
 let collapsedCategories = new Set(); // Kategorien mit eingeklapptem Zustand
-let hiddenCategories = new Set(); // Kategorien die temporär ausgeblendet sind (ohne Attribut-Status zu ändern)
+let hiddenCategories = new Set();    // Kategorien die temporär ausgeblendet sind (ohne Attribut-Status zu ändern)
 let hiddenNodes = new Set();
 let hiddenByRoot = new Map();
 let currentHiddenCount = 0; // Anzahl der ausgeblendeten Knoten in der aktuellen Ansicht
@@ -70,7 +70,7 @@ function setSingleRoot(id){
     try { currentSimulation.stop(); } catch(_) {}
     currentSimulation = null;
   }
-  try { console.log('[roots] setSingleRoot', { id: String(id) }); } catch {}
+  try { if (debugMode) console.log('[roots] setSingleRoot', { id: String(id) }); } catch {}
 }
 function addRoot(id){
   const s = String(id);
@@ -79,7 +79,7 @@ function addRoot(id){
     const seed = currentSelectedId ? String(currentSelectedId) : (lastSingleRootId ? String(lastSingleRootId) : null);
     if (seed && seed !== s) {
       selectedRootIds = [seed];
-      try { console.log('[roots] seed multi-root from', { seed, add: s }); } catch {}
+      try { if (debugMode) console.log('[roots] seed multi-root from', { seed, add: s }); } catch {}
     }
   }
   if (selectedRootIds.includes(s)) return true;
@@ -89,9 +89,9 @@ function addRoot(id){
   // Falls dies der erste Add ist und wir einen letzten Einzel-Root kennen, füge ihn nachträglich hinzu
   if (before.length === 0 && lastSingleRootId && lastSingleRootId !== s) {
     selectedRootIds = [String(lastSingleRootId)].concat(selectedRootIds);
-    try { console.log('[roots] retro-seed after add', { lastSingleRootId, add: s, after: selectedRootIds.slice() }); } catch {}
+    try { if (debugMode) console.log('[roots] retro-seed after add', { lastSingleRootId, add: s, after: selectedRootIds.slice() }); } catch {}
   }
-  try { console.log('[roots] addRoot', { add: s, before, after: selectedRootIds.slice() }); } catch {}
+  try { if (debugMode) console.log('[roots] addRoot', { add: s, before, after: selectedRootIds.slice() }); } catch {}
   return true;
 }
 function removeRoot(id){
@@ -2078,7 +2078,9 @@ function addNodeToAttribute(nodeId, categoryKey, attributeName, attributeValue =
   
   // Markiere Kategorie als geändert
   modifiedCategories.add(categoryKey);
-  console.log(`Kategorie "${categoryKey}" als geändert markiert. Hat Quelle:`, categorySourceFiles.has(categoryKey));
+  if (debugMode) {
+    console.log(`Kategorie "${categoryKey}" als geändert markiert. Hat Quelle:`, categorySourceFiles.has(categoryKey));
+  }
   
   // UI aktualisieren
   buildAttributeLegend();
@@ -4297,7 +4299,7 @@ function buildAttributeLegend() {
     const hasSource = categorySourceFiles.has(cat);
     
     // Debug: Log wenn eine Kategorie geändert wurde aber keinen Source hat
-    if (isModified && !hasSource) {
+    if (isModified && !hasSource && debugMode) {
       console.log(`Kategorie "${cat}" ist geändert, hat aber keine Quelldatei. Verfügbare Quellen:`, Array.from(categorySourceFiles.keys()));
     }
     
