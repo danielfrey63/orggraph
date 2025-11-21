@@ -1028,7 +1028,7 @@ async function loadData() {
           const catName = categoryFromUrl(u);
           if (result.isEmpty) {
             showTemporaryNotification(`Kategorie "${catName}" geladen (leer - nur Platzhalter)`, 2500);
-          } else {
+          } else if (result.unmatchedCount > 0) {
             showTemporaryNotification(`Attribute geladen (${catName}): ${result.matchedCount} zugeordnet, ${result.unmatchedCount} nicht gefunden`, 2500);
           }
         }
