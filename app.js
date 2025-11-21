@@ -824,11 +824,13 @@ async function loadEnvConfig() {
       // Keine gültige env.json gefunden (HTTP-Fehler)
       console.warn('env.json konnte nicht geladen werden:', res.status, res.statusText);
       setStatus('Keine gültige env.json gefunden – manuelles Laden über den Status möglich.');
+      showTemporaryNotification('env.json konnte nicht geladen werden – bitte Datei prüfen oder manuell Daten laden.', 5000);
     }
   } catch (e) {
     // Fehler beim Laden oder Parsen von env.json
     console.error('Fehler beim Laden von env.json:', e);
     setStatus('Fehler beim Laden von env.json – manuelles Laden über den Status möglich.');
+    showTemporaryNotification('env.json ist ungültig oder konnte nicht gelesen werden (z.B. JSON-Syntaxfehler). Bitte Datei prüfen.', 5000);
   }
   envConfig = null;
   return false;
