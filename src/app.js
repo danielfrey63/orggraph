@@ -1,16 +1,8 @@
-const SVG_ID = "#graph";
-const STATUS_ID = "#status";
-const INPUT_COMBO_ID = "#comboInput";
-const LIST_COMBO_ID = "#comboList";
-const INPUT_DEPTH_ID = "#depth";
-const BTN_APPLY_ID = "#apply";
-
-const WIDTH = 1200;
-const HEIGHT = 800;
-const MAX_DROPDOWN_ITEMS = 100;
-const MIN_SEARCH_LENGTH = 2;
-const MAX_ROOTS = 5;
-const BFS_LEVEL_ANIMATION_DELAY_MS = 100;
+import * as d3 from 'd3';
+import { SVG_ID, STATUS_ID, INPUT_COMBO_ID, LIST_COMBO_ID, INPUT_DEPTH_ID, BTN_APPLY_ID, WIDTH, HEIGHT, MAX_DROPDOWN_ITEMS, MIN_SEARCH_LENGTH, MAX_ROOTS, BFS_LEVEL_ANIMATION_DELAY_MS } from './constants.js';
+import { initializeExport } from './export.js';
+import { setStatus, showTemporaryNotification } from './utils.js';
+import './style.css';
 
 let raw = { nodes: [], links: [], persons: [], orgs: []};
 let personAttributes = new Map(); // Map von ID/Email zu Attribut-Maps
@@ -36,6 +28,7 @@ let clusterPolygons = new Map();
 let currentZoomTransform = null;
 let labelsVisible = true;
 let debugMode = false;
+let continuousSimulation = false; // Kontinuierliche Animation aktiviert
 let legendMenuEl = null;
 let nodeMenuEl = null;
 let simAllById = new Map();
@@ -61,16 +54,33 @@ let lastRenderRoots = [];
 let lastRenderDepth = null;
 let lastRenderDirMode = 'both';
 
+const Logger = {
+  ts() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    const s = String(now.getSeconds()).padStart(2, '0');
+    const ms = String(now.getMilliseconds()).padStart(3, '0');
+    return `${h}:${m}:${s}.${ms}`;
+  },
+  log(msg, data) {
+    if (!debugMode) return;
+    const prefix = `[${this.ts()}]${msg}`;
+    if (data !== undefined) {
+      console.log(prefix, data);
+    } else {
+      console.log(prefix);
+    }
+  }
+};
+
 function isRoot(id){ return selectedRootIds.includes(String(id)); }
 function setSingleRoot(id){
   selectedRootIds = [String(id)];
   lastSingleRootId = String(id);
-  // Voll-Reset der Simulation bei Root-Wechsel [SF][PA]
-  if (typeof currentSimulation !== 'undefined' && currentSimulation) {
-    try { currentSimulation.stop(); } catch(_) {}
-    currentSimulation = null;
-  }
-  try { if (debugMode) console.log('[roots] setSingleRoot', { id: String(id) }); } catch {}
+  // Simulation NICHT auf null setzen - Positionen müssen für transitionGraph erhalten bleiben [SF][PA]
+  // Die Simulation wird in renderGraph wiederverwendet oder neu erstellt
+  Logger.log('[roots] setSingleRoot', { id: String(id) });
 }
 function addRoot(id){
   const s = String(id);
@@ -79,7 +89,7 @@ function addRoot(id){
     const seed = currentSelectedId ? String(currentSelectedId) : (lastSingleRootId ? String(lastSingleRootId) : null);
     if (seed && seed !== s) {
       selectedRootIds = [seed];
-      try { if (debugMode) console.log('[roots] seed multi-root from', { seed, add: s }); } catch {}
+      Logger.log('[roots] seed multi-root from', { seed, add: s });
     }
   }
   if (selectedRootIds.includes(s)) return true;
@@ -89,9 +99,9 @@ function addRoot(id){
   // Falls dies der erste Add ist und wir einen letzten Einzel-Root kennen, füge ihn nachträglich hinzu
   if (before.length === 0 && lastSingleRootId && lastSingleRootId !== s) {
     selectedRootIds = [String(lastSingleRootId)].concat(selectedRootIds);
-    try { if (debugMode) console.log('[roots] retro-seed after add', { lastSingleRootId, add: s, after: selectedRootIds.slice() }); } catch {}
+    Logger.log('[roots] retro-seed after add', { lastSingleRootId, add: s, after: selectedRootIds.slice() });
   }
-  try { if (debugMode) console.log('[roots] addRoot', { add: s, before, after: selectedRootIds.slice() }); } catch {}
+  Logger.log('[roots] addRoot', { add: s, before, after: selectedRootIds.slice() });
   return true;
 }
 function removeRoot(id){
@@ -463,61 +473,7 @@ function colorToTransparent(color, alpha = 0.25) {
   return color;
 }
 
-function setStatus(msg) {
-  const el = document.querySelector(STATUS_ID);
-  if (el) el.textContent = msg;
-}
 
-/**
- * Zeigt eine temporäre Benachrichtigung an, ohne den Status zu überschreiben
- */
-function showTemporaryNotification(message, duration = 3000) {
-  // Prüfe, ob bereits eine Benachrichtigung existiert
-  let notification = document.getElementById('temp-notification');
-  
-  // Wenn nicht, erstelle eine neue
-  if (!notification) {
-    notification = document.createElement('div');
-    notification.id = 'temp-notification';
-    notification.style.position = 'fixed';
-    notification.style.bottom = '60px'; // Über dem Footer
-    notification.style.left = '50%';
-    notification.style.transform = 'translateX(-50%)';
-    notification.style.background = 'var(--text-strong)';
-    notification.style.color = 'var(--panel-bg)';
-    notification.style.padding = '8px 16px';
-    notification.style.borderRadius = '4px';
-    notification.style.boxShadow = '0 2px 8px rgba(0,0,0,0.25)';
-    notification.style.zIndex = '1000';
-    notification.style.opacity = '0';
-    notification.style.transition = 'opacity 0.3s ease';
-    document.body.appendChild(notification);
-  }
-  
-  // Bestehende Timer löschen
-  if (notification.hideTimeout) {
-    clearTimeout(notification.hideTimeout);
-  }
-  
-  // Nachricht aktualisieren und einblenden
-  notification.textContent = message;
-  
-  // Sicherstellen, dass das Element im DOM ist, bevor wir die Transition starten
-  setTimeout(() => {
-    notification.style.opacity = '1';
-  }, 10);
-  
-  // Nach der angegebenen Zeit ausblenden
-  notification.hideTimeout = setTimeout(() => {
-    notification.style.opacity = '0';
-    // Nach dem Ausblenden aus dem DOM entfernen
-    setTimeout(() => {
-      if (notification.parentNode) {
-        notification.parentNode.removeChild(notification);
-      }
-    }, 300); // Dauer der Ausblend-Transition
-  }, duration);
-}
 
 /**
  * Aktualisiert die Attribute-Statistik in der Fußzeile
@@ -751,10 +707,13 @@ function idOf(v) {
 
 let allowedOrgs = new Set();
 
-function applyLoadedDataObject(data, sourceName) {
+function processData(data) {
+  Logger.log('[Timing] Start: processData');
   const persons = Array.isArray(data.persons) ? data.persons : [];
   const orgs = Array.isArray(data.orgs) ? data.orgs : [];
   const links = Array.isArray(data.links) ? data.links : [];
+
+  Logger.log(`[Init] Processing data: ${persons.length} persons, ${orgs.length} orgs, ${links.length} links`);
 
   const nodes = [];
   const personIds = new Set();
@@ -824,7 +783,10 @@ function applyLoadedDataObject(data, sourceName) {
       document.getElementById('stats-attributes-count').textContent = '0';
     }
   }
-  
+  Logger.log('[Timing] End: processData');
+}
+
+function renderFullView(sourceName) {
   populateCombo("");
   // Globalen OE-Baum einmalig aufbauen; Sichtbarkeit wird separat über applyLegendScope gesteuert
   buildOrgLegend();
@@ -835,11 +797,25 @@ function applyLoadedDataObject(data, sourceName) {
   updateFooterStats(null);
 }
 
+function applyLoadedDataObject(data, sourceName) {
+  processData(data);
+  renderFullView(sourceName);
+}
+
 async function loadEnvConfig() {
+  // Verwende Logger hier noch nicht, da debugMode möglicherweise noch false ist, aber wir wollen es erzwingen, wenn die Config es sagt.
+  // Wir loggen "Start" nachträglich, falls debugMode aktiviert wird.
+  
   try {
     const res = await fetch("./env.json", { cache: "no-store" });
     if (res.ok) {
       envConfig = await res.json();
+      
+      // Update debug mode from config [SF]
+      if (typeof envConfig.DEBUG_MODE === 'boolean') {
+        debugMode = envConfig.DEBUG_MODE;
+      }
+      Logger.log('[Init] env.json loaded:', envConfig);
       return true;
     } else {
       // Keine gültige env.json gefunden (HTTP-Fehler)
@@ -854,6 +830,7 @@ async function loadEnvConfig() {
     showTemporaryNotification('env.json ist ungültig oder konnte nicht gelesen werden (z.B. JSON-Syntaxfehler). Bitte Datei prüfen.', 5000);
   }
   envConfig = null;
+  Logger.log('[Timing] End: init.loadEnv');
   return false;
 }
 
@@ -1030,7 +1007,7 @@ async function loadData() {
   }
 
   try {
-    applyLoadedDataObject(data, sourceName);
+    processData(data);
   } catch (e) {
     console.error('Fehler beim Anwenden der geladenen Daten:', e);
     setStatus('Fehler beim Verarbeiten der geladenen Daten – bitte Daten manuell laden.');
@@ -1180,14 +1157,14 @@ function chooseItem(idx, addMode) {
       currentSelectedId = nid;
     }
   } else {
-    try { if (debugMode) console.log('[ui] chooseItem replaceMode', { idx, nid }); } catch {}
+    Logger.log('[ui] chooseItem replaceMode', { idx, nid });
     setSingleRoot(nid);
     currentSelectedId = nid;
   }
   input.value = n.label || nid;
   list.hidden = true;
   // Auto-apply and re-center when selecting from dropdown
-  applyFromUI();
+  applyFromUI('comboSelect');
 }
 
 /**
@@ -1432,7 +1409,7 @@ function hideSubtreeFromRoot(rootId) {
   hiddenByRoot.set(rid, sub);
   recomputeHiddenNodes();
   buildHiddenLegend();
-  applyFromUI();
+  applyFromUI('hideSubtree');
 }
 
 function unhideSubtree(rootId) {
@@ -1442,7 +1419,7 @@ function unhideSubtree(rootId) {
     recomputeHiddenNodes();
   }
   buildHiddenLegend();
-  applyFromUI();
+  applyFromUI('unhideSubtree');
 }
 
 // Aktualisiert den Titel der Hidden-Legende mit den aktuellen Zahlen
@@ -2306,6 +2283,103 @@ function exportCategoryAttributes(categoryName) {
 }
 
 /**
+ * Exportiert ein einzelnes Attribut als TSV-Datei
+ * @param {string} attributeKey - Der vollständige Attribut-Key (z.B. "Kategorie::Attributname")
+ */
+function exportSingleAttribute(attributeKey) {
+  const [category, attrName] = String(attributeKey).includes('::') 
+    ? String(attributeKey).split('::') 
+    : ['Attribute', String(attributeKey)];
+  
+  const lines = [];
+  
+  // Sammle alle Personen mit diesem spezifischen Attribut
+  for (const [personId, attrs] of personAttributes.entries()) {
+    if (attrs.has(attributeKey)) {
+      const person = byId.get(personId);
+      const identifier = person?.email || personId;
+      lines.push(`${identifier}\t${attrName}`);
+    }
+  }
+  
+  if (lines.length === 0) {
+    showTemporaryNotification(`Keine Einträge für "${attrName}" gefunden`, 2000);
+    return;
+  }
+  
+  // Sortiere alphabetisch
+  lines.sort();
+  
+  const content = lines.join('\n');
+  const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  
+  // Dateiname: Kategorie_Attributname.tsv
+  const safeCategory = category.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_');
+  const safeAttrName = attrName.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_');
+  const filename = `${safeCategory}_${safeAttrName}.tsv`;
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  showTemporaryNotification(`"${filename}" heruntergeladen (${lines.length} Einträge)`, 2000);
+}
+
+/**
+ * Exportiert alle Attribute einer Kategorie als TSV-Datei
+ * @param {string} categoryName - Name der Kategorie
+ */
+function exportCategoryAsTSV(categoryName) {
+  const lines = [];
+  
+  // Sammle alle Personen mit Attributen in dieser Kategorie
+  for (const [personId, attrs] of personAttributes.entries()) {
+    for (const [attrKey, attrValue] of attrs.entries()) {
+      const [cat, attrName] = String(attrKey).includes('::') 
+        ? String(attrKey).split('::') 
+        : ['Attribute', String(attrKey)];
+      
+      if (cat === categoryName) {
+        const person = byId.get(personId);
+        const identifier = person?.email || personId;
+        lines.push(`${identifier}\t${attrName}`);
+      }
+    }
+  }
+  
+  if (lines.length === 0) {
+    showTemporaryNotification(`Keine Einträge für Kategorie "${categoryName}" gefunden`, 2000);
+    return;
+  }
+  
+  // Sortiere alphabetisch
+  lines.sort();
+  
+  const content = lines.join('\n');
+  const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  
+  // Dateiname: Kategorie.tsv
+  const safeCategory = categoryName.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_');
+  const filename = `${safeCategory}.tsv`;
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  showTemporaryNotification(`"${filename}" heruntergeladen (${lines.length} Einträge)`, 2000);
+}
+
+/**
  * Prompt für neues Attribut in bestehender Kategorie
  */
 function promptNewAttribute(nodeId, category) {
@@ -2402,6 +2476,13 @@ function showNodeMenu(x, y, actionsOrOnHide) {
 
 function refreshClusters() {
   if (!clusterLayer) return;
+  
+  // Early exit: Keine Cluster zeichnen wenn keine OEs ausgewählt sind [PA][SF]
+  if (allowedOrgs.size === 0) {
+    clusterLayer.selectAll('path.cluster').remove();
+    clusterPolygons.clear();
+    return;
+  }
   
   const pad = cssNumber('--cluster-pad', 12);
   const membersByOrg = new Map();
@@ -2667,6 +2748,220 @@ function createSimulation(nodes, links) {
 }
 
 /**
+ * Hält die Simulation kontinuierlich am Laufen, wenn der Modus aktiviert ist [SF][PA]
+ */
+function keepSimulationRunning() {
+  if (!continuousSimulation || !currentSimulation) return;
+  
+  // Alpha auf niedrigem Level halten für sanfte, kontinuierliche Bewegung
+  if (currentSimulation.alpha() < 0.1) {
+    currentSimulation.alpha(0.15).restart();
+  }
+  
+  // Nächsten Frame planen
+  requestAnimationFrame(keepSimulationRunning);
+}
+
+/**
+ * Berechnet die Generation (Level) jedes Knotens relativ zu einer Menge von Root-IDs.
+ * @param {Array} nodes - Array von Knoten-Objekten
+ * @param {Set<string>} rootIds - Set von Root-IDs
+ * @param {Array} links - Array von Links
+ * @returns {Map<string, number>} Map von Node-ID zu Level (0 = Root)
+ */
+function getNodesLevels(nodes, rootIds, links) {
+  const levelMap = new Map();
+  const adjacency = new Map();
+  
+  // Adjazenzliste bauen (ungerichtet für Distanzberechnung)
+  links.forEach(l => {
+    const s = idOf(l.source);
+    const t = idOf(l.target);
+    if (!adjacency.has(s)) adjacency.set(s, []);
+    if (!adjacency.has(t)) adjacency.set(t, []);
+    adjacency.get(s).push(t);
+    adjacency.get(t).push(s);
+  });
+
+  // BFS
+  const queue = [];
+  rootIds.forEach(rid => {
+    if (nodes.find(n => String(n.id) === rid)) {
+      levelMap.set(rid, 0);
+      queue.push({ id: rid, level: 0 });
+    }
+  });
+
+  const visited = new Set(rootIds);
+  
+  while (queue.length > 0) {
+    const { id, level } = queue.shift();
+    const neighbors = adjacency.get(id) || [];
+    
+    neighbors.forEach(nid => {
+      if (!visited.has(nid)) {
+        // Prüfen ob Knoten Teil des Subgraphen ist
+        if (nodes.find(n => String(n.id) === nid)) {
+          visited.add(nid);
+          levelMap.set(nid, level + 1);
+          queue.push({ id: nid, level: level + 1 });
+        }
+      }
+    });
+  }
+  
+  // Fallback für nicht erreichbare Knoten
+  nodes.forEach(n => {
+    const nid = String(n.id);
+    if (!levelMap.has(nid)) levelMap.set(nid, 999);
+  });
+
+  return levelMap;
+}
+
+// Entferne altes TS Objekt, da Funktionalität jetzt in Logger ist
+const TS = { now: Logger.ts };
+
+// Globaler Counter für Transitionen, um Race-Conditions zu vermeiden
+let lastTransitionId = 0;
+
+/**
+ * Orchestriert den Übergang zwischen zwei Subgraphen-Zuständen.
+ * Führt einen schrittweisen Rückbau (Tear-Down) und Aufbau (Build-Up) durch.
+ */
+async function transitionGraph(oldSub, newSub, roots, transitionId) {
+  Logger.log(`[Timing] Start: transitionGraph-${transitionId}.total`);
+  const oldNodes = oldSub ? oldSub.nodes : [];
+  const newNodes = newSub ? newSub.nodes : [];
+  
+  const oldNodeIds = new Set(oldNodes.map(n => String(n.id)));
+  const newNodeIds = new Set(newNodes.map(n => String(n.id)));
+  
+  const nodesToRemove = oldNodes.filter(n => !newNodeIds.has(String(n.id)));
+  const nodesToAdd = newNodes.filter(n => !oldNodeIds.has(String(n.id)));
+
+  Logger.log(`[Transition #${transitionId}] Roots: ${roots.join(', ')}`);
+  Logger.log(`[Transition #${transitionId}] Nodes: ${oldNodes.length} -> ${newNodes.length} (Remove: ${nodesToRemove.length}, Add: ${nodesToAdd.length})`);
+  
+  let currentNodes = [...oldNodes];
+  // Wir nutzen newSub.links als Basis für alle Links die bleiben oder kommen, 
+  // und oldSub.links für die die gehen. 
+  // Einfacher: Wir filtern immer die Links passend zu currentNodes aus dem jeweiligen Quell-Set.
+  // Da Links Objekte sind, ist es sicherer, sie frisch zu filtern.
+  // Strategie: Wir rendern immer eine Teilmenge von (Nodes die da sind) + (Links die dazu passen).
+  // Da die Simulation 'links' Array erwartet, das Referenzen enthält, 
+  // bauen wir das Link-Array in renderGraph eh neu bzw. d3 updated es.
+  // Aber renderGraph erwartet { nodes, links }.
+  
+  // Wir nehmen die Union aller Links für die Übergangsphase, filtern aber auf die aktuellen Nodes.
+  const allLinks = [...(oldSub ? oldSub.links : []), ...(newSub ? newSub.links : [])];
+  // Deduplizieren
+  const linkMap = new Map();
+  allLinks.forEach(l => {
+    const s = idOf(l.source);
+    const t = idOf(l.target);
+    linkMap.set(`${s}>${t}`, l);
+  });
+  const consolidatedLinks = Array.from(linkMap.values());
+
+  const getLinksForNodes = (nodes) => {
+    const nodeIds = new Set(nodes.map(n => String(n.id)));
+    // WICHTIG: Neue Link-Objekte erstellen mit nur IDs (nicht Objekt-Referenzen)
+    // D3's forceLink mutiert source/target zu Objekt-Referenzen, was nach Node-Wechsel
+    // zu Dissoziation führt (Links zeigen auf alte Node-Objekte) [SF][REH]
+    return consolidatedLinks
+      .filter(l => nodeIds.has(idOf(l.source)) && nodeIds.has(idOf(l.target)))
+      .map(l => ({ source: idOf(l.source), target: idOf(l.target) }));
+  };
+
+  // === PHASE 1: RÜCKBAU (TEAR-DOWN) ===
+  if (nodesToRemove.length > 0) {
+    Logger.log('[Timing] Start: transitionGraph.teardown');
+    // Levels basierend auf den *alten* Knoten/Links berechnen (Best Effort)
+    const levels = getNodesLevels(oldNodes, new Set(roots), oldSub ? oldSub.links : []);
+    
+    const byLevel = new Map();
+    nodesToRemove.forEach(n => {
+      const lvl = levels.get(String(n.id));
+      if (!byLevel.has(lvl)) byLevel.set(lvl, []);
+      byLevel.get(lvl).push(String(n.id));
+    });
+    
+    const sortedLevels = Array.from(byLevel.keys()).sort((a, b) => b - a);
+    Logger.log(`[Transition #${transitionId}] Teardown Levels: ${sortedLevels.join(', ')}`);
+    
+    for (const level of sortedLevels) {
+      if (transitionId !== lastTransitionId) {
+        Logger.log(`[Transition #${transitionId}] Aborted during teardown (new transition pending)`);
+        return;
+      }
+
+      const idsToRemove = new Set(byLevel.get(level));
+      Logger.log(`[Transition #${transitionId}] Removing Level ${level}: ${idsToRemove.size} nodes`);
+      
+      currentNodes = currentNodes.filter(n => !idsToRemove.has(String(n.id)));
+      const currentLinks = getLinksForNodes(currentNodes);
+      
+      renderGraph({ nodes: currentNodes, links: currentLinks });
+      await new Promise(r => setTimeout(r, BFS_LEVEL_ANIMATION_DELAY_MS));
+    }
+    Logger.log(`[Timing] End: transitionGraph-${transitionId}.teardown`);
+  }
+  
+  // Hard Sync zum Zwischenzustand (nur nodesToKeep)
+  // Wir stellen sicher, dass wir exakt den State haben, bevor wir aufbauen
+  const nodesToKeep = newNodes.filter(n => oldNodeIds.has(String(n.id)));
+  currentNodes = [...nodesToKeep]; 
+  // Hier könnten wir kurz rendern, um sicherzustellen, dass alles sauber ist
+  
+  // === PHASE 2: AUFBAU (BUILD-UP) ===
+  if (nodesToAdd.length > 0) {
+    Logger.log('[Timing] Start: transitionGraph.buildup');
+    const levels = getNodesLevels(newNodes, new Set(roots), newSub.links);
+    
+    const byLevel = new Map();
+    nodesToAdd.forEach(n => {
+      const lvl = levels.get(String(n.id));
+      if (!byLevel.has(lvl)) byLevel.set(lvl, []);
+      byLevel.get(lvl).push(n);
+    });
+    
+    const sortedLevels = Array.from(byLevel.keys()).sort((a, b) => a - b);
+    Logger.log(`[Transition #${transitionId}] Buildup Levels: ${sortedLevels.join(', ')}`);
+    
+    for (const level of sortedLevels) {
+      if (transitionId !== lastTransitionId) {
+        Logger.log(`[Transition #${transitionId}] Aborted during buildup (new transition pending)`);
+        return;
+      }
+
+      const nodesInLevel = byLevel.get(level);
+      Logger.log(`[Transition #${transitionId}] Adding Level ${level}: ${nodesInLevel.length} nodes`);
+      
+      currentNodes = [...currentNodes, ...nodesInLevel];
+      
+      // Jetzt nehmen wir bevorzugt Links aus newSub, aber unser consolidatedLinks enthält diese ja.
+      // Wichtig: Links müssen aktualisiert werden.
+      const currentLinks = getLinksForNodes(currentNodes);
+      
+      renderGraph({ nodes: currentNodes, links: currentLinks });
+      await new Promise(r => setTimeout(r, BFS_LEVEL_ANIMATION_DELAY_MS));
+    }
+    Logger.log(`[Timing] End: transitionGraph-${transitionId}.buildup`);
+  }
+  
+  if (transitionId !== lastTransitionId) {
+    Logger.log(`[Transition #${transitionId}] Aborted before final render`);
+    return;
+  }
+
+  // Finaler Render mit frischen Link-Objekten (IDs statt Objekt-Referenzen) [SF][REH]
+  const finalLinks = newSub.links.map(l => ({ source: idOf(l.source), target: idOf(l.target) }));
+  renderGraph({ nodes: newSub.nodes, links: finalLinks });
+  Logger.log(`[Timing] End: transitionGraph-${transitionId}.total`);
+}
+
+/**
  * Rendert den Graphen basierend auf dem berechneten Subgraphen
  */
 function renderGraph(sub) {
@@ -2734,7 +3029,7 @@ function renderGraph(sub) {
       enter => enter.append("line")
         .attr("class", "link")
         .attr("marker-end", "url(#arrow)"),
-      update => update,
+      update => update.attr("marker-end", "url(#arrow)"), // Ensure marker stays
       exit => exit.remove()
     );
 
@@ -2824,9 +3119,7 @@ function renderGraph(sub) {
     const rootIds = selectedRootIds.length > 0 ? selectedRootIds : [currentSelectedId].filter(Boolean);
     if (rootIds.length === 0) return false;
     
-    if (debugMode) {
-      console.log('[Layout] Radiales Initial-Layout', { rootIds, nodeCount: personNodes.length });
-    }
+    Logger.log('[Layout] Radiales Initial-Layout', { rootIds, nodeCount: personNodes.length });
     
     // Build parent-child map
     const childrenOf = new Map();
@@ -2903,9 +3196,7 @@ function renderGraph(sub) {
     
     if (newNodeIds.size === 0) return; // Keine neuen Knoten
     
-    if (debugMode) {
-      console.log('[Layout] Erweitere Layout mit neuen Knoten', { newCount: newNodeIds.size });
-    }
+    Logger.log('[Layout] Erweitere Layout mit neuen Knoten', { newCount: newNodeIds.size });
     
     // Finde Blattknoten (Leaf Nodes) im bestehenden Layout
     // Ein Blattknoten hat keine Kinder oder alle Kinder sind neu
@@ -3024,21 +3315,16 @@ function renderGraph(sub) {
     showNodeMenu(event.clientX, event.clientY, {
       onHideSubtree: () => hideSubtreeFromRoot(pid),
       onSetAsRoot: () => {
-        // Setze als neue Root mit radialem Re-Layout [SF][DRY]
+        // Setze als neue Root - Simulation NICHT auf null setzen [SF][DRY]
+        // Die Positionen müssen erhalten bleiben für transitionGraph
         setSingleRoot(pid);
         currentSelectedId = pid;
         const input = document.querySelector(INPUT_COMBO_ID);
         if (input) input.value = d.label || pid;
-        
-        // Stoppe Simulation für Fresh-Layout
-        if (currentSimulation) {
-          currentSimulation.stop();
-          currentSimulation = null;
-        }
-        applyFromUI();
+        applyFromUI('contextSetRoot');
       },
       isRoot: isRoot(pid),
-      onRemoveRoot: () => { removeRoot(pid); applyFromUI(); },
+      onRemoveRoot: () => { removeRoot(pid); applyFromUI('contextRemoveRoot'); },
       nodeId: pid
     });
   });
@@ -3062,68 +3348,9 @@ function renderGraph(sub) {
     simulation = createSimulation(personNodes, linksPP);
   }
 
-  // Optionale BFS-Level-Animation für Single-Root-Subgraphen
-  if (sub && sub.animateLevels) {
-    const levelById = new Map();
-    personNodes.forEach(n => {
-      levelById.set(String(n.id), n.level || 0);
-    });
-    let maxLevel = 0;
-    levelById.forEach(lvl => { if (lvl > maxLevel) maxLevel = lvl; });
-
-    // Legendenscope pro Level berechnen (auf Basis von legendOrgLevels)
-    const legendOrgLevels = sub.legendOrgLevels instanceof Map ? sub.legendOrgLevels : null;
-    const updateLegendForLevel = (level) => {
-      if (!legendOrgLevels) return;
-      const legendEl = document.querySelector('#legend');
-      if (!legendEl) return;
-
-      // Aktuelle Auswahl (Checkboxen) zurück nach allowedOrgs spiegeln
-      updateLegendChips(legendEl);
-
-      const scope = new Set();
-      legendOrgLevels.forEach((lvl, oid) => {
-        if (lvl <= level) scope.add(oid);
-      });
-
-      applyLegendScope(scope);
-      syncGraphAndLegendColors();
-    };
-
-    // Starte mit Root-Level sichtbar, restliche Knoten ausblenden
-    node.style('opacity', d => (levelById.get(String(d.id)) || 0) === 0 ? 1 : 0);
-    link.style('opacity', 0);
-
-    // Initiale Legende für Level 0
-    if (legendOrgLevels) {
-      updateLegendForLevel(0);
-    }
-
-    if (maxLevel > 0) {
-      let currentLevel = 0;
-      const revealNextLevel = () => {
-        currentLevel += 1;
-        node.filter(d => (levelById.get(String(d.id)) || 0) === currentLevel)
-          .style('opacity', 1);
-        link.filter(d => {
-          const sLevel = levelById.get(idOf(d.source)) || 0;
-          const tLevel = levelById.get(idOf(d.target)) || 0;
-          return Math.max(sLevel, tLevel) <= currentLevel;
-        }).style('opacity', 1);
-
-        if (legendOrgLevels) {
-          updateLegendForLevel(currentLevel);
-        }
-        if (currentLevel < maxLevel) {
-          setTimeout(revealNextLevel, BFS_LEVEL_ANIMATION_DELAY_MS);
-        }
-      };
-      setTimeout(revealNextLevel, BFS_LEVEL_ANIMATION_DELAY_MS);
-    }
-  } else {
-    node.style('opacity', 1);
-    link.style('opacity', 1);
-  }
+  // Optionale BFS-Level-Animation entfernt - wird nun von transitionGraph gehandhabt
+  node.style('opacity', 1);
+  link.style('opacity', 1);
 
   // Tick-Handler für Animation
   simulation.on("tick", () => {
@@ -3322,6 +3549,7 @@ function renderGraph(sub) {
     event.stopPropagation(); // Verhindert Zoom-Konflikt
     
     // Setze geklickten Knoten als neuen Root [SF]
+    // Simulation NICHT auf null setzen - Positionen müssen für transitionGraph erhalten bleiben
     const nodeId = String(d.id);
     setSingleRoot(nodeId);
     currentSelectedId = nodeId;
@@ -3330,17 +3558,9 @@ function renderGraph(sub) {
     const input = document.querySelector(INPUT_COMBO_ID);
     if (input) input.value = d.label || nodeId;
     
-    // Stoppe aktuelle Simulation für komplettes Re-Layout [SF]
-    // Dies erzwingt radiales Initial-Layout mit neuem Root im Zentrum
-    if (currentSimulation) {
-      currentSimulation.stop();
-      currentSimulation = null;
-    }
-    
     // Graph mit neuem Root neu berechnen und rendern
-    // - Knoten außerhalb der Tiefe werden automatisch ausgeblendet
-    // - Neu sichtbare Knoten werden über radiales Layout positioniert
-    applyFromUI();
+    // transitionGraph kümmert sich um den inkrementellen Übergang
+    applyFromUI('doubleClickNode');
   });
 
   // Zoom-Verhalten
@@ -3374,11 +3594,23 @@ function renderGraph(sub) {
   // Simulation global speichern und Layout anwenden
   currentSimulation = simulation;
   configureLayout(personNodes, linksPP, simulation, currentLayoutMode);
+
+  // Simulation neu starten, um Positionsänderungen (Teardown) auszugleichen
+  simulation.alpha(0.3).restart();
+  
+  // Kontinuierliche Animation fortsetzen, falls aktiviert [SF]
+  if (continuousSimulation) {
+    keepSimulationRunning();
+  }
 }
 
-function applyFromUI() {
+function applyFromUI(triggerSource = 'unknown', callStack = false) {
+  Logger.log(`[Timing] Start: applyFromUI.${triggerSource}`);
   if (!raw || !raw.links || !raw.nodes) return;
   if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
+  
+  Logger.log(`[UI] applyFromUI triggered by: ${triggerSource}`);
+  if (callStack && debugMode) console.trace();
   
   // Reset hidden count für neue Berechnung
   currentHiddenCount = 0;
@@ -3424,31 +3656,22 @@ function applyFromUI() {
   const isNewRootSelection = rootsKey !== lastRootsKey;
 
   // Single-root or multi-root render
+  let nextSubgraph;
+  let scopeOrgs = new Set();
+
   if (roots.length === 1) {
     const startId = roots[0];
     // Merke letzten Einzel-Root für zukünftiges Shift-Add Seeding
     lastSingleRootId = String(startId);
     currentSelectedId = String(startId);
-    const sub = computeSubgraph(startId, Number.isFinite(depth) ? depth : 2, dirMode);
-    if (isNewRootSelection) {
-      // Nur bei echter Root-Änderung BFS-Animation aktivieren
-      sub.animateLevels = true;
-    }
-    currentSubgraph = sub;
-    renderGraph(sub);
-    updateFooterStats(sub);
-
-    // Bei reinen Parameteränderungen (Tiefe/Richtung) Legenden-Scope direkt anwenden
-    if (!sub.animateLevels && sub.legendOrgs) {
-      applyLegendScope(sub.legendOrgs);
-      syncGraphAndLegendColors();
-    }
+    nextSubgraph = computeSubgraph(startId, Number.isFinite(depth) ? depth : 2, dirMode);
+    if (nextSubgraph.legendOrgs) scopeOrgs = nextSubgraph.legendOrgs;
   } else {
     // Multi-root: compute union of subgraphs
     const nodeMap = new Map();
     const linkSet = new Set();
     const effDepth = Number.isFinite(depth) ? depth : 2;
-    const scopeOrgs = new Set(); // Union of all legendOrgs
+    
     for (const rid of roots) {
       const sub = computeSubgraph(rid, effDepth, dirMode);
       for (const n of sub.nodes) {
@@ -3475,14 +3698,29 @@ function applyFromUI() {
       const [s, t] = k.split('>');
       return { source: s, target: t };
     });
-    const merged = { nodes, links };
-    currentSubgraph = merged;
-    renderGraph(merged);
-    updateFooterStats(merged);
-    // Multi-Root: Legende auf die Vereinigungsmenge der relevanten OEs einschränken
-    applyLegendScope(scopeOrgs);
-    syncGraphAndLegendColors();
+    nextSubgraph = { nodes, links };
   }
+
+  // Transition durchführen [SF][PA]
+  const oldSubgraph = currentSubgraph;
+  currentSubgraph = nextSubgraph;
+  
+  // Neue Transition ID generieren
+  const transitionId = ++lastTransitionId;
+
+  // Async Transition starten
+  transitionGraph(oldSubgraph, nextSubgraph, roots, transitionId).then(() => {
+    if (transitionId !== lastTransitionId) return; // Wenn veraltet, nichts mehr tun
+
+    // Nach Abschluss sicherstellen, dass alles konsistent ist
+    updateFooterStats(nextSubgraph);
+    
+    // Legende anwenden
+    if (scopeOrgs.size > 0) {
+      applyLegendScope(scopeOrgs);
+      // syncGraphAndLegendColors() wird bereits in buildScopedOrgLegend() aufgerufen
+    }
+  });
 
   // Letzten Render-Zustand merken (für zukünftige Root-Wechsel-Erkennung)
   lastRenderRoots = roots.slice();
@@ -4021,6 +4259,10 @@ function getSaveSVG() {
   return `<i class="codicon codicon-save" aria-hidden="true"></i>`;
 }
 
+function getDownloadSVG() {
+  return `<i class="codicon codicon-cloud-download" aria-hidden="true"></i>`;
+}
+
 function updateCheckboxIcon(checkboxElement, checked) {
   checkboxElement.innerHTML = getCheckboxSVG(checked);
   checkboxElement.className = checked ? 
@@ -4132,6 +4374,21 @@ function buildAttributeLegend() {
     catLabel.textContent = `${cat} (${total})`;
     catLabel.title = `${cat} - ${total} Einträge`;
     catLeftArea.appendChild(catLabel);
+    
+    // Download-Button für Kategorie (TSV-Export) - vor Eye-Button
+    const catDownloadBtn = document.createElement('button');
+    catDownloadBtn.type = 'button';
+    catDownloadBtn.className = 'legend-icon-btn';
+    catDownloadBtn.title = `"${cat}" als TSV herunterladen`;
+    catDownloadBtn.innerHTML = getDownloadSVG();
+    catDownloadBtn.setAttribute('data-ignore-header-click', 'true');
+    
+    catDownloadBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportCategoryAsTSV(cat);
+    });
+    
+    catRightArea.appendChild(catDownloadBtn);
     
     // Eye-Toggle Button (rechts) - blendet Kategorie temporär aus
     const eyeBtn = document.createElement('button');
@@ -4861,24 +5118,43 @@ let oesVisible = true;
 let savedAllowedOrgs = new Set();
 
 window.addEventListener("DOMContentLoaded", async () => {
-  const envLoaded = await loadEnvConfig();
-  let dataLoaded = false;
-
-  // Nur versuchen automatisch zu laden, wenn ENV erfolgreich geladen wurde und eine Datenquelle konfiguriert ist [SF][REH]
-  if (envLoaded && envConfig?.DATA_URL) {
-    dataLoaded = await loadData();
-    if (!dataLoaded) {
-      showTemporaryNotification('Automatisches Laden der Daten ist fehlgeschlagen – bitte unten manuell eine Datei wählen.', 5000);
-    }
+  await loadEnvConfig();
+  const input = document.querySelector(INPUT_COMBO_ID);
+  const list = document.querySelector(LIST_COMBO_ID);
+  // Footer: click status to open a file dialog and load JSON dataset
+  const statusEl = document.querySelector(STATUS_ID);
+  if (statusEl) {
+    statusEl.addEventListener('click', async () => {
+      const picker = document.createElement('input');
+      picker.type = 'file';
+      picker.accept = 'application/json,.json';
+      picker.style.display = 'none';
+      document.body.appendChild(picker);
+      picker.addEventListener('change', async () => {
+        try {
+          const file = picker.files && picker.files[0];
+          if (!file) return;
+          const text = await file.text();
+          const data = JSON.parse(text);
+          applyLoadedDataObject(data, file.name);
+          populateCombo("");
+          try { applyFromUI('fileLoad'); } catch(_) { updateFooterStats(null); }
+        } catch(_) {
+          setStatus('Ungültige Datei');
+        } finally {
+          picker.remove();
+        }
+      });
+      picker.click();
+    });
   }
+
   // Initialisiere Chevron-Icons im HTML
   initializeChevronIcons();
   // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
   try { document.addEventListener('contextmenu', (e) => e.preventDefault()); } catch {}
   const applyBtn = document.querySelector(BTN_APPLY_ID);
   if (applyBtn) applyBtn.addEventListener("click", applyFromUI);
-  const input = document.querySelector(INPUT_COMBO_ID);
-  const list = document.querySelector(LIST_COMBO_ID);
   // OE-Sichtbarkeits-Toggle
   const oeVisibilityBtn = document.getElementById('toggleOesVisibility');
   if (oeVisibilityBtn) {
@@ -4916,6 +5192,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       
       // NUR den Graph aktualisieren ohne UI-Elemente zu beeinflussen
       refreshClusters();
+      
+      // Simulation neu anstoßen, damit sich Kräfte ausbalancieren
+      if (currentSimulation) currentSimulation.alpha(0.1).restart();
     });
   }
   
@@ -5190,7 +5469,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     mgmt.addEventListener('click', () => {
       mgmt.classList.toggle('active');
       managementEnabled = mgmt.classList.contains('active');
-      applyFromUI();
+      applyFromUI('toggleManagement');
     });
   }
   // Auto-fit functionality has been removed
@@ -5240,16 +5519,16 @@ window.addEventListener("DOMContentLoaded", async () => {
           const addMode = !!(e.shiftKey);
           // Wenn kein aktives Element, wähle den ersten Treffer automatisch
           const idx = activeIndex >= 0 ? activeIndex : (filteredItems.length > 0 ? 0 : -1);
-          try { if (debugMode) console.log('[ui] key Enter', { addMode, activeIndex, chosenIdx: idx, items: filteredItems.length }); } catch {}
+          Logger.log('[ui] key Enter', { addMode, activeIndex, chosenIdx: idx, items: filteredItems.length });
           if (idx >= 0) chooseItem(idx, addMode);
-          applyFromUI();
+          applyFromUI('keyEnter');
           break;
         }
         case 'Escape': list.hidden = true; break;
       }
     });
     
-    input.addEventListener('change', applyFromUI);
+    input.addEventListener('change', () => applyFromUI('inputChange'));
     input.addEventListener('focus', () => { if (filteredItems.length) list.hidden = false; });
     input.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 0));
   }
@@ -5258,22 +5537,33 @@ window.addEventListener("DOMContentLoaded", async () => {
     fitBtn.addEventListener('click', fitToViewport);
   }
   
+  // Toggle für kontinuierliche Simulation [SF]
+  const simToggleBtn = document.querySelector('#toggleSimulation');
+  if (simToggleBtn) {
+    simToggleBtn.addEventListener('click', () => {
+      simToggleBtn.classList.toggle('active');
+      continuousSimulation = simToggleBtn.classList.contains('active');
+      
+      if (continuousSimulation && currentSimulation) {
+        // Simulation dauerhaft am Laufen halten
+        keepSimulationRunning();
+      }
+      
+      Logger.log(`[Simulation] Continuous mode: ${continuousSimulation}`);
+    });
+  }
+  
   const debugBtn = document.querySelector('#debugBtn');
   if (debugBtn) {
-    // Debug-Flag aus ENV lesen (DEBUG_ON)
-    const envDebugOn = (envConfig && envConfig.DEBUG_ON != null)
-      ? envConfig.DEBUG_ON
-      : null;
-
-    if (envDebugOn != null) {
-      debugMode = !!envDebugOn;
-      if (debugMode) debugBtn.classList.add('active');
-    } else {
-      debugMode = debugBtn.classList.contains('active');
+    // Synchronisiere Button-Status mit dem bereits geladenen debugMode (aus loadEnvConfig)
+    if (debugMode) {
+      debugBtn.classList.add('active');
     }
+    
     debugBtn.addEventListener('click', () => {
       debugBtn.classList.toggle('active');
       debugMode = debugBtn.classList.contains('active');
+      Logger.log(`[Debug] Debug mode toggled to: ${debugMode}`);
       
       // Aktualisiere Labels und Link-Labels sofort [SF]
       const svg = d3.select('#graph');
@@ -5350,7 +5640,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
       
       currentDir = getCurrentDirection();
-      applyFromUI();
+      applyFromUI('directionUp');
     });
     
     downHalf.addEventListener('click', () => {
@@ -5370,7 +5660,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
       
       currentDir = getCurrentDirection();
-      applyFromUI();
+      applyFromUI('directionDown');
     });
   }
   
@@ -5426,36 +5716,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Kollabierbare Legenden einrichten
   initializeCollapsibleLegends();
 
-  // Footer: click status to open a file dialog and load JSON dataset
-  const statusEl = document.querySelector(STATUS_ID);
-  if (statusEl) {
-    statusEl.addEventListener('click', async () => {
-      const picker = document.createElement('input');
-      picker.type = 'file';
-      picker.accept = 'application/json,.json';
-      picker.style.display = 'none';
-      document.body.appendChild(picker);
-      picker.addEventListener('change', async () => {
-        try {
-          const file = picker.files && picker.files[0];
-          if (!file) return;
-          const text = await file.text();
-          const data = JSON.parse(text);
-          applyLoadedDataObject(data, file.name);
-          populateCombo("");
-          try { applyFromUI(); } catch(_) { updateFooterStats(null); }
-        } catch(_) {
-          setStatus('Ungültige Datei');
-        } finally {
-          picker.remove();
-        }
-      });
-      picker.click();
-    });
-  }
-
-  // Apply initial start node(s) from env.json if provided
-  if (envConfig && envConfig.DEFAULT_START_ID != null) {
+  // Lade Daten erst nachdem ENV vollständig verarbeitet wurde [SF][REH]
+  if (await loadData()) {
+    // Apply initial start node(s) from env.json if provided
+    let initialUpdateTriggered = false;
+    if (envConfig && envConfig.DEFAULT_START_ID != null) {
     const def = envConfig.DEFAULT_START_ID;
     if (Array.isArray(def)) {
       const requested = def.map(v => String(v));
@@ -5465,7 +5730,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         selectedRootIds = roots.slice();
         currentSelectedId = roots[0];
         lastSingleRootId = roots[0];
-        try { applyFromUI(); } catch(_) {}
+        initialUpdateTriggered = true;
+        
         // Nach Initial-Apply das Suchfeld leeren und Dropdown schließen
         if (input && list) {
           input.value = "";
@@ -5483,7 +5749,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (startNode) {
         currentSelectedId = String(startNode.id);
         lastSingleRootId = String(startNode.id);
-        try { applyFromUI(); } catch(_) {}
+        initialUpdateTriggered = true;
+        
         // Nach Initial-Apply das Suchfeld leeren und Dropdown schließen
         if (input && list) {
           input.value = "";
@@ -5504,8 +5771,24 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
     recomputeHiddenNodes();
     buildHiddenLegend();
-    try { applyFromUI(); } catch(_) {}
+    // Wir triggern hier nicht, sondern setzen initialUpdateTriggered wenn nötig
+    // Da Hidden-State das Rendering beeinflusst, sollten wir updaten
+    // Aber wenn wir schon für Start-ID updaten, reicht einer.
+    if (!initialUpdateTriggered) {
+         // Falls KEINE Start-ID gesetzt war, aber Hidden-Roots, müssen wir theoretisch updaten
+         // Aber ohne Start-ID rendert eh nichts (außer leere Leinwand).
+         // Also reicht es, wenn der Aufruf am Ende kommt.
+    }
   }
+
+    // Einmaliger initialer Update-Aufruf, falls Parameter gesetzt wurden
+    if (initialUpdateTriggered) {
+        try { applyFromUI('initialLoad'); } catch(_) {}
+    } else {
+        renderFullView(envConfig?.DATA_URL || '(geladen)');
+    }
+  }
+  
   // hideSubtree-Button wurde aus der Toolbar entfernt
   // Die hideSubtreeFromRoot-Funktion bleibt für das Kontextmenü erhalten
   buildHiddenLegend();
@@ -5541,6 +5824,8 @@ function syncGraphAndLegendColors() {
     updateLegendRowColors(legend);
     updateLegendChips(legend);
   }
+  // Wir sollten die Simulation hier NICHT neu starten, da dies nur Farb-Updates sind.
+  // refreshClusters zeichnet nur Pfade neu, sollte also sicher sein.
   refreshClusters();
   updateFooterStats(currentSubgraph);
 }

@@ -1,12 +1,11 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>OrgGraph</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@vscode/codicons@0.0.35/dist/codicon.css" />
-  <link rel="stylesheet" href="./style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="https://unpkg.com/@vscode/codicons@0.0.36/dist/codicon.css" />
 </head>
 <body>
   <header class="app-header">
@@ -51,6 +50,10 @@
       
       <button id="fit" class="toggle-btn" aria-label="Auf Seite einpassen" title="Auf Seite einpassen">
         <i class="codicon codicon-move"></i>
+      </button>
+      
+      <button id="toggleSimulation" class="toggle-btn" aria-label="Animation fortsetzen" title="Animation fortsetzen (Knoten bewegen sich kontinuierlich)">
+        <i class="codicon codicon-sync"></i>
       </button>
       
       <button id="exportBtn" class="toggle-btn" aria-label="Grafik exportieren" title="Grafik exportieren">
@@ -160,8 +163,7 @@
       <span id="stats-attributes">Attribute: <strong id="stats-attributes-count">0</strong></span>
     </div>
   </footer>
-  <script src="./export.js"></script>
-  <script src="./app.js"></script>
+  <script type="module" src="/src/app.js"></script>
   
   <!-- Export Dialog -->
   <div id="exportModal" class="modal" style="display:none;">

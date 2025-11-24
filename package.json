@@ -1,0 +1,25 @@
+{
+  "name": "orggraph",
+  "version": "1.0.0",
+  "description": "OrgGraph Visualization",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:perf": "vite --config trace/vite.config.instrumented.js",
+    "build": "vite build",
+    "build:perf": "vite build --config trace/vite.config.instrumented.js",
+    "preview": "vite preview",
+    "transform": "node transform.js"
+  },
+  "dependencies": {
+    "d3": "^7.9.0"
+  },
+  "devDependencies": {
+    "@babel/generator": "^7.28.5",
+    "@babel/parser": "^7.28.5",
+    "@babel/traverse": "^7.28.5",
+    "@babel/types": "^7.28.5",
+    "@rollup/pluginutils": "^5.3.0",
+    "vite": "^6.0.0"
+  }
+}

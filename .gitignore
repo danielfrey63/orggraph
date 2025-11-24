@@ -5,5 +5,13 @@ env*.json
 attributes
 helpers
 
-.windsurf/rules/kluster-code-verify.md
+.windsurf
 .kluster
+.vscode
+
+tmp
+node_modules
+dist
+trace
+
+.windsurf/rules/kluster-code-verify.md
