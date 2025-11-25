@@ -59,6 +59,10 @@
       <button id="exportBtn" class="toggle-btn" aria-label="Grafik exportieren" title="Grafik exportieren">
         <i class="codicon codicon-save"></i>
       </button>
+      
+      <button id="togglePseudonymization" class="toggle-btn active" aria-label="Pseudonymisierung" title="Pseudonymisierung ein/aus">
+        <i class="codicon codicon-shield"></i>
+      </button>
     </div>
     
     <button id="debugBtn" class="toggle-btn" aria-label="Debug-Modus" title="Debug: Koordinaten & Abstände anzeigen">
@@ -142,7 +146,9 @@
               <h2 class="legend-title" id="hiddenLegendTitle">Ausgeblendet</h2>
             </div>
             <div class="legend-actions-area">
-              <!-- Platzhalter für Konsistenz -->
+              <button id="toggleAllHiddenVisibility" class="legend-icon-btn" title="Alle temporär einblenden">
+                <!-- SVG wird durch JavaScript gesetzt -->
+              </button>
             </div>
           </div>
         </div>

@@ -47,12 +47,22 @@ let collapsedCategories = new Set(); // Kategorien mit eingeklapptem Zustand
 let hiddenCategories = new Set();    // Kategorien die temporär ausgeblendet sind (ohne Attribut-Status zu ändern)
 let hiddenNodes = new Set();
 let hiddenByRoot = new Map();
+let temporarilyVisibleRoots = new Set(); // Roots deren Hidden-Subtrees temporär sichtbar sind
+let allHiddenTemporarilyVisible = false; // Globaler Toggle für alle Hidden-Subtrees
 let currentHiddenCount = 0; // Anzahl der ausgeblendeten Knoten in der aktuellen Ansicht
 let selectedRootIds = [];
 let lastSingleRootId = null;
 let lastRenderRoots = [];
 let lastRenderDepth = null;
 let lastRenderDirMode = 'both';
+
+// Pseudonymisierung [SF]
+let pseudonymizationEnabled = true;
+let pseudoData = null; // { names: [], organizationalUnits0: [], organizationalUnits1: [], ... }
+let pseudoNameMapping = new Map();   // originalName -> pseudoName
+let pseudoOrgMapping = new Map();    // originalOrgLabel -> pseudoOrgLabel
+let pseudoNameIndex = 0;
+let pseudoOrgIndices = new Map();    // level -> currentIndex
 
 const Logger = {
   ts() {
@@ -73,6 +83,288 @@ const Logger = {
     }
   }
 };
+
+// ========== Pseudonymisierung Funktionen [SF][DRY] ==========
+
+/**
+ * Lädt die Pseudonymisierungs-Daten aus der fixen URL
+ */
+async function loadPseudoData() {
+  try {
+    const res = await fetch('./pseudo.data.json', { cache: 'no-store' });
+    if (!res.ok) {
+      Logger.log('[Pseudo] Konnte pseudo.data.json nicht laden:', res.status);
+      return false;
+    }
+    pseudoData = await res.json();
+    Logger.log('[Pseudo] Daten geladen:', {
+      names: pseudoData.names?.length || 0,
+      orgLevels: Object.keys(pseudoData).filter(k => k.startsWith('organizationalUnits')).length
+    });
+    return true;
+  } catch (e) {
+    Logger.log('[Pseudo] Fehler beim Laden:', e);
+    pseudoData = null;
+    return false;
+  }
+}
+
+/**
+ * Holt ein Pseudonym für einen Personennamen (konsistentes Mapping)
+ */
+function getPseudoName(originalName) {
+  if (!pseudoData?.names?.length) return originalName;
+  
+  const key = String(originalName);
+  if (pseudoNameMapping.has(key)) {
+    return pseudoNameMapping.get(key);
+  }
+  
+  // Neues Mapping erstellen
+  const pseudoName = pseudoData.names[pseudoNameIndex % pseudoData.names.length];
+  pseudoNameIndex++;
+  pseudoNameMapping.set(key, pseudoName);
+  return pseudoName;
+}
+
+/**
+ * Holt ein Pseudonym für eine OE basierend auf ihrem Level (konsistentes Mapping)
+ */
+function getPseudoOrgLabel(originalLabel, level) {
+  if (!pseudoData) return originalLabel;
+  
+  const key = String(originalLabel);
+  if (pseudoOrgMapping.has(key)) {
+    return pseudoOrgMapping.get(key);
+  }
+  
+  // Level-basierte OE-Liste finden
+  const levelKey = `organizationalUnits${level}`;
+  const orgList = pseudoData[levelKey];
+  
+  if (!orgList?.length) {
+    // Fallback: höchstes verfügbares Level verwenden
+    const availableLevels = Object.keys(pseudoData)
+      .filter(k => k.startsWith('organizationalUnits'))
+      .map(k => parseInt(k.replace('organizationalUnits', '')))
+      .sort((a, b) => b - a);
+    
+    if (availableLevels.length === 0) return originalLabel;
+    
+    const fallbackLevel = availableLevels.find(l => l <= level) ?? availableLevels[0];
+    const fallbackKey = `organizationalUnits${fallbackLevel}`;
+    const fallbackList = pseudoData[fallbackKey];
+    if (!fallbackList?.length) return originalLabel;
+    
+    const idx = pseudoOrgIndices.get(fallbackLevel) || 0;
+    const pseudoOrg = fallbackList[idx % fallbackList.length];
+    pseudoOrgIndices.set(fallbackLevel, idx + 1);
+    pseudoOrgMapping.set(key, pseudoOrg.name);
+    return pseudoOrg.name;
+  }
+  
+  // Neues Mapping erstellen
+  const idx = pseudoOrgIndices.get(level) || 0;
+  const pseudoOrg = orgList[idx % orgList.length];
+  pseudoOrgIndices.set(level, idx + 1);
+  pseudoOrgMapping.set(key, pseudoOrg.name);
+  return pseudoOrg.name;
+}
+
+/**
+ * Gibt das anzuzeigende Label für einen Knoten zurück (Person oder OE)
+ * @param {Object} node - Der Knoten mit id, label, type
+ * @param {number} [level] - Optional: OE-Level für level-basierte Pseudonyme
+ */
+function getDisplayLabel(node, level) {
+  if (!node) return '';
+  
+  const originalLabel = node.label || node.id || '';
+  
+  // Wenn Pseudonymisierung deaktiviert, Original zurückgeben
+  if (!pseudonymizationEnabled || !pseudoData) {
+    return originalLabel;
+  }
+  
+  // Personen pseudonymisieren
+  if (node.type === 'person') {
+    return getPseudoName(originalLabel);
+  }
+  
+  // OEs pseudonymisieren
+  if (node.type === 'org') {
+    const orgLevel = (level !== undefined) ? level : orgDepth(node.id);
+    return getPseudoOrgLabel(originalLabel, orgLevel);
+  }
+  
+  return originalLabel;
+}
+
+/**
+ * Gibt das anzuzeigende Label für eine OE-ID zurück
+ */
+function getDisplayOrgLabel(orgId) {
+  const node = byId.get(String(orgId));
+  if (!node) return orgId;
+  return getDisplayLabel(node, orgDepth(orgId));
+}
+
+/**
+ * Aktualisiert alle sichtbaren Labels nach Pseudonymisierungs-Toggle
+ */
+function refreshAllLabels() {
+  const svg = d3.select('#graph');
+  
+  // Node-Labels aktualisieren
+  svg.selectAll('.node text.label').text(d => {
+    if (debugMode) {
+      return `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})`;
+    }
+    return getDisplayLabel(d);
+  });
+  
+  // OE-Legende aktualisieren
+  const legendChips = document.querySelectorAll('#legend .legend-label-chip');
+  legendChips.forEach(chip => {
+    const li = chip.closest('li');
+    if (li?.dataset?.oid) {
+      const node = byId.get(li.dataset.oid);
+      if (node) {
+        const label = getDisplayLabel(node, orgDepth(li.dataset.oid));
+        chip.textContent = label;
+        chip.title = label;
+      }
+    }
+  });
+  
+  // Hidden-Legende aktualisieren
+  const hiddenChips = document.querySelectorAll('#hiddenLegend .legend-label-chip');
+  hiddenChips.forEach(chip => {
+    const rootId = chip.dataset.rootId;
+    if (rootId) {
+      const node = byId.get(rootId);
+      const setIds = hiddenByRoot.get(rootId);
+      const count = setIds ? setIds.size : 0;
+      const label = getDisplayLabel(node);
+      chip.textContent = `${label} (${count})`;
+      chip.title = label;
+    }
+  });
+  
+  // Such-Input aktualisieren (falls ein Knoten ausgewählt ist)
+  const input = document.querySelector(INPUT_COMBO_ID);
+  if (input && currentSelectedId) {
+    const node = byId.get(String(currentSelectedId));
+    if (node) {
+      input.value = getDisplayLabel(node);
+    }
+  }
+  
+  // Tooltip ausblenden (wird beim nächsten Hover neu generiert)
+  hideTooltip();
+  
+  Logger.log('[Pseudo] Labels aktualisiert, enabled:', pseudonymizationEnabled);
+}
+
+/**
+ * Zeigt einen Passwort-Dialog für De-Pseudonymisierung [SF][SFT]
+ * @param {Function} onSubmit - Callback mit eingegebenem Passwort
+ */
+function showPasswordDialog(onSubmit) {
+  // Existierenden Dialog entfernen falls vorhanden
+  const existing = document.getElementById('passwordDialog');
+  if (existing) existing.remove();
+  
+  // Dialog erstellen
+  const overlay = document.createElement('div');
+  overlay.id = 'passwordDialog';
+  overlay.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5); z-index: 10000;
+    display: flex; align-items: center; justify-content: center;
+  `;
+  
+  const dialog = document.createElement('div');
+  dialog.style.cssText = `
+    background: var(--bg-primary, #1e1e1e); border-radius: 8px;
+    padding: 20px; min-width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  `;
+  
+  const title = document.createElement('h3');
+  title.textContent = 'Passwort erforderlich';
+  title.style.cssText = 'margin: 0 0 16px 0; color: var(--text-primary, #fff);';
+  
+  const input = document.createElement('input');
+  input.type = 'password';
+  input.placeholder = 'Passwort eingeben...';
+  input.style.cssText = `
+    width: 100%; padding: 8px 12px; border: 1px solid var(--border-color, #444);
+    border-radius: 4px; background: var(--bg-secondary, #2d2d2d);
+    color: var(--text-primary, #fff); font-size: 14px; box-sizing: border-box;
+  `;
+  
+  const errorMsg = document.createElement('div');
+  errorMsg.style.cssText = `
+    color: #ef4444; font-size: 12px; margin-top: 8px; min-height: 18px;
+  `;
+  
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end;';
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Abbrechen';
+  cancelBtn.style.cssText = `
+    padding: 8px 16px; border: 1px solid var(--border-color, #444);
+    border-radius: 4px; background: transparent; color: var(--text-primary, #fff);
+    cursor: pointer;
+  `;
+  
+  const submitBtn = document.createElement('button');
+  submitBtn.textContent = 'Bestätigen';
+  submitBtn.style.cssText = `
+    padding: 8px 16px; border: none; border-radius: 4px;
+    background: var(--accent-color, #4F46E5); color: #fff; cursor: pointer;
+  `;
+  
+  const closeDialog = () => overlay.remove();
+  
+  const trySubmit = () => {
+    const pw = input.value;
+    if (pw === envConfig?.PSEUDONYMIZATION_PASSWORD) {
+      closeDialog();
+      onSubmit(pw);
+    } else {
+      errorMsg.textContent = 'Falsches Passwort';
+      input.style.borderColor = '#ef4444';
+      input.focus();
+      input.select();
+    }
+  };
+  
+  cancelBtn.addEventListener('click', closeDialog);
+  submitBtn.addEventListener('click', trySubmit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') trySubmit();
+    if (e.key === 'Escape') closeDialog();
+  });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeDialog();
+  });
+  
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(submitBtn);
+  dialog.appendChild(title);
+  dialog.appendChild(input);
+  dialog.appendChild(errorMsg);
+  dialog.appendChild(btnRow);
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+  
+  // Fokus auf Input setzen
+  setTimeout(() => input.focus(), 50);
+}
+
+// ========== Ende Pseudonymisierung ==========
 
 function isRoot(id){ return selectedRootIds.includes(String(id)); }
 function setSingleRoot(id){
@@ -176,8 +468,10 @@ function clustersAtPoint(p) {
   for (const [oid, poly] of clusterPolygons.entries()) {
     if (!allowedOrgs.has(oid)) continue;
     if (poly && poly.length>=3 && d3.polygonContains(poly, p)) {
-      const label = byId.get(oid)?.label || oid;
-      orgItems.push({ id: oid, label, depth: orgDepth(oid) });
+      const node = byId.get(oid);
+      const depth = orgDepth(oid);
+      const label = getDisplayLabel(node, depth);
+      orgItems.push({ id: oid, label, depth });
     }
   }
   
@@ -328,7 +622,7 @@ function handleClusterHover(event, svgSel) {
     if (nd.x == null || nd.y == null) continue;
     const dx = p[0] - nd.x, dy = p[1] - nd.y;
     if ((dx*dx + dy*dy) <= r*r) { 
-      nodeLabel = nd.label || String(nd.id);
+      nodeLabel = getDisplayLabel(nd);
       personId = String(nd.id);
       break; 
     }
@@ -419,7 +713,7 @@ function findAllPersonOrgs(personId) {
     .sort((a, b) => b.depth - a.depth || String(a.id).localeCompare(String(b.id)))
     .map(item => {
       const node = byId.get(String(item.id));
-      return (node && node.label) ? node.label : String(item.id);
+      return getDisplayLabel(node, item.depth);
     });
 }
 
@@ -1073,6 +1367,7 @@ function populateCombo(filterText) {
   }
   
   // Fast filtering with early termination
+  // Suche nach Display-Labels (pseudonymisiert wenn aktiv) und IDs [SF]
   filteredItems = [];
   let count = 0;
   for (const n of allNodesUnique) {
@@ -1084,15 +1379,16 @@ function populateCombo(filterText) {
       continue;
     }
     
-    const label = (n.label || "").toLowerCase();
+    const displayLabel = getDisplayLabel(n).toLowerCase();
     const idStr = String(n.id).toLowerCase();
-    if (label.includes(term) || idStr.includes(term)) {
+    if (displayLabel.includes(term) || idStr.includes(term)) {
       filteredItems.push(n);
       count++;
     }
   }
   
-  filteredItems.sort((a, b) => (a.label || String(a.id)).localeCompare(b.label || String(b.id)));
+  // Sortiere nach Display-Labels
+  filteredItems.sort((a, b) => getDisplayLabel(a).localeCompare(getDisplayLabel(b)));
 
   list.innerHTML = '';
   activeIndex = -1;
@@ -1100,8 +1396,8 @@ function populateCombo(filterText) {
   
   filteredItems.forEach((n, idx) => {
     const li = document.createElement('li');
-    const lbl = n.label || String(n.id);
-    li.textContent = `${lbl} — ${n.id}`;
+    const displayLbl = getDisplayLabel(n);
+    li.textContent = `${displayLbl} — ${n.id}`;
     li.setAttribute('data-id', String(n.id));
     li.tabIndex = -1;
     li.addEventListener('mousedown', (e) => {
@@ -1170,7 +1466,7 @@ function chooseItem(idx, addMode) {
     setSingleRoot(nid);
     currentSelectedId = nid;
   }
-  input.value = n.label || nid;
+  input.value = getDisplayLabel(n);
   list.hidden = true;
   // Auto-apply and re-center when selecting from dropdown
   applyFromUI('comboSelect');
@@ -1344,10 +1640,15 @@ function computeSubgraph(startId, depth, mode) {
     })
     .filter(Boolean);
   
-  // Zähle ausgeblendete Knoten in der aktuellen Ansicht
+  // Zähle ausgeblendete Knoten in der aktuellen Ansicht (berücksichtige temporäre Sichtbarkeit)
   if (hiddenNodes && hiddenNodes.size > 0) {
     const beforeCount = nodes.length;
-    nodes = nodes.filter(n => !hiddenNodes.has(String(n.id)));
+    nodes = nodes.filter(n => {
+      const nid = String(n.id);
+      if (!hiddenNodes.has(nid)) return true;
+      // Node ist hidden - prüfe ob temporär sichtbar
+      return isNodeTemporarilyVisible(nid);
+    });
     const hiddenInThisCall = beforeCount - nodes.length;
     currentHiddenCount += hiddenInThisCall; // Addieren statt überschreiben für Multi-Root
   }
@@ -1361,7 +1662,8 @@ function computeSubgraph(startId, depth, mode) {
       if (!byId.has(s) || !byId.has(t)) continue;
       if (byId.get(s)?.type !== 'person' || byId.get(t)?.type !== 'person') continue;
       if (nodeSet.has(t) && !nodeSet.has(s)) {
-        if (hiddenNodes && hiddenNodes.has(String(s))) continue;
+        // Prüfe ob hidden und nicht temporär sichtbar
+        if (hiddenNodes && hiddenNodes.has(String(s)) && !isNodeTemporarilyVisible(s)) continue;
         // In 'down' mode, only add managers that are below or at the start node level
         // (dist > 0 means they were reached during traversal, dist === 0 is the start node)
         if (mode === 'down' && !dist.has(s)) continue;
@@ -1387,6 +1689,18 @@ function recomputeHiddenNodes() {
     for (const id of s) agg.add(String(id));
   }
   hiddenNodes = agg;
+}
+
+// Prüft ob ein Node-ID temporär sichtbar ist (trotz Hidden-Status) [SF]
+function isNodeTemporarilyVisible(nodeId) {
+  const nid = String(nodeId);
+  if (allHiddenTemporarilyVisible) return true;
+  for (const [rootId, setIds] of hiddenByRoot.entries()) {
+    if (setIds.has(nid) && temporarilyVisibleRoots.has(rootId)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function collectReportSubtree(rootId) {
@@ -1425,10 +1739,67 @@ function unhideSubtree(rootId) {
   const rid = String(rootId);
   if (hiddenByRoot.has(rid)) {
     hiddenByRoot.delete(rid);
+    temporarilyVisibleRoots.delete(rid); // Auch temporären Status entfernen
     recomputeHiddenNodes();
   }
   buildHiddenLegend();
+  updateGlobalHiddenVisibilityButton();
   applyFromUI('unhideSubtree');
+}
+
+// Temporäre Sichtbarkeit eines einzelnen Hidden-Subtrees umschalten [SF]
+function toggleHiddenRootVisibility(rootId) {
+  const rid = String(rootId);
+  if (temporarilyVisibleRoots.has(rid)) {
+    temporarilyVisibleRoots.delete(rid);
+  } else {
+    temporarilyVisibleRoots.add(rid);
+  }
+  updateHiddenLegendEyeButtons();
+  updateGlobalHiddenVisibilityButton();
+  applyFromUI('toggleHiddenRootVisibility');
+}
+
+// Globale temporäre Sichtbarkeit aller Hidden-Subtrees umschalten [SF]
+function toggleAllHiddenVisibility() {
+  allHiddenTemporarilyVisible = !allHiddenTemporarilyVisible;
+  // Bei globalem Toggle: individuelle Einstellungen zurücksetzen
+  if (allHiddenTemporarilyVisible) {
+    temporarilyVisibleRoots.clear();
+  }
+  updateHiddenLegendEyeButtons();
+  updateGlobalHiddenVisibilityButton();
+  applyFromUI('toggleAllHiddenVisibility');
+}
+
+// Eye-Buttons in der Hidden-Legende aktualisieren [DRY]
+function updateHiddenLegendEyeButtons() {
+  const legend = document.getElementById('hiddenLegend');
+  if (!legend) return;
+  
+  const eyeBtns = legend.querySelectorAll('.legend-icon-btn[data-root-id]');
+  eyeBtns.forEach(btn => {
+    const rootId = btn.dataset.rootId;
+    const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(rootId);
+    btn.className = isVisible ? 'legend-icon-btn' : 'legend-icon-btn hidden';
+    btn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
+    btn.innerHTML = getEyeSVG(!isVisible);
+  });
+}
+
+// Globalen Eye-Button im Header aktualisieren [DRY]
+function updateGlobalHiddenVisibilityButton() {
+  const btn = document.getElementById('toggleAllHiddenVisibility');
+  if (!btn) return;
+  
+  const hasHidden = hiddenByRoot.size > 0;
+  btn.style.display = hasHidden ? '' : 'none';
+  
+  if (hasHidden) {
+    btn.className = allHiddenTemporarilyVisible ? 'legend-icon-btn' : 'legend-icon-btn hidden';
+    btn.title = allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden';
+    btn.innerHTML = getEyeSVG(!allHiddenTemporarilyVisible);
+  }
 }
 
 // Aktualisiert den Titel der Hidden-Legende mit den aktuellen Zahlen
@@ -1484,13 +1855,30 @@ function buildHiddenLegend() {
     spacer.className = 'legend-tree-spacer';
     leftArea.appendChild(spacer);
     
-    // Label
-    const name = byId.get(root)?.label || root;
+    // Label (pseudonymisiert wenn aktiv)
+    const node = byId.get(root);
+    const name = getDisplayLabel(node);
     const chip = document.createElement('span');
     chip.className = 'legend-label-chip';
+    chip.dataset.rootId = root; // Für spätere Aktualisierung
     chip.textContent = `${name} (${setIds.size})`;
     chip.title = name;
     leftArea.appendChild(chip);
+    
+    // Eye-Button zum temporären Ein-/Ausblenden
+    const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(root);
+    const eyeBtn = document.createElement('button');
+    eyeBtn.type = 'button';
+    eyeBtn.className = isVisible ? 'legend-icon-btn' : 'legend-icon-btn hidden';
+    eyeBtn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
+    eyeBtn.innerHTML = getEyeSVG(!isVisible);
+    eyeBtn.dataset.rootId = root;
+    eyeBtn.setAttribute('data-ignore-header-click', 'true');
+    eyeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleHiddenRootVisibility(root);
+    });
+    rightArea.appendChild(eyeBtn);
     
     // X-Button zum Entfernen (unhide)
     const removeBtn = document.createElement('button');
@@ -1525,7 +1913,8 @@ function renderOrgLegendNode(oid, depth, options) {
 
   const li = document.createElement('li');
   li.dataset.oid = id;
-  const lbl = byId.get(id)?.label || id;
+  const node = byId.get(id);
+  const lbl = getDisplayLabel(node, depth);
   const idAttr = `org_${id}`;
 
   const row = document.createElement('div');
@@ -3095,7 +3484,7 @@ function renderGraph(sub) {
   nodeEnter.append("circle").attr("r", nodeRadius).attr("class", "node-circle")
     .style("fill", d => getNodeFillByLevel(d));
   nodeEnter.append("text")
-    .text(d => debugMode ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})` : (d.label ?? d.id))
+    .text(d => debugMode ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})` : getDisplayLabel(d))
     .attr("x", 10)
     .attr("y", 4)
     .attr("class", "label");
@@ -3309,7 +3698,7 @@ function renderGraph(sub) {
     const p = currentZoomTransform ? currentZoomTransform.invert([mx, my]) : [mx, my];
     
     const personId = String(d.id);
-    const nodeLabel = d.label || personId;
+    const nodeLabel = getDisplayLabel(d);
     const clusters = clustersAtPoint(p);
     
     const lines = buildPersonTooltipLines(personId, nodeLabel, clusters);
@@ -3329,7 +3718,7 @@ function renderGraph(sub) {
         setSingleRoot(pid);
         currentSelectedId = pid;
         const input = document.querySelector(INPUT_COMBO_ID);
-        if (input) input.value = d.label || pid;
+        if (input) input.value = getDisplayLabel(d);
         applyFromUI('contextSetRoot');
       },
       isRoot: isRoot(pid),
@@ -3565,7 +3954,7 @@ function renderGraph(sub) {
     
     // Aktualisiere UI-Input
     const input = document.querySelector(INPUT_COMBO_ID);
-    if (input) input.value = d.label || nodeId;
+    if (input) input.value = getDisplayLabel(d);
     
     // Graph mit neuem Root neu berechnen und rendern
     // transitionGraph kümmert sich um den inkrementellen Übergang
@@ -5130,6 +5519,12 @@ let savedAllowedOrgs = new Set();
 
 window.addEventListener("DOMContentLoaded", async () => {
   await loadEnvConfig();
+  
+  // Pseudonymisierung initialisieren [SF]
+  if (envConfig && typeof envConfig.PSEUDONYMIZATION_ENABLED === 'boolean') {
+    pseudonymizationEnabled = envConfig.PSEUDONYMIZATION_ENABLED;
+  }
+  await loadPseudoData();
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
   // Footer: click status to open a file dialog and load JSON dataset
@@ -5207,6 +5602,16 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Simulation neu anstoßen, damit sich Kräfte ausbalancieren
       if (currentSimulation) currentSimulation.alpha(0.1).restart();
     });
+  }
+  
+  // Globaler Toggle für temporäre Sichtbarkeit aller Hidden-Subtrees [SF]
+  const toggleAllHiddenBtn = document.getElementById('toggleAllHiddenVisibility');
+  if (toggleAllHiddenBtn) {
+    toggleAllHiddenBtn.addEventListener('click', () => {
+      toggleAllHiddenVisibility();
+    });
+    // Initial verstecken wenn keine Hidden-Einträge
+    updateGlobalHiddenVisibilityButton();
   }
   
   // Alle Attribut-Kategorien expandieren/kollabieren (Toggle)
@@ -5635,6 +6040,48 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   }
   
+  // Toggle für Pseudonymisierung [SF]
+  const pseudoBtn = document.querySelector('#togglePseudonymization');
+  if (pseudoBtn) {
+    // Synchronisiere Button-Status mit dem geladenen pseudonymizationEnabled
+    if (pseudonymizationEnabled) {
+      pseudoBtn.classList.add('active');
+    } else {
+      pseudoBtn.classList.remove('active');
+    }
+    
+    pseudoBtn.addEventListener('click', () => {
+      const wasEnabled = pseudonymizationEnabled;
+      const willEnable = !wasEnabled;
+      
+      // Passwort-Schutz beim De-Pseudonymisieren [SF][SFT]
+      if (!willEnable && envConfig?.PSEUDONYMIZATION_PASSWORD) {
+        showPasswordDialog((password) => {
+          if (password === envConfig.PSEUDONYMIZATION_PASSWORD) {
+            // Passwort korrekt - De-Pseudonymisierung durchführen
+            pseudoBtn.classList.remove('active');
+            pseudonymizationEnabled = false;
+            refreshAllLabels();
+            showTemporaryNotification('Pseudonymisierung deaktiviert');
+            Logger.log('[Pseudo] Pseudonymisierung deaktiviert');
+          }
+          // Bei falschem Passwort zeigt der Dialog selbst den Fehler
+        });
+        return; // Warten auf Dialog-Callback
+      }
+      
+      pseudoBtn.classList.toggle('active');
+      pseudonymizationEnabled = pseudoBtn.classList.contains('active');
+      
+      // Alle Labels aktualisieren
+      refreshAllLabels();
+      
+      const status = pseudonymizationEnabled ? 'aktiviert' : 'deaktiviert';
+      showTemporaryNotification(`Pseudonymisierung ${status}`);
+      Logger.log(`[Pseudo] Pseudonymisierung ${status}`);
+    });
+  }
+  
   const debugBtn = document.querySelector('#debugBtn');
   if (debugBtn) {
     // Synchronisiere Button-Status mit dem bereits geladenen debugMode (aus loadEnvConfig)
@@ -5654,7 +6101,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       svg.selectAll('.node text.label').text(d => {
         return debugMode 
           ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})`
-          : (d.label ?? d.id);
+          : getDisplayLabel(d);
       });
       
       // Link-Labels ein/ausblenden (nur wenn auch Labels sichtbar)
