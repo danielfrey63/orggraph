@@ -1781,9 +1781,20 @@ function updateHiddenLegendEyeButtons() {
   eyeBtns.forEach(btn => {
     const rootId = btn.dataset.rootId;
     const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(rootId);
-    btn.className = isVisible ? 'legend-icon-btn' : 'legend-icon-btn hidden';
+    // Verwende active-Klasse wie bei OEs/Attributen
+    btn.className = isVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
     btn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
-    btn.innerHTML = getEyeSVG(!isVisible);
+    // Icon aktualisieren
+    const icon = btn.querySelector('.codicon');
+    if (icon) {
+      if (isVisible) {
+        icon.classList.remove('codicon-eye-closed');
+        icon.classList.add('codicon-eye');
+      } else {
+        icon.classList.remove('codicon-eye');
+        icon.classList.add('codicon-eye-closed');
+      }
+    }
   });
 }
 
@@ -1796,9 +1807,20 @@ function updateGlobalHiddenVisibilityButton() {
   btn.style.display = hasHidden ? '' : 'none';
   
   if (hasHidden) {
-    btn.className = allHiddenTemporarilyVisible ? 'legend-icon-btn' : 'legend-icon-btn hidden';
+    // Verwende active-Klasse wie bei OEs/Attributen für konsistentes Verhalten
+    btn.className = allHiddenTemporarilyVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
     btn.title = allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden';
-    btn.innerHTML = getEyeSVG(!allHiddenTemporarilyVisible);
+    // Icon aktualisieren
+    const icon = btn.querySelector('.codicon');
+    if (icon) {
+      if (allHiddenTemporarilyVisible) {
+        icon.classList.remove('codicon-eye-closed');
+        icon.classList.add('codicon-eye');
+      } else {
+        icon.classList.remove('codicon-eye');
+        icon.classList.add('codicon-eye-closed');
+      }
+    }
   }
 }
 
@@ -1830,6 +1852,8 @@ function buildHiddenLegend() {
   
   // Titel wird separat aktualisiert nach Graph-Berechnung
   updateHiddenLegendTitle();
+  // Globalen Eye-Button aktualisieren (wie bei OEs/Attributen)
+  updateGlobalHiddenVisibilityButton();
   
   legend.innerHTML = '';
   if (hiddenByRoot.size === 0) {
@@ -1865,21 +1889,6 @@ function buildHiddenLegend() {
     chip.title = name;
     leftArea.appendChild(chip);
     
-    // Eye-Button zum temporären Ein-/Ausblenden
-    const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(root);
-    const eyeBtn = document.createElement('button');
-    eyeBtn.type = 'button';
-    eyeBtn.className = isVisible ? 'legend-icon-btn' : 'legend-icon-btn hidden';
-    eyeBtn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
-    eyeBtn.innerHTML = getEyeSVG(!isVisible);
-    eyeBtn.dataset.rootId = root;
-    eyeBtn.setAttribute('data-ignore-header-click', 'true');
-    eyeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleHiddenRootVisibility(root);
-    });
-    rightArea.appendChild(eyeBtn);
-    
     // X-Button zum Entfernen (unhide)
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
@@ -1891,8 +1900,23 @@ function buildHiddenLegend() {
       e.stopPropagation();
       unhideSubtree(root);
     });
-    
     rightArea.appendChild(removeBtn);
+    
+    // Eye-Button zum temporären Ein-/Ausblenden (ganz rechts)
+    const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(root);
+    const eyeBtn = document.createElement('button');
+    eyeBtn.type = 'button';
+    // Verwende active-Klasse wie bei OEs/Attributen
+    eyeBtn.className = isVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
+    eyeBtn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
+    eyeBtn.innerHTML = `<i class="codicon ${isVisible ? 'codicon-eye' : 'codicon-eye-closed'}" aria-hidden="true"></i>`;
+    eyeBtn.dataset.rootId = root;
+    eyeBtn.setAttribute('data-ignore-header-click', 'true');
+    eyeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleHiddenRootVisibility(root);
+    });
+    rightArea.appendChild(eyeBtn);
     
     row.appendChild(leftArea);
     row.appendChild(rightArea);
@@ -5607,7 +5631,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Globaler Toggle für temporäre Sichtbarkeit aller Hidden-Subtrees [SF]
   const toggleAllHiddenBtn = document.getElementById('toggleAllHiddenVisibility');
   if (toggleAllHiddenBtn) {
-    toggleAllHiddenBtn.addEventListener('click', () => {
+    toggleAllHiddenBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       toggleAllHiddenVisibility();
     });
     // Initial verstecken wenn keine Hidden-Einträge

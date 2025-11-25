@@ -11,7 +11,8 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .app-header-main { display: flex; align-items: center; gap: 16px; margin-right: 16px; }
 .app-header h1 { margin: 0; font-size: 18px; color: var(--text-strong); flex-shrink: 0; }
 .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1; }
-#debugBtn { margin-left: auto; }
+#togglePseudonymization { margin-left: 12px; }
+#debugBtn { margin-left: 12px; }
 .controls label { display: inline-flex; gap: 6px; align-items: center; }
 .controls input, .controls select, .controls button { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--control-border); background: var(--control-bg); color: var(--text); }
 
