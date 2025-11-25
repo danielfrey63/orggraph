@@ -1,0 +1,10 @@
+#!/bin/sh
+# Rigorous lint check: block push if ESLint fails
+echo "[pre-push] Running ESLint..."
+npm run lint
+status=$?
+if [ "$status" -ne 0 ]; then
+  echo "[pre-push] ESLint failed. Blocking push."
+  exit 1
+fi
+echo "[pre-push] ESLint passed. Proceeding with push."

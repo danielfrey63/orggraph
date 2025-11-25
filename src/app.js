@@ -1,8 +1,22 @@
 import * as d3 from 'd3';
 import { SVG_ID, STATUS_ID, INPUT_COMBO_ID, LIST_COMBO_ID, INPUT_DEPTH_ID, BTN_APPLY_ID, WIDTH, HEIGHT, MAX_DROPDOWN_ITEMS, MIN_SEARCH_LENGTH, MAX_ROOTS, BFS_LEVEL_ANIMATION_DELAY_MS } from './constants.js';
-import { initializeExport } from './export.js';
-import { setStatus, showTemporaryNotification } from './utils.js';
+import { initializeExport } from './ui/export.js';
 import './style.css';
+
+// Utils
+import { Logger } from './utils/logger.js';
+import { cssNumber } from './utils/css.js';
+import { setStatus, showTemporaryNotification } from './utils/dom.js';
+
+// Graph
+import { idOf, collectReportSubtree as collectReportSubtreeUtil } from './graph/adjacency.js';
+import { computeClusterPolygon } from './graph/clusters.js';
+import { getNodeOuterRadius as getNodeOuterRadiusUtil, findPositionOutsideHull, radialLayoutExpansion, computeLevelsFromRoots, computeHierarchyLevels as computeHierarchyLevelsUtil } from './graph/layout.js';
+import { createSimulation as createSimulationUtil } from './graph/simulation.js';
+
+// UI
+import { getChevronSVG, getEyeSVG, getSaveSVG, getDownloadSVG } from './ui/icons.js';
+import { colorToTransparent } from './ui/colors.js';
 
 let raw = { nodes: [], links: [], persons: [], orgs: []};
 let personAttributes = new Map(); // Map von ID/Email zu Attribut-Maps
@@ -14,7 +28,7 @@ let modifiedCategories = new Set(); // Set von Kategorien mit Änderungen
 let byId = new Map();
 let allNodesUnique = [];
 let attributesVisible = true; // Flag für die Sichtbarkeit der Attribute
-let savedActiveAttributes = new Set(); // Speicher für aktive Attribute
+let _savedActiveAttributes = new Set(); // Speicher für aktive Attribute
 let filteredItems = [];
 let activeIndex = -1;
 let currentSelectedId = null;
@@ -29,6 +43,7 @@ let currentZoomTransform = null;
 let labelsVisible = 'all'; // 'all' | 'attributes' | 'none' - Label-Sichtbarkeitsmodus
 let debugMode = false;
 let continuousSimulation = false; // Kontinuierliche Animation aktiviert
+let pendingFitToViewport = false; // Fit nach Simulation-Ende ausstehend
 let legendMenuEl = null;
 let nodeMenuEl = null;
 let simAllById = new Map();
@@ -41,7 +56,7 @@ let currentSubgraph = null;
 let currentLayoutMode = 'force'; // 'force' or 'hierarchy'
 let hierarchyLevels = new Map(); // nodeId -> level number
 let currentSimulation = null; // Global reference to D3 simulation
-let preferredData = "auto";
+let _preferredData = "auto";
 let envConfig = null;
 let collapsedCategories = new Set(); // Kategorien mit eingeklapptem Zustand
 let hiddenCategories = new Set();    // Kategorien die temporär ausgeblendet sind (ohne Attribut-Status zu ändern)
@@ -52,9 +67,6 @@ let allHiddenTemporarilyVisible = false; // Globaler Toggle für alle Hidden-Sub
 let currentHiddenCount = 0; // Anzahl der ausgeblendeten Knoten in der aktuellen Ansicht
 let selectedRootIds = [];
 let lastSingleRootId = null;
-let lastRenderRoots = [];
-let lastRenderDepth = null;
-let lastRenderDirMode = 'both';
 
 // Pseudonymisierung [SF]
 let pseudonymizationEnabled = true;
@@ -64,25 +76,7 @@ let pseudoOrgMapping = new Map();    // originalOrgLabel -> pseudoOrgLabel
 let pseudoNameIndex = 0;
 let pseudoOrgIndices = new Map();    // level -> currentIndex
 
-const Logger = {
-  ts() {
-    const now = new Date();
-    const h = String(now.getHours()).padStart(2, '0');
-    const m = String(now.getMinutes()).padStart(2, '0');
-    const s = String(now.getSeconds()).padStart(2, '0');
-    const ms = String(now.getMilliseconds()).padStart(3, '0');
-    return `${h}:${m}:${s}.${ms}`;
-  },
-  log(msg, data) {
-    if (!debugMode) return;
-    const prefix = `[${this.ts()}]${msg}`;
-    if (data !== undefined) {
-      console.log(prefix, data);
-    } else {
-      console.log(prefix);
-    }
-  }
-};
+// Logger ist jetzt aus utils/logger.js importiert [DRY]
 
 // ========== Pseudonymisierung Funktionen [SF][DRY] ==========
 
@@ -198,15 +192,6 @@ function getDisplayLabel(node, level) {
   }
   
   return originalLabel;
-}
-
-/**
- * Gibt das anzuzeigende Label für eine OE-ID zurück
- */
-function getDisplayOrgLabel(orgId) {
-  const node = byId.get(String(orgId));
-  if (!node) return orgId;
-  return getDisplayLabel(node, orgDepth(orgId));
 }
 
 /**
@@ -401,11 +386,7 @@ function removeRoot(id){
   selectedRootIds = selectedRootIds.filter(x => x !== s);
 }
 
-function cssNumber(varName, fallback) {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : fallback;
-}
+// cssNumber ist jetzt aus css-cache.js importiert [DRY][PA]
 
 // Farb-Hilfen: gleiche Kategorie -> ähnliche Farben, Kategorien klar unterscheidbar
 const categoryHueCache = new Map();
@@ -482,49 +463,7 @@ function clustersAtPoint(p) {
   return orgItems.map(item => item.label);
 }
 
-function computeClusterPolygon(nodes, pad) {
-  const pts = nodes.map(n => [n.x, n.y]);
-  const r = cssNumber('--node-radius', 8) + pad;
-  if (pts.length === 0) return [];
-  if (pts.length === 1) {
-    const [x,y] = pts[0];
-    const poly = [];
-    for (let i=0;i<12;i++){ const a=(i/12)*Math.PI*2; poly.push([x+Math.cos(a)*r, y+Math.sin(a)*r]); }
-    return poly;
-  }
-  if (pts.length === 2) {
-    const [a,b] = pts;
-    const dx=b[0]-a[0], dy=b[1]-a[1];
-    const len=Math.hypot(dx,dy)||1;
-    const ux=dx/len, uy=dy/len; const nx=-uy, ny=ux;
-    return [
-      [a[0]+nx*r, a[1]+ny*r],
-      [b[0]+nx*r, b[1]+ny*r],
-      [b[0]-nx*r, b[1]-ny*r],
-      [a[0]-nx*r, a[1]-ny*r]
-    ];
-  }
-  const hull = d3.polygonHull(pts);
-  if (!hull || hull.length<3) return [];
-  const cx=d3.mean(hull,p=>p[0]);
-  const cy=d3.mean(hull,p=>p[1]);
-  return hull.map(([x,y])=>{
-    const vx=x-cx, vy=y-cy; const L=Math.hypot(vx,vy)||1; const s=(L+pad)/L; return [cx+vx*s, cy+vy*s];
-  });
-}
-
-// Collect active ancestor chain (including self) for a given org id
-function getActiveAncestorChain(oid) {
-  const active = new Set();
-  let cur = String(oid);
-  while (cur) {
-    if (allowedOrgs.has(cur)) active.add(cur);
-    const p = parentOf.get(cur);
-    if (!p) break;
-    cur = p;
-  }
-  return active;
-}
+// computeClusterPolygon ist jetzt aus clusters.js importiert [DRY]
 
 // Tooltip helpers for overlapping clusters
 let tooltipEl = null;
@@ -639,7 +578,7 @@ function handleClusterHover(event, svgSel) {
   let personId = null;
   
   for (const nd of simAllById.values()) {
-    if (nd.x == null || nd.y == null) continue;
+    if (nd.x === null || nd.x === undefined || nd.y === null || nd.y === undefined) continue;
     const dx = p[0] - nd.x, dy = p[1] - nd.y;
     if ((dx*dx + dy*dy) <= r*r) { 
       nodeLabel = getDisplayLabel(nd);
@@ -767,25 +706,7 @@ function orgDepth(oid){
   return d;
 }
 
-/**
- * Konvertiert eine Farbe in ein transparentes RGBA-Format (wie bei OEs)
- * @param {string} color - Farbe im Format hsl(...) oder rgb(...) oder #hex
- * @param {number} alpha - Alpha-Wert (0-1), default 0.25 wie bei OEs
- * @returns {string} RGBA-Farbe mit Transparenz
- */
-function colorToTransparent(color, alpha = 0.25) {
-  // Parse HSL
-  const hslMatch = /hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/.exec(color);
-  if (hslMatch) {
-    const h = parseInt(hslMatch[1]);
-    const s = parseInt(hslMatch[2]);
-    const l = parseInt(hslMatch[3]);
-    return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
-  }
-  
-  // Fallback: gib die ursprüngliche Farbe zurück
-  return color;
-}
+// colorToTransparent ist jetzt aus ui-helpers.js importiert [DRY]
 
 
 
@@ -1021,12 +942,7 @@ function updateFooterStats(subgraph) {
   }
 }
 
-/**
- * Extrahiert ID aus Objekt oder String
- */
-function idOf(v) {
-  return String(typeof v === 'object' && v ? v.id : v);
-}
+// idOf ist jetzt aus adjacency.js importiert [DRY]
 
 let allowedOrgs = new Set();
 
@@ -1213,7 +1129,6 @@ async function loadAttributesFromUrl(url) {
     
     // Verknüpfe die geladenen Attribute mit den Personen-IDs
     const newPersonAttributes = new Map();
-    const fuzzyMatches = new Map();
     const unmatchedEntries = new Map();
     let matchedCount = 0;
     
@@ -1285,6 +1200,16 @@ async function loadAttributesFromUrl(url) {
     updateAttributeStats();
     // Falls bereits ein Graph gerendert ist, Attribute sofort sichtbar machen
     updateAttributeCircles();
+    // Label-Sichtbarkeit aktualisieren (für 'attributes' Modus) [SF]
+    const svg = document.querySelector(SVG_ID);
+    if (svg) {
+      svg.classList.remove('labels-hidden', 'labels-attributes-only');
+      if (labelsVisible === 'none') {
+        svg.classList.add('labels-hidden');
+      } else if (labelsVisible === 'attributes') {
+        svg.classList.add('labels-attributes-only');
+      }
+    }
     
     return {
       loaded: true,
@@ -1302,7 +1227,6 @@ async function loadAttributesFromUrl(url) {
 async function loadData() {
   setStatus("Lade Daten...");
   let data = null;
-  let sourceName = '(keine Daten)';
 
   const dataUrl = envConfig?.DATA_URL || null;
 
@@ -1316,7 +1240,7 @@ async function loadData() {
     const res = await fetch(dataUrl, { cache: "no-store" });
     if (res.ok) {
       data = await res.json();
-      sourceName = dataUrl;
+      // Daten erfolgreich geladen
     } else {
       console.warn('Automatisches Laden der Daten fehlgeschlagen:', res.status, res.statusText);
     }
@@ -1511,30 +1435,7 @@ function guessIdFromInput(val) {
   return part ? String(part.id) : null;
 }
 
-/**
- * Erstellt Adjazenzliste des Graphen
- */
-function buildAdjacency(links) {
-  const adj = new Map();
-  
-  // Hilfsfunktion zum Sicherstellen, dass der Knoten in der Map existiert
-  const ensure = (id) => { 
-    if (!adj.has(id)) adj.set(id, new Set()); 
-  };
-  
-  // Verarbeite alle Verbindungen
-  links.forEach(l => {
-    const s = idOf(l.source);
-    const t = idOf(l.target);
-    ensure(s); 
-    ensure(t);
-    // Ungerichtete Kanten (beide Richtungen eintragen)
-    adj.get(s).add(t);
-    adj.get(t).add(s);
-  });
-  
-  return adj;
-}
+// buildAdjacency ist jetzt aus adjacency.js importiert [DRY]
 
 function computeSubgraph(startId, depth, mode) {
   const out = new Map();
@@ -1616,7 +1517,7 @@ function computeSubgraph(startId, depth, mode) {
   
   // Build set of OEs that have children (are not leaf nodes)
   const orgsWithChildren = new Set();
-  for (const [child, parent] of parentOf.entries()) {
+  for (const [_child, parent] of parentOf.entries()) {
     if (parent) orgsWithChildren.add(parent);
   }
   
@@ -1723,25 +1624,9 @@ function isNodeTemporarilyVisible(nodeId) {
   return false;
 }
 
+// Wrapper für importierte Funktion [DRY]
 function collectReportSubtree(rootId) {
-  const rid = String(rootId);
-  const out = new Map();
-  for (const l of raw.links) {
-    const s = idOf(l.source), t = idOf(l.target);
-    if (byId.get(s)?.type === 'person' && byId.get(t)?.type === 'person') {
-      if (!out.has(s)) out.set(s, new Set());
-      out.get(s).add(t);
-    }
-  }
-  const seen = new Set([rid]);
-  const q = [rid];
-  while (q.length) {
-    const v = q.shift();
-    for (const w of (out.get(v) || [])) {
-      if (!seen.has(w)) { seen.add(w); q.push(w); }
-    }
-  }
-  return seen;
+  return collectReportSubtreeUtil(rootId, raw.links, byId);
 }
 
 function hideSubtreeFromRoot(rootId) {
@@ -2251,11 +2136,9 @@ function buildScopedOrgLegend(visibleSet) {
   syncGraphAndLegendColors();
 }
 
-let currentLegendScope = new Set();
 
 function applyLegendScope(scope) {
   const scopeSet = new Set(Array.from(scope || []).map(String));
-  currentLegendScope = scopeSet;
 
   const visible = new Set();
   if (scopeSet.size > 0) {
@@ -2321,30 +2204,6 @@ function updateLegendRowColors(rootEl) {
   });
 }
 
-/**
- * Sammelt alle Knoten im Unterbaum
- */
-function collectSubtree(rootId, children, scopeSet) {
-  const out = new Set([rootId]);
-  const q = [rootId];
-  
-  for (let i = 0; i < q.length; i++) {
-    const cur = q[i];
-    // Iteriere über alle Kinder des aktuellen Knotens
-    for (const ch of (children.get(cur) || [])) {
-      // Überspringe Knoten, die nicht im Scope sind, falls ein Scope definiert ist
-      if (scopeSet && !scopeSet.has(ch)) continue;
-      // Füge neue Knoten zum Ergebnis und zur Warteschlange hinzu
-      if (!out.has(ch)) { 
-        out.add(ch); 
-        q.push(ch); 
-      }
-    }
-  }
-  
-  return out;
-}
-
 function ensureLegendMenu() {
   if (legendMenuEl) return legendMenuEl;
   const el = document.createElement('div');
@@ -2385,7 +2244,7 @@ function ensureLegendMenu() {
   document.body.appendChild(el);
   legendMenuEl = el;
   // Dismiss on click elsewhere
-  document.addEventListener('click', (e) => { if (legendMenuEl && legendMenuEl.style.display === 'block') hideLegendMenu(); });
+  document.addEventListener('click', (_e) => { if (legendMenuEl && legendMenuEl.style.display === 'block') hideLegendMenu(); });
   return el;
 }
 function showLegendMenu(x, y, actions) {
@@ -2716,7 +2575,7 @@ function exportCategoryAttributes(categoryName) {
   
   // Sammle alle Personen mit Attributen in dieser Kategorie
   for (const [personId, attrs] of personAttributes.entries()) {
-    for (const [attrKey, attrValue] of attrs.entries()) {
+    for (const [attrKey] of attrs.entries()) {
       const [cat, attrName] = String(attrKey).includes('::') ? String(attrKey).split('::') : ['Attribute', String(attrKey)];
       
       if (cat === categoryName) {
@@ -2753,54 +2612,6 @@ function exportCategoryAttributes(categoryName) {
 }
 
 /**
- * Exportiert ein einzelnes Attribut als TSV-Datei
- * @param {string} attributeKey - Der vollständige Attribut-Key (z.B. "Kategorie::Attributname")
- */
-function exportSingleAttribute(attributeKey) {
-  const [category, attrName] = String(attributeKey).includes('::') 
-    ? String(attributeKey).split('::') 
-    : ['Attribute', String(attributeKey)];
-  
-  const lines = [];
-  
-  // Sammle alle Personen mit diesem spezifischen Attribut
-  for (const [personId, attrs] of personAttributes.entries()) {
-    if (attrs.has(attributeKey)) {
-      const person = byId.get(personId);
-      const identifier = person?.email || personId;
-      lines.push(`${identifier}\t${attrName}`);
-    }
-  }
-  
-  if (lines.length === 0) {
-    showTemporaryNotification(`Keine Einträge für "${attrName}" gefunden`, 2000);
-    return;
-  }
-  
-  // Sortiere alphabetisch
-  lines.sort();
-  
-  const content = lines.join('\n');
-  const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  
-  // Dateiname: Kategorie_Attributname.tsv
-  const safeCategory = category.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_');
-  const safeAttrName = attrName.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_');
-  const filename = `${safeCategory}_${safeAttrName}.tsv`;
-  
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  
-  showTemporaryNotification(`"${filename}" heruntergeladen (${lines.length} Einträge)`, 2000);
-}
-
-/**
  * Exportiert alle Attribute einer Kategorie als TSV-Datei
  * @param {string} categoryName - Name der Kategorie
  */
@@ -2809,7 +2620,7 @@ function exportCategoryAsTSV(categoryName) {
   
   // Sammle alle Personen mit Attributen in dieser Kategorie
   for (const [personId, attrs] of personAttributes.entries()) {
-    for (const [attrKey, attrValue] of attrs.entries()) {
+    for (const [attrKey] of attrs.entries()) {
       const [cat, attrName] = String(attrKey).includes('::') 
         ? String(attrKey).split('::') 
         : ['Attribute', String(attrKey)];
@@ -3029,23 +2840,32 @@ function refreshClusters() {
   paths.exit().remove();
 }
 
-/**
- * Berechnet den äußersten sichtbaren Radius eines Knotens
- * (Node-Radius + Stroke + Attributringe)
- */
+// Wrapper für importierte Funktion mit lokalen Abhängigkeiten [DRY]
 function getNodeOuterRadius(node) {
-  const nodeRadius = cssNumber('--node-radius', 8);
-  const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
-  
-  // Basis: Node-Radius + halber Stroke
-  let outerRadius = nodeRadius + (nodeStrokeWidth / 2);
-  
-  // Wenn Attribute sichtbar sind, addiere Attributringe
-  if (attributesVisible) {
-    const personId = String(node.id);
-    const nodeAttrs = personAttributes.get(personId);
+  return getNodeOuterRadiusUtil(node, personAttributes, activeAttributes, attributesVisible);
+}
+
+// positionNodesInCircle ist jetzt aus layout.js importiert [DRY]
+
+// findPositionOutsideHull ist jetzt aus layout.js importiert [DRY]
+
+// radialLayoutExpansion ist jetzt aus layout.js importiert [DRY]
+// Wrapper mit lokalen Abhängigkeiten
+function radialLayoutExpansionLocal(queue, childrenOf, parentsOf, personNodes, positionedSet, includeParents = false) {
+  radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positionedSet, includeParents, getNodeOuterRadius);
+}
+
+// Wrapper für importierte Funktion mit lokalen Abhängigkeiten [DRY]
+function createSimulation(nodes, links) {
+  const getCollideRadius = (d) => {
+    const nodeRadius = cssNumber('--node-radius', 8);
+    const collidePadding = cssNumber('--collide-padding', 6);
+    const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
     const circleGap = cssNumber('--attribute-circle-gap', 4);
     const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+    
+    const personId = String(d.id);
+    const nodeAttrs = personAttributes.get(personId);
     
     let attrCount = 0;
     if (nodeAttrs && nodeAttrs.size > 0) {
@@ -3056,165 +2876,13 @@ function getNodeOuterRadius(node) {
       }
     }
     
-    // Attributringe hinzufügen
-    outerRadius += attrCount * (circleGap + circleWidth);
-  }
-  
-  return outerRadius;
-}
-
-/**
- * Hilfsfunktion: Positioniere Knoten gleichmäßig im Kreis um Parent
- */
-function positionNodesInCircle(nodes, centerX, centerY, radius, startAngle = 0) {
-  if (nodes.length === 0) return;
-  
-  if (nodes.length === 1) {
-    // Einzelner Knoten: direkt beim Winkel positionieren
-    nodes[0].x = centerX + radius * Math.cos(startAngle);
-    nodes[0].y = centerY + radius * Math.sin(startAngle);
-  } else {
-    // Mehrere Knoten: gleichmäßig verteilt
-    const angleStep = (2 * Math.PI) / nodes.length;
-    nodes.forEach((node, idx) => {
-      const angle = startAngle + (idx * angleStep);
-      node.x = centerX + radius * Math.cos(angle);
-      node.y = centerY + radius * Math.sin(angle);
-    });
-  }
-}
-
-/**
- * Findet eine Position außerhalb der konvexen Hülle für einen sekundären Root
- */
-function findPositionOutsideHull(existingNodes, margin = 200) {
-  if (existingNodes.length === 0) {
-    return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
-  }
-  
-  // Sammle alle Positionen
-  const points = existingNodes
-    .filter(n => Number.isFinite(n.x) && Number.isFinite(n.y))
-    .map(n => ({ x: n.x, y: n.y }));
-  
-  if (points.length === 0) {
-    return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
-  }
-  
-  // Berechne Bounding Box
-  const minX = Math.min(...points.map(p => p.x));
-  const maxX = Math.max(...points.map(p => p.x));
-  const minY = Math.min(...points.map(p => p.y));
-  const maxY = Math.max(...points.map(p => p.y));
-  
-  const centerY = (minY + maxY) / 2;
-  const width = maxX - minX;
-  
-  // Platziere neuen Root rechts außerhalb der Bounding Box
-  return {
-    x: maxX + margin + width * 0.2,
-    y: centerY
+    const outerExtra = (attrCount > 0)
+      ? (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth))
+      : 0;
+    return nodeRadius + collidePadding + outerExtra;
   };
-}
-
-/**
- * Führt eine Breadth-First Expansion für das radiale Layout durch
- */
-function radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positionedSet, includeParents = false) {
-  const childPadding = 4;
   
-  while (queue.length > 0) {
-    const current = queue.shift();
-    
-    // Children (Down-Links)
-    const children = childrenOf.get(current.nodeId) || [];
-    
-    // Parents (Up-Links) only if level 0 and includeParents is true
-    let parents = [];
-    if (includeParents && current.level === 0) {
-      parents = parentsOf.get(current.nodeId) || [];
-    }
-    
-    const allDescendants = [...children, ...parents];
-    
-    if (allDescendants.length > 0) {
-      const unpositionedIds = allDescendants.filter(id => !positionedSet.has(id));
-      
-      if (unpositionedIds.length > 0) {
-        const descendantNodes = unpositionedIds
-          .map(id => personNodes.find(n => String(n.id) === id))
-          .filter(Boolean);
-        
-        const parentNode = personNodes.find(n => String(n.id) === current.nodeId);
-        let parentRadius = 40; 
-        if (parentNode) {
-          parentRadius = getNodeOuterRadius(parentNode) + childPadding;
-        }
-        
-        // Parents start at -90deg (North)
-        const startAngle = (includeParents && current.level === 0 && parents.length > 0) ? -Math.PI / 2 : 0;
-        
-        positionNodesInCircle(descendantNodes, current.x, current.y, parentRadius, startAngle);
-        
-        descendantNodes.forEach(node => {
-          positionedSet.add(String(node.id));
-          queue.push({
-            nodeId: String(node.id),
-            x: node.x,
-            y: node.y,
-            level: current.level + 1
-          });
-        });
-      }
-    }
-  }
-}
-
-/**
- * Erstellt und konfiguriert die D3-Simulation
- */
-function createSimulation(nodes, links) {
-  // Force-Simulation-Parameter
-  const linkDistance = cssNumber('--link-distance', 60);
-  const linkStrength = cssNumber('--link-strength', 0.4);
-  const chargeStrength = cssNumber('--charge-strength', -200);
-  const alphaDecay = cssNumber('--alpha-decay', 0.0228);
-  const velocityDecay = cssNumber('--velocity-decay', 0.4);
-  const nodeRadius = cssNumber('--node-radius', 8);
-  const collidePadding = cssNumber('--collide-padding', 6);
-  const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
-
-  return d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(links).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
-    .force("charge", d3.forceManyBody().strength(chargeStrength))
-    // Schwächere Center-Force für mehr Stabilität mit radialem Layout
-    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
-    .force("collide", d3.forceCollide().radius(d => {
-      // Kollisionsradius basierend auf Attribut-Kreisen berechnen
-      const personId = String(d.id);
-      const nodeAttrs = personAttributes.get(personId);
-      const circleGap = cssNumber('--attribute-circle-gap', 4);
-      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-      
-      // Zähle aktive Attribute für diese Person
-      let attrCount = 0;
-      if (nodeAttrs && nodeAttrs.size > 0) {
-        for (const attrName of nodeAttrs.keys()) {
-          if (activeAttributes.has(attrName)) {
-            attrCount++;
-          }
-        }
-      }
-      
-      // Äußerer Radius der Attributringe relativ zum Knotenzentrum:
-      // outer = nodeRadius + nodeStroke/2 + attrCount * (gap + width)
-      const outerExtra = (attrCount > 0)
-        ? (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth))
-        : 0;
-      return nodeRadius + collidePadding + outerExtra;
-    }).strength(0.8)) // Stärkere Kollisionsvermeidung
-    .alphaDecay(alphaDecay)
-    .velocityDecay(velocityDecay);
+  return createSimulationUtil(nodes, links, getCollideRadius);
 }
 
 /**
@@ -3232,65 +2900,10 @@ function keepSimulationRunning() {
   requestAnimationFrame(keepSimulationRunning);
 }
 
-/**
- * Berechnet die Generation (Level) jedes Knotens relativ zu einer Menge von Root-IDs.
- * @param {Array} nodes - Array von Knoten-Objekten
- * @param {Set<string>} rootIds - Set von Root-IDs
- * @param {Array} links - Array von Links
- * @returns {Map<string, number>} Map von Node-ID zu Level (0 = Root)
- */
+// Wrapper für importierte Funktion [DRY]
 function getNodesLevels(nodes, rootIds, links) {
-  const levelMap = new Map();
-  const adjacency = new Map();
-  
-  // Adjazenzliste bauen (ungerichtet für Distanzberechnung)
-  links.forEach(l => {
-    const s = idOf(l.source);
-    const t = idOf(l.target);
-    if (!adjacency.has(s)) adjacency.set(s, []);
-    if (!adjacency.has(t)) adjacency.set(t, []);
-    adjacency.get(s).push(t);
-    adjacency.get(t).push(s);
-  });
-
-  // BFS
-  const queue = [];
-  rootIds.forEach(rid => {
-    if (nodes.find(n => String(n.id) === rid)) {
-      levelMap.set(rid, 0);
-      queue.push({ id: rid, level: 0 });
-    }
-  });
-
-  const visited = new Set(rootIds);
-  
-  while (queue.length > 0) {
-    const { id, level } = queue.shift();
-    const neighbors = adjacency.get(id) || [];
-    
-    neighbors.forEach(nid => {
-      if (!visited.has(nid)) {
-        // Prüfen ob Knoten Teil des Subgraphen ist
-        if (nodes.find(n => String(n.id) === nid)) {
-          visited.add(nid);
-          levelMap.set(nid, level + 1);
-          queue.push({ id: nid, level: level + 1 });
-        }
-      }
-    });
-  }
-  
-  // Fallback für nicht erreichbare Knoten
-  nodes.forEach(n => {
-    const nid = String(n.id);
-    if (!levelMap.has(nid)) levelMap.set(nid, 999);
-  });
-
-  return levelMap;
+  return computeLevelsFromRoots(nodes, rootIds, links, idOf);
 }
-
-// Entferne altes TS Objekt, da Funktionalität jetzt in Logger ist
-const TS = { now: Logger.ts };
 
 // Globaler Counter für Transitionen, um Race-Conditions zu vermeiden
 let lastTransitionId = 0;
@@ -3429,6 +3042,16 @@ async function transitionGraph(oldSub, newSub, roots, transitionId) {
   const finalLinks = newSub.links.map(l => ({ source: idOf(l.source), target: idOf(l.target) }));
   renderGraph({ nodes: newSub.nodes, links: finalLinks });
   Logger.log(`[Timing] End: transitionGraph-${transitionId}.total`);
+  
+  // Bei kontinuierlicher Simulation: Fit nach Animation + Delay auslösen [SF]
+  if (pendingFitToViewport && continuousSimulation) {
+    setTimeout(() => {
+      if (pendingFitToViewport) {
+        pendingFitToViewport = false;
+        fitToViewport();
+      }
+    }, BFS_LEVEL_ANIMATION_DELAY_MS);
+  }
 }
 
 /**
@@ -3546,11 +3169,6 @@ function renderGraph(sub) {
 
   // Styling-Parameter
   const nodeRadius = cssNumber('--node-radius', 8);
-  const collidePadding = cssNumber('--collide-padding', 6);
-  const circleGap = cssNumber('--attribute-circle-gap', 2);
-  const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
-  
   // Hauptkreis und Label nur für neue Knoten hinzufügen
   const nodeEnter = node.filter(function() { return this.childElementCount === 0; });
   nodeEnter.append("circle").attr("r", nodeRadius).attr("class", "node-circle")
@@ -3633,7 +3251,7 @@ function renderGraph(sub) {
       
       // Breadth-First Expansion von diesem Root aus
       const queue = [{ nodeId: rootId, x: rootX, y: rootY, level: 0 }];
-      radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positioned, true);
+      radialLayoutExpansionLocal(queue, childrenOf, parentsOf, personNodes, positioned, true);
     });
     
     return true;
@@ -3705,7 +3323,7 @@ function renderGraph(sub) {
     });
     
     // Expansion ohne Parents (includeParents = false)
-    radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positioned, false);
+    radialLayoutExpansionLocal(queue, childrenOf, parentsOf, personNodes, positioned, false);
     
     // Fallback für neue Knoten ohne Parent (sollte selten vorkommen)
     personNodes.forEach(n => {
@@ -3824,8 +3442,6 @@ function renderGraph(sub) {
 
   // Tick-Handler für Animation
   simulation.on("tick", () => {
-    const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
-    const nodeOuter = nodeRadius + (nodeStrokeWidth / 2);
     
     // Funktion zur Berechnung des äussersten Attributring-Radius für einen Knoten
     const getOutermostAttributeRadius = (d) => {
@@ -3981,8 +3597,13 @@ function renderGraph(sub) {
     paths.exit().remove();
   });
   
-  // No auto-fit after simulation ends
-  simulation.on('end', () => {});
+  // Fit nach Simulation-Ende, falls angefordert [SF]
+  simulation.on('end', () => {
+    if (pendingFitToViewport) {
+      pendingFitToViewport = false;
+      fitToViewport();
+    }
+  });
 
   // Optionales radiales Layout
   const radialForceStrength = cssNumber('--radial-force', 0);
@@ -4034,7 +3655,7 @@ function renderGraph(sub) {
   });
 
   // Zoom-Verhalten
-  zoomBehavior = d3.zoom().scaleExtent([0.2, 5])
+  zoomBehavior = d3.zoom().scaleExtent([0.1, 5])
     .on("zoom", (event) => {
       currentZoomTransform = event.transform;
       gZoom.attr("transform", event.transform);
@@ -4057,7 +3678,11 @@ function renderGraph(sub) {
   } else {
     // Fallback: ENV-Zoom oder Standard-Identität [SF]
     const defaultZoom = envConfig?.TOOLBAR_ZOOM_DEFAULT;
-    if (typeof defaultZoom === 'number' && defaultZoom > 0) {
+    if (defaultZoom === 'fit') {
+      // Fit wird nach Simulation-Ende ausgeführt
+      currentZoomTransform = d3.zoomIdentity;
+      pendingFitToViewport = true;
+    } else if (typeof defaultZoom === 'number' && defaultZoom > 0) {
       // Zentrierten Zoom mit ENV-Skalierung anwenden
       const cx = WIDTH / 2, cy = HEIGHT / 2;
       currentZoomTransform = d3.zoomIdentity.translate(cx * (1 - defaultZoom), cy * (1 - defaultZoom)).scale(defaultZoom);
@@ -4099,7 +3724,6 @@ function applyFromUI(triggerSource = 'unknown', callStack = false) {
   
   // Get current search input value
   const input = document.querySelector(INPUT_COMBO_ID);
-  const inputValue = input?.value.trim() || '';
 
   // Get selected depth
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
@@ -4132,10 +3756,6 @@ function applyFromUI(triggerSource = 'unknown', callStack = false) {
     roots = [String(startId)];
   }
 
-  // Prüfen, ob sich die Root-Auswahl geändert hat (für BFS-Animation)
-  const rootsKey = JSON.stringify(roots.slice().sort());
-  const lastRootsKey = JSON.stringify((lastRenderRoots || []).slice().sort());
-  const isNewRootSelection = rootsKey !== lastRootsKey;
 
   // Single-root or multi-root render
   let nextSubgraph;
@@ -4204,11 +3824,6 @@ function applyFromUI(triggerSource = 'unknown', callStack = false) {
     }
   });
 
-  // Letzten Render-Zustand merken (für zukünftige Root-Wechsel-Erkennung)
-  lastRenderRoots = roots.slice();
-  lastRenderDepth = depth;
-  lastRenderDirMode = dirMode;
-
   // Titel der Hidden-Legende aktualisieren nach allen Graph-Berechnungen
   updateHiddenLegendTitle();
 }
@@ -4237,7 +3852,6 @@ function parseAttributeList(text) {
   
   for (const line of lines) {
     // Zeilenweise das Trennzeichen erkennen (Tab oder Komma)
-    let separator = ',';
     let parts;
     
     if (line.includes('\t')) {
@@ -4331,9 +3945,8 @@ function fuzzySearch(identifier, threshold = 0.3, progressCallback = null, abort
   
   return new Promise((resolve) => {
     // Timer für Progress-Update, wenn die Suche länger als 1 Sekunde dauert
-    let searchStartTime = performance.now();
     let progressShown = false;
-    let progressTimer = setTimeout(() => {
+    const progressTimer = setTimeout(() => {
       progressShown = true;
       if (progressCallback) progressCallback(0, totalItems);
     }, 1000);
@@ -4489,7 +4102,6 @@ async function loadAttributesFromFile(file) {
     let matchedCount = 0;
     
     // Progress-Anzeige erstellen
-    let searchProgress = null;
     let searchCount = 0;
     let searchAborted = false; // Flag, um die Suche abzubrechen
     
@@ -4541,17 +4153,6 @@ async function loadAttributesFromFile(file) {
     progressContainer.appendChild(progressBox);
     document.body.appendChild(progressContainer);
     
-    // Progress-Callback für Fortschrittsanzeige
-    const updateProgress = (processed, total) => {
-      if (progressContainer.style.display === 'none') {
-        progressContainer.style.display = 'flex';
-      }
-      
-      const percent = Math.round((processed / total) * 100);
-      progressBarInner.style.width = `${percent}%`;
-      progressPercent.textContent = `${processed} / ${total} (${percent}%)`;
-      progressText.textContent = `Suche nach ähnlichen Einträgen für ${searchCount} nicht exakt zugeordnete Attribute...`;
-    };
     
     // Verarbeite alle Attribute
     // Sammle explizit alle Einträge ohne exakte Zuordnung für die spätere Fuzzy-Suche
@@ -4711,46 +4312,7 @@ async function loadAttributesFromFile(file) {
   }
 }
 
-/**
- * Hilfsfunktionen für Codicon-Icons
- */
-function getCheckboxSVG(checked = false) {
-  if (checked) {
-    return `<i class="codicon codicon-check" aria-hidden="true"></i>`;
-  } else {
-    return `<i class="codicon codicon-close" aria-hidden="true"></i>`;
-  }
-}
-
-function getChevronSVG() {
-  return `<i class="codicon codicon-chevron-down" aria-hidden="true"></i>`;
-}
-
-function getCheckAllSVG() {
-  return `<i class="codicon codicon-check-all" aria-hidden="true"></i>`;
-}
-
-function getEyeSVG(closed = false) {
-  if (closed) {
-    return `<i class="codicon codicon-eye-closed" aria-hidden="true"></i>`;
-  }
-  return `<i class="codicon codicon-eye" aria-hidden="true"></i>`;
-}
-
-function getSaveSVG() {
-  return `<i class="codicon codicon-save" aria-hidden="true"></i>`;
-}
-
-function getDownloadSVG() {
-  return `<i class="codicon codicon-cloud-download" aria-hidden="true"></i>`;
-}
-
-function updateCheckboxIcon(checkboxElement, checked) {
-  checkboxElement.innerHTML = getCheckboxSVG(checked);
-  checkboxElement.className = checked ? 
-    checkboxElement.className.replace(/\s*checked/, '') + ' checked' : 
-    checkboxElement.className.replace(/\s*checked/, '');
-}
+// Icon-Funktionen sind jetzt aus ui-helpers.js importiert [DRY]
 
 function initializeChevronIcons() {
   // Aktualisiere alle Chevron-Buttons im HTML mit dem zentralen SVG
@@ -5394,15 +4956,11 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
         visibleItems.push(noMatchLi);
       }
       
-      // Variable für die Sichtbarkeit der Match-Optionen
-      let matchOptionsVisible = false;
-      
       // Alle anderen Optionen filtern
       for (const matchOption of matchOptions) {
         const listItem = matchOption.element;
         if (!searchTerm || matchOption.searchTerms.includes(searchTerm)) {
           listItem.style.display = '';
-          matchOptionsVisible = true;
           visibleItems.push(listItem);
         } else {
           listItem.style.display = 'none';
@@ -5552,7 +5110,7 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
 function finalizeFuzzyMatching(newPersonAttributes, attributeTypes) {
   // Generiere Farben für neue Attributtypen
   const attributeNames = new Set();
-  for (const [id, attrs] of newPersonAttributes.entries()) {
+  for (const [_id, attrs] of newPersonAttributes.entries()) {
     for (const attrName of attrs.keys()) {
       attributeNames.add(attrName);
     }
@@ -6070,11 +5628,14 @@ window.addEventListener("DOMContentLoaded", async () => {
       : null;
 
     if (envLabelsVisible != null) {
-      // ENV-Wert kann boolean oder string sein
-      if (typeof envLabelsVisible === 'string') {
-        labelsVisible = ['all', 'attributes', 'none'].includes(envLabelsVisible) ? envLabelsVisible : 'all';
+      // ENV-Wert: true -> 'all', false -> 'none', 'attributes' -> 'attributes'
+      if (envLabelsVisible === 'attributes') {
+        // 'attributes' direkt setzen - CSS zeigt nur Labels für Knoten mit has-attributes Klasse
+        labelsVisible = 'attributes';
+      } else if (envLabelsVisible === true || envLabelsVisible === 'true') {
+        labelsVisible = 'all';
       } else {
-        labelsVisible = envLabelsVisible ? 'all' : 'none';
+        labelsVisible = 'none';
       }
     } else {
       labelsVisible = lbls.classList.contains('active') ? 'all' : 'none';
@@ -6490,51 +6051,9 @@ function syncGraphAndLegendColors() {
 }
 
 // ========== HIERARCHY LAYOUT FUNCTIONS ==========
-/**
- * Berechnet Hierarchieebenen für Knoten
- */
+// Wrapper für importierte Funktion [DRY]
 function computeHierarchyLevels(nodes, links) {
-  const levels = new Map();
-  const nodeSet = new Set(nodes.map(n => String(n.id)));
-  
-  // Build parent map (manager relationships for persons)
-  const managerOf = new Map(); // personId -> managerId
-  for (const l of links) {
-    const s = idOf(l.source), t = idOf(l.target);
-    const sNode = byId.get(s), tNode = byId.get(t);
-    // Manager -> Employee link (source manages target)
-    if (sNode?.type === 'person' && tNode?.type === 'person' && nodeSet.has(s) && nodeSet.has(t)) {
-      managerOf.set(t, s);
-    }
-  }
-  
-  // Find roots (persons without managers in this subgraph)
-  const roots = nodes.filter(n => n.type === 'person' && !managerOf.has(String(n.id)));
-  
-  // BFS to assign levels
-  const queue = roots.map(r => ({ id: String(r.id), level: 0 }));
-  roots.forEach(r => levels.set(String(r.id), 0));
-  
-  while (queue.length > 0) {
-    const { id, level } = queue.shift();
-    
-    // Find all direct reports
-    for (const [empId, mgrId] of managerOf.entries()) {
-      if (mgrId === id && !levels.has(empId)) {
-        levels.set(empId, level + 1);
-        queue.push({ id: empId, level: level + 1 });
-      }
-    }
-  }
-  
-  // Assign level to org nodes (not used for positioning, but for consistency)
-  nodes.forEach(n => {
-    if (n.type === 'org' && !levels.has(String(n.id))) {
-      levels.set(String(n.id), -1); // Orgs get special level
-    }
-  });
-  
-  return levels;
+  return computeHierarchyLevelsUtil(nodes, links, byId, idOf);
 }
 
 /**

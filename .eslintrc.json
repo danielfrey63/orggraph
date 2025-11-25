@@ -1,0 +1,47 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2022": true,
+    "node": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "extends": ["eslint:recommended"],
+  "reportUnusedDisableDirectives": true,
+  "rules": {
+    "no-unused-vars": ["error", {
+      "vars": "all",
+      "args": "after-used",
+      "argsIgnorePattern": "^_",
+      "varsIgnorePattern": "^_"
+    }],
+    "no-undef": "error",
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    "no-implied-eval": "error"
+  },
+  "ignorePatterns": [
+    "node_modules/",
+    "dist/",
+    "build/",
+    "public/*",
+    "trace/",
+    "helpers/",
+    "*.min.js"
+  ],
+  "overrides": [
+    {
+      "files": ["src/app.js"],
+      "rules": {
+        "no-unused-vars": ["warn", {
+          "vars": "all",
+          "args": "none",
+          "varsIgnorePattern": "^_"
+        }]
+      }
+    }
+  ]
+}

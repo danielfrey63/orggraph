@@ -1,8 +1,8 @@
-import { SVG_ID, WIDTH, HEIGHT } from './constants.js';
-import { showTemporaryNotification } from './utils.js';
+import { SVG_ID, WIDTH, HEIGHT } from '../constants.js';
+import { showTemporaryNotification } from '../utils/dom.js';
 
 /**
- * Export-Funktionen für Grafiken
+ * Export-Funktionen für Grafiken [SF]
  */
 
 // Globale Export-Variablen
@@ -386,3 +386,7 @@ function getTimestamp() {
   
   return `${year}${month}${day}_${hours}${minutes}${seconds}`;
 }
+
+export default {
+  initializeExport
+};
