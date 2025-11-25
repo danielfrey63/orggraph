@@ -26,7 +26,7 @@ let clusterSimById = new Map();
 let clusterPersonIds = new Set();
 let clusterPolygons = new Map();
 let currentZoomTransform = null;
-let labelsVisible = true;
+let labelsVisible = 'all'; // 'all' | 'attributes' | 'none' - Label-Sichtbarkeitsmodus
 let debugMode = false;
 let continuousSimulation = false; // Kontinuierliche Animation aktiviert
 let legendMenuEl = null;
@@ -541,6 +541,9 @@ function updateAttributeCircles() {
       .style('stroke-width', null)
       .style('opacity', 1);
     
+    // has-attributes Klasse entfernen [SF]
+    nodes.classed('has-attributes', false);
+    
     // Labels auf Standard-Position zurücksetzen
     nodes.selectAll('text.label')
       .attr('x', 10);
@@ -561,6 +564,9 @@ function updateAttributeCircles() {
     .style('stroke', null)
     .style('stroke-width', null)
     .style('opacity', 1);
+  
+  // has-attributes Klasse zurücksetzen (wird in der Schleife neu gesetzt) [SF]
+  nodes.classed('has-attributes', false);
   
   // Labels auf Standard-Position zurücksetzen (werden später für Knoten mit Attributen angepasst)
   nodes.selectAll('text.label')
@@ -597,6 +603,9 @@ function updateAttributeCircles() {
       // Wenn es aktive Attribute gibt, ändere den Hauptknoten und speichere die ID
       if (activeNodeAttrs.length > 0) {
         nodesWithActiveAttributesIds.add(personId);
+        
+        // Klasse für CSS-basierte Label-Sichtbarkeit setzen [SF]
+        nodeGroup.classed('has-attributes', true);
         
         // Haupt-Knoten mit spezieller Darstellung für Knoten mit Attributen
         nodeGroup.select('circle.node-circle')
@@ -3045,7 +3054,7 @@ function renderGraph(sub) {
     .attr("class", "link-label")
     .attr("text-anchor", "middle")
     .attr("dy", -3)
-    .style("display", (debugMode && labelsVisible) ? "block" : "none")
+    .style("display", (debugMode && labelsVisible !== 'none') ? "block" : "none")
     .style("font-size", "10px")
     .style("fill", "#666")
     .style("pointer-events", "none");
@@ -3570,7 +3579,9 @@ function renderGraph(sub) {
       gZoom.attr("transform", event.transform);
     });
   svg.call(zoomBehavior);
-  svg.classed('labels-hidden', !labelsVisible);
+  // Label-Sichtbarkeitsklassen setzen [SF]
+  svg.classed('labels-hidden', labelsVisible === 'none');
+  svg.classed('labels-attributes-only', labelsVisible === 'attributes');
 
   // Alten Zoom-Zustand wiederherstellen, falls vorhanden und gültig
   if (savedZoomTransform && typeof savedZoomTransform.k === 'number' && 
@@ -5475,9 +5486,58 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Auto-fit functionality has been removed
   
   function updateLinkLabelVisibility() {
-    const display = (debugMode && labelsVisible) ? 'block' : 'none';
+    const display = (debugMode && labelsVisible !== 'none') ? 'block' : 'none';
     d3.select('#graph').selectAll('.link-label')
       .style('display', display);
+  }
+  
+  /**
+   * Aktualisiert die Label-Sichtbarkeit im SVG basierend auf dem aktuellen Modus [SF]
+   */
+  function updateLabelVisibility() {
+    const svg = document.querySelector('#graph');
+    if (!svg) return;
+    
+    // CSS-Klassen für Label-Sichtbarkeit setzen
+    svg.classList.remove('labels-hidden', 'labels-attributes-only');
+    if (labelsVisible === 'none') {
+      svg.classList.add('labels-hidden');
+    } else if (labelsVisible === 'attributes') {
+      svg.classList.add('labels-attributes-only');
+    }
+    
+    // Link-Labels aktualisieren
+    updateLinkLabelVisibility();
+  }
+  
+  /**
+   * Aktualisiert das Icon des Label-Toggle-Buttons basierend auf dem Zustand [SF]
+   */
+  function updateLabelToggleIcon(btn) {
+    const icon = btn.querySelector('.codicon');
+    if (!icon) return;
+    
+    // Entferne alle möglichen Icon-Klassen
+    icon.classList.remove('codicon-tag', 'codicon-symbol-property', 'codicon-eye-closed');
+    
+    // Setze Icon basierend auf Zustand
+    switch (labelsVisible) {
+      case 'all':
+        icon.classList.add('codicon-tag');
+        btn.classList.add('active');
+        btn.title = 'Alle Labels anzeigen';
+        break;
+      case 'attributes':
+        icon.classList.add('codicon-symbol-property');
+        btn.classList.add('active');
+        btn.title = 'Nur Attribut-Labels anzeigen';
+        break;
+      case 'none':
+        icon.classList.add('codicon-eye-closed');
+        btn.classList.remove('active');
+        btn.title = 'Labels ausgeblendet';
+        break;
+    }
   }
 
   const lbls = document.querySelector('#toggleLabels');
@@ -5488,19 +5548,41 @@ window.addEventListener("DOMContentLoaded", async () => {
       : null;
 
     if (envLabelsVisible != null) {
-      labelsVisible = !!envLabelsVisible;
-      if (!labelsVisible) lbls.classList.remove('active');
+      // ENV-Wert kann boolean oder string sein
+      if (typeof envLabelsVisible === 'string') {
+        labelsVisible = ['all', 'attributes', 'none'].includes(envLabelsVisible) ? envLabelsVisible : 'all';
+      } else {
+        labelsVisible = envLabelsVisible ? 'all' : 'none';
+      }
     } else {
-      labelsVisible = lbls.classList.contains('active');
+      labelsVisible = lbls.classList.contains('active') ? 'all' : 'none';
     }
+    
+    // Initiales Icon setzen
+    updateLabelToggleIcon(lbls);
+    
     lbls.addEventListener('click', () => {
-      lbls.classList.toggle('active');
-      labelsVisible = lbls.classList.contains('active');
-      const svg = document.querySelector('#graph');
-      if (svg) svg.classList.toggle('labels-hidden', !labelsVisible);
+      // Prüfe ob Attribute aktiv sind (für 3-Zustand-Toggle)
+      const hasActiveAttributes = attributesVisible && activeAttributes.size > 0;
       
-      // Link-Labels auch aktualisieren (nur sichtbar wenn Debug UND Labels aktiv) [SF]
-      updateLinkLabelVisibility();
+      // Zykliere durch die Zustände
+      if (hasActiveAttributes) {
+        // 3 Zustände: all -> attributes -> none -> all
+        switch (labelsVisible) {
+          case 'all': labelsVisible = 'attributes'; break;
+          case 'attributes': labelsVisible = 'none'; break;
+          case 'none': labelsVisible = 'all'; break;
+        }
+      } else {
+        // 2 Zustände: all -> none -> all (kein 'attributes' Zustand ohne aktive Attribute)
+        labelsVisible = (labelsVisible === 'none') ? 'all' : 'none';
+      }
+      
+      // UI aktualisieren
+      updateLabelToggleIcon(lbls);
+      updateLabelVisibility();
+      
+      Logger.log('[Labels] Mode changed to:', labelsVisible);
     });
   }
   if (input && list) {

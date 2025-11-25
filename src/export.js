@@ -200,10 +200,15 @@ function exportAsSvg() {
       svgClone.setAttribute('viewBox', `0 0 ${width} ${height}`);
     }
     
-    // Labels-Sichtbarkeit übernehmen - prüfe ob das SVG bereits die Klasse 'labels-hidden' hat
+    // Labels-Sichtbarkeit übernehmen - prüfe ob das SVG die entsprechenden Klassen hat [SF]
     const originalSvg = document.querySelector(SVG_ID);
-    if (originalSvg && originalSvg.classList.contains('labels-hidden')) {
-      svgClone.classList.add('labels-hidden');
+    if (originalSvg) {
+      if (originalSvg.classList.contains('labels-hidden')) {
+        svgClone.classList.add('labels-hidden');
+      }
+      if (originalSvg.classList.contains('labels-attributes-only')) {
+        svgClone.classList.add('labels-attributes-only');
+      }
     }
     
     // Farben und Stile als inline CSS einfügen
@@ -215,6 +220,8 @@ function exportAsSvg() {
       .label { font-size: 8px; fill: #000; }
       .attribute-circle { fill: none; opacity: 0.8; }
       .labels-hidden .label { display: none; }
+      .labels-attributes-only .label { display: none; }
+      .labels-attributes-only .node.has-attributes .label { display: block; }
     `;
     svgClone.insertBefore(styleElement, svgClone.firstChild);
     
@@ -275,10 +282,15 @@ function exportAsPng() {
     svgClone.setAttribute('height', height);
     svgClone.setAttribute('viewBox', currentViewBox);
     
-    // Labels-Sichtbarkeit übernehmen - prüfe ob das SVG bereits die Klasse 'labels-hidden' hat
+    // Labels-Sichtbarkeit übernehmen - prüfe ob das SVG die entsprechenden Klassen hat [SF]
     const originalSvg = document.querySelector(SVG_ID);
-    if (originalSvg && originalSvg.classList.contains('labels-hidden')) {
-      svgClone.classList.add('labels-hidden');
+    if (originalSvg) {
+      if (originalSvg.classList.contains('labels-hidden')) {
+        svgClone.classList.add('labels-hidden');
+      }
+      if (originalSvg.classList.contains('labels-attributes-only')) {
+        svgClone.classList.add('labels-attributes-only');
+      }
     }
     
     // Inline-Styles einfügen
@@ -291,6 +303,8 @@ function exportAsPng() {
       .attribute-circle { fill: none; opacity: 0.8; }
       body { background-color: ${getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg')}; }
       .labels-hidden .label { display: none; }
+      .labels-attributes-only .label { display: none; }
+      .labels-attributes-only .node.has-attributes .label { display: block; }
     `;
     svgClone.insertBefore(styleElement, svgClone.firstChild);
     
