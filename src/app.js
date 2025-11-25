@@ -1928,6 +1928,31 @@ function buildHiddenLegend() {
 
 let legendCollapsedItems = new Set();
 
+// Initialisiert legendCollapsedItems: Erste Kinder mit Geschwistern werden collapsed [SF][CA]
+function initLegendCollapsedItems(scopeSet) {
+  legendCollapsedItems.clear();
+  if (!scopeSet || scopeSet.size === 0) return;
+
+  // Finde alle Knoten im Scope, die Kinder haben
+  for (const oid of scopeSet) {
+    const id = String(oid);
+    const rawChildren = Array.from(orgChildren.get(id) || []);
+    const kids = rawChildren.filter(k => scopeSet.has(String(k)));
+    
+    // Wenn dieser Knoten mehrere Kinder hat, collapse alle Kinder die selbst Kinder haben
+    if (kids.length > 1) {
+      for (const kid of kids) {
+        const kidId = String(kid);
+        const kidChildren = Array.from(orgChildren.get(kidId) || []);
+        const kidKids = kidChildren.filter(k => scopeSet.has(String(k)));
+        if (kidKids.length > 0) {
+          legendCollapsedItems.add(kidId);
+        }
+      }
+    }
+  }
+}
+
 // Gemeinsamer Renderer für OE-Legendeneinträge (voller Baum und Scoped-Baum) [DRY][CA]
 function renderOrgLegendNode(oid, depth, options) {
   const { childrenProvider, scopeSet, registerNode } = options || {};
@@ -2176,6 +2201,9 @@ function buildScopedOrgLegend(visibleSet) {
   if (!raw || !Array.isArray(raw.orgs) || scopeSet.size === 0) {
     return;
   }
+
+  // Initiale collapsed states setzen für erste Kinder mit Geschwistern [SF]
+  initLegendCollapsedItems(scopeSet);
 
   const roots = [];
   for (const oid of scopeSet) {
