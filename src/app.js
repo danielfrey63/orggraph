@@ -330,7 +330,7 @@ function showPasswordDialog(onSubmit) {
   
   const trySubmit = () => {
     const pw = input.value;
-    if (pw === envConfig?.PSEUDONYMIZATION_PASSWORD) {
+    if (pw === envConfig?.TOOLBAR_PSEUDO_PASSWORD) {
       closeDialog();
       onSubmit(pw);
     } else {
@@ -553,6 +553,26 @@ function showTooltip(x, y, lines) {
   tooltipEl.style.display = 'block';
 }
 function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
+
+/**
+ * Zeigt Zoom-Level im Debug-Modus in der Statusleiste an [SF]
+ */
+function updateDebugZoomDisplay() {
+  const statusEl = document.querySelector(STATUS_ID);
+  if (!statusEl) return;
+  
+  if (!debugMode) {
+    // Debug deaktiviert: Status zurücksetzen
+    statusEl.textContent = 'Bereit';
+    return;
+  }
+  
+  if (!currentZoomTransform) return;
+  const k = currentZoomTransform.k.toFixed(2);
+  const x = Math.round(currentZoomTransform.x);
+  const y = Math.round(currentZoomTransform.y);
+  statusEl.textContent = `Zoom: ${k} | Offset: (${x}, ${y})`;
+}
 
 /**
  * Erstellt Tooltip-Zeilen für eine Person mit Attributen und OE-Zugehörigkeiten
@@ -1115,8 +1135,8 @@ async function loadEnvConfig() {
       envConfig = await res.json();
       
       // Update debug mode from config [SF]
-      if (typeof envConfig.DEBUG_MODE === 'boolean') {
-        debugMode = envConfig.DEBUG_MODE;
+      if (typeof envConfig.TOOLBAR_DEBUG_ACTIVE === 'boolean') {
+        debugMode = envConfig.TOOLBAR_DEBUG_ACTIVE;
       }
       Logger.log('[Init] env.json loaded:', envConfig);
       return true;
@@ -1318,7 +1338,7 @@ async function loadData() {
   }
 
   // Lade Attribute automatisch, falls in ENV konfiguriert (string oder string[])
-  const attrCfg = envConfig?.ATTRIBUTES_URL;
+  const attrCfg = envConfig?.DATA_ATTRIBUTES_URL;
   if (attrCfg) {
     const urls = Array.isArray(attrCfg) ? attrCfg : [attrCfg];
     collapsedCategories = new Set(urls.map(u => categoryFromUrl(u)));
@@ -4018,6 +4038,7 @@ function renderGraph(sub) {
     .on("zoom", (event) => {
       currentZoomTransform = event.transform;
       gZoom.attr("transform", event.transform);
+      updateDebugZoomDisplay();
     });
   svg.call(zoomBehavior);
   // Label-Sichtbarkeitsklassen setzen [SF]
@@ -4034,8 +4055,17 @@ function renderGraph(sub) {
     // Aktualisiere auch den internen Zustand des Zoom-Verhaltens
     svg.call(zoomBehavior.transform, savedZoomTransform);
   } else {
-    // Fallback auf Standard-Identität, wenn noch kein Zoom angewendet wurde
-    currentZoomTransform = d3.zoomIdentity;
+    // Fallback: ENV-Zoom oder Standard-Identität [SF]
+    const defaultZoom = envConfig?.TOOLBAR_ZOOM_DEFAULT;
+    if (typeof defaultZoom === 'number' && defaultZoom > 0) {
+      // Zentrierten Zoom mit ENV-Skalierung anwenden
+      const cx = WIDTH / 2, cy = HEIGHT / 2;
+      currentZoomTransform = d3.zoomIdentity.translate(cx * (1 - defaultZoom), cy * (1 - defaultZoom)).scale(defaultZoom);
+      gZoom.attr("transform", currentZoomTransform);
+      svg.call(zoomBehavior.transform, currentZoomTransform);
+    } else {
+      currentZoomTransform = d3.zoomIdentity;
+    }
   }
 
   // Tooltips für Cluster-Überlappungen
@@ -4727,6 +4757,37 @@ function initializeChevronIcons() {
   document.querySelectorAll('.legend-chevron').forEach(chevronBtn => {
     chevronBtn.innerHTML = getChevronSVG();
   });
+}
+
+/**
+ * Initialisiert die Collapsed-Zustände der Legend-Sektionen aus ENV [SF]
+ */
+function initializeLegendCollapsedStates() {
+  const sections = [
+    { key: 'LEGEND_OES_COLLAPSED', target: 'legend' },
+    { key: 'LEGEND_ATTRIBUTES_COLLAPSED', target: 'attributeContainer' },
+    { key: 'LEGEND_HIDDEN_COLLAPSED', target: 'hiddenLegend' }
+  ];
+  
+  for (const { key, target } of sections) {
+    const shouldCollapse = envConfig?.[key];
+    if (typeof shouldCollapse !== 'boolean') continue;
+    
+    const chevronBtn = document.querySelector(`.legend-chevron[data-target="${target}"]`);
+    const content = document.getElementById(target);
+    
+    if (chevronBtn && content) {
+      if (shouldCollapse) {
+        chevronBtn.classList.remove('expanded');
+        chevronBtn.classList.add('collapsed');
+        content.classList.add('collapsed');
+      } else {
+        chevronBtn.classList.remove('collapsed');
+        chevronBtn.classList.add('expanded');
+        content.classList.remove('collapsed');
+      }
+    }
+  }
 }
 
 /**
@@ -5573,8 +5634,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   await loadEnvConfig();
   
   // Pseudonymisierung initialisieren [SF]
-  if (envConfig && typeof envConfig.PSEUDONYMIZATION_ENABLED === 'boolean') {
-    pseudonymizationEnabled = envConfig.PSEUDONYMIZATION_ENABLED;
+  if (envConfig && typeof envConfig.TOOLBAR_PSEUDO_ACTIVE === 'boolean') {
+    pseudonymizationEnabled = envConfig.TOOLBAR_PSEUDO_ACTIVE;
   }
   await loadPseudoData();
   const input = document.querySelector(INPUT_COMBO_ID);
@@ -5609,6 +5670,9 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Initialisiere Chevron-Icons im HTML
   initializeChevronIcons();
+  
+  // Legend-Sektionen aus ENV initialisieren [SF]
+  initializeLegendCollapsedStates();
   // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
   try { document.addEventListener('contextmenu', (e) => e.preventDefault()); } catch {}
   const applyBtn = document.querySelector(BTN_APPLY_ID);
@@ -5739,9 +5803,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Attribute-Sichtbarkeit-Toggle (nur Graph-Sichtbarkeit, keine Selektion ändern)
   const attributesVisibilityBtn = document.getElementById('toggleAttributesVisibility');
   if (attributesVisibilityBtn) {
-    // Anfangszustand aus ENV lesen (ATTRIBUTES_VISIBLE)
-    const envAttrVisible = (envConfig && envConfig.ATTRIBUTES_VISIBLE != null)
-      ? envConfig.ATTRIBUTES_VISIBLE
+    // Anfangszustand aus ENV lesen (LEGEND_ATTRIBUTES_ACTIVE)
+    const envAttrVisible = (envConfig && envConfig.LEGEND_ATTRIBUTES_ACTIVE != null)
+      ? envConfig.LEGEND_ATTRIBUTES_ACTIVE
       : null;
 
     if (envAttrVisible != null) {
@@ -5924,9 +5988,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   
   const mgmt = document.querySelector('#toggleManagement');
   if (mgmt) {
-    // Management-Modus aus ENV lesen (MANAGEMENT_ONLY)
-    const envMgmtOnly = (envConfig && envConfig.MANAGEMENT_ONLY != null)
-      ? envConfig.MANAGEMENT_ONLY
+    // Management-Modus aus ENV lesen (TOOLBAR_MANAGEMENT_ACTIVE)
+    const envMgmtOnly = (envConfig && envConfig.TOOLBAR_MANAGEMENT_ACTIVE != null)
+      ? envConfig.TOOLBAR_MANAGEMENT_ACTIVE
       : null;
 
     if (envMgmtOnly != null) {
@@ -6000,9 +6064,9 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   const lbls = document.querySelector('#toggleLabels');
   if (lbls) {
-    // Label-Sichtbarkeit aus ENV lesen (LABELS_VISIBLE)
-    const envLabelsVisible = (envConfig && envConfig.LABELS_VISIBLE != null)
-      ? envConfig.LABELS_VISIBLE
+    // Label-Sichtbarkeit aus ENV lesen (TOOLBAR_LABELS_ACTIVE)
+    const envLabelsVisible = (envConfig && envConfig.TOOLBAR_LABELS_ACTIVE != null)
+      ? envConfig.TOOLBAR_LABELS_ACTIVE
       : null;
 
     if (envLabelsVisible != null) {
@@ -6080,6 +6144,16 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Toggle für kontinuierliche Simulation [SF]
   const simToggleBtn = document.querySelector('#toggleSimulation');
   if (simToggleBtn) {
+    // Anfangszustand aus ENV lesen
+    if (envConfig && typeof envConfig.TOOLBAR_SIMULATION_ACTIVE === 'boolean') {
+      continuousSimulation = envConfig.TOOLBAR_SIMULATION_ACTIVE;
+      if (continuousSimulation) {
+        simToggleBtn.classList.add('active');
+      } else {
+        simToggleBtn.classList.remove('active');
+      }
+    }
+    
     simToggleBtn.addEventListener('click', () => {
       simToggleBtn.classList.toggle('active');
       continuousSimulation = simToggleBtn.classList.contains('active');
@@ -6108,9 +6182,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       const willEnable = !wasEnabled;
       
       // Passwort-Schutz beim De-Pseudonymisieren [SF][SFT]
-      if (!willEnable && envConfig?.PSEUDONYMIZATION_PASSWORD) {
+      if (!willEnable && envConfig?.TOOLBAR_PSEUDO_PASSWORD) {
         showPasswordDialog((password) => {
-          if (password === envConfig.PSEUDONYMIZATION_PASSWORD) {
+          if (password === envConfig.TOOLBAR_PSEUDO_PASSWORD) {
             // Passwort korrekt - De-Pseudonymisierung durchführen
             pseudoBtn.classList.remove('active');
             pseudonymizationEnabled = false;
@@ -6159,13 +6233,16 @@ window.addEventListener("DOMContentLoaded", async () => {
       
       // Link-Labels ein/ausblenden (nur wenn auch Labels sichtbar)
       updateLinkLabelVisibility();
+      
+      // Zoom-Info im Debug-Modus anzeigen [SF]
+      updateDebugZoomDisplay();
     });
   }
   // Auto-apply on depth change and direction change
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
   if (depthEl) {
-    if (envConfig?.DEFAULT_DEPTH != null) {
-      depthEl.value = envConfig.DEFAULT_DEPTH;
+    if (envConfig?.TOOLBAR_DEPTH_DEFAULT != null) {
+      depthEl.value = envConfig.TOOLBAR_DEPTH_DEFAULT;
     }
     depthEl.addEventListener('change', applyFromUI);
     depthEl.addEventListener('input', applyFromUI);
@@ -6187,8 +6264,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   };
   
   // Initialize direction from config
-  if (envConfig?.DEFAULT_DIR) {
-    currentDir = envConfig.DEFAULT_DIR;
+  if (envConfig?.TOOLBAR_DIRECTION_DEFAULT) {
+    currentDir = envConfig.TOOLBAR_DIRECTION_DEFAULT;
     if (upHalf && downHalf) {
       if (currentDir === 'both') {
         upHalf.classList.add('active');
@@ -6249,9 +6326,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Hierarchy toggle button
   const hier = document.querySelector('#toggleHierarchy');
   if (hier) {
-    // Layout-Modus aus ENV lesen (HIERARCHICAL_LAYOUT)
-    const envHierLayout = (envConfig && envConfig.HIERARCHICAL_LAYOUT != null)
-      ? envConfig.HIERARCHICAL_LAYOUT
+    // Layout-Modus aus ENV lesen (TOOLBAR_HIERARCHY_ACTIVE)
+    const envHierLayout = (envConfig && envConfig.TOOLBAR_HIERARCHY_ACTIVE != null)
+      ? envConfig.TOOLBAR_HIERARCHY_ACTIVE
       : null;
 
     if (envHierLayout != null) {
@@ -6302,8 +6379,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (await loadData()) {
     // Apply initial start node(s) from env.json if provided
     let initialUpdateTriggered = false;
-    if (envConfig && envConfig.DEFAULT_START_ID != null) {
-    const def = envConfig.DEFAULT_START_ID;
+    if (envConfig && envConfig.GRAPH_START_ID_DEFAULT != null) {
+    const def = envConfig.GRAPH_START_ID_DEFAULT;
     if (Array.isArray(def)) {
       const requested = def.map(v => String(v));
       const roots = requested.filter(id => byId.has(id));
@@ -6323,7 +6400,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
       if (invalid.length > 0) {
         // Zeige Info über ungültige IDs
-        showTemporaryNotification(`Ungültige DEFAULT_START_ID Einträge ignoriert: ${invalid.join(', ')}`);
+        showTemporaryNotification(`Ungültige GRAPH_START_ID_DEFAULT Einträge ignoriert: ${invalid.join(', ')}`);
       }
     } else {
       const sid = String(def);
@@ -6340,14 +6417,14 @@ window.addEventListener("DOMContentLoaded", async () => {
           list.hidden = true;
         }
       } else {
-        showTemporaryNotification(`DEFAULT_START_ID nicht gefunden: ${sid}`);
+        showTemporaryNotification(`GRAPH_START_ID_DEFAULT nicht gefunden: ${sid}`);
       }
     }
   }
   // Apply default hidden roots from env
-  if (Array.isArray(envConfig?.DEFAULT_HIDDEN_ROOTS) && envConfig.DEFAULT_HIDDEN_ROOTS.length > 0) {
+  if (Array.isArray(envConfig?.LEGEND_HIDDEN_ROOTS_DEFAULT) && envConfig.LEGEND_HIDDEN_ROOTS_DEFAULT.length > 0) {
     hiddenByRoot = new Map();
-    for (const ridRaw of envConfig.DEFAULT_HIDDEN_ROOTS) {
+    for (const ridRaw of envConfig.LEGEND_HIDDEN_ROOTS_DEFAULT) {
       const rid = String(ridRaw);
       if (byId.has(rid)) hiddenByRoot.set(rid, collectReportSubtree(rid));
     }
