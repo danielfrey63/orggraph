@@ -363,39 +363,18 @@ function invalidateDebugCache() {
 
 /**
  * Generiert Debug-Label für einen Knoten [SF][PA]
- * Zeigt Level und Anzahl OE-Zugehörigkeiten (gecacht)
+ * Im Debug-Modus dieselben Labels wie im Normal-Modus
  */
 function getDebugNodeLabel(d) {
-  if (!d) return '?';
-  const nodeId = String(d.id);
-  
-  // Cache-Lookup
-  if (debugNodeLabelCache.has(nodeId)) {
-    return debugNodeLabelCache.get(nodeId);
-  }
-  
-  const level = hierarchyLevels.get(nodeId) ?? d.level ?? '?';
-  
-  // Anzahl OE-Zugehörigkeiten zählen (nur einmal pro Knoten)
-  const orgs = findAllPersonOrgs(nodeId);
-  const orgCount = orgs.length;
-  
-  // Kurzform: L=Level, O=OrgCount
-  const label = `L${level} O${orgCount}`;
-  debugNodeLabelCache.set(nodeId, label);
-  return label;
+  return getDisplayLabel(d);
 }
 
 /**
  * Generiert Debug-Label für einen Link [SF]
- * Zeigt Source/Target Levels
+ * Keine Labels auf Links im Debug-Modus
  */
-function getDebugLinkLabel(link) {
-  const sourceId = String(typeof link.source === 'object' ? link.source.id : link.source);
-  const targetId = String(typeof link.target === 'object' ? link.target.id : link.target);
-  const sourceLevel = hierarchyLevels.get(sourceId) ?? '?';
-  const targetLevel = hierarchyLevels.get(targetId) ?? '?';
-  return `${sourceLevel}→${targetLevel}`;
+function getDebugLinkLabel(_link) {
+  return '';
 }
 
 function isRoot(id){ return selectedRootIds.includes(String(id)); }
@@ -776,16 +755,17 @@ function updateAttributeCircles() {
   // Wenn wir aus dem renderGraph-Kontext heraus aufgerufen werden, ist der Graph bereits gerendert
   // Wenn nicht, prüfen wir, ob überhaupt ein Subgraph existiert
   
-  // Styling-Parameter
-  const nodeRadius = cssNumber('--node-radius', 3);
-  const circleGap = cssNumber('--attribute-circle-gap', 1);
-  const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 2);
+  // Styling-Parameter - immer frisch aus CSS/Slider lesen [SF]
+  const nodeRadius = parseFloat(document.documentElement.style.getPropertyValue('--node-radius')) || cssNumber('--node-radius');
+  const circleGap = cssNumber('--attribute-circle-gap');
+  const circleWidth = parseFloat(document.documentElement.style.getPropertyValue('--attribute-circle-stroke-width')) || cssNumber('--attribute-circle-stroke-width');
+  const nodeStrokeWidth = parseFloat(document.documentElement.style.getPropertyValue('--node-stroke-width')) || cssNumber('--node-stroke-width');
   
   // Farbe und Stil für Knoten mit Attributen
   const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
   const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke, #4682b4)';
-  const nodeWithAttributesStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
+  // Für Attribut-Ring-Berechnung: verwende die vom Slider gesteuerte Border-Dicke
+  const nodeWithAttributesStrokeWidth = nodeStrokeWidth;
   
   // Transparenz für Knoten ohne Attribute
   const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity', 0.2);
@@ -898,8 +878,8 @@ function updateAttributeCircles() {
         // Berechne äußersten Radius für Label-Positionierung
         const attrCount = activeNodeAttrs.length;
         if (attrCount > 0) {
-          // Äußerster Radius: nodeRadius + nodeStroke/2 + attrCount * (gap + width)
-          outerMostRadius = nodeRadius + (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth));
+          // Äußerster Radius: nodeRadius + nodeWithAttributesStroke/2 + attrCount * (gap + width)
+          outerMostRadius = nodeRadius + (nodeWithAttributesStrokeWidth / 2) + (attrCount * (circleGap + circleWidth));
         }
       }
       
@@ -909,9 +889,9 @@ function updateAttributeCircles() {
         if (!attrColor) return;
         
         // Kreisradius berechnen (gleichmäßige Abstände):
-        // r0 = nodeRadius + nodeStroke/2 + gap + width/2
+        // r0 = nodeRadius + nodeWithAttributesStroke/2 + gap + width/2
         // r(i) = r0 + i * (gap + width)
-        const base = nodeRadius + (nodeStrokeWidth / 2) + circleGap + (circleWidth / 2);
+        const base = nodeRadius + (nodeWithAttributesStrokeWidth / 2) + circleGap + (circleWidth / 2);
         const attrRadius = base + idx * (circleGap + circleWidth);
         
         // Attributkreis vor dem Hauptkreis einfügen, damit er dahinter liegt
@@ -948,6 +928,11 @@ function updateAttributeCircles() {
   }
   
   applyRootStyling();
+  
+  // Simulation kurz reaktivieren, damit Links neu positioniert werden [SF]
+  if (currentSimulation) {
+    currentSimulation.alpha(0.2).restart();
+  }
 }
 
 function updateFooterStats(subgraph) {
@@ -2945,6 +2930,182 @@ function keepSimulationRunning() {
   
   // Nächsten Frame planen
   requestAnimationFrame(keepSimulationRunning);
+}
+
+// ============================================================================
+// DEBUG FORCE SLIDERS [SF][PA]
+// ============================================================================
+
+// Default-Werte werden aus CSS-Variablen gelesen [SF][DRY]
+
+/**
+ * Initialisiert die Debug Force Sliders [SF][PA]
+ * Ermöglicht Live-Anpassung der Simulationskräfte und visuellen Parameter
+ */
+function initDebugForceSliders() {
+  // Force-Slider Konfiguration
+  const forceConfigs = [
+    { id: 'linkDistance', force: 'link', method: 'distance', valueId: 'linkDistanceValue' },
+    { id: 'linkStrength', force: 'link', method: 'strength', valueId: 'linkStrengthValue' },
+    { id: 'chargeStrength', force: 'charge', method: 'strength', valueId: 'chargeStrengthValue' },
+    { id: 'alphaDecay', simulation: 'alphaDecay', valueId: 'alphaDecayValue' },
+    { id: 'velocityDecay', simulation: 'velocityDecay', valueId: 'velocityDecayValue' }
+  ];
+  
+  // Visuelle Slider Konfiguration
+  const visualConfigs = [
+    { id: 'nodeRadius', cssVar: '--node-radius', valueId: 'nodeRadiusValue', update: updateNodeVisuals },
+    { id: 'nodeStroke', cssVar: '--node-stroke-width', valueId: 'nodeStrokeValue', update: updateNodeVisuals },
+    { id: 'labelSize', cssVar: '--label-font-size', valueId: 'labelSizeValue', update: updateLabelVisuals },
+    { id: 'attrRing', cssVar: '--attribute-circle-stroke-width', valueId: 'attrRingValue', update: updateAttributeCircles }
+  ];
+  
+  // Force-Slider initialisieren
+  forceConfigs.forEach(config => {
+    const slider = document.querySelector(`#${config.id}Slider`);
+    const valueDisplay = document.querySelector(`#${config.valueId}`);
+    
+    if (!slider) return;
+    
+    const initialValue = cssNumber(`--${config.id.replace(/([A-Z])/g, '-$1').toLowerCase()}`);
+    slider.value = initialValue;
+    if (valueDisplay) valueDisplay.textContent = formatSliderValue(initialValue);
+    
+    slider.addEventListener('input', () => {
+      const value = parseFloat(slider.value);
+      if (valueDisplay) valueDisplay.textContent = formatSliderValue(value);
+      applyForceParameter(config, value);
+    });
+  });
+  
+  // Visuelle Slider initialisieren
+  visualConfigs.forEach(config => {
+    const slider = document.querySelector(`#${config.id}Slider`);
+    const valueDisplay = document.querySelector(`#${config.valueId}`);
+    
+    if (!slider) return;
+    
+    const initialValue = cssNumber(config.cssVar);
+    slider.value = initialValue;
+    if (valueDisplay) valueDisplay.textContent = formatSliderValue(initialValue);
+    
+    slider.addEventListener('input', () => {
+      const value = parseFloat(slider.value);
+      if (valueDisplay) valueDisplay.textContent = formatSliderValue(value);
+      applyVisualParameter(config, value);
+    });
+  });
+  
+  // Reset-Button
+  const resetBtn = document.querySelector('#resetForces');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      // Force-Parameter zurücksetzen
+      forceConfigs.forEach(config => {
+        const slider = document.querySelector(`#${config.id}Slider`);
+        const valueDisplay = document.querySelector(`#${config.valueId}`);
+        const defaultValue = cssNumber(`--${config.id.replace(/([A-Z])/g, '-$1').toLowerCase()}`);
+        
+        if (slider) {
+          slider.value = defaultValue;
+          if (valueDisplay) valueDisplay.textContent = formatSliderValue(defaultValue);
+          applyForceParameter(config, defaultValue);
+        }
+      });
+      
+      // Visuelle Parameter zurücksetzen
+      visualConfigs.forEach(config => {
+        const slider = document.querySelector(`#${config.id}Slider`);
+        const valueDisplay = document.querySelector(`#${config.valueId}`);
+        const defaultValue = cssNumber(config.cssVar);
+        
+        if (slider) {
+          slider.value = defaultValue;
+          if (valueDisplay) valueDisplay.textContent = formatSliderValue(defaultValue);
+          applyVisualParameter(config, defaultValue);
+        }
+      });
+      
+      showTemporaryNotification('Parameter zurückgesetzt');
+    });
+  }
+}
+
+/**
+ * Formatiert Slider-Wert für Anzeige [SF]
+ */
+function formatSliderValue(value) {
+  if (Math.abs(value) >= 10) return Math.round(value).toString();
+  if (Math.abs(value) >= 1) return value.toFixed(1);
+  return value.toFixed(3);
+}
+
+/**
+ * Wendet einen Force-Parameter auf die aktuelle Simulation an [SF][PA]
+ */
+function applyForceParameter(config, value) {
+  if (!currentSimulation) return;
+  
+  if (config.simulation) {
+    // Direkte Simulation-Eigenschaft (alphaDecay, velocityDecay)
+    currentSimulation[config.simulation](value);
+  } else if (config.force && config.method) {
+    // Force mit Methode
+    const force = currentSimulation.force(config.force);
+    if (force && typeof force[config.method] === 'function') {
+      force[config.method](value);
+    }
+  }
+  
+  // Simulation neu starten für sofortige Wirkung [PA]
+  currentSimulation.alpha(0.3).restart();
+}
+
+/**
+ * Wendet einen visuellen Parameter an [SF][PA]
+ */
+function applyVisualParameter(config, value) {
+  // CSS-Variable setzen
+  document.documentElement.style.setProperty(config.cssVar, `${value}px`);
+  
+  // Update-Funktion aufrufen
+  if (config.update && typeof config.update === 'function') {
+    config.update();
+  }
+}
+
+/**
+ * Aktualisiert Knoten-Visuals (Radius, Stroke) [SF]
+ */
+function updateNodeVisuals() {
+  const nodeRadius = parseFloat(document.documentElement.style.getPropertyValue('--node-radius')) || cssNumber('--node-radius');
+  const nodeStroke = parseFloat(document.documentElement.style.getPropertyValue('--node-stroke-width')) || cssNumber('--node-stroke-width');
+  
+  d3.selectAll('.node circle.node-circle')
+    .attr('r', nodeRadius)
+    .style('stroke-width', nodeStroke);
+  
+  // Kollisionsradius in Simulation aktualisieren
+  if (currentSimulation) {
+    const collideForce = currentSimulation.force('collide');
+    if (collideForce) {
+      const collidePadding = cssNumber('--collide-padding');
+      collideForce.radius(() => nodeRadius + collidePadding);
+    }
+  }
+  
+  // Attribut-Ringe müssen neu berechnet werden (inkl. Simulation-Restart)
+  updateAttributeCircles();
+}
+
+/**
+ * Aktualisiert Label-Visuals (Font-Size) [SF]
+ */
+function updateLabelVisuals() {
+  const labelSize = parseFloat(document.documentElement.style.getPropertyValue('--label-font-size')) || cssNumber('--label-font-size');
+  
+  d3.selectAll('.node text.label')
+    .style('font-size', `${labelSize}px`);
 }
 
 // Wrapper für importierte Funktion [DRY]
@@ -5447,6 +5608,18 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
       }
       
+      // Wenn Attribute ausgeblendet werden und Label-Modus auf 'attributes' steht,
+      // auf 'none' zurückfallen [SF]
+      if (!attributesVisible && labelsVisible === 'attributes') {
+        labelsVisible = 'none';
+        const lblsBtn = document.querySelector('#toggleLabels');
+        if (lblsBtn) {
+          updateLabelToggleIcon(lblsBtn);
+          updateLabelVisibility();
+        }
+        Logger.log('[Labels] Fallback from attributes to none (attributes hidden)');
+      }
+      
       // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:
       // - activeAttributes (bleiben wie sie sind)
       // - hiddenCategories (bleiben wie sie sind)
@@ -5816,16 +5989,24 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   
   const debugBtn = document.querySelector('#debugBtn');
+  const debugForceToolbar = document.querySelector('#debugForceToolbar');
+  
   if (debugBtn) {
     // Synchronisiere Button-Status mit dem bereits geladenen debugMode (aus loadEnvConfig)
     if (debugMode) {
       debugBtn.classList.add('active');
+      if (debugForceToolbar) debugForceToolbar.style.display = 'flex';
     }
     
     debugBtn.addEventListener('click', () => {
       debugBtn.classList.toggle('active');
       debugMode = debugBtn.classList.contains('active');
       Logger.log(`[Debug] Debug mode toggled to: ${debugMode}`);
+      
+      // Debug Force Toolbar ein/ausblenden [SF]
+      if (debugForceToolbar) {
+        debugForceToolbar.style.display = debugMode ? 'flex' : 'none';
+      }
       
       // Aktualisiere Labels und Link-Labels sofort [SF]
       const svg = d3.select('#graph');
@@ -5844,6 +6025,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       updateDebugZoomDisplay();
     });
   }
+  
+  // Debug Force Toolbar Slider-Logik [SF][PA]
+  initDebugForceSliders();
   // Auto-apply on depth change and direction change
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
   if (depthEl) {

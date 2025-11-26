@@ -30,7 +30,7 @@ export function createSimulation(nodes, links, getCollideRadius) {
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(params.centerStrength))
     .force("collide", d3.forceCollide()
       .radius(getCollideRadius || defaultCollideRadius)
-      .strength(params.collideStrength))
+      .strength(1)) // Collide immer auf 1 [SF]
     .alphaDecay(params.alphaDecay)
     .velocityDecay(params.velocityDecay);
 }

@@ -173,12 +173,11 @@ export function getLinkStyleParams() {
  */
 export function getSimulationParams() {
   return {
-    linkDistance: cssNumber('--link-distance', 60),
-    linkStrength: cssNumber('--link-strength', 0.4),
-    chargeStrength: cssNumber('--charge-strength', -200),
+    linkDistance: cssNumber('--link-distance', 10),
+    linkStrength: cssNumber('--link-strength', 0.1),
+    chargeStrength: cssNumber('--charge-strength', -90),
     alphaDecay: cssNumber('--alpha-decay', 0.0228),
     velocityDecay: cssNumber('--velocity-decay', 0.4),
-    collideStrength: cssNumber('--collide-strength', 0.8),
     centerStrength: cssNumber('--center-strength', 0.05),
     levelHeight: cssNumber('--level-height', 200),
     levelForceStrength: cssNumber('--level-force-strength', 0.5)
