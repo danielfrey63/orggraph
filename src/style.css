@@ -889,21 +889,17 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 
   /* Simulation-Parameter */
   --link-distance: 20;
-  --link-strength: 0.7;
+  --link-strength: 1.7;
   --charge-strength: -250;
-  --collide-radius: 15;
   --collide-padding: 6;
-  --collide-strength: 0.7;
+  --collide-strength: 0.8;
   --center-strength: 0.05;
   --alpha-decay: 0.05;
   --velocity-decay: 0.5;
   
   /* Layout-Optionen */
   --level-height: 200;
-  --level-force-strength: 0.25;
-  --radial-force: 0.15;
-  --radial-gap: 120;
-  --radial-base: 0;
+  --level-force-strength: 0.5;
   
   /* Standard-Einstellungen */
   --default-layout-mode: 'force';

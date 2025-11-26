@@ -203,7 +203,7 @@ function refreshAllLabels() {
   // Node-Labels aktualisieren
   svg.selectAll('.node text.label').text(d => {
     if (debugMode) {
-      return `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})`;
+      return getDebugNodeLabel(d);
     }
     return getDisplayLabel(d);
   });
@@ -350,6 +350,53 @@ function showPasswordDialog(onSubmit) {
 }
 
 // ========== Ende Pseudonymisierung ==========
+
+// Cache für Debug-Labels [PA]
+const debugNodeLabelCache = new Map();
+
+/**
+ * Invalidiert den Debug-Label-Cache (bei Graph-Änderungen aufrufen)
+ */
+function invalidateDebugCache() {
+  debugNodeLabelCache.clear();
+}
+
+/**
+ * Generiert Debug-Label für einen Knoten [SF][PA]
+ * Zeigt Level und Anzahl OE-Zugehörigkeiten (gecacht)
+ */
+function getDebugNodeLabel(d) {
+  if (!d) return '?';
+  const nodeId = String(d.id);
+  
+  // Cache-Lookup
+  if (debugNodeLabelCache.has(nodeId)) {
+    return debugNodeLabelCache.get(nodeId);
+  }
+  
+  const level = hierarchyLevels.get(nodeId) ?? d.level ?? '?';
+  
+  // Anzahl OE-Zugehörigkeiten zählen (nur einmal pro Knoten)
+  const orgs = findAllPersonOrgs(nodeId);
+  const orgCount = orgs.length;
+  
+  // Kurzform: L=Level, O=OrgCount
+  const label = `L${level} O${orgCount}`;
+  debugNodeLabelCache.set(nodeId, label);
+  return label;
+}
+
+/**
+ * Generiert Debug-Label für einen Link [SF]
+ * Zeigt Source/Target Levels
+ */
+function getDebugLinkLabel(link) {
+  const sourceId = String(typeof link.source === 'object' ? link.source.id : link.source);
+  const targetId = String(typeof link.target === 'object' ? link.target.id : link.target);
+  const sourceLevel = hierarchyLevels.get(sourceId) ?? '?';
+  const targetLevel = hierarchyLevels.get(targetId) ?? '?';
+  return `${sourceLevel}→${targetLevel}`;
+}
 
 function isRoot(id){ return selectedRootIds.includes(String(id)); }
 function setSingleRoot(id){
@@ -3058,6 +3105,9 @@ async function transitionGraph(oldSub, newSub, roots, transitionId) {
  * Rendert den Graphen basierend auf dem berechneten Subgraphen
  */
 function renderGraph(sub) {
+  // Debug-Cache invalidieren bei neuem Graph [PA]
+  invalidateDebugCache();
+  
   // Aktuellen Zoom-Zustand speichern
   const savedZoomTransform = currentZoomTransform;
 
@@ -3174,7 +3224,7 @@ function renderGraph(sub) {
   nodeEnter.append("circle").attr("r", nodeRadius).attr("class", "node-circle")
     .style("fill", d => getNodeFillByLevel(d));
   nodeEnter.append("text")
-    .text(d => debugMode ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})` : getDisplayLabel(d))
+    .text(d => debugMode ? getDebugNodeLabel(d) : getDisplayLabel(d))
     .attr("x", 10)
     .attr("y", 4)
     .attr("class", "label");
@@ -3501,22 +3551,17 @@ function renderGraph(sub) {
     // Knotenposition aktualisieren
     node.attr("transform", d => `translate(${d.x},${d.y})`);
     
-    // Node-Labels aktualisieren (für Debug-Modus mit Koordinaten)
+    // Node-Labels aktualisieren (für Debug-Modus)
     if (debugMode) {
       node.selectAll("text.label")
-        .text(d => `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})`);
+        .text(d => getDebugNodeLabel(d));
     }
     
-    // Link-Labels aktualisieren (Mittelpunkt + Länge)
+    // Link-Labels aktualisieren (Debug: Source→Target Levels)
     linkLabel
       .attr("x", d => (d.source.x + d.target.x) / 2)
       .attr("y", d => (d.source.y + d.target.y) / 2)
-      .text(d => {
-        const dx = d.target.x - d.source.x;
-        const dy = d.target.y - d.source.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        return Math.round(dist) + 'px';
-      });
+      .text(d => getDebugLinkLabel(d));
 
     // Cluster (OE-Hüllen) aktualisieren
     const pad = cssNumber('--cluster-pad', 12);
@@ -5788,7 +5833,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Node-Labels aktualisieren
       svg.selectAll('.node text.label').text(d => {
         return debugMode 
-          ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})`
+          ? getDebugNodeLabel(d)
           : getDisplayLabel(d);
       });
       

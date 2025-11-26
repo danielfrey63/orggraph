@@ -27,10 +27,10 @@ export function createSimulation(nodes, links, getCollideRadius) {
       .distance(params.linkDistance)
       .strength(params.linkStrength))
     .force("charge", d3.forceManyBody().strength(params.chargeStrength))
-    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
+    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(params.centerStrength))
     .force("collide", d3.forceCollide()
       .radius(getCollideRadius || defaultCollideRadius)
-      .strength(0.8))
+      .strength(params.collideStrength))
     .alphaDecay(params.alphaDecay)
     .velocityDecay(params.velocityDecay);
 }
@@ -57,8 +57,9 @@ export function keepSimulationRunning(simulation, isEnabled) {
  * @param {Array} nodes - Knoten-Array
  */
 export function configureHierarchyForces(simulation, hierarchyLevels, nodes) {
-  const LEVEL_HEIGHT = 200;
-  const LEVEL_FORCE_STRENGTH = 0.5;
+  const params = getSimulationParams();
+  const LEVEL_HEIGHT = params.levelHeight;
+  const LEVEL_FORCE_STRENGTH = params.levelForceStrength;
   
   const sortedLevels = Array.from(new Set(Array.from(hierarchyLevels.values()))).sort((a, b) => a - b);
   const levelToY = new Map();

@@ -38,10 +38,11 @@ const CSS_VARS = [
   '--attribute-circle-gap',
   '--attribute-circle-stroke-width',
   '--arrow-length',
-  '--radial-force',
-  '--radial-gap',
-  '--radial-base',
-  '--canvas-bg'
+  '--canvas-bg',
+  '--collide-strength',
+  '--center-strength',
+  '--level-height',
+  '--level-force-strength'
 ];
 
 /**
@@ -176,7 +177,11 @@ export function getSimulationParams() {
     linkStrength: cssNumber('--link-strength', 0.4),
     chargeStrength: cssNumber('--charge-strength', -200),
     alphaDecay: cssNumber('--alpha-decay', 0.0228),
-    velocityDecay: cssNumber('--velocity-decay', 0.4)
+    velocityDecay: cssNumber('--velocity-decay', 0.4),
+    collideStrength: cssNumber('--collide-strength', 0.8),
+    centerStrength: cssNumber('--center-strength', 0.05),
+    levelHeight: cssNumber('--level-height', 200),
+    levelForceStrength: cssNumber('--level-force-strength', 0.5)
   };
 }
 
