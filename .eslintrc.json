@@ -31,17 +31,5 @@
     "trace/",
     "helpers/",
     "*.min.js"
-  ],
-  "overrides": [
-    {
-      "files": ["src/app.js"],
-      "rules": {
-        "no-unused-vars": ["warn", {
-          "vars": "all",
-          "args": "none",
-          "varsIgnorePattern": "^_"
-        }]
-      }
-    }
   ]
 }

@@ -97,8 +97,8 @@ async function loadPseudoData() {
       orgLevels: Object.keys(pseudoData).filter(k => k.startsWith('organizationalUnits')).length
     });
     return true;
-  } catch (e) {
-    Logger.log('[Pseudo] Fehler beim Laden:', e);
+  } catch (_e) {
+    Logger.log('[Pseudo] Fehler beim Laden:', _e);
     pseudoData = null;
     return false;
   }
@@ -1105,9 +1105,9 @@ async function loadEnvConfig() {
       setStatus('Keine gültige env.json gefunden – manuelles Laden über den Status möglich.');
       showTemporaryNotification('env.json konnte nicht geladen werden – bitte Datei prüfen oder manuell Daten laden.', 5000);
     }
-  } catch (e) {
+  } catch (_e) {
     // Fehler beim Laden oder Parsen von env.json
-    console.error('Fehler beim Laden von env.json:', e);
+    console.error('Fehler beim Laden von env.json:', _e);
     setStatus('Fehler beim Laden von env.json – manuelles Laden über den Status möglich.');
     showTemporaryNotification('env.json ist ungültig oder konnte nicht gelesen werden (z.B. JSON-Syntaxfehler). Bitte Datei prüfen.', 5000);
   }
@@ -1287,8 +1287,8 @@ async function loadData() {
     } else {
       console.warn('Automatisches Laden der Daten fehlgeschlagen:', res.status, res.statusText);
     }
-  } catch (e) {
-    console.error('Fehler beim automatischen Laden der Daten:', e);
+  } catch (_e) {
+    console.error('Fehler beim automatischen Laden der Daten:', _e);
   }
 
   if (!data) {
@@ -1298,8 +1298,8 @@ async function loadData() {
 
   try {
     processData(data);
-  } catch (e) {
-    console.error('Fehler beim Anwenden der geladenen Daten:', e);
+  } catch (_e) {
+    console.error('Fehler beim Anwenden der geladenen Daten:', _e);
     setStatus('Fehler beim Verarbeiten der geladenen Daten – bitte Daten manuell laden.');
     return false;
   }
@@ -2443,7 +2443,7 @@ function addAttributeSubmenu(parentItem, mainMenu, nodeId) {
   
   // Event-Handler für Parent-Item
   parentItem.addEventListener('mouseenter', showSubmenu);
-  parentItem.addEventListener('mouseleave', (e) => {
+  parentItem.addEventListener('mouseleave', (_e) => {
     // Prüfe, ob Maus zum Submenu gewechselt hat
     setTimeout(() => {
       const hasActiveCategoryMenu = document.querySelector('.node-context-menu[data-level="3"]');
@@ -2469,7 +2469,7 @@ function addAttributeSubmenu(parentItem, mainMenu, nodeId) {
   const setupSubmenuHandlers = () => {
     if (!submenu) return;
     
-    submenu.addEventListener('mouseleave', (e) => {
+    submenu.addEventListener('mouseleave', (_e) => {
       setTimeout(() => {
         // Prüfe ob ein Kategorie-Submenu (Ebene 3) aktiv ist
         const hasActiveCategoryMenu = document.querySelector('.node-context-menu[data-level="3"]');
@@ -2570,7 +2570,7 @@ function createCategorySubmenuItem(categoryName, attributes, nodeId, hideAllMenu
     categorySubmenuVisible = true;
     
     // Event-Handler für Kategorie-Submenu
-    categorySubmenu.addEventListener('mouseleave', (e) => {
+    categorySubmenu.addEventListener('mouseleave', (_e) => {
       setTimeout(() => {
         // Schließe nur das Kategorie-Submenu, nicht das Parent-Submenu
         if (!categorySubmenu.matches(':hover') && !item.matches(':hover')) {
@@ -2593,7 +2593,7 @@ function createCategorySubmenuItem(categoryName, attributes, nodeId, hideAllMenu
     showCategorySubmenu();
   });
   
-  item.addEventListener('mouseleave', (e) => {
+  item.addEventListener('mouseleave', (_e) => {
     setTimeout(() => {
       if (categorySubmenu && !categorySubmenu.matches(':hover') && !item.matches(':hover')) {
         hideCategorySubmenu();
@@ -3124,7 +3124,7 @@ function updateNodeVisuals() {
  * Aktualisiert Knoten- und Attribut-Visuals zusammen [SF]
  * Wird aufgerufen wenn nodeStrokeWidth geändert wird (steuert auch Ring-Breite)
  */
-function updateNodeAndAttributeVisuals() {
+function _updateNodeAndAttributeVisuals() {
   updateNodeVisuals();
   // updateAttributeCircles wird bereits in updateNodeVisuals aufgerufen
 }
@@ -4870,7 +4870,7 @@ function buildAttributeLegend() {
       itemLeftArea.appendChild(itemLabel);
       
       // Ganze Zeile klickbar für Toggle
-      itemRow.addEventListener('click', (e) => {
+      itemRow.addEventListener('click', (_e) => {
         const isActive = activeAttributes.has(it.key);
         
         if (isActive) {
@@ -5471,7 +5471,7 @@ let savedAllowedOrgs = new Set();
  * @param {HTMLElement} parentRow - Eltern-Element für das Dropdown
  * @returns {HTMLElement} Palette-Selector Element
  */
-function createCategoryPaletteSelector(category, parentRow) {
+function createCategoryPaletteSelector(category, _parentRow) {
   const selector = document.createElement('div');
   selector.className = 'palette-selector';
   selector.setAttribute('data-ignore-header-click', 'true');
