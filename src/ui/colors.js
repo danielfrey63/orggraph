@@ -10,47 +10,56 @@ const categoryHueCache = new Map();
 let currentPalette = 'blue';
 
 /**
- * Erzeugt eine Spektrum-Palette mit 5 Farben [SF][DRY]
+ * Erzeugt eine Spektrum-Palette mit gut unterscheidbaren Farben [SF][DRY]
  * @param {number} startHue - Start-Hue (0-360)
- * @param {number} range - Hue-Bereich (z.B. 40 für ähnliche Farben)
+ * @param {number} range - Hue-Bereich (z.B. 50 für unterscheidbare Farben)
  * @param {string} name - Paletten-Name
  * @param {string} description - Beschreibung
  * @returns {Object} Palette-Objekt
  */
 function createSpectrumPalette(startHue, range, name, description) {
+  // Vordefinierte Variationen für bessere Unterscheidbarkeit [SF]
+  const variations = [
+    { hueOffset: 0, sat: 75, light: 45 },      // Dunkel, gesättigt
+    { hueOffset: 0.5, sat: 65, light: 60 },    // Hell, mittel gesättigt
+    { hueOffset: 0.25, sat: 80, light: 35 },   // Sehr dunkel, sehr gesättigt
+    { hueOffset: 0.75, sat: 55, light: 55 },   // Mittel, weniger gesättigt
+    { hueOffset: 1, sat: 70, light: 50 },      // Ende des Bereichs
+  ];
+  
   return {
     name,
     description,
     getColor: (_category, ordinal) => {
-      const step = range / 5;
-      const hue = (startHue + (ordinal % 5) * step) % 360;
-      const sat = 70;
-      const light = 45 + (ordinal % 3) * 5;
-      return `hsl(${hue}, ${sat}%, ${light}%)`;
+      const idx = ordinal % variations.length;
+      const v = variations[idx];
+      const hue = (startHue + v.hueOffset * range) % 360;
+      return `hsl(${hue}, ${v.sat}%, ${v.light}%)`;
     }
   };
 }
 
 /**
  * Vordefinierte Farbpaletten [SF][CMV]
- * 10 Spektrum-Paletten mit je 5 ähnlichen Farben
+ * 10 Spektrum-Paletten mit gut unterscheidbaren Farben
  */
 export const COLOR_PALETTES = {
-  red: createSpectrumPalette(0, 30, 'Rot', 'Rottöne (0°-30°)'),
-  orange: createSpectrumPalette(25, 30, 'Orange', 'Orangetöne (25°-55°)'),
-  yellow: createSpectrumPalette(45, 30, 'Gelb', 'Gelbtöne (45°-75°)'),
-  lime: createSpectrumPalette(75, 30, 'Limette', 'Limettentöne (75°-105°)'),
-  green: createSpectrumPalette(105, 30, 'Grün', 'Grüntöne (105°-135°)'),
-  teal: createSpectrumPalette(165, 30, 'Türkis', 'Türkistöne (165°-195°)'),
-  blue: createSpectrumPalette(210, 30, 'Blau', 'Blautöne (210°-240°)'),
-  purple: createSpectrumPalette(270, 30, 'Violett', 'Violetttöne (270°-300°)'),
-  pink: createSpectrumPalette(320, 30, 'Pink', 'Pinktöne (320°-350°)'),
+  red: createSpectrumPalette(350, 40, 'Rot', 'Rottöne'),
+  orange: createSpectrumPalette(20, 40, 'Orange', 'Orangetöne'),
+  yellow: createSpectrumPalette(40, 40, 'Gelb', 'Gelbtöne'),
+  lime: createSpectrumPalette(80, 40, 'Limette', 'Limettentöne'),
+  green: createSpectrumPalette(110, 40, 'Grün', 'Grüntöne'),
+  teal: createSpectrumPalette(170, 40, 'Türkis', 'Türkistöne'),
+  blue: createSpectrumPalette(210, 40, 'Blau', 'Blautöne'),
+  purple: createSpectrumPalette(270, 40, 'Violett', 'Violetttöne'),
+  pink: createSpectrumPalette(320, 40, 'Pink', 'Pinktöne'),
   gray: {
     name: 'Grau',
     description: 'Graustufen',
     getColor: (_category, ordinal) => {
-      const light = 35 + (ordinal % 5) * 10;
-      return `hsl(0, 0%, ${light}%)`;
+      // Bessere Unterscheidbarkeit bei Graustufen [SF]
+      const lights = [30, 45, 55, 40, 65];
+      return `hsl(0, 0%, ${lights[ordinal % 5]}%)`;
     }
   }
 };

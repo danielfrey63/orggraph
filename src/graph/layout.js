@@ -3,7 +3,7 @@
  * Verwaltet die Positionierung von Knoten im Graph.
  */
 
-import { cssNumber, getNodeStyleParams } from '../utils/css.js';
+import { getNodeStyleParams, getGraphParam } from '../utils/css.js';
 import { WIDTH, HEIGHT } from '../constants.js';
 
 /**
@@ -190,7 +190,7 @@ export function initializeRadialLayout({
       rootY = HEIGHT / 2;
     } else {
       const alreadyPositioned = personNodes.filter(n => positioned.has(String(n.id)));
-      const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius', 8) * 1.5);
+      const pos = findPositionOutsideHull(alreadyPositioned, getGraphParam('nodeRadius') * 1.5);
       rootX = pos.x;
       rootY = pos.y;
     }
