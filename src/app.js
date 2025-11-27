@@ -4,7 +4,7 @@ import { initializeExport } from './ui/export.js';
 import './style.css';
 
 // Utils
-import { Logger } from './utils/logger.js';
+import { Logger, setDebugMode } from './utils/logger.js';
 import { cssNumber, setGraphParam, getGraphParam, initGraphParamsFromEnv, resetGraphParams, getParamConfig } from './utils/css.js';
 import { setStatus, showTemporaryNotification } from './utils/dom.js';
 
@@ -805,7 +805,7 @@ function updateAttributeCircles() {
     nodes.selectAll('circle.node-circle')
       .style('fill', d => getNodeFillByLevel(d))
       .style('stroke', null)
-      .style('stroke-width', null)
+      .style('stroke-width', nodeStrokeWidth)
       .style('opacity', 1);
     
     // has-attributes Klasse entfernen [SF]
@@ -830,7 +830,7 @@ function updateAttributeCircles() {
   nodes.selectAll('circle.node-circle')
     .style('fill', d => getNodeFillByLevel(d))
     .style('stroke', null)
-    .style('stroke-width', null)
+    .style('stroke-width', nodeStrokeWidth)
     .style('opacity', 1);
   
   // has-attributes Klasse zurücksetzen (wird in der Schleife neu gesetzt) [SF]
@@ -1092,6 +1092,7 @@ async function loadEnvConfig() {
       // Update debug mode from config [SF]
       if (typeof envConfig.TOOLBAR_DEBUG_ACTIVE === 'boolean') {
         debugMode = envConfig.TOOLBAR_DEBUG_ACTIVE;
+        setDebugMode(debugMode); // Sync Logger debug mode [SF]
       }
       
       // Graph-Parameter aus ENV initialisieren [SF]
@@ -3070,6 +3071,7 @@ function applyForceParameter(config, value) {
 // Update-Funktionen Map für String-Referenzen [SF][DRY]
 const UPDATE_FUNCTIONS = {
   updateNodeVisuals: () => updateNodeVisuals(),
+  updateNodeAndAttributeVisuals: () => updateNodeVisuals(), // nodeStrokeWidth steuert beides
   updateLabelVisuals: () => updateLabelVisuals(),
   updateAttributeCircles: () => updateAttributeCircles(),
   updateLinkVisuals: () => updateLinkVisuals()
@@ -3118,15 +3120,6 @@ function updateNodeVisuals() {
   
   // Attribut-Ringe müssen neu berechnet werden (inkl. Simulation-Restart)
   updateAttributeCircles();
-}
-
-/**
- * Aktualisiert Knoten- und Attribut-Visuals zusammen [SF]
- * Wird aufgerufen wenn nodeStrokeWidth geändert wird (steuert auch Ring-Breite)
- */
-function _updateNodeAndAttributeVisuals() {
-  updateNodeVisuals();
-  // updateAttributeCircles wird bereits in updateNodeVisuals aufgerufen
 }
 
 /**
@@ -4742,6 +4735,40 @@ function buildAttributeLegend() {
     
     catRightArea.appendChild(catDownloadBtn);
     
+    // Toggle-All Button für Kategorie - wählt alle Attributwerte an/ab [SF]
+    const toggleAllBtn = document.createElement('button');
+    toggleAllBtn.type = 'button';
+    // Prüfe ob alle Attribute dieser Kategorie aktiv sind
+    const categoryKeys = items.map(it => it.key);
+    const allActive = categoryKeys.length > 0 && categoryKeys.every(key => activeAttributes.has(key));
+    toggleAllBtn.className = allActive ? 'legend-icon-btn active' : 'legend-icon-btn';
+    toggleAllBtn.title = allActive ? 'Alle Attribute dieser Kategorie abwählen' : 'Alle Attribute dieser Kategorie anwählen';
+    toggleAllBtn.innerHTML = '<i class="codicon codicon-check-all"></i>';
+    toggleAllBtn.setAttribute('data-ignore-header-click', 'true');
+    
+    toggleAllBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const catKeys = items.map(it => it.key);
+      const allCurrentlyActive = catKeys.length > 0 && catKeys.every(key => activeAttributes.has(key));
+      
+      if (allCurrentlyActive) {
+        // Alle abwählen
+        catKeys.forEach(key => activeAttributes.delete(key));
+        showTemporaryNotification(`${cat}: Alle Attribute abgewählt`);
+      } else {
+        // Alle anwählen
+        catKeys.forEach(key => activeAttributes.add(key));
+        showTemporaryNotification(`${cat}: Alle Attribute ausgewählt`);
+      }
+      
+      // UI aktualisieren
+      buildAttributeLegend();
+      updateAttributeCircles();
+      updateAttributeStats();
+    });
+    
+    catRightArea.appendChild(toggleAllBtn);
+    
     // Eye-Toggle Button (rechts) - blendet Kategorie temporär aus
     const eyeBtn = document.createElement('button');
     eyeBtn.type = 'button';
@@ -6180,6 +6207,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     debugBtn.addEventListener('click', () => {
       debugBtn.classList.toggle('active');
       debugMode = debugBtn.classList.contains('active');
+      setDebugMode(debugMode); // Sync Logger debug mode [SF]
       Logger.log(`[Debug] Debug mode toggled to: ${debugMode}`);
       
       // Debug Force Toolbar ein/ausblenden [SF]
