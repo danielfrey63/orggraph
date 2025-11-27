@@ -1107,6 +1107,57 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   color: var(--text-muted);
 }
 
+/* Farbpaletten-Selector [SF] */
+.palette-selector {
+  position: relative;
+  display: inline-flex;
+}
+
+.palette-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1000;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: all 0.2s ease;
+}
+
+.palette-selector.open .palette-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.palette-item {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.palette-item:hover {
+  background-color: var(--control-hover);
+}
+
+.palette-item.active {
+  background-color: var(--active-toggle-bg);
+}
+
+.palette-color-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+}
+
 /* Ausschiebbares Suchfeld */
 .legend-search-container {
   position: relative;

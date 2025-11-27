@@ -16,7 +16,7 @@ import { createSimulation as createSimulationUtil } from './graph/simulation.js'
 
 // UI
 import { getChevronSVG, getEyeSVG, getSaveSVG, getDownloadSVG } from './ui/icons.js';
-import { colorToTransparent } from './ui/colors.js';
+import { colorToTransparent, COLOR_PALETTES, getCurrentPalette } from './ui/colors.js';
 
 let raw = { nodes: [], links: [], persons: [], orgs: []};
 let personAttributes = new Map(); // Map von ID/Email zu Attribut-Maps
@@ -25,6 +25,7 @@ let activeAttributes = new Set(); // Menge der aktiven Attribute für die Anzeig
 let emptyCategories = new Set(); // Kategorien ohne Attribute (nur Platzhalter)
 let categorySourceFiles = new Map(); // Map Kategorie -> {filename, url, originalData}
 let modifiedCategories = new Set(); // Set von Kategorien mit Änderungen
+let categoryPalettes = new Map(); // Map Kategorie -> Palette-ID
 let byId = new Map();
 let allNodesUnique = [];
 let attributesVisible = true; // Flag für die Sichtbarkeit der Attribute
@@ -425,6 +426,12 @@ function quantizedHueFromCategory(category) {
   return hue;
 }
 function colorForCategoryAttribute(category, attrName, ordinal) {
+  const paletteId = getCurrentPalette();
+  const palette = COLOR_PALETTES[paletteId];
+  if (palette && palette.getColor) {
+    return palette.getColor(category, ordinal);
+  }
+  // Fallback auf Standard
   const baseHue = quantizedHueFromCategory(category);
   const localShift = (ordinal % 6) * 10; // kleine Variation innerhalb der Kategorie
   const hue = (baseHue + localShift) % 360;
@@ -4656,6 +4663,10 @@ function buildAttributeLegend() {
     catLabel.title = `${cat} - ${total} Einträge`;
     catLeftArea.appendChild(catLabel);
     
+    // Palette-Selector für Kategorie
+    const paletteSelector = createCategoryPaletteSelector(cat, catRow);
+    catRightArea.appendChild(paletteSelector);
+    
     // Download-Button für Kategorie (TSV-Export) - vor Eye-Button
     const catDownloadBtn = document.createElement('button');
     catDownloadBtn.type = 'button';
@@ -5393,6 +5404,106 @@ function exportUnmatchedEntries(unmatchedEntries) {
 // Zustand für OE-Sichtbarkeit (init mit true = sichtbar)
 let oesVisible = true;
 let savedAllowedOrgs = new Set();
+
+/**
+ * Erstellt ein Palette-Dropdown für eine Kategorie [SF]
+ * @param {string} category - Kategoriename
+ * @param {HTMLElement} parentRow - Eltern-Element für das Dropdown
+ * @returns {HTMLElement} Palette-Selector Element
+ */
+function createCategoryPaletteSelector(category, parentRow) {
+  const selector = document.createElement('div');
+  selector.className = 'palette-selector';
+  selector.setAttribute('data-ignore-header-click', 'true');
+  
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'legend-icon-btn';
+  btn.title = 'Farbpalette wählen';
+  btn.innerHTML = '<i class="codicon codicon-color-mode"></i>';
+  btn.setAttribute('data-ignore-header-click', 'true');
+  
+  const dropdown = document.createElement('div');
+  dropdown.className = 'palette-dropdown';
+  
+  // Aktuelle Palette für diese Kategorie
+  const currentPaletteId = categoryPalettes.get(category) || 'blue';
+  
+  for (const [id, palette] of Object.entries(COLOR_PALETTES)) {
+    const item = document.createElement('div');
+    item.className = `palette-item${id === currentPaletteId ? ' active' : ''}`;
+    item.dataset.paletteId = id;
+    
+    // 5 Farbfelder für die Vorschau generieren
+    for (let i = 0; i < 5; i++) {
+      const swatch = document.createElement('div');
+      swatch.className = 'palette-color-swatch';
+      swatch.style.backgroundColor = palette.getColor(category, i);
+      item.appendChild(swatch);
+    }
+    
+    // Klick-Handler für Paletten-Auswahl
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      applyCategoryPalette(category, id);
+      selector.classList.remove('open');
+    });
+    
+    dropdown.appendChild(item);
+  }
+  
+  selector.appendChild(btn);
+  selector.appendChild(dropdown);
+  
+  // Toggle-Handler für Dropdown
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Schließe alle anderen offenen Dropdowns
+    document.querySelectorAll('.palette-selector.open').forEach(s => {
+      if (s !== selector) s.classList.remove('open');
+    });
+    selector.classList.toggle('open');
+  });
+  
+  return selector;
+}
+
+/**
+ * Wendet eine Farbpalette auf eine Kategorie an [SF]
+ * @param {string} category - Kategoriename
+ * @param {string} paletteId - ID der Palette
+ */
+function applyCategoryPalette(category, paletteId) {
+  if (!COLOR_PALETTES[paletteId]) return;
+  
+  // Palette für Kategorie speichern
+  categoryPalettes.set(category, paletteId);
+  
+  // Nur Farben dieser Kategorie neu berechnen
+  let ordinal = 0;
+  for (const key of attributeTypes.keys()) {
+    const [cat] = String(key).includes('::') ? String(key).split('::') : ['Attribute'];
+    if (cat === category) {
+      const palette = COLOR_PALETTES[paletteId];
+      const newColor = palette.getColor(category, ordinal);
+      attributeTypes.set(key, newColor);
+      ordinal++;
+    }
+  }
+  
+  // UI aktualisieren
+  buildAttributeLegend();
+  updateAttributeCircles();
+  
+  showTemporaryNotification(`${category}: ${COLOR_PALETTES[paletteId].name}`);
+}
+
+// Globaler Klick-Handler zum Schließen von Palette-Dropdowns
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.palette-selector')) {
+    document.querySelectorAll('.palette-selector.open').forEach(s => s.classList.remove('open'));
+  }
+});
 
 window.addEventListener("DOMContentLoaded", async () => {
   await loadEnvConfig();
