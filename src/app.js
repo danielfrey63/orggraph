@@ -765,14 +765,12 @@ function updateAttributeCircles() {
   // Styling-Parameter aus zentralem Store lesen [SF][DRY]
   const nodeRadius = getGraphParam('nodeRadius');
   const circleGap = cssNumber('--attribute-circle-gap');
-  const circleWidth = getGraphParam('attrCircleStrokeWidth');
   const nodeStrokeWidth = getGraphParam('nodeStrokeWidth');
+  // Ring-Breite = Border-Breite (vereinfacht) [SF]
+  const circleWidth = nodeStrokeWidth;
   
   // Farbe und Stil für Knoten mit Attributen
   const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
-  const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke, #4682b4)';
-  // Für Attribut-Ring-Berechnung: verwende die vom Slider gesteuerte Border-Dicke
-  const nodeWithAttributesStrokeWidth = nodeStrokeWidth;
   
   // Transparenz für Knoten ohne Attribute
   const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity', 0.2);
@@ -878,30 +876,31 @@ function updateAttributeCircles() {
         // Klasse für CSS-basierte Label-Sichtbarkeit setzen [SF]
         nodeGroup.classed('has-attributes', true);
         
-        // Haupt-Knoten mit spezieller Darstellung für Knoten mit Attributen
+        // Erstes Attribut färbt den Border des Hauptknotens [SF]
+        const firstAttrColor = attributeTypes.get(activeNodeAttrs[0][0]);
         nodeGroup.select('circle.node-circle')
           .style('fill', nodeWithAttributesFill)
-          .style('stroke', nodeWithAttributesStroke)
-          .style('stroke-width', nodeWithAttributesStrokeWidth);
+          .style('stroke', firstAttrColor || 'var(--node-stroke)')
+          .style('stroke-width', nodeStrokeWidth);
         
         // Berechne äußersten Radius für Label-Positionierung
-        const attrCount = activeNodeAttrs.length;
-        if (attrCount > 0) {
-          // Äußerster Radius: nodeRadius + nodeWithAttributesStroke/2 + attrCount * (gap + width)
-          outerMostRadius = nodeRadius + (nodeWithAttributesStrokeWidth / 2) + (attrCount * (circleGap + circleWidth));
+        // Border zählt als erster Ring, weitere Ringe ab Index 1 [SF]
+        const additionalRings = activeNodeAttrs.length - 1; // -1 weil Border = erster Ring
+        outerMostRadius = nodeRadius + (nodeStrokeWidth / 2);
+        if (additionalRings > 0) {
+          outerMostRadius += additionalRings * (circleGap + circleWidth);
         }
       }
       
-      // Füge Attribute-Kreise von innen nach außen hinzu
-      activeNodeAttrs.forEach(([attrName], idx) => {
+      // Füge zusätzliche Attribute-Kreise ab dem zweiten Attribut hinzu [SF]
+      // Der erste Ring ist der Border des Hauptknotens
+      activeNodeAttrs.slice(1).forEach(([attrName], idx) => {
         const attrColor = attributeTypes.get(attrName);
         if (!attrColor) return;
         
-        // Kreisradius berechnen (gleichmäßige Abstände):
-        // r0 = nodeRadius + nodeWithAttributesStroke/2 + gap + width/2
-        // r(i) = r0 + i * (gap + width)
-        const base = nodeRadius + (nodeWithAttributesStrokeWidth / 2) + circleGap + (circleWidth / 2);
-        const attrRadius = base + idx * (circleGap + circleWidth);
+        // Kreisradius berechnen (gleichmäßige Abstände ab Border):
+        // r(i) = nodeRadius + strokeWidth/2 + (i+1) * (gap + width) - width/2
+        const attrRadius = nodeRadius + (nodeStrokeWidth / 2) + circleGap + (circleWidth / 2) + idx * (circleGap + circleWidth);
         
         // Attributkreis vor dem Hauptkreis einfügen, damit er dahinter liegt
         nodeGroup.insert("circle", "circle.node-circle")
@@ -2908,7 +2907,8 @@ function createSimulation(nodes, links) {
     const collidePadding = cssNumber('--collide-padding', 6);
     const nodeStrokeWidth = getGraphParam('nodeStrokeWidth');
     const circleGap = cssNumber('--attribute-circle-gap', 4);
-    const circleWidth = getGraphParam('attrCircleStrokeWidth');
+    // Ring-Breite = Border-Breite [SF]
+    const circleWidth = nodeStrokeWidth;
     
     const personId = String(d.id);
     const nodeAttrs = personAttributes.get(personId);
@@ -2922,8 +2922,10 @@ function createSimulation(nodes, links) {
       }
     }
     
+    // Border = erster Ring, zusätzliche Ringe ab attrCount > 1 [SF]
+    const additionalRings = Math.max(0, attrCount - 1);
     const outerExtra = (attrCount > 0)
-      ? (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth))
+      ? (nodeStrokeWidth / 2) + (additionalRings * (circleGap + circleWidth))
       : 0;
     return nodeRadius + collidePadding + outerExtra;
   };
@@ -2960,9 +2962,9 @@ const SLIDER_CONFIGS = [
   { sliderId: 'velocityDecaySlider', valueId: 'velocityDecayValue', param: 'velocityDecay', simulation: 'velocityDecay' },
   // Visuelle Parameter
   { sliderId: 'nodeRadiusSlider', valueId: 'nodeRadiusValue', param: 'nodeRadius', update: 'updateNodeVisuals' },
-  { sliderId: 'nodeStrokeSlider', valueId: 'nodeStrokeValue', param: 'nodeStrokeWidth', update: 'updateNodeVisuals' },
+  // nodeStrokeWidth steuert jetzt auch Ring-Breite [SF]
+  { sliderId: 'nodeStrokeSlider', valueId: 'nodeStrokeValue', param: 'nodeStrokeWidth', update: 'updateNodeAndAttributeVisuals' },
   { sliderId: 'labelSizeSlider', valueId: 'labelSizeValue', param: 'labelFontSize', update: 'updateLabelVisuals' },
-  { sliderId: 'attrRingSlider', valueId: 'attrRingValue', param: 'attrCircleStrokeWidth', update: 'updateAttributeCircles' },
   { sliderId: 'linkStrokeSlider', valueId: 'linkStrokeValue', param: 'linkStrokeWidth', update: 'updateLinkVisuals' },
   { sliderId: 'arrowSizeSlider', valueId: 'arrowSizeValue', param: 'arrowSize', update: 'updateLinkVisuals' }
 ];
@@ -3116,6 +3118,15 @@ function updateNodeVisuals() {
   
   // Attribut-Ringe müssen neu berechnet werden (inkl. Simulation-Restart)
   updateAttributeCircles();
+}
+
+/**
+ * Aktualisiert Knoten- und Attribut-Visuals zusammen [SF]
+ * Wird aufgerufen wenn nodeStrokeWidth geändert wird (steuert auch Ring-Breite)
+ */
+function updateNodeAndAttributeVisuals() {
+  updateNodeVisuals();
+  // updateAttributeCircles wird bereits in updateNodeVisuals aufgerufen
 }
 
 /**
@@ -3693,7 +3704,8 @@ function renderGraph(sub) {
   simulation.on("tick", () => {
     
     // Funktion zur Berechnung des äussersten sichtbaren Radius für einen Knoten [SF][DRY]
-    // Berücksichtigt: nodeRadius + nodeStroke/2 + (falls sichtbar) Attribut-Ringe
+    // Berücksichtigt: nodeRadius + nodeStroke/2 + (falls sichtbar) zusätzliche Attribut-Ringe
+    // Border = erster Ring, daher attrCount - 1 zusätzliche Ringe
     const getOutermostAttributeRadius = (d) => {
       const currentNodeRadius = getGraphParam('nodeRadius');
       const currentNodeStroke = getGraphParam('nodeStrokeWidth');
@@ -3709,7 +3721,8 @@ function renderGraph(sub) {
       const personId = String(d.id);
       const nodeAttrs = personAttributes.get(personId);
       const circleGap = cssNumber('--attribute-circle-gap', 4);
-      const circleWidth = getGraphParam('attrCircleStrokeWidth');
+      // Ring-Breite = Border-Breite [SF]
+      const circleWidth = currentNodeStroke;
       
       let attrCount = 0;
       if (nodeAttrs && nodeAttrs.size > 0) {
@@ -3722,9 +3735,10 @@ function renderGraph(sub) {
         }
       }
       
-      // Attribut-Ringe hinzufügen: jeder Ring = gap + width
-      if (attrCount > 0) {
-        outerRadius += attrCount * (circleGap + circleWidth);
+      // Border = erster Ring, zusätzliche Ringe ab attrCount > 1 [SF]
+      const additionalRings = Math.max(0, attrCount - 1);
+      if (additionalRings > 0) {
+        outerRadius += additionalRings * (circleGap + circleWidth);
       }
       
       return outerRadius;

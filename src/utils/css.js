@@ -21,7 +21,6 @@ const graphParams = {
   nodeRadius: null,
   nodeStrokeWidth: null,
   labelFontSize: null,
-  attrCircleStrokeWidth: null,
   linkStrokeWidth: null,
   arrowSize: null
 };
@@ -166,7 +165,7 @@ export function getNodeStyleParams() {
     radius: getGraphParam('nodeRadius'),
     strokeWidth: getGraphParam('nodeStrokeWidth'),
     attrCircleGap: cssNumber('--attribute-circle-gap', 4),
-    attrCircleWidth: getGraphParam('attrCircleStrokeWidth'),
+    attrCircleWidth: getGraphParam('nodeStrokeWidth'), // Ring-Breite = Border-Breite [SF]
     attrStrokeWidth: cssNumber('--node-with-attributes-stroke-width', 3),
     collidePadding: cssNumber('--collide-padding', 6),
     noAttrOpacity: cssNumber('--nodes-without-attributes-opacity', 0.2)
@@ -215,7 +214,6 @@ const PARAM_CONFIG = {
   nodeRadius: { cssVar: '--node-radius', default: 8 },
   nodeStrokeWidth: { cssVar: '--node-stroke-width', default: 3 },
   labelFontSize: { cssVar: '--label-font-size', default: 12 },
-  attrCircleStrokeWidth: { cssVar: '--attribute-circle-stroke-width', default: 2 },
   linkStrokeWidth: { cssVar: '--link-stroke-width', default: 1.5 },
   arrowSize: { cssVar: '--arrow-length', default: 8 }
 };
@@ -278,7 +276,6 @@ export function initGraphParamsFromEnv(envConfig) {
     DEBUG_NODE_RADIUS: 'nodeRadius',
     DEBUG_NODE_STROKE_WIDTH: 'nodeStrokeWidth',
     DEBUG_LABEL_FONT_SIZE: 'labelFontSize',
-    DEBUG_ATTR_RING_WIDTH: 'attrCircleStrokeWidth',
     DEBUG_LINK_STROKE_WIDTH: 'linkStrokeWidth',
     DEBUG_ARROW_SIZE: 'arrowSize'
   };

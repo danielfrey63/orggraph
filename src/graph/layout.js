@@ -8,6 +8,7 @@ import { WIDTH, HEIGHT } from '../constants.js';
 
 /**
  * Berechnet den äußersten sichtbaren Radius eines Knotens [SF][DRY]
+ * Border = erster Ring, zusätzliche Ringe ab attrCount > 1
  * @param {Object} node - Der Knoten
  * @param {Map} personAttributes - Attribut-Map
  * @param {Set} activeAttributes - Aktive Attribute
@@ -15,7 +16,9 @@ import { WIDTH, HEIGHT } from '../constants.js';
  * @returns {number} Äußerster Radius
  */
 export function getNodeOuterRadius(node, personAttributes, activeAttributes, attributesVisible) {
-  const { radius, strokeWidth, attrCircleGap, attrCircleWidth } = getNodeStyleParams();
+  const { radius, strokeWidth, attrCircleGap } = getNodeStyleParams();
+  // Ring-Breite = Border-Breite [SF]
+  const circleWidth = strokeWidth;
   
   let outerRadius = radius + (strokeWidth / 2);
   
@@ -32,7 +35,11 @@ export function getNodeOuterRadius(node, personAttributes, activeAttributes, att
       }
     }
     
-    outerRadius += attrCount * (attrCircleGap + attrCircleWidth);
+    // Border = erster Ring, zusätzliche Ringe ab attrCount > 1 [SF]
+    const additionalRings = Math.max(0, attrCount - 1);
+    if (additionalRings > 0) {
+      outerRadius += additionalRings * (attrCircleGap + circleWidth);
+    }
   }
   
   return outerRadius;
