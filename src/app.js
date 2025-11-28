@@ -45,6 +45,7 @@ let labelsVisible = 'all'; // 'all' | 'attributes' | 'none' - Label-Sichtbarkeit
 let debugMode = false;
 let continuousSimulation = false; // Kontinuierliche Animation aktiviert
 let pendingFitToViewport = false; // Fit nach Simulation-Ende ausstehend
+let isDragging = false; // Dragging-Zustand [SF]
 let legendMenuEl = null;
 let nodeMenuEl = null;
 let simAllById = new Map();
@@ -68,6 +69,15 @@ let allHiddenTemporarilyVisible = false; // Globaler Toggle für alle Hidden-Sub
 let currentHiddenCount = 0; // Anzahl der ausgeblendeten Knoten in der aktuellen Ansicht
 let selectedRootIds = [];
 let lastSingleRootId = null;
+
+// Hover-Detail-State für Knoten [SF]
+let hoverDetailNode = null;
+let hoverDimActive = false;
+let hoverDimTimeout = null;
+let hoverHideTimeout = null;
+let hoverPanelTimeout = null;
+let detailPanelEl = null;
+let detailLineEl = null;
 
 // Pseudonymisierung [SF]
 let pseudonymizationEnabled = true;
@@ -247,7 +257,7 @@ function refreshAllLabels() {
   }
   
   // Tooltip ausblenden (wird beim nächsten Hover neu generiert)
-  hideTooltip();
+  _hideTooltip();
   
   Logger.log('[Pseudo] Labels aktualisiert, enabled:', pseudonymizationEnabled);
 }
@@ -498,9 +508,9 @@ function clustersAtPoint(p) {
 
 // computeClusterPolygon ist jetzt aus clusters.js importiert [DRY]
 
-// Tooltip helpers for overlapping clusters
+// Tooltip helpers for overlapping clusters (derzeit deaktiviert)
 let tooltipEl = null;
-function ensureTooltip() {
+function _ensureTooltip() {
   if (tooltipEl) return;
   tooltipEl = document.createElement('div');
   tooltipEl.style.position = 'fixed';
@@ -518,13 +528,13 @@ function ensureTooltip() {
   tooltipEl.style.lineHeight = '1.4';
   document.body.appendChild(tooltipEl);
 }
-function showTooltip(x, y, lines) {
+function _showTooltip(x, y, lines) {
   tooltipEl.textContent = lines.join('\n');
   tooltipEl.style.left = `${x+12}px`;
   tooltipEl.style.top = `${y+12}px`;
   tooltipEl.style.display = 'block';
 }
-function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
+function _hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
 
 /**
  * Zeigt Zoom-Level im Debug-Modus in der Statusleiste an [SF]
@@ -555,24 +565,27 @@ function updateDebugZoomDisplay() {
  */
 function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
   const lines = [];
+  const addLine = (text, type = 'content') => lines.push({ text, type });
   
   // Section header for node
-  lines.push(`👤 ${nodeLabel}`);
+  addLine(`👤 ${nodeLabel}`, 'name');
   
   // Zeige Attribute für diese Person an
   if (personId && personAttributes.has(personId)) {
     const attrs = personAttributes.get(personId);
-    lines.push('📊 Attribute:');
+    addLine('📊 Attribute:', 'title');
     let hasAttributes = false;
     for (const [attrName, attrValue] of attrs.entries()) {
       if (activeAttributes.has(attrName)) {
         const displayValue = attrValue !== '1' ? `: ${attrValue}` : '';
-        lines.push(`  • ${attrName}${displayValue}`);
+        // Ersetze '::' durch ': ' für schönere Anzeige [SF]
+        const displayName = attrName.replace('::', ': ');
+        addLine(`  • ${displayName}${displayValue}`, 'content');
         hasAttributes = true;
       }
     }
     if (!hasAttributes) {
-      lines.push('  • Keine aktiven Attribute');
+      addLine('  • Keine aktiven Attribute', 'content');
     }
   }
   
@@ -581,25 +594,25 @@ function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
   
   // Add visible org memberships (at mouse point) with a header
   if (visibleOrgs.length > 0) {
-    lines.push('🔍 OEs am Cursor:');
-    visibleOrgs.forEach(org => lines.push(`  • ${org}`));
+    addLine('🔍 OEs am Cursor:', 'title');
+    visibleOrgs.forEach(org => addLine(`  • ${org}`, 'content'));
   }
   
   // Add all org memberships with header
   if (allPersonOrgs.length > 0) {
-    lines.push('🏢 Alle OE-Zugehörigkeiten:');
-    allPersonOrgs.forEach(org => lines.push(`  • ${org}`));
+    addLine('🏢 Alle OE-Zugehörigkeiten:', 'title');
+    allPersonOrgs.forEach(org => addLine(`  • ${org}`, 'content'));
   }
   
   return lines;
 }
 
 /**
- * Tooltips für Cluster-Hover
+ * Tooltips für Cluster-Hover (derzeit deaktiviert)
  */
-function handleClusterHover(event, svgSel) {
+function _handleClusterHover(event, svgSel) {
   if (!currentZoomTransform) { 
-    hideTooltip(); 
+    _hideTooltip(); 
     return; 
   }
   
@@ -635,9 +648,9 @@ function handleClusterHover(event, svgSel) {
   }
   
   if (lines.length) {
-    showTooltip(event.clientX, event.clientY, lines);
+    _showTooltip(event.clientX, event.clientY, lines);
   } else {
-    hideTooltip();
+    _hideTooltip();
   }
 }
 
@@ -739,6 +752,228 @@ function orgDepth(oid){
   return d;
 }
 
+// Hover-Detail Panel & Linie [SF]
+function ensureHoverDetailDom() {
+  if (!detailPanelEl) {
+    const canvasEl = document.querySelector('.canvas');
+    if (!canvasEl) return null;
+
+    const panel = document.createElement('div');
+    panel.id = 'hoverDetailPanel';
+    canvasEl.appendChild(panel);
+    detailPanelEl = panel;
+  }
+
+  if (!detailLineEl) {
+    const svg = d3.select(SVG_ID);
+    // Layer am Anfang einfügen, damit Linie hinter allem rendert [SF]
+    const layer = svg.select('.hover-detail-layer').empty()
+      ? svg.insert('g', ':first-child').attr('class', 'hover-detail-layer')
+      : svg.select('.hover-detail-layer');
+
+    detailLineEl = layer.append('line')
+      .attr('class', 'hover-detail-line')
+      .attr('x1', 0).attr('y1', 0)
+      .attr('x2', 0).attr('y2', 0)
+      .node();
+  }
+
+  return { panel: detailPanelEl, line: detailLineEl };
+}
+
+function prepareHoverDetailPanel(node) {
+  const dom = ensureHoverDetailDom();
+  if (!dom) return;
+  const panel = dom.panel;
+
+  while (panel.firstChild) panel.removeChild(panel.firstChild);
+
+  const personId = String(node.id);
+  const label = getDisplayLabel(node);
+  const visibleOrgs = clustersAtPoint([node.x, node.y]);
+  const lines = buildPersonTooltipLines(personId, label, visibleOrgs);
+
+  lines.forEach(item => {
+    const row = document.createElement('div');
+    // Spezifische Klassen für Styling [SF]
+    if (item.type === 'name') {
+      row.className = 'detail-row detail-name';
+    } else if (item.type === 'title') {
+      row.className = 'detail-row detail-title';
+    } else {
+      row.className = 'detail-row';
+    }
+    row.textContent = item.text;
+    panel.appendChild(row);
+  });
+}
+
+function updateHoverDetailLinePosition(node, event, svgSel) {
+  if (!detailLineEl || !hoverDetailNode || hoverDetailNode !== node) return;
+
+  const svg = svgSel || d3.select(SVG_ID);
+  const svgNode = svg.node();
+  if (!svgNode || !detailPanelEl) return;
+
+  // WICHTIG: Die Linie ist im nicht-transformierten SVG, aber die Nodes sind transformiert [SF]
+  // Also müssen beide Punkte im SVG-Viewport-Koordinatensystem sein (nach Transform)
+  
+  const t = currentZoomTransform || d3.zoomIdentity;
+  
+  // Startpunkt: Node-Position MIT Transform (wo der Knoten visuell ist)
+  const [sx, sy] = t.apply([node.x, node.y]);
+  
+  // Panel-Position in Bildschirm-Koordinaten
+  const panelRect = detailPanelEl.getBoundingClientRect();
+  
+  // Zielpunkt: Mitte des sichtbaren Panel-Inhalts (vertikal)
+  // Horizontal: Nimm die Kante, die dem Knoten am nächsten ist (Links oder Rechts) [SF]
+  const distToLeft = Math.abs(sx - panelRect.left);
+  const distToRight = Math.abs(sx - panelRect.right);
+  const panelTargetX = (distToLeft < distToRight) ? panelRect.left : panelRect.right;
+  
+  // Verwende clientHeight, damit Schatten/Überläufe die Mitte nicht verschieben [SF]
+  const panelCenterY = panelRect.top + (detailPanelEl.clientHeight / 2);
+  
+  // Umrechnung von Bildschirm zu SVG-Viewport-Koordinaten mittels CTM (Coordinate Transform Matrix)
+  // Das ist robuster als einfache Subtraktion, falls SVG skaliert ist oder viewBox hat.
+  let ax = panelTargetX;
+  let ay = panelCenterY;
+
+  // Versuche, SVG-Punkt Transformation zu nutzen
+  try {
+    const pt = svgNode.createSVGPoint();
+    pt.x = panelTargetX;
+    pt.y = panelCenterY;
+    // Transformiere Screen-Koordinaten in SVG-Koordinaten
+    const svgP = pt.matrixTransform(svgNode.getScreenCTM().inverse());
+    ax = svgP.x;
+    ay = svgP.y;
+  } catch (e) {
+    // Fallback falls matrixTransform fehlschlägt (z.B. SVG nicht im DOM)
+    const svgRect = svgNode.getBoundingClientRect();
+    ax = panelTargetX - svgRect.left;
+    ay = panelCenterY - svgRect.top;
+  }
+  
+  // Debug-Logs nur im Debug-Modus [SF]
+  if (debugMode) {
+    console.log('=== Hover Detail Line Debug ===');
+    console.log('Node (data coords):', { x: node.x, y: node.y });
+    console.log('Transform:', { k: t.k, x: t.x, y: t.y });
+    console.log('Node (transformed):', t.apply([node.x, node.y]));
+    console.log('Panel (screen absolute):', { 
+      left: panelRect.left, 
+      top: panelRect.top, 
+      right: panelRect.right, 
+      bottom: panelRect.bottom,
+      width: panelRect.width,
+      height: panelRect.height,
+      clientHeight: detailPanelEl.clientHeight
+    });
+    console.log('Target Point (screen absolute):', { x: panelTargetX, y: panelCenterY });
+    console.log('Line Start (SVG coords):', { x: sx, y: sy });
+    console.log('Line End (SVG coords calculated via CTM):', { x: ax, y: ay });
+  }
+
+  const lineSel = d3.select(detailLineEl);
+  lineSel
+    .attr('x1', sx)
+    .attr('y1', sy)
+    .attr('x2', ax)
+    .attr('y2', ay);
+}
+
+function setNodeHighlight(node) {
+  hoverDimActive = true;
+  document.body.classList.add('hover-dim-active');
+  d3.selectAll(SVG_ID + ' .node').classed('is-hover-target', d => d === node);
+}
+
+function activateHoverDetail(node, event, svgSel) {
+  if (isDragging) return; // Kein Panel während Drag [SF]
+  const dom = ensureHoverDetailDom();
+  if (!dom) return;
+
+  hoverDetailNode = node;
+  
+  // Highlight erneut sicherstellen (falls Funktion isoliert aufgerufen)
+  setNodeHighlight(node);
+
+  // Positionierung: Wenn Knoten links ist (< 350px), Panel nach rechts schieben [SF]
+  const t = currentZoomTransform || d3.zoomIdentity;
+  const [nx] = t.apply([node.x, node.y]);
+  
+  // Reset styles first to avoid conflicts
+  detailPanelEl.style.left = '';
+  detailPanelEl.style.right = '';
+  detailPanelEl.style.transformOrigin = '';
+  
+  if (nx < 350) {
+    // Knoten links -> Panel rechts
+    detailPanelEl.style.left = 'auto';
+    detailPanelEl.style.right = '16px';
+    detailPanelEl.style.transformOrigin = 'right center';
+    // Animation-Richtung anpassen (optional, wir nutzen translateX im CSS, das muss passen)
+    // CSS transformiert translateX(-16px) -> 0. Das wirkt von links kommend.
+    // Wenn rechts, wäre translateX(16px) -> 0 besser? Wir lassen es erstmal so.
+  } else {
+    // Knoten rechts -> Panel links (Standard)
+    detailPanelEl.style.left = '16px';
+    detailPanelEl.style.right = 'auto';
+    detailPanelEl.style.transformOrigin = 'left center';
+  }
+
+  // Panel zuerst sichtbar machen (aber noch transparent durch CSS)
+  detailPanelEl.style.visibility = 'visible';
+  
+  // Kurz warten, damit Browser Panel-Position berechnen kann
+  requestAnimationFrame(() => {
+    // Linie zum Panel-Endpunkt zeichnen
+    updateHoverDetailLinePosition(node, event, svgSel);
+    d3.select(detailLineEl).classed('visible', true);
+    
+    // Panel-Animation starten (leicht verzögert nach Linie)
+    if (hoverPanelTimeout) {
+      clearTimeout(hoverPanelTimeout);
+    }
+    hoverPanelTimeout = setTimeout(() => {
+      if (hoverDetailNode !== node) return;
+      detailPanelEl.classList.add('visible');
+    }, 200);
+  });
+}
+
+function deactivateHoverDetail() {
+  hoverDetailNode = null;
+  hoverDimActive = false;
+  if (hoverDimTimeout) {
+    clearTimeout(hoverDimTimeout);
+    hoverDimTimeout = null;
+  }
+  if (hoverHideTimeout) {
+    clearTimeout(hoverHideTimeout);
+    hoverHideTimeout = null;
+  }
+  if (hoverPanelTimeout) {
+    clearTimeout(hoverPanelTimeout);
+    hoverPanelTimeout = null;
+  }
+
+  document.body.classList.remove('hover-dim-active');
+
+  const nodesSel = d3.selectAll(SVG_ID + ' .node');
+  nodesSel.classed('is-hover-target', false);
+
+  if (detailPanelEl) {
+    detailPanelEl.classList.remove('visible');
+    detailPanelEl.style.visibility = '';
+  }
+  if (detailLineEl) {
+    d3.select(detailLineEl).classed('visible', false);
+  }
+}
+
 // colorToTransparent ist jetzt aus ui-helpers.js importiert [DRY]
 
 
@@ -796,8 +1031,9 @@ function updateAttributeCircles() {
     });
   };
   
-  // Alle bestehenden Attribut-Kreise entfernen
+  // Alle bestehenden Attribut-Kreise und Hit-Areas entfernen
   nodes.selectAll('circle.attribute-circle').remove();
+  nodes.selectAll('circle.attribute-hit-area').remove();
   
   // Wenn Attribute ausgeblendet sind, nur die Kreise entfernen und den Rest überspringen
   if (!attributesVisible) {
@@ -890,6 +1126,16 @@ function updateAttributeCircles() {
         if (additionalRings > 0) {
           outerMostRadius += additionalRings * (circleGap + circleWidth);
         }
+        
+        // Unsichtbare Hit-Area um den gesamten Attributbereich, um Hover-Lücken zwischen Ringen zu vermeiden [SF]
+        // Radius leicht größer als der äußerste Ring
+        const hitRadius = outerMostRadius + circleGap;
+        nodeGroup.insert('circle', 'circle.node-circle')
+          .attr('r', hitRadius)
+          .attr('class', 'attribute-hit-area')
+          .style('fill', 'transparent')
+          .style('stroke', 'none')
+          .style('pointer-events', 'all');
       }
       
       // Füge zusätzliche Attribute-Kreise ab dem zweiten Attribut hinzu [SF]
@@ -910,13 +1156,22 @@ function updateAttributeCircles() {
           .style("stroke", attrColor)
           .style("stroke-width", circleWidth);
       });
+      
+      // Label-Position basierend auf dem äußersten Radius anpassen [SF]
+      const labelOffset = 3;
+      const labelPos = outerMostRadius + labelOffset;
+      nodeGroup.select('text.label')
+        .attr('x', labelPos);
     }
     
-    // Label-Position basierend auf dem äußersten Radius anpassen [SF]
-    const labelOffset = 3;
-    const labelPos = outerMostRadius + labelOffset;
-    nodeGroup.select('text.label')
-      .attr('x', labelPos);
+    // Wenn es keine aktiven Attribute gibt, setze den Knoten auf Standard zurück
+    else {
+      nodeGroup.select('circle.node-circle')
+        .style('fill', d => getNodeFillByLevel(d))
+        .style('stroke', null)
+        .style('stroke-width', nodeStrokeWidth)
+        .style('opacity', 1);
+    }
   });
   
   // Wenn es aktive Attribute gibt, wende Transparenz auf alle Knoten ohne Attribute an
@@ -3323,6 +3578,24 @@ function renderGraph(sub) {
   if (defs.empty()) {
     defs = svg.append("defs");
   }
+
+  // Shadow-Filter für Hover-Linie [SF]
+  let lineShadow = defs.select("filter#line-shadow");
+  if (lineShadow.empty()) {
+    lineShadow = defs.append("filter")
+      .attr("id", "line-shadow")
+      .attr("x", "-50%")
+      .attr("y", "-50%")
+      .attr("width", "200%")
+      .attr("height", "200%");
+      
+    lineShadow.append("feDropShadow")
+      .attr("dx", "0")
+      .attr("dy", "2")
+      .attr("stdDeviation", "3")
+      .attr("flood-color", "rgba(0,0,0,0.3)");
+  }
+
   const arrowLen = getGraphParam('arrowSize');
   const linkStroke = getGraphParam('linkStrokeWidth');
   let arrow = defs.select("marker#arrow");
@@ -3634,20 +3907,65 @@ function renderGraph(sub) {
     }
   }
 
-  // Tooltips für Knoten
-  node.on('mousemove', (event, d) => {
+  // Hover-Detail-Verhalten für Knoten
+  node.on('mouseover', (event, d) => {
+    if (isDragging) return; // Kein Hover während Drag [SF]
     if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
-    const [mx, my] = d3.pointer(event, svg.node());
-    const p = currentZoomTransform ? currentZoomTransform.invert([mx, my]) : [mx, my];
+
+    // 1. Falls wir zurückkommen (Hide-Timer läuft), diesen stoppen
+    if (hoverHideTimeout) {
+      clearTimeout(hoverHideTimeout);
+      hoverHideTimeout = null;
+    }
+
+    // 2. Wenn wir bereits auf diesem Knoten sind...
+    if (hoverDetailNode === d) {
+      // ...und er bereits aktiv ist: Nichts tun.
+      if (hoverDimActive) return;
+      
+      // ...und der Aufbau-Timer noch läuft: Nichts tun (weiterlaufen lassen).
+      // Das verhindert Resets durch Bubbling-Events von Kind-Elementen (Ringe).
+      if (hoverDimTimeout) return;
+    }
+
+    // 3. Neuer Knoten oder Neustart erforderlich
     
-    const personId = String(d.id);
-    const nodeLabel = getDisplayLabel(d);
-    const clusters = clustersAtPoint(p);
+    // Laufenden Aufbau eines ANDEREN Knotens abbrechen
+    if (hoverDimTimeout) {
+      clearTimeout(hoverDimTimeout);
+      hoverDimTimeout = null;
+    }
+
+    hoverDetailNode = d;
+    prepareHoverDetailPanel(d);
     
-    const lines = buildPersonTooltipLines(personId, nodeLabel, clusters);
-    showTooltip(event.clientX, event.clientY, lines);
+    hoverDimTimeout = setTimeout(() => {
+      activateHoverDetail(d, event, svg);
+    }, 500);
   });
-  node.on('mouseleave', hideTooltip);
+
+  node.on('mousemove', (event, d) => {
+    if (!hoverDetailNode || hoverDetailNode !== d) return;
+    if (!hoverDimActive) return;
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    updateHoverDetailLinePosition(d, event, svg);
+  });
+
+  node.on('mouseleave', (event, d) => {
+    if (hoverDetailNode !== d) return;
+
+    if (hoverDimTimeout) {
+      clearTimeout(hoverDimTimeout);
+      hoverDimTimeout = null;
+    }
+    if (hoverHideTimeout) {
+      clearTimeout(hoverHideTimeout);
+    }
+
+    hoverHideTimeout = setTimeout(() => {
+      deactivateHoverDetail();
+    }, 3000);
+  });
   // Context menu: hide subtree and (if applicable) remove as Root
   node.on('contextmenu', (event, d) => {
     if (event && typeof event.preventDefault === 'function') event.preventDefault();
@@ -3889,6 +4207,8 @@ function renderGraph(sub) {
   // Drag-Handler
   const drag = d3.drag()
     .on("start", (event, d) => {
+      isDragging = true; // [SF]
+      deactivateHoverDetail(); // Hover ausschalten beim Starten des Drags
       if (!event.active) simulation.alphaTarget(0.3).restart();
       d.fx = d.x; d.fy = d.y;
     })
@@ -3896,6 +4216,7 @@ function renderGraph(sub) {
       d.fx = event.x; d.fy = event.y;
     })
     .on("end", (event, d) => {
+      isDragging = false; // [SF]
       if (!event.active) simulation.alphaTarget(0);
       d.fx = null; d.fy = null;
     });
@@ -3959,10 +4280,9 @@ function renderGraph(sub) {
     }
   }
 
-  // Tooltips für Cluster-Überlappungen
-  ensureTooltip();
-  svg.on('mousemove', event => handleClusterHover(event, svg));
-  svg.on('mouseleave', hideTooltip);
+  // Tooltips für Cluster-Überlappungen deaktiviert (Hover-Detail-Panel übernimmt Kontextanzeige)
+  // svg.on('mousemove', event => handleClusterHover(event, svg));
+  // svg.on('mouseleave', hideTooltip);
   
   // Simulation global speichern und Layout anwenden
   currentSimulation = simulation;
@@ -6458,10 +6778,14 @@ window.addEventListener("DOMContentLoaded", async () => {
 function fitToViewport() {
   const svgEl = document.querySelector(SVG_ID);
   if (!svgEl || !zoomBehavior) return;
-  const g = svgEl.querySelector('g');
+  
+  // WICHTIG: Explizit den Zoom-Layer wählen, nicht das erste 'g' (das ist jetzt hover-detail-layer) [SF]
+  const g = svgEl.querySelector('g.zoom-layer');
   if (!g) return;
+  
   const bbox = g.getBBox();
   if (!isFinite(bbox.width) || !isFinite(bbox.height) || bbox.width === 0 || bbox.height === 0) return;
+  
   // Use SVG viewBox units for stable centering
   const pad = 20; // in viewBox units
   const availW = Math.max(1, WIDTH - pad * 2);

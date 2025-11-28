@@ -172,6 +172,120 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 #legendPane { border-left: 1px solid var(--panel-border); padding: 0px; overflow: auto; background: var(--panel-bg); color: var(--text); width: 320px; }
 #legendPane h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-muted); }
 
+/* Hover-Detail Panel und Dimming */
+#hoverDetailPanel {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 260px;
+  max-height: calc(100% - 32px);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+  padding: 12px 14px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(-16px);
+  pointer-events: none;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  z-index: 10;
+}
+
+#hoverDetailPanel.visible {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* Name hervorheben [SF] */
+.detail-name {
+  background-color: rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+  /* Randlos machen: Negative Margins kompensieren Panel-Padding (12px 14px) */
+  margin: -12px -14px 0 -14px; /* Bottom Margin 0 für nahtlosen Übergang [SF] */
+  width: calc(100% + 28px);
+  padding: 10px 14px; /* Inhalt wieder einrücken, vertikal kompakt */
+  border-radius: 0;
+}
+
+/* Titel hervorheben [SF] */
+.detail-title {
+  background-color: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+  /* Randlos horizontal */
+  margin: 4px -14px 2px -14px;
+  width: calc(100% + 28px);
+  padding: 4px 14px; /* Inhalt einrücken, vertikal kompakt */
+  border-radius: 0;
+  color: var(--text-strong);
+}
+
+/* Wenn Titel direkt auf Name folgt, Abstand entfernen */
+.detail-name + .detail-title {
+  margin-top: 0;
+}
+
+#hoverDetailPanel > * {
+  transform: translateX(-12px);
+  opacity: 0;
+}
+
+#hoverDetailPanel.visible > * {
+  animation: hoverPanelRowIn 0.45s ease forwards;
+}
+
+#hoverDetailPanel.visible > *:nth-child(1) { animation-delay: 0.00s; }
+#hoverDetailPanel.visible > *:nth-child(2) { animation-delay: 0.10s; }
+#hoverDetailPanel.visible > *:nth-child(3) { animation-delay: 0.20s; }
+#hoverDetailPanel.visible > *:nth-child(4) { animation-delay: 0.30s; }
+#hoverDetailPanel.visible > *:nth-child(5) { animation-delay: 0.40s; }
+#hoverDetailPanel.visible > *:nth-child(6) { animation-delay: 0.50s; }
+#hoverDetailPanel.visible > *:nth-child(7) { animation-delay: 0.60s; }
+#hoverDetailPanel.visible > *:nth-child(8) { animation-delay: 0.70s; }
+#hoverDetailPanel.visible > *:nth-child(9) { animation-delay: 0.80s; }
+#hoverDetailPanel.visible > *:nth-child(10) { animation-delay: 0.90s; }
+#hoverDetailPanel.visible > *:nth-child(n+11) { animation-delay: 1.00s; }
+
+@keyframes hoverPanelRowIn {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Dimmen des gesamten Graphen ausser des aktiven Knotens */
+body.hover-dim-active .node-circle,
+body.hover-dim-active .node .label,
+body.hover-dim-active .link,
+body.hover-dim-active .cluster {
+  opacity: 0.15 !important;
+  transition: opacity 0.3s ease;
+}
+
+body.hover-dim-active .node.is-hover-target .node-circle,
+body.hover-dim-active .node.is-hover-target .label {
+  opacity: 1 !important;
+  display: block !important; /* Erzwinge Anzeige auch wenn Labels ausgeblendet sind [SF] */
+}
+
+.hover-detail-line {
+  stroke: var(--panel-border);
+  stroke-width: 2px;
+  stroke-opacity: 0;
+  pointer-events: none;
+  transition: stroke-opacity 0.3s ease;
+  filter: url(#line-shadow); /* Shadow filter from SVG defs [SF] */
+}
+
+.hover-detail-line.visible {
+  stroke-opacity: 0.5;
+}
+
 /* Kollabierbare Legenden - Neues Design */
 .legend-section { margin-bottom: 0px; }
 .legend-section:last-child { margin-bottom: 0; }
@@ -1885,18 +1999,23 @@ body > .combo-list li {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 8px 16px;
-  background: var(--panel-bg);
-  border-bottom: 1px solid var(--panel-border);
+  width: 100%; /* Neue Zeile im Header [SF] */
+  margin-top: 12px; /* Abstand zu den oberen Controls [SF] */
+  padding: 12px 0 0 0; /* Innenabstand oben */
+  border-top: 1px solid var(--panel-border); /* Trennlinie oben [SF] */
+  background: transparent; /* Erbt Header-Hintergrund */
+  border-bottom: none; /* Kein unterer Rand mehr nötig [SF] */
   align-items: center;
   font-size: 12px;
+  height: auto;
 }
 
 .force-slider-group {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 100px;
+  width: 150px; /* Feste Breite für einheitliches Raster [SF] */
+  flex: 0 0 auto; /* Nicht wachsen/schrumpfen, wie Header-Controls [SF] */
 }
 
 .force-slider-group label {
@@ -1963,7 +2082,6 @@ body > .combo-list li {
   cursor: pointer;
   font-size: 11px;
   transition: all 0.2s ease;
-  margin-left: auto;
 }
 
 .reset-forces-btn:hover {
@@ -1976,8 +2094,5 @@ body > .combo-list li {
 }
 
 .toolbar-separator {
-  width: 1px;
-  height: 32px;
-  background: var(--panel-border);
-  margin: 0 4px;
+  display: none; /* Separator ausgeblendet [SF] */
 }
