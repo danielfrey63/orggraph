@@ -147,27 +147,6 @@ function getPseudoOrgLabel(originalLabel, level) {
   const levelKey = `organizationalUnits${level}`;
   const orgList = pseudoData[levelKey];
   
-  if (!orgList?.length) {
-    // Fallback: höchstes verfügbares Level verwenden
-    const availableLevels = Object.keys(pseudoData)
-      .filter(k => k.startsWith('organizationalUnits'))
-      .map(k => parseInt(k.replace('organizationalUnits', '')))
-      .sort((a, b) => b - a);
-    
-    if (availableLevels.length === 0) return originalLabel;
-    
-    const fallbackLevel = availableLevels.find(l => l <= level) ?? availableLevels[0];
-    const fallbackKey = `organizationalUnits${fallbackLevel}`;
-    const fallbackList = pseudoData[fallbackKey];
-    if (!fallbackList?.length) return originalLabel;
-    
-    const idx = pseudoOrgIndices.get(fallbackLevel) || 0;
-    const pseudoOrg = fallbackList[idx % fallbackList.length];
-    pseudoOrgIndices.set(fallbackLevel, idx + 1);
-    pseudoOrgMapping.set(key, pseudoOrg.name);
-    return pseudoOrg.name;
-  }
-  
   // Neues Mapping erstellen
   const idx = pseudoOrgIndices.get(level) || 0;
   const pseudoOrg = orgList[idx % orgList.length];
@@ -3554,6 +3533,10 @@ async function transitionGraph(oldSub, newSub, roots, transitionId) {
   renderGraph({ nodes: newSub.nodes, links: finalLinks });
   Logger.log(`[Timing] End: transitionGraph-${transitionId}.total`);
   
+  // Signal: Graph-Aufbau abgeschlossen [SF]
+  const graphEl = document.querySelector(SVG_ID);
+  if (graphEl) graphEl.dataset.ready = 'true';
+  
   // Bei kontinuierlicher Simulation: Fit nach Animation + Delay auslösen [SF]
   if (pendingFitToViewport && continuousSimulation) {
     setTimeout(() => {
@@ -4307,6 +4290,10 @@ function applyFromUI(triggerSource = 'unknown', callStack = false) {
   Logger.log(`[Timing] Start: applyFromUI.${triggerSource}`);
   if (!raw || !raw.links || !raw.nodes) return;
   if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
+  
+  // Signal: Graph-Aufbau beginnt [SF]
+  const graphEl = document.querySelector(SVG_ID);
+  if (graphEl) graphEl.dataset.ready = 'false';
   
   Logger.log(`[UI] applyFromUI triggered by: ${triggerSource}`);
   if (callStack && debugMode) console.trace();
