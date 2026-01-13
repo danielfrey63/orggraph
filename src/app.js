@@ -1213,9 +1213,15 @@ function updateFooterStats(subgraph) {
   }
   
   // Update visible stats (from subgraph if provided)
+  // Zähle nur Personen-Knoten und Person→Person-Links, da nur diese gerendert werden [SF]
   if (subgraph) {
-    document.getElementById('stats-nodes-visible').textContent = subgraph.nodes.length;
-    document.getElementById('stats-links-visible').textContent = subgraph.links.length;
+    const personNodes = subgraph.nodes.filter(n => byId.get(String(n.id))?.type === 'person');
+    const personIds = new Set(personNodes.map(n => String(n.id)));
+    const personLinks = subgraph.links.filter(l => 
+      personIds.has(idOf(l.source)) && personIds.has(idOf(l.target))
+    );
+    document.getElementById('stats-nodes-visible').textContent = personNodes.length;
+    document.getElementById('stats-links-visible').textContent = personLinks.length;
   } else {
     document.getElementById('stats-nodes-visible').textContent = 0;
     document.getElementById('stats-links-visible').textContent = 0;
