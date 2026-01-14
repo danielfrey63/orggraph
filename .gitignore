@@ -4,14 +4,21 @@ env*.json
 !env.example.json
 attributes
 helpers
-
-.windsurf
-.kluster
-.vscode
-
+coverage
+coverage-report
+monocart-report
+playwright-report
+assets
+test-results
 tmp
+temp
 node_modules
 dist
 trace
 
-.windsurf/rules/kluster-code-verify.md
+.windsurf
+.kluster
+.vscode
+.automaker
+.trae
+.auto-claude

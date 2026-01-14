@@ -147,6 +147,27 @@ function getPseudoOrgLabel(originalLabel, level) {
   const levelKey = `organizationalUnits${level}`;
   const orgList = pseudoData[levelKey];
   
+  if (!orgList?.length) {
+    // Fallback: höchstes verfügbares Level verwenden
+    const availableLevels = Object.keys(pseudoData)
+      .filter(k => k.startsWith('organizationalUnits'))
+      .map(k => parseInt(k.replace('organizationalUnits', '')))
+      .sort((a, b) => b - a);
+    
+    if (availableLevels.length === 0) return originalLabel;
+    
+    const fallbackLevel = availableLevels.find(l => l <= level) ?? availableLevels[0];
+    const fallbackKey = `organizationalUnits${fallbackLevel}`;
+    const fallbackList = pseudoData[fallbackKey];
+    if (!fallbackList?.length) return originalLabel;
+    
+    const idx = pseudoOrgIndices.get(fallbackLevel) || 0;
+    const pseudoOrg = fallbackList[idx % fallbackList.length];
+    pseudoOrgIndices.set(fallbackLevel, idx + 1);
+    pseudoOrgMapping.set(key, pseudoOrg.name);
+    return pseudoOrg.name;
+  }
+  
   // Neues Mapping erstellen
   const idx = pseudoOrgIndices.get(level) || 0;
   const pseudoOrg = orgList[idx % orgList.length];
@@ -1325,9 +1346,7 @@ async function loadEnvConfig() {
   // Wir loggen "Start" nachträglich, falls debugMode aktiviert wird.
   
   try {
-    const useExample = import.meta.env.VITE_USE_EXAMPLE_ENV === 'true';
-    const envFile = useExample ? './env.example.json' : './env.json';
-    const res = await fetch(envFile, { cache: "no-store" });
+    const res = await fetch("./env.json", { cache: "no-store" });
     if (res.ok) {
       envConfig = await res.json();
       
@@ -1340,11 +1359,11 @@ async function loadEnvConfig() {
       // Graph-Parameter aus ENV initialisieren [SF]
       initGraphParamsFromEnv(envConfig);
       
-      Logger.log(`[Init] ${envFile} loaded:`, envConfig);
+      Logger.log('[Init] env.json loaded:', envConfig);
       return true;
     } else {
       // Keine gültige env.json gefunden (HTTP-Fehler)
-      console.warn(`${envFile} konnte nicht geladen werden:`, res.status, res.statusText);
+      console.warn('env.json konnte nicht geladen werden:', res.status, res.statusText);
       setStatus('Keine gültige env.json gefunden – manuelles Laden über den Status möglich.');
       showTemporaryNotification('env.json konnte nicht geladen werden – bitte Datei prüfen oder manuell Daten laden.', 5000);
     }
@@ -3535,10 +3554,6 @@ async function transitionGraph(oldSub, newSub, roots, transitionId) {
   renderGraph({ nodes: newSub.nodes, links: finalLinks });
   Logger.log(`[Timing] End: transitionGraph-${transitionId}.total`);
   
-  // Signal: Graph-Aufbau abgeschlossen [SF]
-  const graphEl = document.querySelector(SVG_ID);
-  if (graphEl) graphEl.dataset.ready = 'true';
-  
   // Bei kontinuierlicher Simulation: Fit nach Animation + Delay auslösen [SF]
   if (pendingFitToViewport && continuousSimulation) {
     setTimeout(() => {
@@ -4292,10 +4307,6 @@ function applyFromUI(triggerSource = 'unknown', callStack = false) {
   Logger.log(`[Timing] Start: applyFromUI.${triggerSource}`);
   if (!raw || !raw.links || !raw.nodes) return;
   if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
-  
-  // Signal: Graph-Aufbau beginnt [SF]
-  const graphEl = document.querySelector(SVG_ID);
-  if (graphEl) graphEl.dataset.ready = 'false';
   
   Logger.log(`[UI] applyFromUI triggered by: ${triggerSource}`);
   if (callStack && debugMode) console.trace();

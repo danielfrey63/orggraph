@@ -15,10 +15,12 @@ let envConfig = null;
  */
 export async function loadEnvConfig() {
   try {
-    const res = await fetch('./env.json', { cache: 'no-store' });
+    const useExample = import.meta.env.VITE_USE_EXAMPLE_ENV === 'true';
+    const envFile = useExample ? './env.example.json' : './env.json';
+    const res = await fetch(envFile, { cache: 'no-store' });
     if (res.ok) {
       envConfig = await res.json();
-      Logger.log('[Config] Umgebungskonfiguration geladen');
+      Logger.log(`[Config] Umgebungskonfiguration geladen von ${envFile}`);
       return envConfig;
     }
   } catch (e) {

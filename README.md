@@ -128,3 +128,68 @@ Hinweis: Das Browser-Kontextmenü ist global unterdrückt, damit die App-eigenen
 - UI/Styles: `index.html`, `style.css`
 - Logik/Rendering: `app.js`
 - Transformation: `transform.js`
+
+## Testing
+
+Die App verwendet Playwright für End-to-End-Tests mit Coverage-Tracking.
+
+### Voraussetzungen
+
+```bash
+npm install
+```
+
+### Tests ausführen
+
+| Befehl | Beschreibung |
+|--------|--------------|
+| `npm run test:coverage` | Alle Tests mit Coverage-Report |
+| `npm run test:ui` | Playwright UI Mode (interaktiv) |
+| `npx playwright test [name]` | Einzelnen Test ausführen (z.B. `person-search`) |
+
+### Tests aufzeichnen
+
+1. **Dev-Server starten** (Terminal 1):
+   ```bash
+   npm run dev
+   ```
+
+2. **Test-Recorder starten** (Terminal 2):
+   ```bash
+   npm run test:record
+   ```
+
+3. **Im Recorder**:
+   - Interaktionen durchführen → Code wird generiert
+   - Code kopieren
+   - **Clear** klicken für nächsten Test
+   - Wiederholen...
+
+4. **Neuen Test erstellen**:
+   - Kopiere `tests/_template.spec.js` → `tests/[feature].spec.js`
+   - Füge aufgezeichneten Code ein
+   - Ersetze `page.goto('http://localhost:5173/')` mit `page.goto('/')`
+
+### Test-Struktur
+
+```
+tests/
+├── fixtures.js          # Coverage-Fixture (immer importieren!)
+├── _template.spec.js    # Vorlage für neue Tests
+├── coverage.spec.js     # Basis-Coverage-Test
+└── person-search.spec.js # Feature-spezifische Tests
+```
+
+### Coverage-Reports
+
+Nach `npm run test:coverage`:
+- **HTML-Report**: `coverage/index.html` (V8 Coverage)
+- **LCOV-Report**: `coverage/lcov.info` (für VS Code Gutter)
+- **Test-Report**: `coverage-report/index.html`
+
+Für Coverage-Anzeige im VS Code Editor die Extension "Coverage Gutters" installieren und in Settings konfigurieren:
+```json
+{
+  "coverage-gutters.coverageFileNames": ["coverage/lcov.info"]
+}
+```
