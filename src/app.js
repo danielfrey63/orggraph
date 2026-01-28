@@ -4140,6 +4140,9 @@ function renderGraph(sub) {
   node.call(drag);
 
   // Doppelklick auf Knoten setzt neues Zentrum
+  node.on('click', (event) => {
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+  });
   node.on('dblclick', (event, d) => {
     event.stopPropagation(); // Verhindert Zoom-Konflikt
     
@@ -4166,6 +4169,16 @@ function renderGraph(sub) {
       updateDebugZoomDisplay();
     });
   svg.call(zoomBehavior);
+  svg.on('click', (event) => {
+    if (isDragging) return;
+    const target = event && event.target;
+    if (target && typeof target.closest === 'function') {
+      if (target.closest('g.node')) return;
+    }
+    if (hoverDetailNode) {
+      deactivateHoverDetail();
+    }
+  });
   // Label-Sichtbarkeitsklassen setzen [SF]
   svg.classed('labels-hidden', labelsVisible === 'none');
   svg.classed('labels-attributes-only', labelsVisible === 'attributes');
