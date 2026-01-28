@@ -18,6 +18,9 @@ import { createSimulation as createSimulationUtil } from './graph/simulation.js'
 import { getChevronSVG, getEyeSVG, getSaveSVG, getDownloadSVG } from './ui/icons.js';
 import { colorToTransparent, COLOR_PALETTES, getCurrentPalette } from './ui/colors.js';
 
+// Config [SF][DRY]
+import { buildConfig, useExampleData } from './config/env.js';
+
 let raw = { nodes: [], links: [], persons: [], orgs: []};
 let personAttributes = new Map(); // Map von ID/Email zu Attribut-Maps
 let attributeTypes = new Map(); // Map von Attributnamen zu Farbwerten
@@ -48,7 +51,6 @@ let pendingFitToViewport = false; // Fit nach Simulation-Ende ausstehend
 let isDragging = false; // Dragging-Zustand [SF]
 let legendMenuEl = null;
 let nodeMenuEl = null;
-let simAllById = new Map();
 let parentOf = new Map();
 let orgParent = new Map();      // childOrgId -> parentOrgId
 let orgChildren = new Map();    // parentOrgId -> Set(childOrgId)
@@ -234,9 +236,6 @@ function refreshAllLabels() {
       input.value = getDisplayLabel(node);
     }
   }
-  
-  // Tooltip ausblenden (wird beim nächsten Hover neu generiert)
-  _hideTooltip();
   
   Logger.log('[Pseudo] Labels aktualisiert, enabled:', pseudonymizationEnabled);
 }
@@ -487,34 +486,6 @@ function clustersAtPoint(p) {
 
 // computeClusterPolygon ist jetzt aus clusters.js importiert [DRY]
 
-// Tooltip helpers for overlapping clusters (derzeit deaktiviert)
-let tooltipEl = null;
-function _ensureTooltip() {
-  if (tooltipEl) return;
-  tooltipEl = document.createElement('div');
-  tooltipEl.style.position = 'fixed';
-  tooltipEl.style.pointerEvents = 'none';
-  tooltipEl.style.background = 'rgba(17,17,17,0.9)';
-  tooltipEl.style.color = '#fff';
-  tooltipEl.style.fontSize = '12px';
-  tooltipEl.style.padding = '10px 12px';
-  tooltipEl.style.borderRadius = '6px';
-  tooltipEl.style.zIndex = 1000;
-  tooltipEl.style.whiteSpace = 'pre';
-  tooltipEl.style.display = 'none';
-  tooltipEl.style.maxWidth = '400px';
-  tooltipEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-  tooltipEl.style.lineHeight = '1.4';
-  document.body.appendChild(tooltipEl);
-}
-function _showTooltip(x, y, lines) {
-  tooltipEl.textContent = lines.join('\n');
-  tooltipEl.style.left = `${x+12}px`;
-  tooltipEl.style.top = `${y+12}px`;
-  tooltipEl.style.display = 'block';
-}
-function _hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
-
 /**
  * Zeigt Zoom-Level im Debug-Modus in der Statusleiste an [SF]
  */
@@ -584,53 +555,6 @@ function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
   }
   
   return lines;
-}
-
-/**
- * Tooltips für Cluster-Hover (derzeit deaktiviert)
- */
-function _handleClusterHover(event, svgSel) {
-  if (!currentZoomTransform) { 
-    _hideTooltip(); 
-    return; 
-  }
-  
-  const [mx, my] = d3.pointer(event, svgSel.node());
-  const p = currentZoomTransform.invert([mx, my]);
-  
-  const r = getGraphParam('nodeRadius') + 6;
-  let nodeLabel = null;
-  let personId = null;
-  
-  for (const nd of simAllById.values()) {
-    if (nd.x === null || nd.x === undefined || nd.y === null || nd.y === undefined) continue;
-    const dx = p[0] - nd.x, dy = p[1] - nd.y;
-    if ((dx*dx + dy*dy) <= r*r) { 
-      nodeLabel = getDisplayLabel(nd);
-      personId = String(nd.id);
-      break; 
-    }
-  }
-  
-  // Verwende die sortierte clustersAtPoint Funktion
-  const hits = clustersAtPoint(p);
-  
-  let lines = [];
-  
-  // Person information or cluster information
-  if (nodeLabel) {
-    lines = buildPersonTooltipLines(personId, nodeLabel, hits);
-  } else if (hits.length) {
-    // Display cluster information with header
-    lines.push('🏢 OE-Bereiche:');
-    hits.forEach(hit => lines.push(`  • ${hit}`));
-  }
-  
-  if (lines.length) {
-    _showTooltip(event.clientX, event.clientY, lines);
-  } else {
-    _hideTooltip();
-  }
 }
 
 // Color mapping for OEs (harmonious palette)
@@ -1320,43 +1244,46 @@ function applyLoadedDataObject(data, sourceName) {
   renderFullView(sourceName);
 }
 
+/**
+ * Lädt Konfiguration mit Priorität: ENV > JSON > Defaults [SF][DRY]
+ * @returns {Promise<boolean>} true wenn erfolgreich
+ */
 async function loadEnvConfig() {
-  // Verwende Logger hier noch nicht, da debugMode möglicherweise noch false ist, aber wir wollen es erzwingen, wenn die Config es sagt.
-  // Wir loggen "Start" nachträglich, falls debugMode aktiviert wird.
-  
   try {
-    const useExample = import.meta.env.VITE_USE_EXAMPLE_ENV === 'true';
+    const useExample = useExampleData();
     const envFile = useExample ? './env.example.json' : './env.json';
-    const res = await fetch(envFile, { cache: "no-store" });
+    
+    let jsonConfig = {};
+    const res = await fetch(envFile, { cache: 'no-store' });
     if (res.ok) {
-      envConfig = await res.json();
-      
-      // Update debug mode from config [SF]
-      if (typeof envConfig.TOOLBAR_DEBUG_ACTIVE === 'boolean') {
-        debugMode = envConfig.TOOLBAR_DEBUG_ACTIVE;
-        setDebugMode(debugMode); // Sync Logger debug mode [SF]
-      }
-      
-      // Graph-Parameter aus ENV initialisieren [SF]
-      initGraphParamsFromEnv(envConfig);
-      
-      Logger.log(`[Init] ${envFile} loaded:`, envConfig);
-      return true;
+      jsonConfig = await res.json();
+      Logger.log(`[Config] JSON geladen von ${envFile}`);
     } else {
-      // Keine gültige env.json gefunden (HTTP-Fehler)
-      console.warn(`${envFile} konnte nicht geladen werden:`, res.status, res.statusText);
-      setStatus('Keine gültige env.json gefunden – manuelles Laden über den Status möglich.');
-      showTemporaryNotification('env.json konnte nicht geladen werden – bitte Datei prüfen oder manuell Daten laden.', 5000);
+      console.warn(`[Config] ${envFile} nicht gefunden (${res.status}) - nutze Defaults/ENV`);
     }
-  } catch (_e) {
-    // Fehler beim Laden oder Parsen von env.json
-    console.error('Fehler beim Laden von env.json:', _e);
-    setStatus('Fehler beim Laden von env.json – manuelles Laden über den Status möglich.');
-    showTemporaryNotification('env.json ist ungültig oder konnte nicht gelesen werden (z.B. JSON-Syntaxfehler). Bitte Datei prüfen.', 5000);
+    
+    // Merge: ENV > JSON > Defaults
+    envConfig = buildConfig(jsonConfig);
+    
+    // Debug-Mode initialisieren
+    if (typeof envConfig.TOOLBAR_DEBUG_ACTIVE === 'boolean') {
+      debugMode = envConfig.TOOLBAR_DEBUG_ACTIVE;
+      setDebugMode(debugMode);
+    }
+    
+    // Graph-Parameter aus Config initialisieren
+    initGraphParamsFromEnv(envConfig);
+    
+    Logger.log('[Config] Finale Konfiguration:', envConfig);
+    return true;
+  } catch (e) {
+    console.error('[Config] Fehler beim Laden:', e);
+    // Fallback: nur ENV + Defaults
+    envConfig = buildConfig({});
+    initGraphParamsFromEnv(envConfig);
+    showTemporaryNotification('Config-Fehler – nutze Defaults', 3000);
+    return true;
   }
-  envConfig = null;
-  Logger.log('[Timing] End: init.loadEnv');
-  return false;
 }
 
 /**
@@ -3665,7 +3592,6 @@ function renderGraph(sub) {
   const simById = new Map(personNodes.map(d => [String(d.id), d]));
   clusterSimById = simById;
   clusterPersonIds = new Set(personNodes.map(d => String(d.id)));
-  simAllById = new Map(personNodes.map(d => [String(d.id), d]));
   
   // Knoten erstellen (inkrementell)
   let nodeGroup = gZoom.select("g.nodes");
