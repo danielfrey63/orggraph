@@ -10,11 +10,12 @@ monocart-report
 playwright-report
 assets
 test-results
-tmp
-temp
 node_modules
 dist
 trace
+browser
+public
+temp
 
 .windsurf
 .kluster
@@ -22,3 +23,5 @@ trace
 .automaker
 .trae
 .auto-claude
+.kilocode
+.claude
