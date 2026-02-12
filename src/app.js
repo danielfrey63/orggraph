@@ -17,7 +17,6 @@ import { createSimulation as createSimulationUtil } from './graph/simulation.js'
 // UI
 import { getChevronSVG, getEyeSVG, getSaveSVG, getDownloadSVG } from './ui/icons.js';
 import { colorToTransparent, COLOR_PALETTES, getCurrentPalette } from './ui/colors.js';
-import { createLegendRow, createColorIndicator, toggleChevron } from './ui/legend-row.js';
 
 // Config [SF][DRY]
 import { buildConfig, useExampleData } from './config/env.js';
