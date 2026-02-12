@@ -7,6 +7,9 @@
 let cachedAdjacency = null;
 let cacheSourceLinks = null;
 
+// Org-Depth Cache [PA][DRY]
+const orgDepthCache = new Map();
+
 /**
  * Extrahiert ID aus Objekt oder String [SF]
  * @param {Object|string} v - Wert
@@ -22,6 +25,40 @@ export function idOf(v) {
 export function invalidateAdjacencyCache() {
   cachedAdjacency = null;
   cacheSourceLinks = null;
+}
+
+/**
+ * Invalidiert den Org-Depth-Cache [SF]
+ * Muss aufgerufen werden, wenn sich die OE-Hierarchie ändert.
+ */
+export function invalidateOrgDepthCache() {
+  orgDepthCache.clear();
+}
+
+/**
+ * Berechnet die Tiefe einer OE in der Hierarchie (mit Caching) [PA][DRY]
+ * @param {string} oid - OE-ID
+ * @param {Map<string, string>} parentOf - Parent-Map (childId -> parentId)
+ * @returns {number} Tiefe (0 = Root)
+ */
+export function getOrgDepth(oid, parentOf) {
+  const key = String(oid);
+  if (orgDepthCache.has(key)) {
+    return orgDepthCache.get(key);
+  }
+  
+  let depth = 0;
+  let cur = key;
+  const seen = new Set();
+  
+  while (parentOf && parentOf.has(cur) && !seen.has(cur)) {
+    seen.add(cur);
+    cur = parentOf.get(cur);
+    depth++;
+  }
+  
+  orgDepthCache.set(key, depth);
+  return depth;
 }
 
 /**
@@ -133,6 +170,8 @@ export function collectReportSubtree(rootId, links, byId) {
 export default {
   idOf,
   invalidateAdjacencyCache,
+  invalidateOrgDepthCache,
+  getOrgDepth,
   getAdjacencyCache,
   buildAdjacency,
   collectReportSubtree

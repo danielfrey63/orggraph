@@ -9,14 +9,15 @@ import { cssNumber, setGraphParam, getGraphParam, initGraphParamsFromEnv, resetG
 import { setStatus, showTemporaryNotification } from './utils/dom.js';
 
 // Graph
-import { idOf, collectReportSubtree as collectReportSubtreeUtil } from './graph/adjacency.js';
-import { computeClusterPolygon } from './graph/clusters.js';
+import { idOf, collectReportSubtree as collectReportSubtreeUtil, getOrgDepth } from './graph/adjacency.js';
+import { computeClusterMemberships, renderClusterPaths } from './graph/clusters.js';
 import { getNodeOuterRadius as getNodeOuterRadiusUtil, findPositionOutsideHull, radialLayoutExpansion, computeLevelsFromRoots, computeHierarchyLevels as computeHierarchyLevelsUtil } from './graph/layout.js';
 import { createSimulation as createSimulationUtil } from './graph/simulation.js';
 
 // UI
 import { getChevronSVG, getEyeSVG, getSaveSVG, getDownloadSVG } from './ui/icons.js';
 import { colorToTransparent, COLOR_PALETTES, getCurrentPalette } from './ui/colors.js';
+import { createLegendRow, createColorIndicator, toggleChevron } from './ui/legend-row.js';
 
 // Config [SF][DRY]
 import { buildConfig, useExampleData } from './config/env.js';
@@ -642,17 +643,10 @@ function colorForOrg(oid){
   return colors;
 }
 
-function orgDepth(oid){
-  let d = 0;
-  let cur = String(oid);
-  const seen = new Set();
-  while (parentOf && parentOf.has(cur)) {
-    if (seen.has(cur)) break;
-    seen.add(cur);
-    cur = parentOf.get(cur);
-    d++;
-  }
-  return d;
+// orgDepth ist jetzt aus adjacency.js importiert [DRY]
+// Wrapper nutzt globales parentOf
+function orgDepth(oid) {
+  return getOrgDepth(oid, parentOf);
 }
 
 // Hover-Detail Panel & Linie [SF]
@@ -2979,79 +2973,28 @@ function refreshClusters() {
     return;
   }
   
-  const pad = cssNumber('--cluster-pad', 12);
-  const membersByOrg = new Map();
-  
   if (!raw || !Array.isArray(raw.orgs) || !Array.isArray(raw.links)) return;
   const orgIds = new Set(raw.orgs.map(o => String(o.id)));
 
-  // Cache: für jedes OE alle Nachfahren inkl. sich selbst
-  const descendantsCache = new Map();
-  const getDescendants = (root) => {
-    const key = String(root);
-    if (descendantsCache.has(key)) return descendantsCache.get(key);
-    const res = new Set([key]);
-    const q = [key];
-    while (q.length) {
-      const cur = q.shift();
-      const kids = orgChildren.get(cur);
-      if (!kids) continue;
-      for (const k of kids) {
-        if (!res.has(k)) {
-          res.add(k);
-          q.push(k);
-        }
-      }
-    }
-    descendantsCache.set(key, res);
-    return res;
-  };
-
-  // Mapping: jede OE -> Menge aktiver Wurzel-OEs, deren Unterbaum sie angehört
-  const rootForOrg = new Map();
-  for (const root of allowedOrgs) {
-    const rootId = String(root);
-    if (!orgIds.has(rootId)) continue;
-    const desc = getDescendants(rootId);
-    for (const oid of desc) {
-      if (!rootForOrg.has(oid)) rootForOrg.set(oid, new Set());
-      rootForOrg.get(oid).add(rootId);
-    }
-  }
-
-  // Personen den Clustern der Wurzel-OEs ihrer Basis-OEs zuordnen
-  for (const l of raw.links) {
-    if (!l) continue;
-    const s = idOf(l.source), t = idOf(l.target);
-    if (!clusterPersonIds.has(s)) continue;
-    if (!orgIds.has(t)) continue;
-    const roots = rootForOrg.get(t);
-    if (!roots || roots.size === 0) continue;
-    const nd = clusterSimById.get(s);
-    if (!nd || nd.x == null || nd.y == null) continue;
-    for (const rid of roots) {
-      if (!membersByOrg.has(rid)) membersByOrg.set(rid, []);
-      membersByOrg.get(rid).push(nd);
-    }
-  }
+  // Cluster-Mitgliedschaften berechnen [DRY]
+  const membersByOrg = computeClusterMemberships({
+    personIds: clusterPersonIds,
+    orgIds,
+    allowedOrgs,
+    links: raw.links,
+    orgChildren,
+    simById: clusterSimById,
+    idOf
+  });
   
-  const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }))
-    .sort((a,b) => (orgDepth(a.oid) - orgDepth(b.oid)) || String(a.oid).localeCompare(String(b.oid)));
-    
-  const paths = clusterLayer.selectAll('path.cluster').data(clusterData, d => d.oid);
-  paths.enter().append('path').attr('class','cluster').merge(paths)
-    .each(function(d){
-      const poly = computeClusterPolygon(d.nodes, pad);
-      clusterPolygons.set(d.oid, poly);
-      const { stroke, fill } = colorForOrg(d.oid);
-      const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
-      d3.select(this)
-        .attr('d', line(poly))
-        .style('fill', fill)
-        .style('stroke', stroke);
-    })
-    .order();
-  paths.exit().remove();
+  // Cluster-Pfade rendern [DRY]
+  renderClusterPaths({
+    clusterLayer,
+    membersByOrg,
+    clusterPolygons,
+    colorForOrg,
+    orgDepth
+  });
 }
 
 // Wrapper für importierte Funktion mit lokalen Abhängigkeiten [DRY]
@@ -4019,83 +3962,28 @@ function renderGraph(sub) {
       .attr("y", d => (d.source.y + d.target.y) / 2)
       .text(d => getDebugLinkLabel(d));
 
-    // Cluster (OE-Hüllen) aktualisieren
-    const pad = cssNumber('--cluster-pad', 12);
-    const membersByOrg = new Map();
-
+    // Cluster (OE-Hüllen) aktualisieren [DRY]
     if (raw && Array.isArray(raw.orgs) && Array.isArray(raw.links)) {
       const orgIds = new Set(raw.orgs.map(o => String(o.id)));
-
-      // Cache: für jedes OE alle Nachfahren inkl. sich selbst auf Basis der globalen orgChildren
-      const descendantsCache = new Map();
-      const getDescendants = (root) => {
-        const key = String(root);
-        if (descendantsCache.has(key)) return descendantsCache.get(key);
-        const res = new Set([key]);
-        const q = [key];
-        while (q.length) {
-          const cur = q.shift();
-          const kids = orgChildren.get(cur);
-          if (!kids) continue;
-          for (const k of kids) {
-            if (!res.has(k)) {
-              res.add(k);
-              q.push(k);
-            }
-          }
-        }
-        descendantsCache.set(key, res);
-        return res;
-      };
-
-      // Mapping: jede OE -> Menge aktiver Wurzel-OEs, deren Unterbaum sie angehört
-      const rootForOrg = new Map();
-      for (const rootOid of allowedOrgs) {
-        const rootId = String(rootOid);
-        if (!orgIds.has(rootId)) continue;
-        const desc = getDescendants(rootId);
-        for (const oid of desc) {
-          if (!rootForOrg.has(oid)) rootForOrg.set(oid, new Set());
-          rootForOrg.get(oid).add(rootId);
-        }
-      }
-
-      // Personen den Clustern der Wurzel-OEs ihrer Basis-OEs zuordnen
-      for (const l of raw.links) {
-        if (!l) continue;
-        const s = idOf(l.source), t = idOf(l.target);
-        if (!personIdsInSub.has(s)) continue;
-        if (!orgIds.has(t)) continue;
-        const roots = rootForOrg.get(t);
-        if (!roots || roots.size === 0) continue;
-        const nd = simById.get(s);
-        if (!nd || nd.x == null || nd.y == null) continue;
-        for (const rid of roots) {
-          if (!membersByOrg.has(rid)) membersByOrg.set(rid, []);
-          membersByOrg.get(rid).push(nd);
-        }
-      }
-    }
-
-    // Cluster-Pfade aktualisieren
-    const clusterData = Array.from(membersByOrg.entries())
-      .map(([oid, arr]) => ({ oid, nodes: arr }))
-      .sort((a,b) => (orgDepth(a.oid) - orgDepth(b.oid)) || String(a.oid).localeCompare(String(b.oid)));
       
-    const paths = gClusters.selectAll('path.cluster').data(clusterData, d => d.oid);
-    paths.enter().append('path').attr('class','cluster').merge(paths)
-      .each(function(d){
-        const poly = computeClusterPolygon(d.nodes, pad);
-        clusterPolygons.set(d.oid, poly);
-        const { stroke, fill } = colorForOrg(d.oid);
-        const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
-        d3.select(this)
-          .attr('d', line(poly))
-          .style('fill', fill)
-          .style('stroke', stroke);
-      })
-      .order();
-    paths.exit().remove();
+      const membersByOrg = computeClusterMemberships({
+        personIds: personIdsInSub,
+        orgIds,
+        allowedOrgs,
+        links: raw.links,
+        orgChildren,
+        simById,
+        idOf
+      });
+      
+      renderClusterPaths({
+        clusterLayer: gClusters,
+        membersByOrg,
+        clusterPolygons,
+        colorForOrg,
+        orgDepth
+      });
+    }
   });
   
   // Fit nach Simulation-Ende, falls angefordert [SF]

@@ -61,6 +61,35 @@ export function showTemporaryNotification(message, duration = 3000) {
 }
 
 /**
+ * Zeigt Erfolgs-Meldung [DRY]
+ * @param {string} message - Nachricht
+ */
+export function showSuccess(message) {
+  showTemporaryNotification(message, 2000);
+}
+
+/**
+ * Zeigt Fehlermeldung (länger sichtbar) [DRY]
+ * @param {string} message - Nachricht
+ */
+export function showError(message) {
+  showTemporaryNotification(message, 5000);
+}
+
+/**
+ * Zeigt Info-Meldung mit Parametern [DRY]
+ * @param {string} template - Template mit {{param}} Platzhaltern
+ * @param {Object} params - Parameter-Objekt
+ */
+export function showInfo(template, params) {
+  const message = Object.entries(params).reduce(
+    (msg, [key, value]) => msg.replace(`{{${key}}}`, value),
+    template
+  );
+  showTemporaryNotification(message, 3000);
+}
+
+/**
  * Erstellt ein DOM-Element mit Attributen [SF][DRY]
  * @param {string} tag - Tag-Name
  * @param {Object} attrs - Attribute
@@ -142,6 +171,9 @@ export function isVisible(el) {
 export default {
   setStatus,
   showTemporaryNotification,
+  showSuccess,
+  showError,
+  showInfo,
   createElement,
   clearChildren,
   findParentWithClass,
