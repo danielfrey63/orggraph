@@ -167,6 +167,77 @@ export function collectReportSubtree(rootId, links, byId) {
   return seen;
 }
 
+/**
+ * Finds all organizational units a person belongs to
+ * @param {string} personId - ID of the person
+ * @param {Object} raw - Raw data object { links, orgs }
+ * @param {Map} byId - Map of ID to Node
+ * @param {Map} parentOf - Map of childOrgId -> parentOrgId
+ * @param {Function} getDisplayLabel - Function to get display label
+ * @returns {string[]} - Array of organization labels ordered by hierarchy
+ */
+export function findAllPersonOrgs(personId, raw, byId, parentOf, getDisplayLabel) {
+  if (!personId || !raw || !Array.isArray(raw.links) || !Array.isArray(raw.orgs)) return [];
+
+  const pid = String(personId);
+  const orgIds = new Set(raw.orgs.map(o => String(o.id)));
+
+  // Basis-OEs der Person: direkte Person->Org Kanten
+  const baseOrgs = new Set();
+  for (const link of raw.links) {
+    if (!link) continue;
+    const s = idOf(link.source);
+    const t = idOf(link.target);
+    if (s === pid && orgIds.has(t)) {
+      baseOrgs.add(t);
+    }
+  }
+
+  // Alle OEs entlang der Aufwärts-Kette (Basis-OE + alle Eltern) einsammeln
+  const orgMap = new Map(); // label -> { id, depth }
+
+  // Tiefe innerhalb der OE-Hierarchie cachen (Abstand zur Wurzel)
+  const depthCache = new Map();
+  const computeDepth = (oid) => {
+    const key = String(oid);
+    if (depthCache.has(key)) return depthCache.get(key);
+    let d = 0;
+    let cur = key;
+    const seen = new Set();
+    while (parentOf.has(cur) && !seen.has(cur)) {
+      seen.add(cur);
+      cur = parentOf.get(cur);
+      d++;
+    }
+    depthCache.set(key, d);
+    return d;
+  };
+
+  for (const baseId of baseOrgs) {
+    let cur = String(baseId);
+    const chainSeen = new Set();
+    while (cur && !chainSeen.has(cur)) {
+      chainSeen.add(cur);
+      const node = byId.get(cur);
+      if (node && node.type === 'org') {
+        const label = node.label || cur;
+        if (!orgMap.has(label)) {
+          orgMap.set(label, { id: cur, depth: computeDepth(cur) });
+        }
+      }
+      cur = parentOf.get(cur);
+    }
+  }
+
+  // Nach Tiefe sortieren (kleinere/basisnähere OEs haben eine höhere Tiefe)
+  return Array.from(orgMap.values())
+    .sort((a, b) => b.depth - a.depth || String(a.id).localeCompare(String(b.id)))
+    .map(item => {
+      const node = byId.get(String(item.id));
+      return getDisplayLabel ? getDisplayLabel(node, item.depth) : (node.label || node.id);
+    });
+}
+
 export default {
   idOf,
   invalidateAdjacencyCache,
@@ -174,5 +245,6 @@ export default {
   getOrgDepth,
   getAdjacencyCache,
   buildAdjacency,
-  collectReportSubtree
+  collectReportSubtree,
+  findAllPersonOrgs
 };

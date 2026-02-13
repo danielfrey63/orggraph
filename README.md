@@ -1,54 +1,216 @@
 # OrgGraph
 
-Minimaler statischer D3-Graph. Benutzer kann Startknoten wählen und Such-Tiefe konfigurieren.
+Interaktive D3-basierte Organisations-Graph-Visualisierung. Benutzer kann Startknoten wählen, Such-Tiefe konfigurieren, Attribute laden und den Graphen exportieren.
 
-## ENV-Konfiguration
-
-Die App kann über eine `env.json` Datei konfiguriert werden. Kopieren Sie `env.example.json` nach `env.json` und passen Sie die Werte an:
+## Schnellstart
 
 ```bash
-cp env.example.json env.json
+npm install
+npm run dev          # Dev-Server auf http://localhost:5173
 ```
 
-```json
-{
-  "DATA_URL": "./data.default.json",
-  "DEFAULT_START_ID": "p-1",
-  "DEFAULT_DEPTH": 2,
-  "DEFAULT_DIR": "both",
-  "DEFAULT_MANAGEMENT": true,
-  "DEFAULT_LABELS": true,
-  "DEFAULT_HIERARCHY": true,
-  "DEFAULT_DEBUG": false,
-  "DEFAULT_ATTRIBUTES": true,
-  "DEFAULT_HIDDEN_ROOTS": ["p-1"],
-  "ATTRIBUTES_URL": "./attributes.tsv.txt"
-}
+Für Beispieldaten:
+
+```bash
+npm run dev:example  # Lädt data.example.json statt Produktionsdaten
 ```
+
+## Scripts
+
+| Befehl | Beschreibung |
+|--------|--------------|
+| `npm run dev` | Vite Dev-Server starten |
+| `npm run dev:example` | Dev-Server mit Beispieldaten |
+| `npm run build` | Produktions-Build nach `dist/` |
+| `npm run preview` | Produktions-Build lokal testen |
+| `npm run lint` | ESLint prüfen |
+| `npm run lint:fix` | ESLint automatisch korrigieren |
+| `npm run transform` | Quelldaten transformieren (siehe unten) |
+
+## Konfiguration
+
+### Configuration Precedence
+
+Die App unterstützt 7 Konfigurationsquellen mit klarer Priorität (höchste zuerst):
+
+| # | Quelle | Beschreibung |
+|---|--------|--------------|
+| 1 | **CLI args** | `vite --define 'import.meta.env.VITE_KEY="value"'` |
+| 2 | **Runtime injected** | `window.__ORGGRAPH_ENV__` (Script-Tag im HTML) |
+| 3 | **System env** | `VITE_*` Umgebungsvariablen des Systems |
+| 4 | **.env files** | `.env`, `.env.production`, `.env.development` |
+| 5 | **env.json** | `public/env.json` (zur Laufzeit geladen) |
+| 6 | **config.json** | `public/config.json` (zur Laufzeit geladen) |
+| 7 | **Code defaults** | Hartcodierte Standardwerte in `src/config/env.js` |
+
+> **Hinweis:** Quellen 1, 3 und 4 werden von Vite zur Build-Zeit in `import.meta.env` gebündelt und sind zur Laufzeit nicht unterscheidbar.
 
 ### Konfigurationsoptionen
 
-- **`DATA_URL`**: URL zur Datendatei (optional)
-- **`DEFAULT_START_ID`**: Standard-Startknoten-ID
-- **`DEFAULT_DEPTH`**: Standard-Suchtiefe
-- **`DEFAULT_DIR`**: Standard-Richtung (`both`, `down`, `up`)
-- **`DEFAULT_MANAGEMENT`**: Management-Filter standardmäßig aktiviert
-- **`DEFAULT_LABELS`**: Knoten-Labels standardmäßig sichtbar
-- **`DEFAULT_HIERARCHY`**: Hierarchie-Layout standardmäßig aktiviert
-- **`DEFAULT_DEBUG`**: Debug-Modus standardmäßig aktiviert (zeigt Koordinaten statt Namen)
-- **`DEFAULT_ATTRIBUTES`**: Attribut-Sichtbarkeit standardmäßig aktiviert
-- **`DEFAULT_HIDDEN_ROOTS`**: Array von Knoten-IDs, die standardmäßig ausgeblendet werden
-- **`ATTRIBUTES_URL`**: URL zur Attributdatei (TSV/CSV-Format, optional)
+#### Daten
+
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `DATA_URL` | string | `./data.json` | URL zur Graphdaten-Datei |
+| `DATA_ATTRIBUTES_URL` | string[] | `["./attributes.txt"]` | URLs zu Attributdateien (TSV/CSV) |
+
+#### Toolbar
+
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `TOOLBAR_DEPTH_DEFAULT` | number | `2` | Standard-Suchtiefe (BFS-Stufen) |
+| `TOOLBAR_DIRECTION_DEFAULT` | string | `both` | Richtung: `both`, `up`, `down` |
+| `TOOLBAR_MANAGEMENT_ACTIVE` | boolean | `true` | Management-Filter aktiviert |
+| `TOOLBAR_HIERARCHY_ACTIVE` | boolean | `false` | Hierarchie-Layout aktiviert |
+| `TOOLBAR_LABELS_ACTIVE` | string | `all` | Label-Modus: `all`, `attributes`, `none` |
+| `TOOLBAR_ZOOM_DEFAULT` | string/number | `fit` | Zoom: `fit` oder numerischer Wert |
+| `TOOLBAR_PSEUDO_ACTIVE` | boolean | `true` | Pseudonymisierung aktiviert |
+| `TOOLBAR_PSEUDO_PASSWORD` | string | `""` | Passwort zum Aufheben der Pseudonymisierung |
+| `TOOLBAR_DEBUG_ACTIVE` | boolean | `false` | Debug-Modus aktiviert |
+| `TOOLBAR_SIMULATION_ACTIVE` | boolean | `false` | Simulation dauerhaft aktiv |
+
+#### Legende
+
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `LEGEND_OES_COLLAPSED` | boolean | `false` | OE-Legende eingeklappt |
+| `LEGEND_ATTRIBUTES_COLLAPSED` | boolean | `false` | Attribut-Legende eingeklappt |
+| `LEGEND_ATTRIBUTES_ACTIVE` | boolean | `false` | Attribute sichtbar |
+| `LEGEND_HIDDEN_COLLAPSED` | boolean | `true` | Ausgeblendet-Legende eingeklappt |
+| `LEGEND_HIDDEN_ROOTS_DEFAULT` | string[] | `[]` | IDs standardmäßig ausgeblendeter Knoten |
+
+#### Graph
+
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `GRAPH_START_ID_DEFAULT` | string | `""` | Standard-Startknoten-ID |
+
+#### Debug-Parameter (Force-Simulation)
+
+| Schlüssel | Typ | Default |
+|-----------|-----|---------|
+| `DEBUG_LINK_DISTANCE` | number | `30` |
+| `DEBUG_LINK_STRENGTH` | number | `0.25` |
+| `DEBUG_CHARGE_STRENGTH` | number | `-250` |
+| `DEBUG_ALPHA_DECAY` | number | `0.05` |
+| `DEBUG_VELOCITY_DECAY` | number | `0.5` |
+| `DEBUG_NODE_RADIUS` | number | `16` |
+| `DEBUG_NODE_STROKE_WIDTH` | number | `4` |
+| `DEBUG_LABEL_FONT_SIZE` | number | `21` |
+| `DEBUG_LINK_STROKE_WIDTH` | number | `4` |
+| `DEBUG_ARROW_SIZE` | number | `16` |
+
+### Konfiguration via JSON-Dateien
+
+Kopiere `public/env.example.json` nach `public/env.json` und passe die Werte an:
+
+```bash
+cp public/env.example.json public/env.json
+```
+
+`env.json` überschreibt `config.json`. Beide Dateien verwenden dieselben Schlüssel (siehe Tabellen oben).
+
+### Konfiguration via .env-Dateien
+
+Erstelle eine `.env`-Datei im Projektroot. Alle Schlüssel müssen mit `VITE_` prefixed werden:
+
+```env
+VITE_DATA_URL=./data.sem-n.json
+VITE_DATA_ATTRIBUTES_URL=./attr1.tsv,./attr2.tsv
+VITE_TOOLBAR_LABELS_ACTIVE=attributes
+VITE_TOOLBAR_PSEUDO_PASSWORD=Alles zeigen
+```
+
+> Arrays werden als komma-separierte Strings oder JSON-Arrays unterstützt.
+
+### Runtime-Injection (ohne Rebuild)
+
+Für Deployments, die Konfiguration zur Laufzeit benötigen (z.B. Docker, Server-seitiges Rendering):
+
+```html
+<script>
+  window.__ORGGRAPH_ENV__ = {
+    DATA_URL: './other-data.json',
+    TOOLBAR_PSEUDO_ACTIVE: false
+  };
+</script>
+<script type="module" src="/src/app.js"></script>
+```
+
+Runtime-injizierte Werte haben die zweithöchste Priorität (nach CLI/Build-Zeit-ENV).
+
+## Projektstruktur
+
+```
+orggraph/
+├── index.html                  # Haupt-HTML mit Toolbar, Legende, SVG-Canvas
+├── vite.config.js              # Vite-Konfiguration
+├── package.json
+├── public/
+│   ├── config.json             # Standard-Konfiguration (Layer 6)
+│   ├── env.json                # Override-Konfiguration (Layer 5)
+│   ├── env.example.json        # Vorlage für env.json
+│   ├── data.sem-n.json         # Produktionsdaten
+│   └── data.example.json       # Beispieldaten
+├── src/
+│   ├── app.js                  # App-Controller (Init, Routing, Event-Handling)
+│   ├── constants.js            # DOM-Selektoren und Konstanten
+│   ├── style.css               # Gesamtes Styling
+│   ├── config/
+│   │   └── env.js              # Configuration Precedence & Laden
+│   ├── state/
+│   │   └── store.js            # Zentraler GraphStore (Singleton, Event-basiert)
+│   ├── data/
+│   │   ├── loader.js           # Daten- und Attribut-Laden
+│   │   ├── processor.js        # Datenverarbeitung (Nodes, Links)
+│   │   ├── attributes.js       # Attribut-Parsing (TSV/CSV)
+│   │   └── pseudonym.js        # Pseudonymisierungs-Daten
+│   ├── graph/
+│   │   ├── renderer.js         # D3 SVG-Rendering (Nodes, Links, Labels)
+│   │   ├── simulation.js       # D3 Force-Simulation
+│   │   ├── layout.js           # Hierarchie- und Force-Layout
+│   │   ├── subgraph.js         # BFS-Teilgraph-Berechnung
+│   │   ├── adjacency.js        # Adjazenz-Berechnung
+│   │   ├── clusters.js         # Cluster-Erkennung
+│   │   └── visibility.js       # Knoten-Sichtbarkeit
+│   ├── ui/
+│   │   ├── toolbar.js          # Toolbar-Steuerung
+│   │   ├── legend.js           # OE- und Attribut-Legende
+│   │   ├── search.js           # Suchfeld mit Autocomplete
+│   │   ├── debug.js            # Debug-Panel (Force-Slider)
+│   │   ├── export.js           # SVG/PNG-Export
+│   │   ├── dialogs.js          # Modale Dialoge
+│   │   ├── node-menu.js        # Knoten-Kontextmenü
+│   │   ├── detail-panel.js     # Detail-Ansicht
+│   │   ├── colors.js           # Farbpaletten
+│   │   ├── icons.js            # SVG-Icons
+│   │   ├── label-utils.js      # Label-Hilfsfunktionen
+│   │   ├── legend-row.js       # Legenden-Zeilen-Komponente
+│   │   ├── buttons.js          # Button-Hilfsfunktionen
+│   │   ├── menus.js            # Menü-Hilfsfunktionen
+│   │   └── tooltips.js         # Tooltip-Komponente
+│   ├── services/
+│   │   └── pseudonymization.js # Pseudonymisierungs-Service
+│   └── utils/
+│       ├── css.js              # CSS-Variablen & Graph-Parameter
+│       ├── dom.js              # DOM-Hilfsfunktionen
+│       └── logger.js           # Logging-Utility
+└── tests/
+    ├── fixtures.js             # Coverage-Fixture (immer importieren!)
+    ├── _template.spec.js       # Vorlage für neue Tests
+    ├── coverage.spec.js        # Basis-Coverage-Test
+    └── person-search.spec.js   # Feature-spezifische Tests
+```
 
 ## Datenformat
 
-Die App erwartet eine Datei `data.json` oder `data.generated.json` im `orggraph/` Verzeichnis mit folgendem Format:
+Die App erwartet eine JSON-Datei (konfigurierbar via `DATA_URL`) mit folgendem Format:
 
 - **`persons`**: Array von Personen-Objekten
   - `id` (string, required): Eindeutige ID
   - `label` (string, required): Anzeigename
   - `email` (string, optional): E-Mail-Adresse
-  - `isBasis` (boolean, optional): `true` = Person ohne Mitarbeiter (Blatt-Knoten, wird bei aktiviertem Management-Filter ausgeblendet)
+  - `isBasis` (boolean, optional): `true` = Person ohne Mitarbeiter (Blatt-Knoten)
 - **`orgs`**: Array von Organisations-Objekten
   - `id` (string, required): Eindeutige ID
   - `label` (string, required): Name der Organisationseinheit
@@ -57,53 +219,7 @@ Die App erwartet eine Datei `data.json` oder `data.generated.json` im `orggraph/
   - `target` (string, required): Ziel-ID
   - Typen: Person→Person (Vorgesetzter→Mitarbeiter), Person→Org (Mitgliedschaft), Org→Org (Hierarchie)
 
-### Optional: Transform-Utility
-
-Falls deine Quelldaten ein anderes Format haben, kannst du das mitgelieferte Transform-Skript verwenden:
-
-```bash
-# Mit Positionsargumenten
-node transform.js input.json output.json
-
-# Mit benannten Optionen
-node transform.js --input source.json --output data.json
-node transform.js -i source.json -o data.json
-
-# Hilfe anzeigen
-node transform.js --help
-```
-
-## Start
-
-- Öffne `index.html` direkt im Browser, oder
-- Starte einen simplen Static-Server (z.B. via VS Code Live Server oder `python -m http.server`).
-
-## Nutzung
-
-- **Suchfeld**: Namen oder ID eingeben (min. 2 Zeichen für große Datensätze)
-  - Zeigt max. 100 Ergebnisse an
-  - Debounced Search (150ms Verzögerung) für bessere Performance
-  - Mehrfach-Roots:
-    - Shift+Klick auf Treffereintrag → als weiterer Root hinzufügen
-    - Shift+Enter bei Tastenauswahl (↑/↓) → als weiterer Root hinzufügen
-    - Enter/Klick ohne Shift → ersetzt alle Roots durch den ausgewählten
-- **Tiefe**: Anzahl BFS-Stufen ab Startknoten
-- **Management-Checkbox**: Standardmäßig aktiviert - blendet Personen ohne Mitarbeiter (Blätter) aus
-- **Button „Anzeigen"**: Rendert den Teilgraphen
-- **OE-Legende**: Organisationseinheiten ein-/ausblenden (Rechtsklick für Subtree-Aktionen)
-  - Single-Root: Legende zeigt OEs im Kontext des Startknotens
-  - Multi-Root: Legende zeigt die Vereinigungsmenge aller relevanten OEs der ausgewählten Roots
-- **Attribute**: Über ENV-Datei konfigurierbar - bei Angabe von `ATTRIBUTES_URL` werden Attribute automatisch geladen und angezeigt
-
-### Kontextmenü
-
-- Rechtsklick auf Personenknoten öffnet ein kontextbezogenes Menü (Browser-Menü ist global deaktiviert):
-  - „Ausblenden“: blendet die Berichtslinie dieser Management-Person aus
-  - „Als Root entfernen“: nur sichtbar, wenn der Knoten aktueller Root ist und mindestens 2 Roots ausgewählt sind
-
-Hinweis: Das Browser-Kontextmenü ist global unterdrückt, damit die App-eigenen Menüs konsistent funktionieren.
-
-## Beispiel
+### Beispiel
 
 ```json
 {
@@ -121,64 +237,73 @@ Hinweis: Das Browser-Kontextmenü ist global unterdrückt, damit die App-eigenen
 }
 ```
 
-**Hinweis**: `isBasis: true` bedeutet, dass die Person keine Mitarbeiter hat (Blatt-Knoten). Personen ohne `isBasis`-Feld oder mit `isBasis: false` sind Manager.
+> **Hinweis:** `isBasis: true` = Person ohne Mitarbeiter (Blatt-Knoten, wird bei aktiviertem Management-Filter ausgeblendet).
 
-## Anpassen
+### Transform-Utility
 
-- UI/Styles: `index.html`, `style.css`
-- Logik/Rendering: `app.js`
-- Transformation: `transform.js`
+Falls die Quelldaten ein anderes Format haben:
+
+```bash
+node transform.js input.json output.json
+node transform.js --input source.json --output data.json
+node transform.js --help
+```
+
+## Nutzung
+
+- **Suchfeld**: Namen oder ID eingeben (min. 2 Zeichen)
+  - Max. 100 Ergebnisse, Debounced (150ms)
+  - **Shift+Klick/Enter**: Als weiteren Root hinzufügen
+  - **Klick/Enter**: Ersetzt alle Roots
+- **Tiefe**: Anzahl BFS-Stufen ab Startknoten (Stepper-Buttons)
+- **Richtung**: Aufwärts/Abwärts/Beide (Split-Button)
+- **Management**: Blendet Personen ohne Mitarbeiter aus
+- **Hierarchie**: Wechselt zwischen Force- und Hierarchie-Layout
+- **Labels**: Schaltet zwischen `all` → `attributes` → `none`
+- **Zoom/Fit**: Passt den Graphen auf die Ansicht ein
+- **Simulation**: Hält die Force-Simulation dauerhaft aktiv
+- **Export**: SVG- oder PNG-Export mit wählbarer Auflösung
+- **Pseudonymisierung**: Anonymisiert Namen (Passwort zum Aufheben konfigurierbar)
+- **Debug**: Zeigt Force-Simulation-Slider für Feintuning
+
+### Legende
+
+- **OEs**: Organisationseinheiten ein-/ausblenden, filtern, alle an/abwählen
+- **Attribute**: Attribut-Kategorien laden, expandieren, filtern
+- **Ausgeblendet**: Temporär ausgeblendete Knoten verwalten
+
+### Kontextmenü
+
+Rechtsklick auf Personenknoten:
+- **Ausblenden**: Blendet die Berichtslinie aus
+- **Als Root entfernen**: Nur bei Multi-Root-Auswahl sichtbar
+
+> Das Browser-Kontextmenü ist global unterdrückt.
 
 ## Testing
 
 Die App verwendet Playwright für End-to-End-Tests mit Coverage-Tracking.
 
-### Voraussetzungen
-
 ```bash
 npm install
+npx playwright install   # Browser-Binaries installieren
 ```
-
-### Tests ausführen
 
 | Befehl | Beschreibung |
 |--------|--------------|
-| `npm run test:coverage` | Alle Tests mit Coverage-Report |
+| `npm test` | Alle Tests ausführen |
+| `npm run test:coverage` | Tests mit Coverage-Report |
 | `npm run test:ui` | Playwright UI Mode (interaktiv) |
-| `npx playwright test [name]` | Einzelnen Test ausführen (z.B. `person-search`) |
+| `npm run test:record` | Test-Recorder starten |
+| `npm run test:file -- "name"` | Einzelnen Test ausführen |
 
 ### Tests aufzeichnen
 
-1. **Dev-Server starten** (Terminal 1):
-   ```bash
-   npm run dev
-   ```
-
-2. **Test-Recorder starten** (Terminal 2):
-   ```bash
-   npm run test:record
-   ```
-
-3. **Im Recorder**:
-   - Interaktionen durchführen → Code wird generiert
-   - Code kopieren
-   - **Clear** klicken für nächsten Test
-   - Wiederholen...
-
-4. **Neuen Test erstellen**:
-   - Kopiere `tests/_template.spec.js` → `tests/[feature].spec.js`
-   - Füge aufgezeichneten Code ein
-   - Ersetze `page.goto('http://localhost:5173/')` mit `page.goto('/')`
-
-### Test-Struktur
-
-```
-tests/
-├── fixtures.js          # Coverage-Fixture (immer importieren!)
-├── _template.spec.js    # Vorlage für neue Tests
-├── coverage.spec.js     # Basis-Coverage-Test
-└── person-search.spec.js # Feature-spezifische Tests
-```
+1. Dev-Server starten: `npm run dev`
+2. Recorder starten: `npm run test:record`
+3. Interaktionen durchführen → Code kopieren
+4. Kopiere `tests/_template.spec.js` → `tests/[feature].spec.js`
+5. `page.goto('http://localhost:5173/')` → `page.goto('/')` ersetzen
 
 ### Coverage-Reports
 
@@ -187,7 +312,7 @@ Nach `npm run test:coverage`:
 - **LCOV-Report**: `coverage/lcov.info` (für VS Code Gutter)
 - **Test-Report**: `coverage-report/index.html`
 
-Für Coverage-Anzeige im VS Code Editor die Extension "Coverage Gutters" installieren und in Settings konfigurieren:
+Für Coverage-Anzeige im VS Code die Extension "Coverage Gutters" installieren:
 ```json
 {
   "coverage-gutters.coverageFileNames": ["coverage/lcov.info"]

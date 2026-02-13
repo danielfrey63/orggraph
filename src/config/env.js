@@ -1,71 +1,56 @@
-/**
- * Zentrale Konfiguration mit ENV-Variablen-Unterstützung [SF][ISA]
- * Alle Konfigurationswerte können über Vite ENV-Variablen überschrieben werden.
- */
+import { graphStore } from '../state/store.js';
+import { initGraphParamsFromEnv } from '../utils/css.js';
 
 /**
- * Liest einen ENV-Wert mit Fallback auf Default
- * @param {string} key - ENV-Variablen-Name (ohne VITE_ Prefix)
- * @param {*} defaultValue - Default-Wert
- * @returns {*} Konfigurationswert
+ * Zentrale Konfiguration mit sauberer Configuration Precedence [SF][ISA]
+ *
+ * Priorität (höchste zuerst):
+ *
+ *   1. CLI args / vite --define     ─┐
+ *   2. Runtime injected (window)     │  → getLayerRuntimeInjected()
+ *   3. System env (VITE_*)          ─┤  → getLayerViteEnv()
+ *   4. .env files (.env, .env.prod) ─┘    (3+4+1 werden von Vite in import.meta.env gebündelt)
+ *   5. env.json                      → fetchJsonLayer('./env.json')
+ *   6. config.json                   → fetchJsonLayer('./config.json')
+ *   7. Code defaults                 → DEFAULTS
+ *
+ * Layers 1/3/4 sind zur Build-Zeit in import.meta.env gebacken und
+ * können zur Laufzeit nicht unterschieden werden.
+ * Layer 2 (window.__ORGGRAPH_ENV__) ermöglicht Runtime-Overrides
+ * ohne Rebuild (z.B. via Server-seitigem HTML-Injection).
  */
-function getEnvValue(key, defaultValue) {
-  const envKey = `VITE_${key}`;
-  const value = import.meta.env?.[envKey];
-  
-  if (value === undefined || value === '') {
-    return defaultValue;
-  }
-  
-  // Type-Konvertierung basierend auf Default-Wert-Typ
-  if (typeof defaultValue === 'boolean') {
-    return value === 'true' || value === true;
-  }
-  if (typeof defaultValue === 'number') {
-    const num = Number(value);
-    return isNaN(num) ? defaultValue : num;
-  }
-  if (Array.isArray(defaultValue)) {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return defaultValue;
-    }
-  }
-  
-  return value;
-}
 
-/**
- * Standard-Konfigurationswerte
- */
+// ---------------------------------------------------------------------------
+// DEFAULTS (Layer 7 – niedrigste Priorität)
+// ---------------------------------------------------------------------------
+
 const DEFAULTS = {
   // Daten-URLs
   DATA_URL: './data.json',
-  DATA_ATTRIBUTES_URL: './attributes.txt',
-  
+  DATA_ATTRIBUTES_URL: ['./attributes.txt'],
+
   // Toolbar-Defaults
   TOOLBAR_DEPTH_DEFAULT: 2,
   TOOLBAR_DIRECTION_DEFAULT: 'both',
   TOOLBAR_MANAGEMENT_ACTIVE: true,
   TOOLBAR_HIERARCHY_ACTIVE: false,
-  TOOLBAR_LABELS_ACTIVE: true,
+  TOOLBAR_LABELS_ACTIVE: 'all',
   TOOLBAR_ZOOM_DEFAULT: 'fit',
   TOOLBAR_PSEUDO_ACTIVE: true,
   TOOLBAR_PSEUDO_PASSWORD: '',
   TOOLBAR_DEBUG_ACTIVE: false,
   TOOLBAR_SIMULATION_ACTIVE: false,
-  
+
   // Legende-Defaults
   LEGEND_OES_COLLAPSED: false,
   LEGEND_ATTRIBUTES_COLLAPSED: false,
   LEGEND_ATTRIBUTES_ACTIVE: false,
   LEGEND_HIDDEN_COLLAPSED: true,
   LEGEND_HIDDEN_ROOTS_DEFAULT: [],
-  
+
   // Graph-Defaults
   GRAPH_START_ID_DEFAULT: '',
-  
+
   // Debug/Simulation-Parameter
   DEBUG_LINK_DISTANCE: 30,
   DEBUG_LINK_STRENGTH: 0.25,
@@ -79,54 +64,172 @@ const DEFAULTS = {
   DEBUG_ARROW_SIZE: 16
 };
 
+// ---------------------------------------------------------------------------
+// Type Coercion
+// ---------------------------------------------------------------------------
+
 /**
- * Erstellt Konfigurationsobjekt mit ENV-Overrides
- * @param {Object} jsonConfig - Konfiguration aus JSON-Datei
- * @returns {Object} Finale Konfiguration
+ * Konvertiert einen Rohwert in den Typ des typeHint [SF]
+ * @param {*} raw - Rohwert (String aus ENV, oder bereits typisiert aus JSON)
+ * @param {*} typeHint - Referenzwert für Typ-Erkennung
+ * @returns {*} Typisierter Wert
  */
-export function buildConfig(jsonConfig = {}) {
-  const config = {};
-  
-  for (const [key, defaultValue] of Object.entries(DEFAULTS)) {
-    // Priorität: ENV > JSON > Default
-    const envValue = getEnvValue(key, undefined);
-    if (envValue !== undefined) {
-      config[key] = envValue;
-    } else if (jsonConfig[key] !== undefined) {
-      config[key] = jsonConfig[key];
-    } else {
-      config[key] = defaultValue;
+function coerce(raw, typeHint) {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  if (typeHint === undefined) return raw;
+
+  if (typeof typeHint === 'boolean') {
+    if (typeof raw === 'boolean') return raw;
+    return raw === 'true' || raw === true;
+  }
+  if (typeof typeHint === 'number') {
+    if (typeof raw === 'number') return raw;
+    const num = Number(raw);
+    return isNaN(num) ? undefined : num;
+  }
+  if (Array.isArray(typeHint)) {
+    if (Array.isArray(raw)) return raw;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch { /* ignore */ }
+    if (typeof raw === 'string') {
+      return raw.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    }
+    return undefined;
+  }
+
+  return raw;
+}
+
+// ---------------------------------------------------------------------------
+// Layer Loaders
+// ---------------------------------------------------------------------------
+
+/**
+ * Layer 6/5: Lädt eine JSON-Datei als Config-Layer [SF]
+ * @param {string} url - URL der JSON-Datei
+ * @returns {Promise<Object>} Geladene Konfiguration oder leeres Objekt
+ */
+async function fetchJsonLayer(url) {
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (res.ok) return await res.json();
+  } catch { /* optional layer, ignore errors */ }
+  return {};
+}
+
+/**
+ * Layer 1/3/4: Liest alle VITE_*-Werte aus import.meta.env [SF]
+ * Nur Keys die in DEFAULTS definiert sind werden berücksichtigt.
+ * @returns {Object} Gefundene ENV-Werte (roh, noch nicht typisiert)
+ */
+function getLayerViteEnv() {
+  const layer = {};
+  for (const key of Object.keys(DEFAULTS)) {
+    const envKey = `VITE_${key}`;
+    const value = import.meta.env?.[envKey];
+    if (value !== undefined && value !== '') {
+      layer[key] = value;
     }
   }
-  
+  return layer;
+}
+
+/**
+ * Layer 2: Liest Runtime-injizierte Werte aus window.__ORGGRAPH_ENV__ [SF]
+ * Ermöglicht Overrides ohne Rebuild (z.B. via Script-Tag im HTML).
+ * @returns {Object} Runtime-Overrides oder leeres Objekt
+ */
+function getLayerRuntimeInjected() {
+  if (typeof window !== 'undefined' && window.__ORGGRAPH_ENV__) {
+    return { ...window.__ORGGRAPH_ENV__ };
+  }
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Config Builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Erstellt Konfigurationsobjekt durch Layer-Merge [SF][DRY]
+ *
+ * Merge-Reihenfolge (niedrigste → höchste Priorität):
+ *   DEFAULTS → config.json → env.json → import.meta.env → window.__ORGGRAPH_ENV__
+ *
+ * @param {Object} configJson - Inhalt von config.json (Layer 6)
+ * @param {Object} envJson - Inhalt von env.json (Layer 5)
+ * @returns {Object} Finale Konfiguration
+ */
+export function buildConfig(configJson = {}, envJson = {}) {
+  const viteEnv = getLayerViteEnv();
+  const runtimeEnv = getLayerRuntimeInjected();
+
+  // Layers von niedrig → hoch, spätere überschreiben frühere
+  const layers = [configJson, envJson, viteEnv, runtimeEnv];
+
+  const config = {};
+  for (const [key, defaultValue] of Object.entries(DEFAULTS)) {
+    let resolved = defaultValue;
+
+    for (const layer of layers) {
+      if (layer[key] !== undefined) {
+        const typed = coerce(layer[key], defaultValue);
+        if (typed !== undefined) {
+          resolved = typed;
+        }
+      }
+    }
+
+    config[key] = resolved;
+  }
+
+  return config;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Lädt die Konfiguration aus allen Quellen und aktualisiert den Store [SF]
+ *
+ * Precedence: CLI args > runtime injected > system env > .env files
+ *             > env.json > config.json > code defaults
+ */
+export async function loadEnvConfig() {
+  // Layer 6: config.json
+  const configJson = await fetchJsonLayer('./config.json');
+
+  // Layer 5: env.json
+  const envJson = await fetchJsonLayer('./env.json');
+
+  // Layers 1-4 + 7 werden in buildConfig zusammengeführt
+  const config = buildConfig(configJson, envJson);
+
+  // Update Store
+  graphStore.setEnvConfig(config);
+
+  // Initialize Graph Params
+  initGraphParamsFromEnv(config);
+
   return config;
 }
 
 /**
- * Gibt einen einzelnen Konfigurationswert zurück
+ * Gibt einen einzelnen Konfigurationswert zurück [SF]
  * @param {string} key - Konfigurationsschlüssel
- * @param {Object} jsonConfig - Optionale JSON-Konfiguration
+ * @param {Object} configJson - Optionale config.json-Daten
+ * @param {Object} envJson - Optionale env.json-Daten
  * @returns {*} Konfigurationswert
  */
-export function getConfigValue(key, jsonConfig = {}) {
+export function getConfigValue(key, configJson = {}, envJson = {}) {
   const defaultValue = DEFAULTS[key];
-  if (defaultValue === undefined) {
-    return undefined;
-  }
-  
-  // ENV hat höchste Priorität
-  const envValue = getEnvValue(key, undefined);
-  if (envValue !== undefined) {
-    return envValue;
-  }
-  
-  // Dann JSON
-  if (jsonConfig[key] !== undefined) {
-    return jsonConfig[key];
-  }
-  
-  // Schließlich Default
-  return defaultValue;
+  if (defaultValue === undefined) return undefined;
+
+  const fullConfig = buildConfig(configJson, envJson);
+  return fullConfig[key];
 }
 
 /**
@@ -134,7 +237,8 @@ export function getConfigValue(key, jsonConfig = {}) {
  * @returns {boolean}
  */
 export function useExampleData() {
-  return getEnvValue('USE_EXAMPLE_ENV', false);
+  const raw = import.meta.env?.VITE_USE_EXAMPLE_ENV;
+  return raw === 'true' || raw === true;
 }
 
 /**

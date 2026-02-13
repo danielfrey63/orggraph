@@ -11,6 +11,7 @@ export default defineConfig({
   ],
   
   reporter: [
+    ['list'],
     ['html', { open: 'never' }],
     ['monocart-reporter', {
       name: 'OrgGraph Coverage Report',

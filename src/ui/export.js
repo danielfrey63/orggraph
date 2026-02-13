@@ -1,8 +1,9 @@
 import { SVG_ID, WIDTH, HEIGHT } from '../constants.js';
 import { showTemporaryNotification } from '../utils/dom.js';
+import { graphStore } from '../state/store.js';
 
 /**
- * Export-Funktionen für Grafiken [SF]
+ * Export-Funktionen für Grafiken und Daten [SF]
  */
 
 // Globale Export-Variablen
@@ -387,6 +388,113 @@ function getTimestamp() {
   return `${year}${month}${day}_${hours}${minutes}${seconds}`;
 }
 
+/**
+ * Exportiert die Attribute einer Kategorie als CSV/TSV Datei
+ */
+export function exportCategoryAttributes(categoryName) {
+  const { categorySourceFiles, personAttributes, byId, modifiedCategories } = graphStore.state;
+  const sourceInfo = categorySourceFiles.get(categoryName);
+  
+  if (!sourceInfo) {
+    showTemporaryNotification(`Keine Quell-Informationen für Kategorie "${categoryName}" gefunden`, 3000);
+    return;
+  }
+  
+  const separator = sourceInfo.format === 'tab' ? '\t' : ',';
+  const lines = [];
+  
+  // Sammle alle Personen mit Attributen in dieser Kategorie
+  for (const [personId, attrs] of personAttributes.entries()) {
+    for (const [attrKey] of attrs.entries()) {
+      const parts = String(attrKey).split('::');
+      const cat = parts.length > 1 ? parts[0] : 'Attribute';
+      const attrName = parts.length > 1 ? parts[1] : String(attrKey);
+      
+      if (cat === categoryName) {
+        // Versuche E-Mail oder ID zu finden
+        const person = byId.get(personId);
+        const identifier = person?.email || personId;
+        
+        // Nur 2 Spalten: ID/Email und Attributname (ohne Wert)
+        lines.push(`${identifier}${separator}${attrName}`);
+      }
+    }
+  }
+  
+  // Sortiere alphabetisch
+  lines.sort();
+  
+  const content = lines.join('\n');
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = sourceInfo.filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  // Markiere Kategorie als nicht mehr geändert
+  const newModified = new Set(modifiedCategories);
+  newModified.delete(categoryName);
+  graphStore.setModifiedCategories(newModified);
+  
+  showTemporaryNotification(`"${sourceInfo.filename}" heruntergeladen`, 2000);
+}
+
+/**
+ * Exportiert alle Attribute einer Kategorie als TSV-Datei
+ */
+export function exportCategoryAsTSV(categoryName) {
+  const { personAttributes, byId } = graphStore.state;
+  const lines = [];
+  
+  // Sammle alle Personen mit Attributen in dieser Kategorie
+  for (const [personId, attrs] of personAttributes.entries()) {
+    for (const [attrKey] of attrs.entries()) {
+      const parts = String(attrKey).split('::');
+      const cat = parts.length > 1 ? parts[0] : 'Attribute';
+      const attrName = parts.length > 1 ? parts[1] : String(attrKey);
+      
+      if (cat === categoryName) {
+        const person = byId.get(personId);
+        const identifier = person?.email || personId;
+        lines.push(`${identifier}\t${attrName}`);
+      }
+    }
+  }
+  
+  if (lines.length === 0) {
+    showTemporaryNotification(`Keine Einträge für Kategorie "${categoryName}" gefunden`, 2000);
+    return;
+  }
+  
+  // Sortiere alphabetisch
+  lines.sort();
+  
+  const content = lines.join('\n');
+  const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  
+  // Dateiname: Kategorie.tsv
+  const safeCategory = categoryName.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_');
+  const filename = `${safeCategory}.tsv`;
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  showTemporaryNotification(`"${filename}" heruntergeladen (${lines.length} Einträge)`, 2000);
+}
+
 export default {
-  initializeExport
+  initializeExport,
+  exportCategoryAttributes,
+  exportCategoryAsTSV
 };
