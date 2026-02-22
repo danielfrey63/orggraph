@@ -11,26 +11,29 @@ import { initGraphParamsFromEnv } from '../utils/css.js';
  *   3. System env (VITE_*)          ─┤  → getLayerViteEnv()
  *   4. .env files (.env, .env.prod) ─┘    (3+4+1 werden von Vite in import.meta.env gebündelt)
  *   5. env.json                      → fetchJsonLayer('./env.json')
- *   6. config.json                   → fetchJsonLayer('./config.json')
- *   7. Code defaults                 → DEFAULTS
+ *      Fallback: env.example.json    → fetchJsonLayer('./env.example.json')
+ *   6. Code defaults                 → DEFAULTS
  *
  * Layers 1/3/4 sind zur Build-Zeit in import.meta.env gebacken und
  * können zur Laufzeit nicht unterschieden werden.
  * Layer 2 (window.__ORGGRAPH_ENV__) ermöglicht Runtime-Overrides
  * ohne Rebuild (z.B. via Server-seitigem HTML-Injection).
+ *
+ * npm run dev:example erzwingt env.example.json (kein Fallback).
+ * npm run dev         versucht env.json, fällt auf env.example.json zurück.
  */
 
 // ---------------------------------------------------------------------------
-// DEFAULTS (Layer 7 – niedrigste Priorität)
+// DEFAULTS (Layer 6 – niedrigste Priorität)
 // ---------------------------------------------------------------------------
 
 const DEFAULTS = {
-  // Daten-URLs
-  DATA_URL: './data.json',
-  DATA_ATTRIBUTES_URL: ['./attributes.txt'],
+  // Daten-URLs (leer – werden durch env.json oder env.example.json gesetzt)
+  DATA_URL: '',
+  DATA_ATTRIBUTES_URL: [],
 
   // Toolbar-Defaults
-  TOOLBAR_DEPTH_DEFAULT: 2,
+  TOOLBAR_DEPTH_DEFAULT: 1,
   TOOLBAR_DIRECTION_DEFAULT: 'both',
   TOOLBAR_MANAGEMENT_ACTIVE: true,
   TOOLBAR_HIERARCHY_ACTIVE: false,
@@ -107,16 +110,20 @@ function coerce(raw, typeHint) {
 // ---------------------------------------------------------------------------
 
 /**
- * Layer 6/5: Lädt eine JSON-Datei als Config-Layer [SF]
+ * Lädt eine JSON-Datei als Config-Layer [SF]
  * @param {string} url - URL der JSON-Datei
- * @returns {Promise<Object>} Geladene Konfiguration oder leeres Objekt
+ * @returns {Promise<Object|null>} Geladene Konfiguration oder null bei Fehler
  */
 async function fetchJsonLayer(url) {
   try {
     const res = await fetch(url, { cache: 'no-store' });
-    if (res.ok) return await res.json();
+    if (!res.ok) return null;
+    // Vite SPA-Fallback liefert HTML mit Status 200 für fehlende Dateien
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('json')) return null;
+    return await res.json();
   } catch { /* optional layer, ignore errors */ }
-  return {};
+  return null;
 }
 
 /**
@@ -156,18 +163,17 @@ function getLayerRuntimeInjected() {
  * Erstellt Konfigurationsobjekt durch Layer-Merge [SF][DRY]
  *
  * Merge-Reihenfolge (niedrigste → höchste Priorität):
- *   DEFAULTS → config.json → env.json → import.meta.env → window.__ORGGRAPH_ENV__
+ *   DEFAULTS → env.json → import.meta.env → window.__ORGGRAPH_ENV__
  *
- * @param {Object} configJson - Inhalt von config.json (Layer 6)
- * @param {Object} envJson - Inhalt von env.json (Layer 5)
+ * @param {Object} envJson - Inhalt von env.json / env.example.json (Layer 5)
  * @returns {Object} Finale Konfiguration
  */
-export function buildConfig(configJson = {}, envJson = {}) {
+export function buildConfig(envJson = {}) {
   const viteEnv = getLayerViteEnv();
   const runtimeEnv = getLayerRuntimeInjected();
 
   // Layers von niedrig → hoch, spätere überschreiben frühere
-  const layers = [configJson, envJson, viteEnv, runtimeEnv];
+  const layers = [envJson, viteEnv, runtimeEnv];
 
   const config = {};
   for (const [key, defaultValue] of Object.entries(DEFAULTS)) {
@@ -188,6 +194,26 @@ export function buildConfig(configJson = {}, envJson = {}) {
   return config;
 }
 
+/**
+ * Lädt env.json mit Fallback auf env.example.json [SF]
+ *
+ * - npm run dev:example → direkt env.example.json
+ * - npm run dev         → env.json versuchen, bei Fehlen env.example.json
+ *
+ * @returns {Promise<Object>} Geladene Konfiguration (nie null)
+ */
+async function loadEnvJson() {
+  if (useExampleData()) {
+    return await fetchJsonLayer('./env.example.json') || {};
+  }
+
+  const envJson = await fetchJsonLayer('./env.json');
+  if (envJson) return envJson;
+
+  // Fallback: env.example.json
+  return await fetchJsonLayer('./env.example.json') || {};
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -196,17 +222,14 @@ export function buildConfig(configJson = {}, envJson = {}) {
  * Lädt die Konfiguration aus allen Quellen und aktualisiert den Store [SF]
  *
  * Precedence: CLI args > runtime injected > system env > .env files
- *             > env.json > config.json > code defaults
+ *             > env.json (oder env.example.json als Fallback) > code defaults
  */
 export async function loadEnvConfig() {
-  // Layer 6: config.json
-  const configJson = await fetchJsonLayer('./config.json');
+  // env.json laden (oder env.example.json im Example-Modus / als Fallback)
+  const envJson = await loadEnvJson();
 
-  // Layer 5: env.json
-  const envJson = await fetchJsonLayer('./env.json');
-
-  // Layers 1-4 + 7 werden in buildConfig zusammengeführt
-  const config = buildConfig(configJson, envJson);
+  // Layers 1-4 + 6 werden in buildConfig zusammengeführt
+  const config = buildConfig(envJson);
 
   // Update Store
   graphStore.setEnvConfig(config);
@@ -220,15 +243,14 @@ export async function loadEnvConfig() {
 /**
  * Gibt einen einzelnen Konfigurationswert zurück [SF]
  * @param {string} key - Konfigurationsschlüssel
- * @param {Object} configJson - Optionale config.json-Daten
  * @param {Object} envJson - Optionale env.json-Daten
  * @returns {*} Konfigurationswert
  */
-export function getConfigValue(key, configJson = {}, envJson = {}) {
+export function getConfigValue(key, envJson = {}) {
   const defaultValue = DEFAULTS[key];
   if (defaultValue === undefined) return undefined;
 
-  const fullConfig = buildConfig(configJson, envJson);
+  const fullConfig = buildConfig(envJson);
   return fullConfig[key];
 }
 

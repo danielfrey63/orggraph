@@ -4,6 +4,9 @@ export class GraphStore {
   static getInstance() {
     if (!GraphStore.#instance) {
       GraphStore.#instance = new GraphStore();
+      console.log('[GraphStore] New Instance created');
+    } else {
+        console.log('[GraphStore] Returning existing instance');
     }
     return GraphStore.#instance;
   }
@@ -12,6 +15,7 @@ export class GraphStore {
     if (GraphStore.#instance) {
       return GraphStore.#instance;
     }
+    console.log('[GraphStore] Constructor called');
 
     this.state = {
       // Daten
@@ -83,6 +87,7 @@ export class GraphStore {
   // --- Mutations: Daten --------------------------------------------------
 
   setRawData(raw) {
+    console.log('[GraphStore] setRawData called with:', raw ? { nodes: raw.nodes?.length, links: raw.links?.length } : 'null');
     this.state.raw = raw || { nodes: [], links: [], persons: [], orgs: [] };
     this.notify('raw:update', this.state.raw);
   }

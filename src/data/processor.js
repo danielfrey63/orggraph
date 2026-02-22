@@ -8,12 +8,42 @@ export function processData(data) {
   const orgs = Array.isArray(data.orgs) ? data.orgs : [];
   const links = Array.isArray(data.links) ? data.links : [];
 
+  console.log(`[Processor] Raw data counts: Persons=${persons.length}, Orgs=${orgs.length}, Links=${links.length}`);
   Logger.log(`[Init] Processing data: ${persons.length} persons, ${orgs.length} orgs, ${links.length} links`);
 
   const nodes = [];
   const personIds = new Set();
-  persons.forEach(p => { if (p && p.id) { nodes.push({ ...p, id: String(p.id), type: 'person' }); personIds.add(String(p.id)); } });
-  orgs.forEach(o => { if (o && o.id) { nodes.push({ ...o, id: String(o.id), type: 'org' }); } });
+  
+  try {
+    persons.forEach((p, index) => { 
+        try {
+            if (p && p.id) { 
+                nodes.push({ ...p, id: String(p.id), type: 'person' }); 
+                personIds.add(String(p.id)); 
+            }
+        } catch (err) {
+            console.error(`[Processor] Error in person at index ${index}:`, p, err);
+        }
+    });
+  } catch (err) {
+    console.error('[Processor] Crash in persons loop:', err);
+  }
+
+  try {
+    orgs.forEach((o, index) => { 
+        try {
+            if (o && o.id) { 
+                nodes.push({ ...o, id: String(o.id), type: 'org' }); 
+            }
+        } catch (err) {
+            console.error(`[Processor] Error in org at index ${index}:`, o, err);
+        }
+    });
+  } catch (err) {
+    console.error('[Processor] Crash in orgs loop:', err);
+  }
+
+  console.log(`[Processor] Processed nodes: ${nodes.length} (Persons+Orgs)`);
 
   const seen = new Set();
   const idSet = new Set(nodes.map(n => String(n.id)));

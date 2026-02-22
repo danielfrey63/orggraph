@@ -352,6 +352,8 @@ export async function loadData() {
     const res = await fetch(dataUrl, { cache: "no-store" });
     if (res.ok) {
       data = await res.json();
+      console.log(`[Loader] Loaded data from ${dataUrl}:`, data ? Object.keys(data) : 'null');
+      Logger.log(`[Load] Data fetched from ${dataUrl}`, data ? Object.keys(data) : 'null');
     } else {
       console.warn('Automatisches Laden der Daten fehlgeschlagen:', res.status, res.statusText);
     }

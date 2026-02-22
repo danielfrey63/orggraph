@@ -60,7 +60,9 @@ class App {
         graphStore.setPseudonymizationEnabled(config.TOOLBAR_PSEUDO_ACTIVE);
       }
       if (config.TOOLBAR_DEBUG_ACTIVE !== undefined) {
-        graphStore.setDebugMode(config.TOOLBAR_DEBUG_ACTIVE);
+        const debug = !!config.TOOLBAR_DEBUG_ACTIVE;
+        graphStore.setDebugMode(debug);
+        Logger.setDebugMode(debug); // Sync Logger immediately
       }
       if (config.LEGEND_ATTRIBUTES_ACTIVE !== undefined) {
         graphStore.setAttributesVisible(config.LEGEND_ATTRIBUTES_ACTIVE);
@@ -221,6 +223,12 @@ class App {
         event === 'attributesVisible:update' ||
         event === 'debugMode:update'
     ) {
+        if (event === 'debugMode:update') {
+            // Synchronize Logger with Store
+            Logger.setDebugMode(state.debugMode);
+            Logger.log('Debug Mode synced:', state.debugMode);
+        }
+
         if (this.renderer) {
             this.renderer.updateVisualParams();
         }

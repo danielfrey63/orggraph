@@ -36,11 +36,22 @@ export class LegendUI {
     if (this.unsubscribe) this.unsubscribe();
   }
   
-  handleStoreUpdate({ event }) {
+  handleStoreUpdate({ event, state }) {
     switch (event) {
       case 'allowedOrgs:update':
       case 'orgRoots:update':
-      case 'hierarchy:update':
+      case 'hierarchy:update': {
+        // Debug: Log incoming hierarchy/allowedOrgs state before (re)building the OE legend [DEBUG]
+        const { raw, orgRoots, orgChildren, orgParent, allowedOrgs } = state;
+        console.log('[Legend][StoreUpdate]', event, {
+          rawOrgs: raw?.orgs?.length,
+          orgRoots: Array.isArray(orgRoots) ? orgRoots.slice(0, 10) : orgRoots,
+          orgRootsSize: Array.isArray(orgRoots) ? orgRoots.length : (orgRoots && orgRoots.size),
+          orgChildrenSize: orgChildren ? orgChildren.size : null,
+          orgParentSize: orgParent ? orgParent.size : null,
+          allowedOrgsSize: allowedOrgs ? allowedOrgs.size : null
+        });
+
         if (event === 'allowedOrgs:update') {
             this.updateLegendChips();
             this.updateLegendRowColors();
@@ -48,6 +59,7 @@ export class LegendUI {
             this.buildOrgLegend();
         }
         break;
+      }
       case 'personAttributes:update':
       case 'activeAttributes:update':
       case 'attributeTypes:update':

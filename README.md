@@ -31,19 +31,18 @@ npm run dev:example  # Lädt data.example.json statt Produktionsdaten
 
 ### Configuration Precedence
 
-Die App unterstützt 7 Konfigurationsquellen mit klarer Priorität (höchste zuerst):
+Die App unterstützt **6 effektive Konfigurationsquellen** mit klarer Priorität (höchste zuerst):
 
 | # | Quelle | Beschreibung |
 |---|--------|--------------|
-| 1 | **CLI args** | `vite --define 'import.meta.env.VITE_KEY="value"'` |
+| 1 | **CLI / System / .env** | `vite --define …`, System-ENV `VITE_*` und `.env*`-Dateien. Werden von Vite in `import.meta.env` gebündelt. |
 | 2 | **Runtime injected** | `window.__ORGGRAPH_ENV__` (Script-Tag im HTML) |
-| 3 | **System env** | `VITE_*` Umgebungsvariablen des Systems |
-| 4 | **.env files** | `.env`, `.env.production`, `.env.development` |
-| 5 | **env.json** | `public/env.json` (zur Laufzeit geladen) |
-| 6 | **config.json** | `public/config.json` (zur Laufzeit geladen) |
-| 7 | **Code defaults** | Hartcodierte Standardwerte in `src/config/env.js` |
+| 3 | **env.json** | `public/env.json` (zur Laufzeit geladen) |
+| 4 | **env.example.json** | `public/env.example.json` (Fallback bzw. im Example-Modus erzwungen) |
+| 5 | **Code defaults** | Hartcodierte Standardwerte in `src/config/env.js` |
+| 6 | **Graph Runtime-State** | Abgeleitete Parameter im Store (z.B. Slider/Toolbar-Status), nicht direkt konfigurierbar, aber von obigen Quellen beeinflusst |
 
-> **Hinweis:** Quellen 1, 3 und 4 werden von Vite zur Build-Zeit in `import.meta.env` gebündelt und sind zur Laufzeit nicht unterscheidbar.
+> **Hinweis:** CLI-Defines, System-Env und `.env`-Dateien werden von Vite zur Build-Zeit in `import.meta.env` konsolidiert und sind zur Laufzeit nicht mehr unterscheidbar. `buildConfig()` in [`src/config/env.js`](src/config/env.js:171) fasst diese Quellen unter `import.meta.env` zusammen und merged sie mit `env.json` / `env.example.json` und `window.__ORGGRAPH_ENV__`.
 
 ### Konfigurationsoptionen
 
