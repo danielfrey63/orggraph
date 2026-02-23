@@ -52,12 +52,7 @@ export class LegendUI {
           allowedOrgsSize: allowedOrgs ? allowedOrgs.size : null
         });
 
-        if (event === 'allowedOrgs:update') {
-            this.updateLegendChips();
-            this.updateLegendRowColors();
-        } else {
-            this.buildOrgLegend();
-        }
+        this.buildOrgLegend();
         break;
       }
       case 'personAttributes:update':
@@ -89,18 +84,16 @@ export class LegendUI {
     if (!this.legendEl) return;
     this.legendEl.innerHTML = '';
     
-    const { raw, orgRoots, orgChildren, orgParent } = graphStore.state;
-    // Determine roots
-    let roots = Array.isArray(orgRoots) && orgRoots.length > 0 ? orgRoots.slice() : [];
+    const { orgChildren, orgParent, allowedOrgs } = graphStore.state;
     
-    // If no roots found but we have orgs, try to find them manually (fallback)
-    if (roots.length === 0 && raw && raw.orgs && raw.orgs.length > 0) {
-        const orgIds = new Set(raw.orgs.map(o => String(o.id)));
-        roots = Array.from(orgIds).filter(id => {
-            const p = orgParent?.get(id);
-            return !p || !orgIds.has(String(p));
-        });
-    }
+    // If no allowedOrgs yet, skip rendering (will rebuild when allowedOrgs is set) [SF]
+    if (!allowedOrgs || allowedOrgs.size === 0) return;
+    
+    // Determine roots: top-level OEs within allowedOrgs (no parent in allowedOrgs)
+    let roots = Array.from(allowedOrgs).filter(id => {
+        const p = orgParent?.get(id);
+        return !p || !allowedOrgs.has(String(p));
+    });
 
     this.orgLegendNodes.clear();
     const ul = document.createElement('ul');
@@ -109,7 +102,8 @@ export class LegendUI {
     const options = {
         childrenProvider: (id) => {
             const children = orgChildren?.get(String(id));
-            return children ? Array.from(children) : [];
+            if (!children) return [];
+            return Array.from(children).filter(c => allowedOrgs.has(String(c)));
         },
         registerNode: (id, li) => { this.orgLegendNodes.set(id, li); }
     };

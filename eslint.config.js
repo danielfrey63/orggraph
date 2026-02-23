@@ -7,6 +7,7 @@ export default [
       "public/*",
       "trace/",
       "helpers/",
+      "playwright-report/",
       "*.min.js"
     ]
   },

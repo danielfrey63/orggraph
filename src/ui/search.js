@@ -128,17 +128,21 @@ export class SearchUI {
 
   guessIdFromInput(val) {
     if (!val) return null;
-    const { nodes } = graphStore.state.raw;
-    if (!nodes) return null;
+    const { byId, byEmail } = graphStore.state;
+    const term = val.toLowerCase().trim();
 
-    const exactByLabel = nodes.find(n => (n.label || '') === val);
-    if (exactByLabel) return String(exactByLabel.id);
+    // 1. Exact Email Match (O(1))
+    if (byEmail.has(term)) return byEmail.get(term);
 
-    const exactById = nodes.find(n => String(n.id) === val);
-    if (exactById) return String(exactById.id);
+    // 2. Exact ID Match (O(1))
+    if (byId.has(term)) return term;
 
-    const part = nodes.find(n => (n.label || '').toLowerCase().includes(val.toLowerCase()));
-    return part ? String(part.id) : null;
+    // 3. Exact Label Match (O(N) but only if not found by ID/Email)
+    for (const node of byId.values()) {
+        if ((node.label || '').toLowerCase() === term) return String(node.id);
+    }
+
+    return null;
   }
 
   chooseItem(idx, addMode) {

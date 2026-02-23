@@ -21,10 +21,12 @@ export class GraphStore {
       // Daten
       raw: { nodes: [], links: [], persons: [], orgs: [] },
       byId: new Map(),
+      byEmail: new Map(), // email -> personId [PA]
       allNodesUnique: [],
 
       // Attribute
       personAttributes: new Map(),
+      personToOrgs: new Map(), // personId -> Set<orgId> [PA]
       attributeTypes: new Map(),
       activeAttributes: new Set(),
       emptyCategories: new Set(),
@@ -95,6 +97,16 @@ export class GraphStore {
   setById(map) {
     this.state.byId = map || new Map();
     this.notify('byId:update', this.state.byId);
+  }
+
+  setByEmail(map) {
+    this.state.byEmail = map || new Map();
+    this.notify('byEmail:update', this.state.byEmail);
+  }
+
+  setPersonToOrgs(map) {
+    this.state.personToOrgs = map || new Map();
+    this.notify('personToOrgs:update', this.state.personToOrgs);
   }
 
   setAllNodesUnique(nodes) {

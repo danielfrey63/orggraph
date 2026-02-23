@@ -1,5 +1,5 @@
 import { graphStore } from '../state/store.js';
-import { idOf } from './adjacency.js';
+import { idOf, getAdjacencyCache } from './adjacency.js';
 
 /**
  * Computes the subgraph based on start node, depth, and traversal mode.
@@ -9,24 +9,13 @@ import { idOf } from './adjacency.js';
  * @returns {Object} { nodes, links, legendOrgs, legendOrgLevels }
  */
 export function computeSubgraph(startId, depth, mode) {
-  const { raw, byId, parentOf, hiddenNodes, managementEnabled } = graphStore.state;
+  const { raw, byId, parentOf, hiddenNodes, managementEnabled, personToOrgs } = graphStore.state;
   
   if (!raw || !byId.has(startId)) return { nodes: [], links: [] };
 
-  const out = new Map();
-  const inn = new Map();
+  // Use cached adjacency maps [PA] [DRY] [Medium Severity Fix]
+  const { out, inn } = getAdjacencyCache(raw.links, byId);
   
-  // Pre-process links for traversal
-  for (const l of raw.links) {
-    const s = idOf(l.source);
-    const t = idOf(l.target);
-    if (!byId.has(s) || !byId.has(t)) continue;
-    if (!out.has(s)) out.set(s, new Set());
-    if (!inn.has(t)) inn.set(t, new Set());
-    out.get(s).add(t);
-    inn.get(t).add(s);
-  }
-
   const seen = new Set();
   const dist = new Map(); 
   const q = [];
@@ -90,18 +79,8 @@ export function computeSubgraph(startId, depth, mode) {
   const legendOrgs = new Set();
   const legendOrgLevels = new Map(); // oid -> min person level activating this OE
   
-  // Build efficient lookup: person -> set of OEs
-  const personToOrgs = new Map();
-  for (const l of raw.links) {
-    const s = idOf(l.source);
-    const t = idOf(l.target);
-    if (byId.get(s)?.type === 'person' && byId.get(t)?.type === 'org') {
-      if (!personToOrgs.has(s)) personToOrgs.set(s, new Set());
-      personToOrgs.get(s).add(t);
-    }
-  }
-  
   // For each person in the subgraph, find their lowest OE(s)
+  // Optimization: use pre-computed personToOrgs [PA] [Medium Severity Fix]
   for (const id of seen) {
     const n = byId.get(id);
     if (n && n.type === 'person') {

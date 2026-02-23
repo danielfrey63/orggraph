@@ -1,6 +1,6 @@
 import { Logger } from '../utils/logger.js';
 import { graphStore } from '../state/store.js';
-import { idOf } from '../graph/adjacency.js';
+import { idOf, invalidateAdjacencyCache, invalidateOrgDepthCache } from '../graph/adjacency.js';
 
 export function processData(data) {
   Logger.log('[Timing] Start: processData');
@@ -13,13 +13,18 @@ export function processData(data) {
 
   const nodes = [];
   const personIds = new Set();
+  const byEmail = new Map(); // [PA]
   
   try {
     persons.forEach((p, index) => { 
         try {
             if (p && p.id) { 
-                nodes.push({ ...p, id: String(p.id), type: 'person' }); 
-                personIds.add(String(p.id)); 
+                const pid = String(p.id);
+                nodes.push({ ...p, id: pid, type: 'person' }); 
+                personIds.add(pid); 
+                if (p.email) {
+                    byEmail.set(String(p.email).toLowerCase(), pid);
+                }
             }
         } catch (err) {
             console.error(`[Processor] Error in person at index ${index}:`, p, err);
@@ -64,8 +69,9 @@ export function processData(data) {
   graphStore.setRawData(raw);
 
   const byId = new Map(raw.nodes.map(n => [String(n.id), n]));
-  // Update Store: byId
+  // Update Store: byId, byEmail
   graphStore.setById(byId);
+  graphStore.setByEmail(byEmail);
 
   const allNodesUnique = Array.from(byId.values());
   // Update Store: allNodesUnique
@@ -95,6 +101,25 @@ export function processData(data) {
     orgRoots = allOrgIds.filter(id => !hasParent.has(id));
   }
   
+  // Person -> Orgs pre-computation [PA] [Medium Severity Fix]
+  const personToOrgs = new Map();
+  if (raw && Array.isArray(raw.links)) {
+    const orgIds = new Set(raw.orgs.map(o => String(o.id)));
+    for (const l of raw.links) {
+        const s = idOf(l.source);
+        const t = idOf(l.target);
+        if (personIds.has(s) && orgIds.has(t)) {
+            if (!personToOrgs.has(s)) personToOrgs.set(s, new Set());
+            personToOrgs.get(s).add(t);
+        }
+    }
+  }
+  graphStore.setPersonToOrgs(personToOrgs);
+
+  // Invalidate caches [REH]
+  invalidateAdjacencyCache();
+  invalidateOrgDepthCache();
+  
   // Update Store: Hierarchy
   graphStore.setHierarchy({ parentOf, orgParent, orgChildren, orgRoots });
 
@@ -118,6 +143,8 @@ export function processData(data) {
       graphStore.setEmptyCategories(new Set());
       graphStore.setCategorySourceFiles(new Map());
       graphStore.setModifiedCategories(new Set());
+      graphStore.setByEmail(new Map());
+      graphStore.setPersonToOrgs(new Map());
     }
   }
   Logger.log('[Timing] End: processData');

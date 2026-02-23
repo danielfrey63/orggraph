@@ -76,20 +76,20 @@ export function parseAttributeList(text) {
  * Find person IDs by identifier (ID or Email)
  */
 export function findPersonIdsByIdentifier(identifier) {
-  const { raw } = graphStore.state;
-  if (!raw || !raw.persons) return [];
-
+  const { byId, byEmail } = graphStore.state;
   const normalizedId = String(identifier).toLowerCase();
   const matches = [];
   
-  // Search exact ID
-  const exactById = raw.persons.find(p => String(p.id).toLowerCase() === normalizedId);
-  if (exactById) matches.push(String(exactById.id));
+  // Search by Email (O(1) lookup)
+  if (byEmail.has(normalizedId)) {
+    matches.push(byEmail.get(normalizedId));
+  }
   
-  // Search exact Email
-  const exactByEmail = raw.persons.find(p => (p.email || '').toLowerCase() === normalizedId);
-  if (exactByEmail && !matches.includes(String(exactByEmail.id))) {
-    matches.push(String(exactByEmail.id));
+  // Search by ID (O(1) lookup)
+  if (byId.has(normalizedId) && byId.get(normalizedId).type === 'person') {
+    if (!matches.includes(normalizedId)) {
+      matches.push(normalizedId);
+    }
   }
   
   return matches;

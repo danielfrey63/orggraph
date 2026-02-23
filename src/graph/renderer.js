@@ -36,6 +36,9 @@ export class GraphRenderer {
     this.nodeGroup = null;
     this.linkLabelGroup = null;
 
+    // Transition control [REH]
+    this.activeTransitionId = 0;
+
     // Cluster state (visual only)
     this.clusterLayer = null;
     this.clusterSimById = new Map();
@@ -62,7 +65,10 @@ export class GraphRenderer {
   /**
    * Orchestrates the transition between two subgraph states.
    */
-  async transition(oldSub, newSub, roots) {
+  async transition(oldSub, newSub, roots, transitionId = 0) {
+    this.activeTransitionId = transitionId;
+    const isCancelled = () => transitionId !== 0 && this.activeTransitionId !== transitionId;
+
     const oldNodes = oldSub ? oldSub.nodes : [];
     const newNodes = newSub ? newSub.nodes : [];
     
@@ -103,6 +109,7 @@ export class GraphRenderer {
       const sortedLevels = Array.from(byLevel.keys()).sort((a, b) => b - a);
 
       for (const level of sortedLevels) {
+        if (isCancelled()) return;
         const idsToRemove = new Set(byLevel.get(level));
         currentNodes = currentNodes.filter(n => !idsToRemove.has(String(n.id)));
         const currentLinks = getLinksForNodes(currentNodes);
@@ -110,6 +117,8 @@ export class GraphRenderer {
         await new Promise(r => setTimeout(r, BFS_LEVEL_ANIMATION_DELAY_MS));
       }
     }
+
+    if (isCancelled()) return;
 
     // Sync to keep nodes
     const nodesToKeep = newNodes.filter(n => oldNodeIds.has(String(n.id)));
@@ -127,6 +136,7 @@ export class GraphRenderer {
       const sortedLevels = Array.from(byLevel.keys()).sort((a, b) => a - b);
 
       for (const level of sortedLevels) {
+        if (isCancelled()) return;
         const nodesInLevel = byLevel.get(level);
         currentNodes = [...currentNodes, ...nodesInLevel];
         const currentLinks = getLinksForNodes(currentNodes);
@@ -134,6 +144,8 @@ export class GraphRenderer {
         await new Promise(r => setTimeout(r, BFS_LEVEL_ANIMATION_DELAY_MS));
       }
     }
+
+    if (isCancelled()) return;
 
     // Final render
     const finalLinks = newSub.links.map(l => ({ source: idOf(l.source), target: idOf(l.target) }));

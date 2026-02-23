@@ -67,6 +67,13 @@ class App {
       if (config.LEGEND_ATTRIBUTES_ACTIVE !== undefined) {
         graphStore.setAttributesVisible(config.LEGEND_ATTRIBUTES_ACTIVE);
       }
+      // Apply depth default to hidden input [SF]
+      if (config.TOOLBAR_DEPTH_DEFAULT !== undefined) {
+        const depthInput = document.querySelector(INPUT_DEPTH_ID);
+        if (depthInput) {
+          depthInput.value = config.TOOLBAR_DEPTH_DEFAULT;
+        }
+      }
     }
 
     // 2. Initialize Components
@@ -199,7 +206,7 @@ class App {
   }
 
   handleStoreUpdate({ event, state }) {
-    if (event === 'selectedRootIds:update' || event === 'currentSelectedId:update') {
+    if (event.startsWith('selectedRootIds:') || event === 'currentSelectedId:update') {
       this.render();
     }
     if (event === 'currentSelectedId:update') {
@@ -284,15 +291,31 @@ class App {
     
     let allNodes = new Map();
     let allLinks = new Map();
+    let allLegendOrgs = new Set();
     
     roots.forEach(rootId => {
         const sub = computeSubgraph(rootId, depth, mode);
         sub.nodes.forEach(n => allNodes.set(String(n.id), n));
         sub.links.forEach(l => {
-            const key = `${l.source}|${l.target}`; // idOf used inside
+            const key = `${l.source}|${l.target}`;
             allLinks.set(key, l);
         });
+        if (sub.legendOrgs) {
+            sub.legendOrgs.forEach(oid => allLegendOrgs.add(oid));
+        }
     });
+    
+    // Scope allowedOrgs to subgraph OEs + their ancestor chain [SF]
+    const { parentOf } = graphStore.state;
+    const scopedOrgs = new Set(allLegendOrgs);
+    for (const oid of allLegendOrgs) {
+        let cur = parentOf?.get(oid);
+        while (cur && !scopedOrgs.has(cur)) {
+            scopedOrgs.add(cur);
+            cur = parentOf.get(cur);
+        }
+    }
+    graphStore.setAllowedOrgs(scopedOrgs);
     
     const subgraph = {
         nodes: Array.from(allNodes.values()),
@@ -301,9 +324,11 @@ class App {
     
     // Transition
     this.currentTransitionId++;
+    const transitionId = this.currentTransitionId;
     
     if (this.currentSubgraph) {
-        this.renderer.transition(this.currentSubgraph, subgraph, roots).then(() => {
+        this.renderer.transition(this.currentSubgraph, subgraph, roots, transitionId).then(() => {
+            if (this.currentTransitionId !== transitionId) return;
             // Update stats
             this.updateStats(subgraph);
             this.updateDetailPanel();

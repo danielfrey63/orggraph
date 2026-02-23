@@ -68,8 +68,13 @@ class PseudonymizationService {
     
     // Find level-based org list
     const levelKey = `organizationalUnits${level}`;
-    const orgList = this.pseudoData[levelKey];
+    let orgList = this.pseudoData[levelKey];
     
+    // Fallback to organizationalUnits0 if level not found [SF][REH]
+    if (!orgList || !Array.isArray(orgList) || orgList.length === 0) {
+        orgList = this.pseudoData['organizationalUnits0'] || [];
+    }
+
     if (!orgList || !Array.isArray(orgList) || orgList.length === 0) {
         return originalLabel;
     }

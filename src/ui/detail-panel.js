@@ -117,8 +117,8 @@ export class DetailPanel {
     }
     
     // All OEs
-    const { raw, byId } = graphStore.state;
-    const allPersonOrgs = findAllPersonOrgs(personId, raw, byId, this.parentOf, (n, d) => pseudonymizationService.getDisplayLabel(n, d, this.parentOf));
+    const { byId, personToOrgs } = graphStore.state;
+    const allPersonOrgs = findAllPersonOrgs(personId, personToOrgs, byId, this.parentOf, (n, d) => pseudonymizationService.getDisplayLabel(n, d, this.parentOf));
     
     // Visible OEs
     if (visibleOrgs.length > 0) {
