@@ -34,7 +34,6 @@ export class GraphRenderer {
     this.gClusters = null;
     this.linkGroup = null;
     this.nodeGroup = null;
-    this.linkLabelGroup = null;
 
     // Transition control [REH]
     this.activeTransitionId = 0;
@@ -326,6 +325,7 @@ export class GraphRenderer {
     arrow.attr('viewBox', '0 0 10 10').attr('refX', 0).attr('refY', 5)
          .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto-start-reverse');
     if (arrow.select('path').empty()) arrow.append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z');
+    arrow.select('path').attr('fill', 'var(--link-stroke)');
     
     // Groups
     this.gZoom = this.svg.select('g.zoom-layer');
@@ -338,8 +338,7 @@ export class GraphRenderer {
     this.linkGroup = this.gZoom.select('g.links');
     if (this.linkGroup.empty()) this.linkGroup = this.gZoom.append('g').attr('class', 'links');
 
-    this.linkLabelGroup = this.gZoom.select('g.link-labels');
-    if (this.linkLabelGroup.empty()) this.linkLabelGroup = this.gZoom.append('g').attr('class', 'link-labels');
+
 
     this.nodeGroup = this.gZoom.select('g.nodes');
     if (this.nodeGroup.empty()) this.nodeGroup = this.gZoom.append('g').attr('class', 'nodes');
@@ -360,7 +359,7 @@ export class GraphRenderer {
     if (!this.svg) return;
 
     const { nodes, links } = sub;
-    const { byId, debugMode, labelsVisible } = graphStore.state;
+    const { byId } = graphStore.state;
 
     // Filter to persons
     const personIdsInSub = new Set(nodes.filter(n => byId.get(String(n.id))?.type === 'person').map(n => String(n.id)));
@@ -380,16 +379,6 @@ export class GraphRenderer {
         exit => exit.remove()
       );
 
-    // Render Link Labels
-    this.linkLabelGroup.selectAll('text')
-      .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
-      .join('text')
-      .attr('class', 'link-label')
-      .attr('text-anchor', 'middle')
-      .attr('dy', -3)
-      .style('display', (debugMode && labelsVisible !== 'none') ? 'block' : 'none')
-      .text('link') // Placeholder
-      .style('font-size', '10px').style('fill', '#666').style('pointer-events', 'none');
 
     // Render Nodes
     const nodeRadius = getGraphParam('nodeRadius');
@@ -399,7 +388,7 @@ export class GraphRenderer {
         enter => {
           const g = enter.append('g').attr('class', 'node');
           g.append('circle').attr('r', nodeRadius).attr('class', 'node-circle');
-          g.append('text').attr('x', 10).attr('y', 4).attr('class', 'label');
+          g.append('text').attr('x', nodeRadius + getGraphParam('nodeStrokeWidth')/2 + 4).attr('dy', '0.35em').attr('class', 'label');
           return g;
         },
         update => update,
@@ -498,13 +487,10 @@ export class GraphRenderer {
         });
 
     this.nodeGroup.selectAll('g.node').attr('transform', d => `translate(${d.x},${d.y})`);
-    
-    this.linkLabelGroup.selectAll('text')
-        .attr('x', d => (d.source.x + d.target.x) / 2)
-        .attr('y', d => (d.source.y + d.target.y) / 2);
-        
+
     this._updateClusters();
   }
+
 
   _getOutermostRadius(d) {
     const nodeRadius = getGraphParam('nodeRadius');
@@ -673,11 +659,17 @@ export class GraphRenderer {
     this.svg.selectAll('.link').style('stroke-width', linkStroke);
     const arrow = this.svg.select('marker#arrow');
     arrow.attr('markerWidth', arrowSize).attr('markerHeight', arrowSize + linkStroke);
+    arrow.select('path').attr('fill', 'var(--link-stroke)');
   }
 
   _updateLabelVisuals() {
     const labelSize = getGraphParam('labelFontSize');
-    this.svg.selectAll('.node text.label').style('font-size', `${labelSize}px`)
+    const nodeRadius = getGraphParam('nodeRadius');
+    const nodeStroke = getGraphParam('nodeStrokeWidth');
+    this.svg.selectAll('.node text.label')
+       .style('font-size', `${labelSize}px`)
+       .attr('x', nodeRadius + nodeStroke / 2 + 4)
+       .attr('dy', '0.35em')
        .text(d => graphStore.state.debugMode ? this._getDebugLabel(d) : pseudonymizationService.getDisplayLabel(d));
   }
   
@@ -748,11 +740,11 @@ export class GraphRenderer {
             g.insert('circle', 'circle.node-circle').attr('r', outerR + circleGap).attr('class', 'attribute-hit-area').style('fill', 'transparent');
             
             // Label pos
-            g.select('text.label').attr('x', outerR + 3);
+            g.select('text.label').attr('x', outerR + 4);
         } else {
             // Reset
             mainCircle.style('stroke', null).style('fill', null); // CSS handles default?
-            g.select('text.label').attr('x', nodeRadius + nodeStroke/2 + 3);
+            g.select('text.label').attr('x', nodeRadius + nodeStroke/2 + 4);
         }
     });
     
