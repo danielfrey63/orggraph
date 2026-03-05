@@ -1,10 +1,15 @@
 import { graphStore } from '../state/store.js';
+import { Logger } from '../utils/logger.js';
 import { colorForOrg } from './colors.js';
 import { getChevronSVG } from './icons.js';
 import { pseudonymizationService } from '../services/pseudonymization.js';
 import { getOrgDepth } from '../graph/adjacency.js';
 import { showLegendMenu } from './menus.js';
 import { exportCategoryAttributes, exportCategoryAsTSV } from './export.js';
+import { showTemporaryNotification } from '../utils/dom.js';
+import { loadAttributesFromFile } from '../data/loader.js';
+import { initializeChevronIcons } from './icons.js';
+import { updateEyeButton } from './buttons.js';
 
 /**
  * Legend UI Component
@@ -26,6 +31,11 @@ export class LegendUI {
   }
   
   init() {
+    // Initialize header icons and collapse/expand behavior
+    initializeChevronIcons();
+    this.initCollapsibleSections();
+    this.initHeaderActions();
+
     // Initial build
     this.buildOrgLegend();
     this.buildAttributeLegend();
@@ -38,12 +48,15 @@ export class LegendUI {
   
   handleStoreUpdate({ event, state }) {
     switch (event) {
+      case 'hullVisibleOrgs:update':
+        this.syncGraphAndLegendColors();
+        break;
       case 'allowedOrgs:update':
       case 'orgRoots:update':
       case 'hierarchy:update': {
         // Debug: Log incoming hierarchy/allowedOrgs state before (re)building the OE legend [DEBUG]
         const { raw, orgRoots, orgChildren, orgParent, allowedOrgs } = state;
-        console.log('[Legend][StoreUpdate]', event, {
+        Logger.log('[Legend][StoreUpdate]', event, {
           rawOrgs: raw?.orgs?.length,
           orgRoots: Array.isArray(orgRoots) ? orgRoots.slice(0, 10) : orgRoots,
           orgRootsSize: Array.isArray(orgRoots) ? orgRoots.length : (orgRoots && orgRoots.size),
@@ -76,6 +89,301 @@ export class LegendUI {
         this.buildHiddenLegend();
         break;
     }
+  }
+
+  // --- Section Collapse/Expand ---
+
+  initCollapsibleSections() {
+    const buttons = document.querySelectorAll('.legend-chevron[data-target]');
+    buttons.forEach(btn => {
+      const targetId = btn.dataset.target;
+      const target = document.getElementById(targetId);
+      if (!target) return;
+
+      const saved = this._loadCollapseState(targetId);
+      if (saved) {
+        target.classList.add('collapsed');
+        btn.classList.remove('expanded');
+        btn.classList.add('collapsed');
+      }
+
+      const config = graphStore.state.envConfig;
+      if (config) {
+        const envMap = {
+          'legend': 'LEGEND_OES_COLLAPSED',
+          'attributeContainer': 'LEGEND_ATTRIBUTES_COLLAPSED',
+          'hiddenLegend': 'LEGEND_HIDDEN_COLLAPSED'
+        };
+        const key = envMap[targetId];
+        if (key && typeof config[key] === 'boolean') {
+          if (config[key]) {
+            target.classList.add('collapsed');
+            btn.classList.remove('expanded');
+            btn.classList.add('collapsed');
+          } else {
+            target.classList.remove('collapsed');
+            btn.classList.remove('collapsed');
+            btn.classList.add('expanded');
+          }
+        }
+      }
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._toggleSection(btn, target, targetId);
+      });
+
+      const header = btn.closest('.legend-header');
+      if (header) {
+        header.addEventListener('click', (e) => {
+          let el = e.target;
+          while (el && el !== header) {
+            if (el.hasAttribute && el.hasAttribute('data-ignore-header-click')) return;
+            el = el.parentElement;
+          }
+          if (e.target !== btn && !btn.contains(e.target)) {
+            this._toggleSection(btn, target, targetId);
+          }
+        });
+      }
+    });
+  }
+
+  _toggleSection(btn, target, targetId) {
+    const isCollapsed = target.classList.toggle('collapsed');
+    if (isCollapsed) {
+      btn.classList.remove('expanded');
+      btn.classList.add('collapsed');
+    } else {
+      btn.classList.remove('collapsed');
+      btn.classList.add('expanded');
+    }
+    this._saveCollapseState(targetId, isCollapsed);
+  }
+
+  _saveCollapseState(id, isCollapsed) {
+    try { localStorage.setItem('orggraph_collapsed_' + id, isCollapsed ? '1' : '0'); } catch (_e) { /* ignore */ }
+  }
+
+  _loadCollapseState(id) {
+    try { return localStorage.getItem('orggraph_collapsed_' + id) === '1'; } catch (_e) { return false; }
+  }
+
+  // --- Header Actions ---
+
+  initHeaderActions() {
+    this._initOeFilter();
+    this._initToggleAllOes();
+    this._initToggleOesVisibility();
+    this._initExpandAllAttributes();
+    this._initLoadAttributes();
+    this._initToggleAllAttributes();
+    this._initToggleAttributesVisibility();
+  }
+  _initOeFilter() {
+    const oeFilter = document.getElementById('oeFilter');
+    const oeFilterBtn = document.getElementById('oeFilterBtn');
+    if (!oeFilter) return;
+
+    const updateFieldState = () => {
+      if (oeFilter.value.trim()) {
+        oeFilter.classList.add('has-value');
+        if (oeFilterBtn) oeFilterBtn.classList.add('visible');
+      } else {
+        oeFilter.classList.remove('has-value');
+        if (oeFilterBtn) oeFilterBtn.classList.remove('visible');
+      }
+    };
+
+    oeFilter.addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase().trim();
+      if (!this.legendEl) return;
+
+      const items = this.legendEl.querySelectorAll('.legend-list li');
+      let anyVisible = false;
+
+      items.forEach(li => {
+        const chip = li.querySelector('.legend-label-chip');
+        const label = (chip && chip.textContent || '').toLowerCase();
+        const match = label.includes(term);
+
+        li.style.display = term === '' || match ? '' : 'none';
+        if (li.style.display !== 'none') anyVisible = true;
+
+        if (match && term !== '') {
+          let parent = li.parentElement;
+          while (parent) {
+            if (parent.tagName === 'UL') {
+              parent.style.display = '';
+              const parentLi = parent.parentElement;
+              if (parentLi && parentLi.tagName === 'LI') parentLi.style.display = '';
+            }
+            parent = parent.parentElement;
+          }
+          const childUl = li.querySelector('ul');
+          if (childUl) childUl.style.display = '';
+        }
+      });
+
+      let noMsg = this.legendEl.querySelector('.no-matches-message');
+      if (!anyVisible && term !== '') {
+        if (!noMsg) {
+          noMsg = document.createElement('div');
+          noMsg.className = 'no-matches-message';
+          noMsg.textContent = 'Keine OEs gefunden';
+          noMsg.style.cssText = 'padding:8px;font-style:italic;color:#666';
+          this.legendEl.appendChild(noMsg);
+        }
+      } else if (noMsg) {
+        noMsg.remove();
+      }
+      updateFieldState();
+    });
+
+    oeFilter.addEventListener('focus', updateFieldState);
+    oeFilter.addEventListener('blur', updateFieldState);
+
+    if (oeFilterBtn) {
+      oeFilterBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (oeFilter.value.trim()) {
+          oeFilter.value = '';
+          oeFilter.dispatchEvent(new Event('input'));
+          updateFieldState();
+          oeFilter.blur();
+        }
+      });
+    }
+
+    updateFieldState();
+  }
+
+  _initToggleAllOes() {
+    const btn = document.getElementById('toggleAllOes');
+    if (!btn) return;
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const { hullVisibleOrgs, allowedOrgs } = graphStore.state;
+      const hasAny = hullVisibleOrgs.size > 0;
+
+      if (hasAny) {
+        graphStore.setHullVisibleOrgs(new Set());
+        showTemporaryNotification('Alle Hüllkurven ausgeblendet');
+      } else {
+        graphStore.setHullVisibleOrgs(new Set(allowedOrgs));
+        showTemporaryNotification('Alle Hüllkurven eingeblendet');
+      }
+    });
+  }
+
+  _initToggleOesVisibility() {
+    const btn = document.getElementById('toggleOesVisibility');
+    if (!btn) return;
+
+    this._savedHullOrgs = null;
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const { hullVisibleOrgs, allowedOrgs } = graphStore.state;
+      const isVisible = btn.classList.contains('active');
+
+      if (isVisible) {
+        this._savedHullOrgs = new Set(hullVisibleOrgs);
+        graphStore.setHullVisibleOrgs(new Set());
+      } else {
+        const restored = this._savedHullOrgs && this._savedHullOrgs.size > 0
+          ? this._savedHullOrgs
+          : new Set(allowedOrgs);
+        graphStore.setHullVisibleOrgs(restored);
+        this._savedHullOrgs = null;
+      }
+
+      btn.classList.toggle('active');
+      updateEyeButton(btn, btn.classList.contains('active'), 'OEs ausblenden', 'OEs einblenden');
+    });
+  }
+  _initExpandAllAttributes() {
+    const btn = document.getElementById('expandAllAttributes');
+    if (!btn) return;
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const { collapsedCategories, attributeTypes } = graphStore.state;
+
+      const allCats = new Set();
+      for (const key of attributeTypes.keys()) {
+        const parts = key.split('::');
+        allCats.add(parts.length > 1 ? parts[0] : 'Attribute');
+      }
+
+      const allExpanded = Array.from(allCats).every(cat => !collapsedCategories.has(cat));
+
+      if (allExpanded) {
+        graphStore.setCollapsedCategories(new Set(allCats));
+      } else {
+        graphStore.setCollapsedCategories(new Set());
+      }
+    });
+  }
+
+  _initLoadAttributes() {
+    const btn = document.getElementById('loadAttributes');
+    const fileInput = document.getElementById('attributeFileInput');
+    if (!btn || !fileInput) return;
+
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fileInput.click();
+    });
+
+    fileInput.addEventListener('change', async () => {
+      if (fileInput.files && fileInput.files[0]) {
+        await loadAttributesFromFile(fileInput.files[0]);
+        fileInput.value = '';
+      }
+    });
+  }
+
+  _initToggleAllAttributes() {
+    const btn = document.getElementById('toggleAllAttributes');
+    if (!btn) return;
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const { activeAttributes, attributeTypes } = graphStore.state;
+      const hasAny = activeAttributes.size > 0;
+
+      if (hasAny) {
+        graphStore.setActiveAttributes(new Set());
+        showTemporaryNotification('Alle Attribute abgewählt');
+      } else {
+        graphStore.setActiveAttributes(new Set(attributeTypes.keys()));
+        showTemporaryNotification('Alle Attribute ausgewählt');
+      }
+    });
+  }
+
+  _initToggleAttributesVisibility() {
+    const btn = document.getElementById('toggleAttributesVisibility');
+    if (!btn) return;
+
+    const envVisible = graphStore.state.envConfig?.LEGEND_ATTRIBUTES_ACTIVE;
+    if (envVisible != null) {
+      if (!envVisible) btn.classList.remove('active');
+      else btn.classList.add('active');
+    }
+    updateEyeButton(btn, btn.classList.contains('active'), 'Attribute ausblenden', 'Attribute einblenden');
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isVisible = btn.classList.contains('active');
+      const newVisible = !isVisible;
+      btn.classList.toggle('active');
+      graphStore.setAttributesVisible(newVisible);
+      updateEyeButton(btn, newVisible, 'Attribute ausblenden', 'Attribute einblenden');
+    });
   }
 
   // --- Org Legend ---
@@ -186,20 +494,20 @@ export class LegendUI {
     row.appendChild(rightArea);
 
     const updateRowState = () => {
-      const isActive = allowedOrgs.has(id);
-      row.title = isActive ? `${lbl} - Klicken zum Ausblenden` : `${lbl} - Klicken zum Anzeigen`;
+      const isActive = graphStore.state.hullVisibleOrgs.has(id);
+      row.title = isActive ? `${lbl} - Hüllkurve ausblenden` : `${lbl} - Hüllkurve einblenden`;
     };
     updateRowState();
 
     row.addEventListener('click', (e) => {
       if (e.target.closest('.legend-tree-chevron')) return;
-      const currentAllowed = new Set(graphStore.state.allowedOrgs);
-      if (currentAllowed.has(id)) {
-        currentAllowed.delete(id);
+      const currentHull = new Set(graphStore.state.hullVisibleOrgs);
+      if (currentHull.has(id)) {
+        currentHull.delete(id);
       } else {
-        currentAllowed.add(id);
+        currentHull.add(id);
       }
-      graphStore.setAllowedOrgs(currentAllowed);
+      graphStore.setHullVisibleOrgs(currentHull);
     });
     row.style.cursor = 'pointer';
 
@@ -239,7 +547,7 @@ export class LegendUI {
   }
 
   showOrgContextMenu(e, id) {
-    const { allowedOrgs, orgChildren } = graphStore.state;
+    const { orgChildren } = graphStore.state;
     // Gather descendants
     const getAllDescendants = (rootId) => {
         const res = new Set();
@@ -260,36 +568,34 @@ export class LegendUI {
     const descendants = getAllDescendants(id);
     const directChildren = orgChildren?.get(String(id)) || new Set();
 
+    const { hullVisibleOrgs } = graphStore.state;
     showLegendMenu(e.clientX, e.clientY, [
         {
-            label: 'Alle einblenden',
+            label: 'Alle Hüllkurven einblenden',
             handler: () => {
-                const newAllowed = new Set(allowedOrgs);
-                newAllowed.add(id);
-                descendants.forEach(d => newAllowed.add(d));
-                graphStore.setAllowedOrgs(newAllowed);
+                const newHull = new Set(hullVisibleOrgs);
+                newHull.add(id);
+                descendants.forEach(d => newHull.add(d));
+                graphStore.setHullVisibleOrgs(newHull);
             }
         },
         {
-            label: 'Alle ausblenden',
+            label: 'Alle Hüllkurven ausblenden',
             handler: () => {
-                const newAllowed = new Set(allowedOrgs);
-                newAllowed.delete(id);
-                descendants.forEach(d => newAllowed.delete(d));
-                graphStore.setAllowedOrgs(newAllowed);
+                const newHull = new Set(hullVisibleOrgs);
+                newHull.delete(id);
+                descendants.forEach(d => newHull.delete(d));
+                graphStore.setHullVisibleOrgs(newHull);
             }
         },
         {
             label: 'Nur direkte Kinder anzeigen',
             handler: () => {
-                const newAllowed = new Set(allowedOrgs);
-                // Hide all descendants first
-                descendants.forEach(d => newAllowed.delete(d));
-                // Show root and direct children
-                newAllowed.add(id);
-                directChildren.forEach(d => newAllowed.add(String(d)));
-                
-                graphStore.setAllowedOrgs(newAllowed);
+                const newHull = new Set(hullVisibleOrgs);
+                descendants.forEach(d => newHull.delete(d));
+                newHull.add(id);
+                directChildren.forEach(d => newHull.add(String(d)));
+                graphStore.setHullVisibleOrgs(newHull);
             }
         }
     ]);
@@ -300,7 +606,7 @@ export class LegendUI {
   }
 
   updateLegendRowColors() {
-    const { allowedOrgs, parentOf } = graphStore.state;
+    const { hullVisibleOrgs, parentOf } = graphStore.state;
     if (!this.legendEl) return;
     
     this.legendEl.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
@@ -315,7 +621,7 @@ export class LegendUI {
       row.style.setProperty('--org-fill', fill);
       row.style.setProperty('--org-stroke', stroke);
       
-      const isActive = allowedOrgs.has(oid);
+      const isActive = hullVisibleOrgs.has(oid);
       if (isActive) {
         row.classList.add('active');
       } else {

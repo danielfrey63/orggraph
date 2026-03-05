@@ -633,8 +633,8 @@ export class GraphRenderer {
 
   _updateClusters() {
     if (!this.clusterLayer) return;
-    const { raw, allowedOrgs, orgChildren } = graphStore.state;
-    if (!allowedOrgs || allowedOrgs.size === 0) {
+    const { raw, hullVisibleOrgs, orgChildren } = graphStore.state;
+    if (!hullVisibleOrgs || hullVisibleOrgs.size === 0) {
         this.clusterLayer.selectAll('path.cluster').remove();
         this.clusterPolygons.clear();
         return;
@@ -644,7 +644,7 @@ export class GraphRenderer {
     const membersByOrg = computeClusterMemberships({
         personIds: this.clusterPersonIds,
         orgIds,
-        allowedOrgs,
+        allowedOrgs: hullVisibleOrgs,
         links: raw.links,
         orgChildren,
         simById: this.clusterSimById,

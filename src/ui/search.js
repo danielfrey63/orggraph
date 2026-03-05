@@ -151,10 +151,10 @@ export class SearchUI {
     
     const n = this.filteredItems[idx];
     const nid = String(n.id);
-    const { debugMode, selectedRootIds, currentSelectedId, lastSingleRootId } = graphStore.state;
+    const { selectedRootIds, currentSelectedId, lastSingleRootId } = graphStore.state;
 
     if (addMode) {
-      if (debugMode) console.log('[ui] chooseItem addMode', { idx, nid });
+      Logger.log('[ui] chooseItem addMode', { idx, nid });
       
       // If first Shift-Add, initialize multi-root list from current selection
       if (selectedRootIds.length === 0) {
@@ -167,7 +167,7 @@ export class SearchUI {
         }
         if (seed && String(seed) !== nid) {
           graphStore.addRoot(seed);
-          if (debugMode) console.log('[roots] initial seed in chooseItem', { seed: String(seed) });
+          Logger.log('[roots] initial seed in chooseItem', { seed: String(seed) });
         }
       }
       

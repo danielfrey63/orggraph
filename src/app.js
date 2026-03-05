@@ -241,6 +241,15 @@ class App {
         }
     }
     
+    if (event === 'hullVisibleOrgs:update') {
+        // Nudge simulation so _updateClusters() runs on the next tick
+        if (this.renderer && this.renderer.currentSimulation) {
+            if (this.renderer.currentSimulation.alpha() < 0.1) {
+                this.renderer.currentSimulation.alpha(0.15).restart();
+            }
+        }
+    }
+
     if (event === 'currentLayoutMode:update') {
         if (this.renderer) {
             this.renderer.updateLayout();

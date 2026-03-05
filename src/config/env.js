@@ -117,12 +117,20 @@ function coerce(raw, typeHint) {
 async function fetchJsonLayer(url) {
   try {
     const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[Config] ${url}: HTTP ${res.status} ${res.statusText}`);
+      return null;
+    }
     // Vite SPA-Fallback liefert HTML mit Status 200 für fehlende Dateien
     const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('json')) return null;
+    if (!ct.includes('json')) {
+      console.warn(`[Config] ${url}: unexpected Content-Type "${ct}" (expected JSON)`);
+      return null;
+    }
     return await res.json();
-  } catch { /* optional layer, ignore errors */ }
+  } catch (e) {
+    console.warn(`[Config] ${url}: ${e.message}`);
+  }
   return null;
 }
 

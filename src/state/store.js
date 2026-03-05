@@ -1,12 +1,14 @@
+import { Logger } from '../utils/logger.js';
+
 export class GraphStore {
   static #instance = null;
 
   static getInstance() {
     if (!GraphStore.#instance) {
       GraphStore.#instance = new GraphStore();
-      console.log('[GraphStore] New Instance created');
+      Logger.log('[GraphStore] New Instance created');
     } else {
-        console.log('[GraphStore] Returning existing instance');
+        Logger.log('[GraphStore] Returning existing instance');
     }
     return GraphStore.#instance;
   }
@@ -15,7 +17,7 @@ export class GraphStore {
     if (GraphStore.#instance) {
       return GraphStore.#instance;
     }
-    console.log('[GraphStore] Constructor called');
+    Logger.log('[GraphStore] Constructor called');
 
     this.state = {
       // Daten
@@ -43,6 +45,7 @@ export class GraphStore {
       lastSingleRootId: null,
       currentSelectedId: null,
       allowedOrgs: new Set(),
+      hullVisibleOrgs: new Set(),
       hiddenNodes: new Set(),
       hiddenByRoot: new Map(),
       temporarilyVisibleRoots: new Set(),
@@ -75,7 +78,7 @@ export class GraphStore {
         fn({ event, payload, state: this.state });
       } catch (e) {
         // Listener-Fehler nicht propagieren
-        console.error('[GraphStore] Listener error', e);
+        Logger.error('[GraphStore] Listener error', e);
       }
     }
   }
@@ -89,7 +92,7 @@ export class GraphStore {
   // --- Mutations: Daten --------------------------------------------------
 
   setRawData(raw) {
-    console.log('[GraphStore] setRawData called with:', raw ? { nodes: raw.nodes?.length, links: raw.links?.length } : 'null');
+    Logger.log('[GraphStore] setRawData called with:', raw ? { nodes: raw.nodes?.length, links: raw.links?.length } : 'null');
     this.state.raw = raw || { nodes: [], links: [], persons: [], orgs: [] };
     this.notify('raw:update', this.state.raw);
   }
@@ -236,7 +239,14 @@ export class GraphStore {
 
   setAllowedOrgs(set) {
     this.state.allowedOrgs = set || new Set();
+    // Init hull visibility to match (all visible by default)
+    this.state.hullVisibleOrgs = new Set(this.state.allowedOrgs);
     this.notify('allowedOrgs:update', this.state.allowedOrgs);
+  }
+
+  setHullVisibleOrgs(set) {
+    this.state.hullVisibleOrgs = set || new Set();
+    this.notify('hullVisibleOrgs:update', this.state.hullVisibleOrgs);
   }
 
   setHiddenNodes(set) {

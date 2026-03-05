@@ -8,7 +8,8 @@ export default [
       "trace/",
       "helpers/",
       "playwright-report/",
-      "*.min.js"
+      "*.min.js",
+      ".claude/"
     ]
   },
   {

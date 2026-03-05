@@ -1,4 +1,5 @@
 import { SVG_ID, WIDTH, HEIGHT } from '../constants.js';
+import { Logger } from '../utils/logger.js';
 import { showTemporaryNotification } from '../utils/dom.js';
 import { graphStore } from '../state/store.js';
 
@@ -247,7 +248,7 @@ function exportAsSvg() {
     hideExportDialog();
     showTemporaryNotification('SVG-Export erfolgreich!');
   } catch (error) {
-    console.error('Fehler beim SVG-Export:', error);
+    Logger.error('[Export] Fehler beim SVG-Export:', error);
     showTemporaryNotification('Fehler beim SVG-Export: ' + error.message);
   }
 }
@@ -360,14 +361,14 @@ function exportAsPng() {
     
     // Fehlerbehandlung für Bildladung
     img.onerror = function(error) {
-      console.error('Fehler beim Laden des SVG für PNG-Export:', error);
+      Logger.error('[Export] Fehler beim Laden des SVG für PNG-Export:', error);
       showTemporaryNotification('Fehler beim PNG-Export: Bild konnte nicht geladen werden');
     };
     
     // Starte den Ladevorgang des Bildes
     img.src = svgBase64;
   } catch (error) {
-    console.error('Fehler beim PNG-Export:', error);
+    Logger.error('[Export] Fehler beim PNG-Export:', error);
     showTemporaryNotification('Fehler beim PNG-Export: ' + error.message);
   }
 }

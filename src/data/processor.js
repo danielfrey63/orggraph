@@ -8,7 +8,7 @@ export function processData(data) {
   const orgs = Array.isArray(data.orgs) ? data.orgs : [];
   const links = Array.isArray(data.links) ? data.links : [];
 
-  console.log(`[Processor] Raw data counts: Persons=${persons.length}, Orgs=${orgs.length}, Links=${links.length}`);
+  Logger.log(`[Processor] Raw data counts: Persons=${persons.length}, Orgs=${orgs.length}, Links=${links.length}`);
   Logger.log(`[Init] Processing data: ${persons.length} persons, ${orgs.length} orgs, ${links.length} links`);
 
   const nodes = [];
@@ -27,11 +27,11 @@ export function processData(data) {
                 }
             }
         } catch (err) {
-            console.error(`[Processor] Error in person at index ${index}:`, p, err);
+            Logger.error(`[Processor] Error in person at index ${index}:`, p, err);
         }
     });
   } catch (err) {
-    console.error('[Processor] Crash in persons loop:', err);
+    Logger.error('[Processor] Crash in persons loop:', err);
   }
 
   try {
@@ -41,14 +41,14 @@ export function processData(data) {
                 nodes.push({ ...o, id: String(o.id), type: 'org' }); 
             }
         } catch (err) {
-            console.error(`[Processor] Error in org at index ${index}:`, o, err);
+            Logger.error(`[Processor] Error in org at index ${index}:`, o, err);
         }
     });
   } catch (err) {
-    console.error('[Processor] Crash in orgs loop:', err);
+    Logger.error('[Processor] Crash in orgs loop:', err);
   }
 
-  console.log(`[Processor] Processed nodes: ${nodes.length} (Persons+Orgs)`);
+  Logger.log(`[Processor] Processed nodes: ${nodes.length} (Persons+Orgs)`);
 
   const seen = new Set();
   const idSet = new Set(nodes.map(n => String(n.id)));

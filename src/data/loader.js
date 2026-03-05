@@ -352,13 +352,13 @@ export async function loadData() {
     const res = await fetch(dataUrl, { cache: "no-store" });
     if (res.ok) {
       data = await res.json();
-      console.log(`[Loader] Loaded data from ${dataUrl}:`, data ? Object.keys(data) : 'null');
+      Logger.log(`[Loader] Loaded data from ${dataUrl}:`, data ? Object.keys(data) : 'null');
       Logger.log(`[Load] Data fetched from ${dataUrl}`, data ? Object.keys(data) : 'null');
     } else {
-      console.warn('Automatisches Laden der Daten fehlgeschlagen:', res.status, res.statusText);
+      Logger.warn('[Loader] Automatisches Laden der Daten fehlgeschlagen:', res.status, res.statusText);
     }
   } catch (_e) {
-    console.error('Fehler beim automatischen Laden der Daten:', _e);
+    Logger.error('[Loader] Fehler beim automatischen Laden der Daten:', _e);
   }
 
   if (!data) {
@@ -369,7 +369,7 @@ export async function loadData() {
   try {
     processData(data);
   } catch (_e) {
-    console.error('Fehler beim Anwenden der geladenen Daten:', _e);
+    Logger.error('[Loader] Fehler beim Anwenden der geladenen Daten:', _e);
     setStatus('Fehler beim Verarbeiten der geladenen Daten – bitte Daten manuell laden.');
     return false;
   }
@@ -394,7 +394,7 @@ export async function loadData() {
           }
         }
       } catch (error) {
-        console.error('Automatisches Laden der Attribute fehlgeschlagen:', error);
+        Logger.error('[Loader] Automatisches Laden der Attribute fehlgeschlagen:', error);
       }
     }
   }
