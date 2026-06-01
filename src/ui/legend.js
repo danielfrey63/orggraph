@@ -299,8 +299,6 @@ export class LegendUI {
         this._savedHullOrgs = null;
       }
 
-      btn.classList.toggle('active');
-      updateEyeButton(btn, btn.classList.contains('active'), 'OEs ausblenden', 'OEs einblenden');
     });
   }
   _initExpandAllAttributes() {
@@ -603,6 +601,20 @@ export class LegendUI {
 
   syncGraphAndLegendColors() {
     this.updateLegendRowColors();
+    this._syncOesVisibilityButton();
+  }
+
+  _syncOesVisibilityButton() {
+    const btn = document.getElementById('toggleOesVisibility');
+    if (!btn) return;
+    const { hullVisibleOrgs } = graphStore.state;
+    const isVisible = hullVisibleOrgs.size > 0;
+    if (isVisible) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+    updateEyeButton(btn, isVisible, 'OEs ausblenden', 'OEs einblenden');
   }
 
   updateLegendRowColors() {
@@ -690,7 +702,14 @@ export class LegendUI {
       // Label
       const label = document.createElement('span');
       label.className = 'category-label';
-      label.textContent = cat;
+      const catAttrCount = attrs.reduce((sum, a) => {
+        let c = 0;
+        for (const pAttrs of graphStore.state.personAttributes.values()) {
+          if (pAttrs.has(a.key)) c++;
+        }
+        return sum + c;
+      }, 0);
+      label.textContent = `${cat} (${catAttrCount})`;
       if (modifiedCategories.has(cat)) {
         label.classList.add('modified');
         label.title = 'Ungespeicherte Änderungen';
@@ -704,7 +723,7 @@ export class LegendUI {
       const sourceInfo = categorySourceFiles.get(cat);
       if (sourceInfo) {
         const downloadBtn = document.createElement('button');
-        downloadBtn.className = 'icon-btn';
+        downloadBtn.className = 'legend-icon-btn';
         downloadBtn.innerHTML = '<i class="codicon codicon-cloud-download"></i>';
         downloadBtn.title = `Exportieren (${sourceInfo.filename})`;
         downloadBtn.onclick = (e) => {
@@ -714,7 +733,7 @@ export class LegendUI {
         actionsDiv.appendChild(downloadBtn);
       } else {
         const downloadBtn = document.createElement('button');
-        downloadBtn.className = 'icon-btn';
+        downloadBtn.className = 'legend-icon-btn';
         downloadBtn.innerHTML = '<i class="codicon codicon-cloud-download"></i>';
         downloadBtn.title = 'Als TSV exportieren';
         downloadBtn.onclick = (e) => {
@@ -727,7 +746,7 @@ export class LegendUI {
       // Toggle All in Category (only if has attributes)
       if (attrs.length > 0) {
         const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'icon-btn';
+        toggleBtn.className = 'legend-icon-btn';
         const allActive = attrs.every(a => activeAttributes.has(a.key));
         toggleBtn.innerHTML = `<i class="codicon ${allActive ? 'codicon-eye' : 'codicon-eye-closed'}"></i>`;
         toggleBtn.title = allActive ? 'Alle ausblenden' : 'Alle einblenden';
@@ -757,7 +776,7 @@ export class LegendUI {
       
       attrs.sort((a,b) => a.name.localeCompare(b.name)).forEach(attr => {
         const itemRow = document.createElement('div');
-        itemRow.className = 'attribute-item';
+        itemRow.className = 'attribute-legend-item';
         
         const isActive = activeAttributes.has(attr.key);
         
@@ -767,7 +786,11 @@ export class LegendUI {
         
         const nameSpan = document.createElement('span');
         nameSpan.className = 'attribute-name';
-        nameSpan.textContent = attr.name;
+        let attrCount = 0;
+        for (const pAttrs of graphStore.state.personAttributes.values()) {
+          if (pAttrs.has(attr.key)) attrCount++;
+        }
+        nameSpan.textContent = `${attr.name} (${attrCount})`;
         
         const check = document.createElement('div');
         check.className = 'attribute-check';

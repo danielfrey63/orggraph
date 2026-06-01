@@ -726,9 +726,43 @@ body.hover-dim-active .node.is-hover-target .label {
   display: none; /* Verstecken da durch Chevron ersetzt */
 }
 
-/* Legacy Support für alte Attribute Collapse-Buttons */
+/* Attribute category headers */
+.attribute-category-header {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 0;
+}
+
+.attribute-category-header .category-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attribute-category-header .category-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Hover-reveal for category header buttons (same as legend-header) */
+.attribute-category-header:hover .legend-icon-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.attribute-category-header:hover .legend-icon-btn.hidden {
+  opacity: 0.5;
+  pointer-events: auto;
+}
+
+/* Legacy Support */
 .attribute-category-header .collapse-btn {
-  display: none; /* Verstecken da durch Chevron ersetzt */
+  display: none;
 }
 
 /* Legacy Input-Checkboxes (werden durch Icon-Checkboxes ersetzt) */
@@ -846,6 +880,14 @@ body.hover-dim-active .node.is-hover-target .label {
   color: var(--active-toggle-color, white);
   border-color: transparent;
   box-shadow: 0 2px 5px rgba(99,102,241,0.4);
+}
+
+.toggle-btn.semi-active {
+  background-color: var(--active-toggle-bg, #6366f1);
+  color: var(--active-toggle-color, white);
+  border-color: transparent;
+  box-shadow: 0 2px 5px rgba(99,102,241,0.4);
+  opacity: 0.5;
 }
 
 .toggle-btn .codicon {
@@ -1002,8 +1044,8 @@ body.hover-dim-active .node.is-hover-target .label {
   --root-node-fill: #f97316;
 
   /* Simulation-Parameter */
-  --link-distance: 30;
-  --link-strength: 0.25;
+  --link-distance: 20;
+  --link-strength: 0.7;
   --charge-strength: -250;
   --collide-padding: 6;
   --collide-strength: 0.8;

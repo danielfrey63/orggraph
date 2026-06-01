@@ -23,6 +23,8 @@ export class GraphRenderer {
     // Zoom state
     this.currentZoomTransform = d3.zoomIdentity;
     this.zoomBehavior = null;
+    this.pendingFitToViewport = false;
+    this.initialZoomApplied = false;
 
     // Hover detail state
     this.hoverDetailNode = null;
@@ -181,6 +183,16 @@ export class GraphRenderer {
     this.currentZoomTransform = transform;
     this.gZoom.attr('transform', transform);
     this.svg.call(this.zoomBehavior.transform, transform);
+  }
+
+  applyInitialZoom(zoomDefault) {
+    if (this.initialZoomApplied) return;
+    this.initialZoomApplied = true;
+    if (zoomDefault === 'fit') {
+      this.pendingFitToViewport = true;
+    } else if (typeof zoomDefault === 'number' && zoomDefault > 0) {
+      this.zoomTo(zoomDefault);
+    }
   }
 
   fitToViewport() {
@@ -425,6 +437,10 @@ export class GraphRenderer {
     });
     
     this.currentSimulation.on('end', () => {
+      if (this.pendingFitToViewport) {
+        this.pendingFitToViewport = false;
+        this.fitToViewport();
+      }
       if (this.continuousSimulation) this._keepSimulationRunning();
     });
 
@@ -666,11 +682,24 @@ export class GraphRenderer {
     const labelSize = getGraphParam('labelFontSize');
     const nodeRadius = getGraphParam('nodeRadius');
     const nodeStroke = getGraphParam('nodeStrokeWidth');
+    const { labelsVisible, debugMode, personAttributes } = graphStore.state;
+    const getLabel = d => debugMode ? this._getDebugLabel(d) : pseudonymizationService.getDisplayLabel(d);
     this.svg.selectAll('.node text.label')
        .style('font-size', `${labelSize}px`)
        .attr('x', nodeRadius + nodeStroke / 2 + 4)
        .attr('dy', '0.35em')
-       .text(d => graphStore.state.debugMode ? this._getDebugLabel(d) : pseudonymizationService.getDisplayLabel(d));
+       .each((d, i, nodes) => {
+         const el = d3.select(nodes[i]);
+         if (labelsVisible === 'none') {
+           el.style('display', 'none');
+         } else if (labelsVisible === 'attributes') {
+           const hasAttrs = personAttributes.has(String(d.id));
+           el.style('display', hasAttrs ? null : 'none');
+           if (hasAttrs) el.text(getLabel(d));
+         } else {
+           el.style('display', null).text(getLabel(d));
+         }
+       });
   }
   
   _getDebugLabel(d) {

@@ -32,7 +32,20 @@ export class ToolbarUI {
     // Update toggle buttons state based on store
     this.setButtonActive('toggleManagement', state.managementEnabled);
     this.setButtonActive('toggleHierarchy', state.currentLayoutMode === 'hierarchy');
-    this.setButtonActive('toggleLabels', state.labelsVisible !== 'none');
+    // Labels button: active for 'all', semi-active for 'attributes', inactive for 'none'
+    const lblBtn = document.getElementById('toggleLabels');
+    if (lblBtn) {
+      lblBtn.classList.remove('active', 'semi-active');
+      if (state.labelsVisible === 'all') {
+        lblBtn.classList.add('active');
+        lblBtn.title = 'Labels: Alle';
+      } else if (state.labelsVisible === 'attributes') {
+        lblBtn.classList.add('semi-active');
+        lblBtn.title = 'Labels: Nur mit Attributen';
+      } else {
+        lblBtn.title = 'Labels: Aus';
+      }
+    }
     this.setButtonActive('togglePseudonymization', state.pseudonymizationEnabled);
     this.setButtonActive('debugBtn', state.debugMode);
   }
@@ -163,14 +176,20 @@ export class ToolbarUI {
       });
     }
 
-    // Labels
+    // Labels (3-state when attributes exist: all -> attributes -> none -> all)
     const labelsBtn = document.getElementById('toggleLabels');
     if (labelsBtn) {
       labelsBtn.addEventListener('click', () => {
-        // Toggle logic: all -> none -> all (or attributes?)
-        // Simple toggle for now
         const current = graphStore.state.labelsVisible;
-        const next = current === 'none' ? 'all' : 'none';
+        const hasAttributes = graphStore.state.attributeTypes.size > 0;
+        let next;
+        if (hasAttributes) {
+          if (current === 'all') next = 'attributes';
+          else if (current === 'attributes') next = 'none';
+          else next = 'all';
+        } else {
+          next = current === 'none' ? 'all' : 'none';
+        }
         graphStore.setLabelsVisible(next);
       });
     }

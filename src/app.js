@@ -113,9 +113,12 @@ class App {
       if (startId) {
         graphStore.setSingleRoot(startId);
       } else {
-        // Render full or empty?
-        // Let's render whatever we can or just initial state
         this.render();
+      }
+      // Apply initial zoom from config
+      const defaultZoom = config?.TOOLBAR_ZOOM_DEFAULT;
+      if (defaultZoom && this.renderer) {
+        this.renderer.applyInitialZoom(defaultZoom);
       }
     }
   }

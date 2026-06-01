@@ -205,18 +205,51 @@ export function getSimulationParams() {
 }
 
 // Mapping von Parameter-Namen zu CSS-Variablen und Defaults [CMV]
+// Kette: env.json → CSS Custom Property → getGraphParam() → Slider
+// style.css definiert die Basis-Defaults. env.json kann sie überschreiben.
 const PARAM_CONFIG = {
-  linkDistance: { cssVar: '--link-distance', default: 10 },
-  linkStrength: { cssVar: '--link-strength', default: 0.1 },
-  chargeStrength: { cssVar: '--charge-strength', default: -90 },
-  alphaDecay: { cssVar: '--alpha-decay', default: 0.0228 },
-  velocityDecay: { cssVar: '--velocity-decay', default: 0.4 },
-  nodeRadius: { cssVar: '--node-radius', default: 8 },
-  nodeStrokeWidth: { cssVar: '--node-stroke-width', default: 3 },
-  labelFontSize: { cssVar: '--label-font-size', default: 12 },
-  linkStrokeWidth: { cssVar: '--link-stroke-width', default: 1.5 },
-  arrowSize: { cssVar: '--arrow-length', default: 8 }
+  linkDistance: { cssVar: '--link-distance', default: 20 },
+  linkStrength: { cssVar: '--link-strength', default: 0.7 },
+  chargeStrength: { cssVar: '--charge-strength', default: -250 },
+  alphaDecay: { cssVar: '--alpha-decay', default: 0.05 },
+  velocityDecay: { cssVar: '--velocity-decay', default: 0.5 },
+  nodeRadius: { cssVar: '--node-radius', default: 16 },
+  nodeStrokeWidth: { cssVar: '--node-stroke-width', default: 4 },
+  labelFontSize: { cssVar: '--label-font-size', default: 21 },
+  linkStrokeWidth: { cssVar: '--link-stroke-width', default: 4 },
+  arrowSize: { cssVar: '--arrow-length', default: 16 }
 };
+
+// Mapping von env.json-Key zu PARAM_CONFIG-Name
+const ENV_TO_PARAM = {
+  DEBUG_LINK_DISTANCE: 'linkDistance',
+  DEBUG_LINK_STRENGTH: 'linkStrength',
+  DEBUG_CHARGE_STRENGTH: 'chargeStrength',
+  DEBUG_ALPHA_DECAY: 'alphaDecay',
+  DEBUG_VELOCITY_DECAY: 'velocityDecay',
+  DEBUG_NODE_RADIUS: 'nodeRadius',
+  DEBUG_NODE_STROKE_WIDTH: 'nodeStrokeWidth',
+  DEBUG_LABEL_FONT_SIZE: 'labelFontSize',
+  DEBUG_LINK_STROKE_WIDTH: 'linkStrokeWidth',
+  DEBUG_ARROW_SIZE: 'arrowSize'
+};
+
+/**
+ * Schreibt env.json DEBUG_*-Werte als CSS Custom Properties auf :root [SF][DRY]
+ * Kette: env.json → CSS-Variable → getGraphParam() → Slider
+ * @param {Object} envConfig - Geladene env.json-Konfiguration
+ */
+export function applyEnvToCSS(envConfig) {
+  if (!envConfig || typeof document === 'undefined') return;
+  const root = document.documentElement.style;
+  for (const [envKey, paramName] of Object.entries(ENV_TO_PARAM)) {
+    if (typeof envConfig[envKey] === 'number') {
+      const cfg = PARAM_CONFIG[paramName];
+      if (cfg) root.setProperty(cfg.cssVar, String(envConfig[envKey]));
+    }
+  }
+  invalidateCSSCache();
+}
 
 /**
  * Setzt einen Graph-Parameter [SF]
@@ -264,28 +297,6 @@ export function getAllGraphParams() {
  * Initialisiert Graph-Parameter aus ENV-Config [SF]
  * @param {Object} envConfig - ENV-Konfiguration
  */
-export function initGraphParamsFromEnv(envConfig) {
-  if (!envConfig) return;
-  
-  const envMapping = {
-    DEBUG_LINK_DISTANCE: 'linkDistance',
-    DEBUG_LINK_STRENGTH: 'linkStrength',
-    DEBUG_CHARGE_STRENGTH: 'chargeStrength',
-    DEBUG_ALPHA_DECAY: 'alphaDecay',
-    DEBUG_VELOCITY_DECAY: 'velocityDecay',
-    DEBUG_NODE_RADIUS: 'nodeRadius',
-    DEBUG_NODE_STROKE_WIDTH: 'nodeStrokeWidth',
-    DEBUG_LABEL_FONT_SIZE: 'labelFontSize',
-    DEBUG_LINK_STROKE_WIDTH: 'linkStrokeWidth',
-    DEBUG_ARROW_SIZE: 'arrowSize'
-  };
-  
-  for (const [envKey, paramName] of Object.entries(envMapping)) {
-    if (typeof envConfig[envKey] === 'number') {
-      graphParams[paramName] = envConfig[envKey];
-    }
-  }
-}
 
 /**
  * Setzt alle Parameter auf CSS-Defaults zurück [SF]
@@ -315,7 +326,7 @@ export default {
   setGraphParam,
   getGraphParam,
   getAllGraphParams,
-  initGraphParamsFromEnv,
+  applyEnvToCSS,
   resetGraphParams,
   getParamConfig
 };

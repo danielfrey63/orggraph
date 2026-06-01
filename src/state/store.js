@@ -154,7 +154,7 @@ export class GraphStore {
     } else {
       s.add(key);
     }
-    this.notify('activeAttributes:toggle', { key, activeAttributes: s });
+    this.notify('activeAttributes:update', this.state.activeAttributes);
   }
 
   setHiddenCategories(set) {
@@ -239,8 +239,7 @@ export class GraphStore {
 
   setAllowedOrgs(set) {
     this.state.allowedOrgs = set || new Set();
-    // Init hull visibility to match (all visible by default)
-    this.state.hullVisibleOrgs = new Set(this.state.allowedOrgs);
+    // Hull-Sichtbarkeit nicht automatisch setzen — bleibt wie vom User gewählt
     this.notify('allowedOrgs:update', this.state.allowedOrgs);
   }
 

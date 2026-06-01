@@ -1,5 +1,5 @@
 import { graphStore } from '../state/store.js';
-import { initGraphParamsFromEnv } from '../utils/css.js';
+import { applyEnvToCSS } from '../utils/css.js';
 
 /**
  * Zentrale Konfiguration mit sauberer Configuration Precedence [SF][ISA]
@@ -54,9 +54,9 @@ const DEFAULTS = {
   // Graph-Defaults
   GRAPH_START_ID_DEFAULT: '',
 
-  // Debug/Simulation-Parameter
-  DEBUG_LINK_DISTANCE: 30,
-  DEBUG_LINK_STRENGTH: 0.25,
+  // Graph-Parameter (überschreiben CSS-Variablen in style.css)
+  DEBUG_LINK_DISTANCE: 20,
+  DEBUG_LINK_STRENGTH: 0.7,
   DEBUG_CHARGE_STRENGTH: -250,
   DEBUG_ALPHA_DECAY: 0.05,
   DEBUG_VELOCITY_DECAY: 0.5,
@@ -242,8 +242,8 @@ export async function loadEnvConfig() {
   // Update Store
   graphStore.setEnvConfig(config);
 
-  // Initialize Graph Params
-  initGraphParamsFromEnv(config);
+  // env.json DEBUG_*-Werte als CSS Custom Properties auf :root schreiben
+  applyEnvToCSS(config);
 
   return config;
 }
