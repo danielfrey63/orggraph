@@ -5,19 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:example": "cross-env VITE_USE_EXAMPLE_ENV=true vite",
     "dev:perf": "vite --config trace/vite.config.instrumented.js",
     "build": "vite build",
     "build:perf": "vite build --config trace/vite.config.instrumented.js",
     "preview": "vite preview",
-    "transform": "node transform.js",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "test": "npx playwright test",
-    "test:coverage": "npx playwright test",
-    "test:ui": "npx playwright test --ui",
-    "test:record": "npx playwright codegen http://localhost:5173",
-    "test:file": "npx playwright test --grep"
+    "transform": "node transform.js"
   },
   "dependencies": {
     "d3": "^7.9.0"
@@ -27,11 +19,7 @@
     "@babel/parser": "^7.28.5",
     "@babel/traverse": "^7.28.5",
     "@babel/types": "^7.28.5",
-    "@playwright/test": "^1.57.0",
     "@rollup/pluginutils": "^5.3.0",
-    "cross-env": "^7.0.3",
-    "eslint": "^10.0.0",
-    "monocart-reporter": "^2.9.23",
     "vite": "^6.0.0"
   }
 }
