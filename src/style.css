@@ -83,7 +83,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   background-color: var(--control-hover);
 }
 
-.depth-display .codicon {
+.depth-display .ic {
   font-size: 18px;
   color: var(--text-muted);
 }
@@ -168,7 +168,13 @@ input#depth {
 }
 .viewport { display: grid; grid-template-columns: 1fr 320px; gap: 0; overflow: hidden; }
 .canvas { position: relative; overflow: hidden; background: var(--panel-bg); }
-svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
+#graph { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
+
+/* Zentrale Icon-Basis (siehe icons.js / ICON-Registry). Grösse folgt der
+   font-size des Kontexts (1em), damit die bestehenden font-size-Regeln wie
+   zuvor bei der Icon-Font greifen. Farbe via currentColor. */
+[data-icon] { display: inline-flex; align-items: center; justify-content: center; }
+.ic { width: 1em; height: 1em; font-size: 16px; display: inline-block; flex: 0 0 auto; vertical-align: -0.125em; background: none; }
 #legendPane { border-left: 1px solid var(--panel-border); padding: 0px; overflow: auto; background: var(--panel-bg); color: var(--text); width: 320px; }
 #legendPane h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-muted); }
 
@@ -251,15 +257,15 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   background-color: var(--control-hover);
 }
 
-.legend-chevron .codicon {
+.legend-chevron .ic {
   transition: transform 0.2s ease;
 }
 
-.legend-chevron.expanded .codicon {
+.legend-chevron.expanded .ic {
   transform: rotate(0deg);
 }
 
-.legend-chevron.collapsed .codicon {
+.legend-chevron.collapsed .ic {
   transform: rotate(-90deg);
 }
 
@@ -331,15 +337,15 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   background-color: transparent;
 }
 
-.legend-tree-chevron .codicon {
+.legend-tree-chevron .ic {
   transition: transform 0.2s ease;
 }
 
-.legend-tree-chevron.expanded .codicon {
+.legend-tree-chevron.expanded .ic {
   transform: rotate(0deg);
 }
 
-.legend-tree-chevron.collapsed .codicon {
+.legend-tree-chevron.collapsed .ic {
   transform: rotate(-90deg);
 }
 
@@ -487,15 +493,15 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   background-color: transparent;
 }
 
-.attribute-tree-chevron .codicon {
+.attribute-tree-chevron .ic {
   transition: transform 0.2s ease;
 }
 
-.attribute-tree-chevron.expanded .codicon {
+.attribute-tree-chevron.expanded .ic {
   transform: rotate(0deg);
 }
 
-.attribute-tree-chevron.collapsed .codicon {
+.attribute-tree-chevron.collapsed .ic {
   transform: rotate(-90deg);
 }
 
@@ -734,7 +740,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   box-shadow: 0 2px 5px rgba(99,102,241,0.4);
 }
 
-.toggle-btn .codicon {
+.toggle-btn .ic {
   font-size: 18px;
 }
 
@@ -812,21 +818,21 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 }
 
 /* Icon Clipping für halbe Darstellung */
-.direction-half .codicon {
+.direction-half .ic {
   font-size: 20px;
   line-height: 1;
   position: relative;
 }
 
 /* Up-Pfeil: Zeige obere Hälfte des Icons - etwas mehr als 50% */
-.direction-up .codicon {
+.direction-up .ic {
   clip-path: inset(0 0 30% 0);
   margin-bottom: -13px;
   transform: translateY(-2px);
 }
 
 /* Down-Pfeil: Zeige untere Hälfte des Icons - etwas mehr als 50% */
-.direction-down .codicon {
+.direction-down .ic {
   clip-path: inset(30% 0 0 0);
   margin-top: -13px;
   transform: translateY(2px);
@@ -1105,7 +1111,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   background-color: var(--control-hover);
 }
 
-.legend-ellipsis-item .codicon {
+.legend-ellipsis-item .ic {
   font-size: 16px;
   color: var(--text-muted);
 }
@@ -1163,7 +1169,7 @@ svg { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
   justify-content: center;
 }
 
-#expandAllAttributes .codicon {
+#expandAllAttributes .ic {
   line-height: 1;
 }
 
@@ -1609,6 +1615,92 @@ body > .combo-list li {
 
 .modal-content {
   padding: 24px;
+}
+
+/* ========== Drop-Zone (Standalone-Datenimport) ========== */
+.dz-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 18, 24, 0.72);
+  backdrop-filter: blur(2px);
+}
+.dz-overlay.dz-visible {
+  display: flex;
+}
+.dz-panel {
+  max-width: 520px;
+  margin: 24px;
+  padding: 32px 36px;
+  border: 2px dashed rgba(255, 255, 255, 0.35);
+  border-radius: 14px;
+  background: rgba(30, 35, 45, 0.96);
+  color: #e8ecf2;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+.dz-icon {
+  font-size: 42px;
+  line-height: 1;
+  opacity: 0.85;
+}
+.dz-title {
+  margin: 14px 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+}
+.dz-text {
+  margin: 0 0 20px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #aeb6c2;
+}
+.dz-text code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+}
+.dz-pick {
+  padding: 9px 18px;
+  border: none;
+  border-radius: 8px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.dz-pick:hover {
+  background: #2f6fd6;
+}
+/* Visuelles Feedback, während eine Datei über das Fenster gezogen wird. */
+body.dz-dragging::after {
+  content: '';
+  position: fixed;
+  inset: 8px;
+  z-index: 1999;
+  pointer-events: none;
+  border: 3px dashed #3b82f6;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.footer-reset-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-muted, #8a93a3);
+  font: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.footer-reset-btn:hover {
+  color: var(--text-strong, #e8ecf2);
 }
 
 .export-options {

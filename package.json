@@ -9,6 +9,7 @@
     "build": "vite build",
     "build:perf": "vite build --config trace/vite.config.instrumented.js",
     "preview": "vite preview",
+    "standalone": "node make-standalone.js",
     "transform": "node transform.js"
   },
   "dependencies": {

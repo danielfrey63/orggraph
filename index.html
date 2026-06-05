@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>OrgGraph</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="https://unpkg.com/@vscode/codicons@0.0.36/dist/codicon.css" />
 </head>
 <body>
   <header class="app-header">
@@ -20,7 +19,7 @@
       <div class="depth-control" id="depthControl">
         <button class="depth-half depth-up" data-action="increase" title="Tiefe erhöhen"></button>
         <div class="depth-display">
-          <i class="codicon codicon-layers"></i>
+          <i data-icon="layers"></i>
           <span class="depth-value">2</span>
         </div>
         <button class="depth-half depth-down" data-action="decrease" title="Tiefe verringern"></button>
@@ -29,44 +28,44 @@
       
       <div class="direction-split" id="directionToggle">
         <button class="direction-half direction-up active" data-dir="up" title="Aufwärts">
-          <i class="codicon codicon-arrow-up"></i>
+          <i data-icon="arrowUp"></i>
         </button>
         <button class="direction-half direction-down active" data-dir="down" title="Abwärts">
-          <i class="codicon codicon-arrow-down"></i>
+          <i data-icon="arrowDown"></i>
         </button>
       </div>
       
       <button id="toggleManagement" class="toggle-btn active" title="Management">
-        <i class="codicon codicon-organization"></i>
+        <i data-icon="organization"></i>
       </button>
       
       <button id="toggleHierarchy" class="toggle-btn active" title="Hierarchie">
-        <i class="codicon codicon-type-hierarchy"></i>
+        <i data-icon="hierarchy"></i>
       </button>
       
       <button id="toggleLabels" class="toggle-btn active" title="Namen anzeigen">
-        <i class="codicon codicon-tag"></i>
+        <i data-icon="tag"></i>
       </button>
       
       <button id="fit" class="toggle-btn" aria-label="Auf Seite einpassen" title="Auf Seite einpassen">
-        <i class="codicon codicon-move"></i>
+        <i data-icon="move"></i>
       </button>
       
       <button id="toggleSimulation" class="toggle-btn" aria-label="Animation fortsetzen" title="Animation fortsetzen (Knoten bewegen sich kontinuierlich)">
-        <i class="codicon codicon-sync"></i>
+        <i data-icon="sync"></i>
       </button>
       
       <button id="exportBtn" class="toggle-btn" aria-label="Grafik exportieren" title="Grafik exportieren">
-        <i class="codicon codicon-save"></i>
+        <i data-icon="save"></i>
       </button>
     </div>
     
     <button id="togglePseudonymization" class="toggle-btn active" aria-label="Pseudonymisierung" title="Pseudonymisierung ein/aus">
-      <i class="codicon codicon-shield"></i>
+      <i data-icon="shield"></i>
     </button>
     
     <button id="debugBtn" class="toggle-btn" aria-label="Debug-Modus" title="Debug: Koordinaten & Abstände anzeigen">
-      <i class="codicon codicon-bug"></i>
+      <i data-icon="bug"></i>
     </button>
   </header>
   <main class="viewport">
@@ -87,14 +86,14 @@
               <div class="legend-search-container" data-ignore-header-click="true">
                 <input type="text" id="oeFilter" placeholder="OE filtern..." class="legend-search-input" data-ignore-header-click="true">
                 <button class="legend-icon-btn" id="oeFilterBtn" title="OE filtern" data-ignore-header-click="true">
-                  <i class="codicon codicon-filter"></i>
+                  <i data-icon="filter"></i>
                 </button>
               </div>
               <button id="toggleAllOes" class="legend-icon-btn" title="Alle OEs an/abwählen" data-ignore-header-click="true">
-                <i class="codicon codicon-check-all"></i>
+                <i data-icon="checkAll"></i>
               </button>
               <button id="toggleOesVisibility" class="legend-icon-btn active" title="OEs ausblenden" data-ignore-header-click="true">
-                <i class="codicon codicon-eye"></i>
+                <i data-icon="eye"></i>
               </button>
             </div>
           </div>
@@ -113,17 +112,17 @@
             </div>
             <div class="legend-actions-area">
               <button id="expandAllAttributes" class="legend-icon-btn" title="Alle Kategorien expandieren/kollabieren" data-ignore-header-click="true">
-                <i class="codicon codicon-chevron-down"></i>
-                <i class="codicon codicon-chevron-down" style="margin-top: -8px;"></i>
+                <i data-icon="chevronDown"></i>
+                <i data-icon="chevronDown" style="margin-top: -8px;"></i>
               </button>
               <button id="loadAttributes" class="legend-icon-btn" title="Attributliste laden" data-ignore-header-click="true">
-                <i class="codicon codicon-cloud-upload"></i>
+                <i data-icon="cloudUpload"></i>
               </button>
               <button id="toggleAllAttributes" class="legend-icon-btn" title="Alle Attribute an/abwählen" data-ignore-header-click="true">
-                <i class="codicon codicon-check-all"></i>
+                <i data-icon="checkAll"></i>
               </button>
               <button id="toggleAttributesVisibility" class="legend-icon-btn active" title="Attribute ausblenden" data-ignore-header-click="true">
-                <i class="codicon codicon-eye"></i>
+                <i data-icon="eye"></i>
               </button>
             </div>
           </div>
@@ -147,7 +146,7 @@
             </div>
             <div class="legend-actions-area">
               <button id="toggleAllHiddenVisibility" class="legend-icon-btn" title="Alle temporär einblenden" data-ignore-header-click="true" style="display: none;">
-                <i class="codicon codicon-eye-closed"></i>
+                <i data-icon="eyeClosed"></i>
               </button>
             </div>
           </div>

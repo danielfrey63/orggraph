@@ -2,6 +2,13 @@ import * as d3 from 'd3';
 import { SVG_ID, STATUS_ID, INPUT_COMBO_ID, LIST_COMBO_ID, INPUT_DEPTH_ID, BTN_APPLY_ID, WIDTH, HEIGHT, MAX_DROPDOWN_ITEMS, MIN_SEARCH_LENGTH, MAX_ROOTS, BFS_LEVEL_ANIMATION_DELAY_MS } from './constants.js';
 import { initializeExport } from './export.js';
 import { setStatus, showTemporaryNotification } from './utils.js';
+import { ICON, setIcon, hydrateIcons } from './icons.js';
+import {
+  KEY_ENV, KEY_DATA, KEY_PSEUDO, ATTR_PREFIX,
+  idbPut, idbClear, requestPersistence,
+  storeFiles, getStoredText, getStoredJson, getStoredAttributes,
+} from './storage.js';
+import { showDropZone, hideDropZone, installGlobalDrop } from './dropzone.js';
 import './style.css';
 
 let raw = { nodes: [], links: [], persons: [], orgs: []};
@@ -91,6 +98,14 @@ const Logger = {
  */
 async function loadPseudoData() {
   try {
+    // 1) IndexedDB (standalone persistence)
+    const storedPseudo = await getStoredJson(KEY_PSEUDO);
+    if (storedPseudo) {
+      pseudoData = storedPseudo;
+      Logger.log('[Pseudo] Daten aus IndexedDB geladen');
+      return true;
+    }
+    // 2) fetch fallback (dev server)
     const res = await fetch('./pseudo.data.json', { cache: 'no-store' });
     if (!res.ok) {
       Logger.log('[Pseudo] Konnte pseudo.data.json nicht laden:', res.status);
@@ -1130,10 +1145,21 @@ async function loadEnvConfig() {
   // Wir loggen "Start" nachträglich, falls debugMode aktiviert wird.
   
   try {
+    // 1) IndexedDB (standalone persistence)
+    const storedEnv = await getStoredJson(KEY_ENV);
+    if (storedEnv) {
+      envConfig = storedEnv;
+      if (typeof envConfig.TOOLBAR_DEBUG_ACTIVE === 'boolean') {
+        debugMode = envConfig.TOOLBAR_DEBUG_ACTIVE;
+      }
+      Logger.log('[Init] env loaded from IndexedDB:', envConfig);
+      return true;
+    }
+    // 2) fetch fallback (dev server)
     const res = await fetch("./env.json", { cache: "no-store" });
     if (res.ok) {
       envConfig = await res.json();
-      
+
       // Update debug mode from config [SF]
       if (typeof envConfig.TOOLBAR_DEBUG_ACTIVE === 'boolean') {
         debugMode = envConfig.TOOLBAR_DEBUG_ACTIVE;
@@ -1304,28 +1330,37 @@ async function loadData() {
   let data = null;
   let sourceName = '(keine Daten)';
 
-  const dataUrl = envConfig?.DATA_URL || null;
-
-  // Wenn keine Datenquelle über ENV konfiguriert ist, kein Autoload durchführen [SF][REH]
-  if (!dataUrl) {
-    setStatus('Keine automatische Datenquelle konfiguriert – manuelles Laden über den Status möglich.');
-    return false;
+  // 1) IndexedDB (standalone persistence) [SF]
+  const storedText = await getStoredText(KEY_DATA);
+  if (storedText != null) {
+    try {
+      data = JSON.parse(storedText);
+      sourceName = '(lokal gespeichert)';
+    } catch (e) {
+      console.error('Gespeicherte Daten konnten nicht geparst werden:', e);
+    }
   }
 
-  try {
-    const res = await fetch(dataUrl, { cache: "no-store" });
-    if (res.ok) {
-      data = await res.json();
-      sourceName = dataUrl;
-    } else {
-      console.warn('Automatisches Laden der Daten fehlgeschlagen:', res.status, res.statusText);
+  // 2) fetch fallback (dev server, via env DATA_URL)
+  if (!data) {
+    const dataUrl = envConfig?.DATA_URL || null;
+    if (dataUrl) {
+      try {
+        const res = await fetch(dataUrl, { cache: "no-store" });
+        if (res.ok) {
+          data = await res.json();
+          sourceName = dataUrl;
+        } else {
+          console.warn('Automatisches Laden der Daten fehlgeschlagen:', res.status, res.statusText);
+        }
+      } catch (e) {
+        console.error('Fehler beim automatischen Laden der Daten:', e);
+      }
     }
-  } catch (e) {
-    console.error('Fehler beim automatischen Laden der Daten:', e);
   }
 
   if (!data) {
-    setStatus('Automatisches Laden der Daten fehlgeschlagen – bitte Daten manuell laden.');
+    setStatus('Keine Daten vorhanden – bitte eine JSON-Datei laden (Drag & Drop).');
     return false;
   }
 
@@ -1337,7 +1372,27 @@ async function loadData() {
     return false;
   }
 
-  // Lade Attribute automatisch, falls in ENV konfiguriert (string oder string[])
+  await loadAttributesPreferStored();
+
+  return true;
+}
+
+// Attribute laden: bevorzugt aus IndexedDB, sonst aus ENV-URLs (Dev-Fallback) [SF][DRY]
+async function loadAttributesPreferStored() {
+  const stored = await getStoredAttributes();
+  if (stored.length) {
+    collapsedCategories = new Set(stored.map(s => s.filename.replace(/\.[^/.]+$/, '')));
+    for (const s of stored) {
+      try {
+        await loadAttributesFromFile(new File([s.text], s.filename));
+      } catch (error) {
+        console.error('Laden gespeicherter Attribute fehlgeschlagen:', error);
+      }
+    }
+    return;
+  }
+
+  // Fallback: Attribute aus ENV-URLs (string oder string[]) – nur im Dev-Server
   const attrCfg = envConfig?.DATA_ATTRIBUTES_URL;
   if (attrCfg) {
     const urls = Array.isArray(attrCfg) ? attrCfg : [attrCfg];
@@ -1358,8 +1413,6 @@ async function loadData() {
       }
     }
   }
-
-  return true;
 }
 
 function populateCombo(filterText) {
@@ -1805,16 +1858,7 @@ function updateHiddenLegendEyeButtons() {
     btn.className = isVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
     btn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
     // Icon aktualisieren
-    const icon = btn.querySelector('.codicon');
-    if (icon) {
-      if (isVisible) {
-        icon.classList.remove('codicon-eye-closed');
-        icon.classList.add('codicon-eye');
-      } else {
-        icon.classList.remove('codicon-eye');
-        icon.classList.add('codicon-eye-closed');
-      }
-    }
+    setIcon(btn, isVisible ? 'eye' : 'eyeClosed');
   });
 }
 
@@ -1831,16 +1875,8 @@ function updateGlobalHiddenVisibilityButton() {
     btn.className = allHiddenTemporarilyVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
     btn.title = allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden';
     // Icon aktualisieren
-    const icon = btn.querySelector('.codicon');
-    if (icon) {
-      if (allHiddenTemporarilyVisible) {
-        icon.classList.remove('codicon-eye-closed');
-        icon.classList.add('codicon-eye');
-      } else {
-        icon.classList.remove('codicon-eye');
-        icon.classList.add('codicon-eye-closed');
-      }
-    }
+    const icon = btn.querySelector('[data-icon]');
+    if (icon) setIcon(icon, allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed');
   }
 }
 
@@ -1914,7 +1950,7 @@ function buildHiddenLegend() {
     removeBtn.type = 'button';
     removeBtn.className = 'legend-icon-btn';
     removeBtn.title = 'Wieder einblenden';
-    removeBtn.innerHTML = '<i class="codicon codicon-close" aria-hidden="true"></i>';
+    setIcon(removeBtn, 'close');
     removeBtn.setAttribute('data-ignore-header-click', 'true');
     removeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1929,7 +1965,7 @@ function buildHiddenLegend() {
     // Verwende active-Klasse wie bei OEs/Attributen
     eyeBtn.className = isVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
     eyeBtn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
-    eyeBtn.innerHTML = `<i class="codicon ${isVisible ? 'codicon-eye' : 'codicon-eye-closed'}" aria-hidden="true"></i>`;
+    setIcon(eyeBtn, isVisible ? 'eye' : 'eyeClosed');
     eyeBtn.dataset.rootId = root;
     eyeBtn.setAttribute('data-ignore-header-click', 'true');
     eyeBtn.addEventListener('click', (e) => {
@@ -4712,37 +4748,30 @@ async function loadAttributesFromFile(file) {
 }
 
 /**
- * Hilfsfunktionen für Codicon-Icons
+ * Hilfsfunktionen für Icons (zentrale Registry ICON, siehe icons.js)
  */
 function getCheckboxSVG(checked = false) {
-  if (checked) {
-    return `<i class="codicon codicon-check" aria-hidden="true"></i>`;
-  } else {
-    return `<i class="codicon codicon-close" aria-hidden="true"></i>`;
-  }
+  return checked ? ICON.check : ICON.close;
 }
 
 function getChevronSVG() {
-  return `<i class="codicon codicon-chevron-down" aria-hidden="true"></i>`;
+  return ICON.chevronDown;
 }
 
 function getCheckAllSVG() {
-  return `<i class="codicon codicon-check-all" aria-hidden="true"></i>`;
+  return ICON.checkAll;
 }
 
 function getEyeSVG(closed = false) {
-  if (closed) {
-    return `<i class="codicon codicon-eye-closed" aria-hidden="true"></i>`;
-  }
-  return `<i class="codicon codicon-eye" aria-hidden="true"></i>`;
+  return closed ? ICON.eyeClosed : ICON.eye;
 }
 
 function getSaveSVG() {
-  return `<i class="codicon codicon-save" aria-hidden="true"></i>`;
+  return ICON.save;
 }
 
 function getDownloadSVG() {
-  return `<i class="codicon codicon-cloud-download" aria-hidden="true"></i>`;
+  return ICON.cloudDownload;
 }
 
 function updateCheckboxIcon(checkboxElement, checked) {
@@ -4909,34 +4938,27 @@ function buildAttributeLegend() {
     const isHidden = hiddenCategories.has(cat);
     eyeBtn.className = isHidden ? 'legend-icon-btn hidden' : 'legend-icon-btn';
     eyeBtn.title = isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden';
-    eyeBtn.innerHTML = getEyeSVG(isHidden);
+    setIcon(eyeBtn, isHidden ? 'eyeClosed' : 'eye');
     eyeBtn.setAttribute('data-ignore-header-click', 'true');
-    
+
     eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const isCurrentlyHidden = hiddenCategories.has(cat);
-      const icon = eyeBtn.querySelector('.codicon');
-      
+
       if (isCurrentlyHidden) {
         // Einblenden
         hiddenCategories.delete(cat);
         eyeBtn.className = 'legend-icon-btn';
         eyeBtn.title = 'Kategorie ausblenden';
-        if (icon) {
-          icon.classList.remove('codicon-eye-closed');
-          icon.classList.add('codicon-eye');
-        }
+        setIcon(eyeBtn, 'eye');
       } else {
         // Ausblenden
         hiddenCategories.add(cat);
         eyeBtn.className = 'legend-icon-btn hidden';
         eyeBtn.title = 'Kategorie einblenden';
-        if (icon) {
-          icon.classList.remove('codicon-eye');
-          icon.classList.add('codicon-eye-closed');
-        }
+        setIcon(eyeBtn, 'eyeClosed');
       }
-      
+
       // Attribut-Kreise neu zeichnen
       updateAttributeCircles();
     });
@@ -5630,9 +5652,57 @@ function exportUnmatchedEntries(unmatchedEntries) {
 let oesVisible = true;
 let savedAllowedOrgs = new Set();
 
+// ========== Standalone-Persistenz: Drop-Handling & Reset [SF] ==========
+
+/**
+ * Verarbeitet gedroppte/gewählte Dateien: speichert sie in IndexedDB und lädt
+ * neu. Enthält der Drop einen Datensatz (data/env/pseudo), wird die Seite neu
+ * geladen, damit der reguläre Init-Pfad (inkl. Start-Knoten) greift. Reine
+ * Attribut-Drops werden live nachgeladen, ohne die Ansicht zu verlieren.
+ */
+async function handleDroppedFiles(fileList) {
+  const summary = await storeFiles(fileList);
+  await requestPersistence();
+
+  if (summary.unknown.length) {
+    showTemporaryNotification(`Nicht erkannt, ignoriert: ${summary.unknown.join(', ')}`, 5000);
+  }
+  if (!summary.stored.length) return;
+
+  const kinds = new Set(summary.stored.map(s => s.kind));
+  const onlyAttributes = kinds.size > 0 && [...kinds].every(k => k === 'attr');
+
+  if (onlyAttributes) {
+    // Datensatz steht bereits – Attribute inkrementell nachladen.
+    for (const s of summary.stored) {
+      const file = Array.from(fileList).find(f => f.name === s.filename);
+      if (file) {
+        try { await loadAttributesFromFile(file); } catch (e) { console.error(e); }
+      }
+    }
+    showTemporaryNotification(`${summary.stored.length} Attribut-Datei(en) geladen und gespeichert.`, 3000);
+    return;
+  }
+
+  // Datensatz/Env/Pseudo geändert → sauberer Neustart über den Init-Pfad.
+  hideDropZone();
+  setStatus('Daten gespeichert – lade neu …');
+  location.reload();
+}
+
+/** Löscht alle lokal gespeicherten Daten und kehrt zum Leerzustand zurück. */
+async function resetAllData() {
+  try { await idbClear(); } catch (e) { console.error(e); }
+  location.reload();
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
+  // Persistenz früh anfragen und globales Drag&Drop installieren.
+  requestPersistence();
+  installGlobalDrop(handleDroppedFiles);
+
   await loadEnvConfig();
-  
+
   // Pseudonymisierung initialisieren [SF]
   if (envConfig && typeof envConfig.TOOLBAR_PSEUDO_ACTIVE === 'boolean') {
     pseudonymizationEnabled = envConfig.TOOLBAR_PSEUDO_ACTIVE;
@@ -5658,6 +5728,8 @@ window.addEventListener("DOMContentLoaded", async () => {
           applyLoadedDataObject(data, file.name);
           populateCombo("");
           try { applyFromUI('fileLoad'); } catch(_) { updateFooterStats(null); }
+          // In IndexedDB persistieren, damit beim nächsten Öffnen automatisch geladen wird.
+          try { await idbPut(KEY_DATA, text); await requestPersistence(); hideDropZone(); } catch(_) {}
         } catch(_) {
           setStatus('Ungültige Datei');
         } finally {
@@ -5689,16 +5761,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       oesVisible = oeVisibilityBtn.classList.contains('active');
       
       // Icon wechseln zwischen eye und eye-closed
-      const icon = oeVisibilityBtn.querySelector('.codicon');
-      if (icon) {
-        if (oesVisible) {
-          icon.classList.remove('codicon-eye-closed');
-          icon.classList.add('codicon-eye');
-        } else {
-          icon.classList.remove('codicon-eye');
-          icon.classList.add('codicon-eye-closed');
-        }
-      }
+      const icon = oeVisibilityBtn.querySelector('[data-icon]');
+      if (icon) setIcon(icon, oesVisible ? 'eye' : 'eyeClosed');
       
       if (oesVisible) {
         // OEs einblenden - gespeicherte Auswahl wiederherstellen
@@ -5816,16 +5880,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Icon initial korrekt setzen (eye vs. eye-closed)
-    const initialIcon = attributesVisibilityBtn.querySelector('.codicon');
-    if (initialIcon) {
-      if (attributesVisible) {
-        initialIcon.classList.remove('codicon-eye-closed');
-        initialIcon.classList.add('codicon-eye');
-      } else {
-        initialIcon.classList.remove('codicon-eye');
-        initialIcon.classList.add('codicon-eye-closed');
-      }
-    }
+    const initialIcon = attributesVisibilityBtn.querySelector('[data-icon]');
+    if (initialIcon) setIcon(initialIcon, attributesVisible ? 'eye' : 'eyeClosed');
     
     attributesVisibilityBtn.addEventListener('click', () => {
       // Toggle Button-Status
@@ -5833,16 +5889,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
       
       // Icon wechseln zwischen eye und eye-closed
-      const icon = attributesVisibilityBtn.querySelector('.codicon');
-      if (icon) {
-        if (attributesVisible) {
-          icon.classList.remove('codicon-eye-closed');
-          icon.classList.add('codicon-eye');
-        } else {
-          icon.classList.remove('codicon-eye');
-          icon.classList.add('codicon-eye-closed');
-        }
-      }
+      const icon = attributesVisibilityBtn.querySelector('[data-icon]');
+      if (icon) setIcon(icon, attributesVisible ? 'eye' : 'eyeClosed');
       
       // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:
       // - activeAttributes (bleiben wie sie sind)
@@ -6036,26 +6084,23 @@ window.addEventListener("DOMContentLoaded", async () => {
    * Aktualisiert das Icon des Label-Toggle-Buttons basierend auf dem Zustand [SF]
    */
   function updateLabelToggleIcon(btn) {
-    const icon = btn.querySelector('.codicon');
+    const icon = btn.querySelector('[data-icon]');
     if (!icon) return;
-    
-    // Entferne alle möglichen Icon-Klassen
-    icon.classList.remove('codicon-tag', 'codicon-symbol-property', 'codicon-eye-closed');
-    
-    // Setze Icon basierend auf Zustand
+
+    // Icon + Button-Zustand basierend auf labelsVisible setzen
     switch (labelsVisible) {
       case 'all':
-        icon.classList.add('codicon-tag');
+        setIcon(icon, 'tag');
         btn.classList.add('active');
         btn.title = 'Alle Labels anzeigen';
         break;
       case 'attributes':
-        icon.classList.add('codicon-symbol-property');
+        setIcon(icon, 'property');
         btn.classList.add('active');
         btn.title = 'Nur Attribut-Labels anzeigen';
         break;
       case 'none':
-        icon.classList.add('codicon-eye-closed');
+        setIcon(icon, 'eyeClosed');
         btn.classList.remove('active');
         btn.title = 'Labels ausgeblendet';
         break;
@@ -6363,6 +6408,13 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (attrFileInput.files && attrFileInput.files[0]) {
         const file = attrFileInput.files[0];
         await loadAttributesFromFile(file);
+        // In IndexedDB persistieren (Inhalt + Originalname für Kategorie-Ableitung).
+        try {
+          const text = await file.text();
+          await idbPut(ATTR_PREFIX + file.name, text);
+          await idbPut(ATTR_PREFIX + file.name + '::name', file.name);
+          await requestPersistence();
+        } catch (_) {}
         attrFileInput.value = ''; // Reset für wiederholtes Laden
       }
     });
@@ -6377,6 +6429,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Lade Daten erst nachdem ENV vollständig verarbeitet wurde [SF][REH]
   if (await loadData()) {
+    hideDropZone();
     // Apply initial start node(s) from env.json if provided
     let initialUpdateTriggered = false;
     if (envConfig && envConfig.GRAPH_START_ID_DEFAULT != null) {
@@ -6446,8 +6499,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     } else {
         renderFullView(envConfig?.DATA_URL || '(geladen)');
     }
+  } else {
+    // Keine Daten vorhanden → Drop-Zone zum Laden einblenden.
+    showDropZone(handleDroppedFiles);
   }
-  
+
   // hideSubtree-Button wurde aus der Toolbar entfernt
   // Die hideSubtreeFromRoot-Funktion bleibt für das Kontextmenü erhalten
   buildHiddenLegend();
@@ -6455,6 +6511,23 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Initialisiere Export-Funktionalität
   if (typeof initializeExport === 'function') {
     initializeExport();
+  }
+
+  // Reset-Schaltfläche für lokal gespeicherte Daten (Footer).
+  const footerStats = document.querySelector('.footer-stats');
+  if (footerStats && !document.getElementById('resetData')) {
+    const sep = document.createElement('span');
+    sep.className = 'stat-separator';
+    sep.textContent = '|';
+    const resetBtn = document.createElement('button');
+    resetBtn.id = 'resetData';
+    resetBtn.className = 'footer-reset-btn';
+    resetBtn.type = 'button';
+    resetBtn.title = 'Lokal gespeicherte Daten löschen und zurücksetzen';
+    resetBtn.textContent = 'Daten zurücksetzen';
+    resetBtn.addEventListener('click', () => { resetAllData(); });
+    footerStats.appendChild(sep);
+    footerStats.appendChild(resetBtn);
   }
 });
 
