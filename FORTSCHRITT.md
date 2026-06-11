@@ -301,11 +301,21 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
 - `02-icons` aus `coverage.exclude` entfernt → **100 % Coverage** auf der Sektion.
 - **193 Tests grün, Gate grün: 92,23 %** (Nenner jetzt 10 von 19 Sektionen).
 
-## Nächster Schritt (Iteration 26)
+### Iteration 26 — `05-dropzone` in den Nenner (10 Tests, 96 %)
+- Tests: ensureOverlay-Singleton, dz-visible-Toggle, File-Picker-Flow
+  (multiple/accept/change→onFiles→remove), installGlobalDrop (dragenter/leave-
+  Tiefenzählung, Files-Type-Filter, copy-dropEffect, Drop-Delivery, leerer Drop),
+  Logger (Silent-Guard, Timestamp-Format).
+- Fund dokumentiert: Sektion 05 enthält neben der Drop-Zone auch die zentralen
+  App-State-`let`s und den `Logger`; `debugMode` ist dort modullokal → Loud-Pfad
+  des Loggers nur im Gesamt-Build erreichbar (Zeilen 157-162, ehrliche Rest-Lücke).
+- **203 Tests grün, Gate grün: 92,45 %** (11/19 Sektionen im Nenner).
 
-`05-dropzone` (170 Z.): Overlay-Aufbau, showDropZone/hideDropZone,
-installGlobalDrop (DragEvents in jsdom, storeFiles/applyLoaded-Stubs) testen
-und aus `coverage.exclude` nehmen.
+## Nächster Schritt (Iteration 27)
+
+`16-legend-attributes` (335 Z.): SVG-Icon-Getter, updateCheckboxIcon,
+initializeChevronIcons/LegendCollapsedStates, buildAttributeLegend (jsdom,
+Kategorien/Chips/Toggles) testen und aus `coverage.exclude` nehmen.
 
 ## Offene Fragen / Risiken
 

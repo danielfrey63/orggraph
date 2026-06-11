@@ -18,7 +18,6 @@ export default defineConfig({
       // must move into an included section, not be tested through the DOM.
       exclude: [
         'src/sections/03-export-dialog.js',
-        'src/sections/05-dropzone.js',
         'src/sections/12-legend-org.js',
         'src/sections/13-clusters-simulation.js',
         'src/sections/14-render.js',
