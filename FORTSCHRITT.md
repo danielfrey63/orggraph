@@ -332,12 +332,26 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
   `forceSimulation` initialisiert x/y selbst → für Vorpositionierungs-Tests NaN setzen.
 - **228 Tests grün, Gate grün: 93,53 %** (13/19 Sektionen im Nenner).
 
-## Nächster Schritt (Iteration 29)
+### Iteration 29 — `12-legend-org` Teil 1 (15 Tests)
+- Getestet: collectSubtree (voll + Scope), buildOrgLegend (Baum, Tiefen-Spacer,
+  Chevron nur bei Eltern, raw-Fallback ohne globale Maps, Row-Toggle,
+  Chevron-Collapse), echtes Kontextmenü (ensureLegendMenu/showLegendMenu/
+  hideLegendMenu mit onShowAll/onHideAll/onShowDirectChildrenOnly inkl.
+  visuellem Collapse), buildScopedOrgLegend (Scope-Roots, leerer Scope),
+  applyLegendScope (Ancestor-Erweiterung), initLegendCollapsedItems
+  (Geschwister-Vorcollapse), updateLegendChips (oesVisible-Pfade),
+  updateLegendRowColors (active + CSS-Props + cb-Sync), buildHiddenLegend
+  (leer, Einträge mit Count, Unhide-/Eye-Buttons).
+- Learning: modullokale Funktionen (showLegendMenu) lassen sich nicht per
+  Global stubben — gegen das echte Menü-DOM testen.
+- **243 Tests grün**, Verify grün. Sektion 12 bleibt bis Teil 2 in exclude.
 
-Der grösste Brocken: `12-legend-org` (1076 Z.) — renderOrgLegendNode,
-buildOrgLegend/buildScopedOrgLegend, applyLegendScope, updateLegendChips/
-RowColors, collectSubtree, Legend-Menü, buildHiddenLegend, initLegendCollapsedItems.
-Ggf. auf zwei Iterationen aufteilen (erst Baum-Aufbau + Scope, dann Menü/Hidden).
+## Nächster Schritt (Iteration 30)
+
+`12-legend-org` Teil 2: addNodeToAttribute, addAttributeSubmenu/createSubmenu-
+Items, exportCategoryAttributes/exportSingleAttribute/exportCategoryAsTSV
+(Blob/URL.createObjectURL stubben), promptNewAttribute/Category (window.prompt
+stubben), ensureNodeMenu/showNodeMenu. Danach Sektion 12 aus exclude nehmen.
 
 ## Offene Fragen / Risiken
 
