@@ -85,6 +85,13 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   → Basis für VS-Code-Gutters vorhanden. `npm run verify` weiterhin grün.
 - Babel-devDeps bewusst behalten (werden vom lokalen `helpers/transform.js` genutzt).
 
+### Iteration 9 — Tests für `04-storage`
+- `tests/04-storage.test.js`: 17 neue Tests (IndexedDB-Roundtrip via fake-indexeddb,
+  Datei-Klassifizierung looksLike*/classifyFile, storeFiles inkl. Attr-Filename-Persistenz,
+  getStored*-Accessoren, requestPersistence-Fallback). **Total 35 Tests grün.**
+- Learning: jsdoms `File` implementiert `Blob.text()` nicht → Test-Factory nutzt ein
+  minimales `{name, text()}`-Objekt (entspricht exakt der von `classifyFile` genutzten Schnittstelle).
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -95,13 +102,13 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 9)
+## Nächster Schritt (Iteration 10)
 
-Test-Masse aufbauen, sektionsweise (testgetrieben Import-Wiring nur wo nötig):
-als Nächstes `04-storage` (IndexedDB-Kapsel mit fake-indexeddb: openDb, idbGet/Put/
-Delete/Keys/Clear, classifyFile/looksLike*-Klassifizierung) und `09-data-load`
-(processData, idOf — reine Datenverarbeitung). Parallel beginnen, die Grenzschicht-
-Klassifizierung pro Sektion festzuhalten (Basis für `coverage.exclude`-Liste).
+Tests für `09-data-load` (idOf, processData — reine Datenverarbeitung; Querbezüge
+prüfen und nötigenfalls Import-Zeilen ergänzen) und danach `11-graph-core`
+(buildAdjacency, computeSubgraph — Kern-Traversierung, grösster Logik-Hebel).
+Parallel die Grenzschicht-Klassifizierung pro Sektion festhalten
+(Basis für die `coverage.exclude`-Liste).
 
 ## Offene Fragen / Risiken
 
