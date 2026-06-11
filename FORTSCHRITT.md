@@ -102,6 +102,13 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   (Strict-Mode-Auflösung) und locken das Ist-Verhalten vor dem späteren
   State-Refactoring ein.
 
+### Iteration 11 — Tests für `11-graph-core`
+- `tests/11-graph-core.test.js`: 17 neue Tests (buildAdjacency; computeSubgraph mit allen
+  Traversierungs-Modi down/up/org-Start, Tiefenlimit, Level-Annotation, Link-Filter,
+  Legend-Leaf-Orgs; Hidden-/Management-Filter inkl. temporäre Sichtbarkeit;
+  recomputeHiddenNodes, isNodeTemporarilyVisible, collectReportSubtree).
+- **Total 62 Tests grün**, Verify grün. `04-storage` bereits bei 91 % Lines.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -112,12 +119,13 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 11)
+## Nächster Schritt (Iteration 12)
 
-Tests für `11-graph-core` (buildAdjacency, computeSubgraph, recomputeHiddenNodes,
-collectReportSubtree, hide/unhide-Subtree — Kern-Traversierung, grösster Logik-Hebel;
-gleiche Globals-Technik wie bei 09). Danach 15-ui-apply-search (levenshtein/fuzzySearch,
-parseAttributeList) und 06-pseudo-labels.
+Tests für `15-ui-apply-search` (levenshteinDistance, normalizedLevenshteinDistance,
+fuzzySearch, parseAttributeList, findPersonIdsByIdentifier) und danach
+`06-pseudo-labels` (getPseudoName, getPseudoOrgLabel, getDisplayLabel,
+getDisplayOrgLabel). Danach steht die Grenzschicht-Klassifizierung aller
+19 Sektionen an (`coverage.exclude`-Liste + 80%-Threshold in vitest.config).
 
 ## Offene Fragen / Risiken
 
