@@ -74,6 +74,17 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   `13-clusters-simulation` (referenziert `Logger` aus anderer Sektion auf Top-Level →
   wird beim Import-Wiring gelöst).
 
+### Iteration 8 — Test-Infrastruktur (Phase 5 Start)
+- devDependencies: `vitest`, `jsdom`, `fake-indexeddb`, `@vitest/coverage-v8`;
+  `package-lock.json` + `node_modules` sauber neu erzeugt (vorbestehende Lock-Änderung damit aufgelöst).
+- `vitest.config.js`: jsdom-Environment, Coverage v8 mit `text`/`lcov`/`html` nach `coverage/`,
+  `include: src/sections/**`; `coverage.exclude` (Grenzschicht) wächst mit der Klassifizierung.
+- Erste Suite `tests/08-color-geometry.test.js`: **18 Tests grün** (hashCode, quantizedHue,
+  colorForCategoryAttribute, colorForOrg, colorToTransparent, cssNumber, computeClusterPolygon).
+- **Coverage-Workflow Ende-zu-Ende verifiziert:** `coverage/lcov.info` + HTML-Report entstehen
+  → Basis für VS-Code-Gutters vorhanden. `npm run verify` weiterhin grün.
+- Babel-devDeps bewusst behalten (werden vom lokalen `helpers/transform.js` genutzt).
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -84,16 +95,13 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 8)
+## Nächster Schritt (Iteration 9)
 
-Test-Infrastruktur aufsetzen (Phase 5 Start): Vitest + jsdom + fake-indexeddb +
-@vitest/coverage-v8 als devDependencies, `vitest.config.js` mit `coverage.exclude`
-für die Grenzschicht-Sektionen, `package-lock.json` dabei sauber neu erzeugen.
-Erste Tests gegen die reinsten, bereits importierbaren Sektionen (08-color-geometry:
-hashCode, quantizedHueFromCategory, colorToTransparent, computeClusterPolygon;
-01-config-status: Konstanten). Damit steht der Coverage-Workflow Ende-zu-Ende
-(lcov.info für Gutters), bevor die Test-Masse wächst. Import-Wiring zwischen
-Sektionen folgt danach testgetrieben (nur wo Tests es brauchen).
+Test-Masse aufbauen, sektionsweise (testgetrieben Import-Wiring nur wo nötig):
+als Nächstes `04-storage` (IndexedDB-Kapsel mit fake-indexeddb: openDb, idbGet/Put/
+Delete/Keys/Clear, classifyFile/looksLike*-Klassifizierung) und `09-data-load`
+(processData, idOf — reine Datenverarbeitung). Parallel beginnen, die Grenzschicht-
+Klassifizierung pro Sektion festzuhalten (Basis für `coverage.exclude`-Liste).
 
 ## Offene Fragen / Risiken
 
