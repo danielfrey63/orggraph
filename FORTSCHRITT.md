@@ -109,6 +109,12 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   recomputeHiddenNodes, isNodeTemporarilyVisible, collectReportSubtree).
 - **Total 62 Tests grün**, Verify grün. `04-storage` bereits bei 91 % Lines.
 
+### Iteration 12 — Tests für `15-ui-apply-search`
+- `tests/15-ui-apply-search.test.js`: 18 neue Tests (levenshteinDistance,
+  normalizedLevenshteinDistance, parseAttributeList mit Tab/Komma-Erkennung und
+  Empty-Category-Flag, findPersonIdsByIdentifier, fuzzySearch inkl. Sortierung,
+  Label-Match, Abort-Flag, Threshold). **Total 80 Tests grün**, Verify grün.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -119,13 +125,13 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 12)
+## Nächster Schritt (Iteration 13)
 
-Tests für `15-ui-apply-search` (levenshteinDistance, normalizedLevenshteinDistance,
-fuzzySearch, parseAttributeList, findPersonIdsByIdentifier) und danach
-`06-pseudo-labels` (getPseudoName, getPseudoOrgLabel, getDisplayLabel,
-getDisplayOrgLabel). Danach steht die Grenzschicht-Klassifizierung aller
-19 Sektionen an (`coverage.exclude`-Liste + 80%-Threshold in vitest.config).
+Tests für `06-pseudo-labels` (getPseudoName, getPseudoOrgLabel, getDisplayLabel,
+getDisplayOrgLabel) und `10-combo` (guessIdFromInput). Danach die Grenzschicht-
+Klassifizierung aller 19 Sektionen (`coverage.exclude`-Liste + 80%-Threshold
+in vitest.config) — dann zeigt sich, wo noch Coverage-Lücken auf der reinen
+Logik sind.
 
 ## Offene Fragen / Risiken
 
