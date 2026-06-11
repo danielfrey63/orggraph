@@ -3,6 +3,7 @@
 // (same stripping rules as build.js) to translate line numbers, then appends
 // an SF:index.html record to coverage/lcov.info. Idempotent, zero deps.
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const LCOV = 'coverage/lcov.info';
 if (!existsSync(LCOV)) {
@@ -85,8 +86,10 @@ for (const record of records) {
 
 const lines = Array.from(da.keys()).sort((a, b) => a - b);
 const hit = lines.filter((l) => da.get(l) > 0).length;
+// Absolute path: Coverage Gutters fails to match a bare single-segment
+// relative path against the open editor file.
 const indexRecord = [
-  'SF:index.html',
+  `SF:${resolve('index.html')}`,
   ...lines.map((l) => `DA:${l},${da.get(l)}`),
   `LF:${lines.length}`,
   `LH:${hit}`,
@@ -96,7 +99,7 @@ const indexRecord = [
 
 // Idempotent: drop any previous index.html record before appending.
 const withoutOld = records
-  .filter((r) => !/^SF:index\.html$/m.test(r))
+  .filter((r) => !/^SF:.*index\.html$/m.test(r))
   .map((r) => r + 'end_of_record\n')
   .join('');
 writeFileSync(LCOV, withoutOld + indexRecord);
