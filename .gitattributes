@@ -1,0 +1,7 @@
+# Normalize everything to LF — the legacy index.html had mixed line endings,
+# which breaks reproducible builds under autocrlf.
+* text=auto eol=lf
+
+# Keep the immutable baseline and vendored minified code byte-exact.
+reference/** -text
+vendor/** -text

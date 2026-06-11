@@ -52,6 +52,20 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - Hinweis: Sektionen sind Zwischenschritt (noch globaler Scope, keine Exports) — die Umformung
   in echte ES-Module mit `export`/`import` + Strip beim Inlining folgt in den nächsten Iterationen.
 
+### Iteration 6 — ES-Modul-Infrastruktur + EOL-Sanierung
+- `build.js` strippt beim Inlining jetzt Modul-Syntax: einzeilige `import`-Zeilen,
+  `export {…}`-Statements und `export `-Präfixe auf Spalte 0 (Konvention dokumentiert).
+- Erste Exports gesetzt: `01-config-status.js` (14) und `08-color-geometry.js` (21).
+- **Stolperstein entdeckt:** Die Legacy-`index.html` hat gemischte Zeilenenden (LF+CRLF);
+  Git-autocrlf zerstört bei jedem `checkout` die Byte-Treue → Byte-Identität als Kriterium
+  nicht haltbar. **Entscheid:** Alle Quellen auf LF normalisiert, `.gitattributes` mit
+  `* text=auto eol=lf` + `reference/** -text` (Baseline bleibt byte-exakt). Verifikation
+  ab jetzt via `verify.js`: Gleichheit **modulo Zeilenenden** (verhaltensneutral für
+  HTML/CSS/JS). `npm run verify` = build + verify.
+- `git add --renormalize` ausgeführt; reine EOL-Diffs in `public/*` und `rename-env-keys.ps1`
+  mit committet. `package-lock.json` (echte vor-bestehende Inhaltsänderung) bewusst NICHT
+  committet — wird in Phase 5 sauber neu erzeugt.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -62,14 +76,13 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 6)
+## Nächster Schritt (Iteration 7)
 
-ES-Modul-Umformung beginnen: `build.js` um Import/Export-Stripping erweitern
-(beim Inlining werden `import`-Zeilen entfernt und `export `-Präfixe gestrichen,
-Konkatenation in fixer Reihenfolge bleibt). Danach erste Sektionen in echte Module
-mit `export`/`import` umformen — beginnend bei den reinsten (08-color-geometry,
-01-config-status). Ab da gilt: Output nicht mehr byte-identisch, daher zusätzlich
-Smoke-Verifikation (Node-Syntax-Check des gebauten Scripts + Browser-Smoke-Test).
+Exports + Imports flächendeckend: restliche Sektionen mit `export` versehen und die
+Querbezüge als `import`-Zeilen ergänzen (werden beim Build gestrippt), damit jede
+Sektion einzeln von Vitest importierbar wird. Achtung: zirkuläre Bezüge zwischen
+Sektionen sind beim Konkatenieren harmlos, für ES-Module aber relevant — beim
+Import-Setzen prüfen und nötigenfalls Schnitt anpassen. Verifikation: `npm run verify`.
 
 ## Offene Fragen / Risiken
 

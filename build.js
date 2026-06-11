@@ -4,11 +4,20 @@ import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 
 const read = (path) => readFileSync(path, 'utf8');
 
+// Sections are ES modules for dev/tests; the deliverable inlines them as one
+// classic script. Convention: imports are single-line, export keywords sit at
+// column 0 — both are stripped here, which exactly reverses the module syntax.
+const stripModuleSyntax = (code) =>
+  code
+    .replace(/^import .*\n/gm, '')
+    .replace(/^export \{[^}]*\};?\n/gm, '')
+    .replace(/^export (?=(const|let|var|function|async function|class)\b)/gm, '');
+
 // App sections are concatenated in lexicographic order (numeric prefixes).
 const app = readdirSync('src/sections')
   .filter((f) => f.endsWith('.js'))
   .sort()
-  .map((f) => read(`src/sections/${f}`))
+  .map((f) => stripModuleSyntax(read(`src/sections/${f}`)))
   .join('');
 
 const out = read('index.template.html')

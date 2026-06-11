@@ -1,4 +1,4 @@
-function cssNumber(varName, fallback) {
+export function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : fallback;
@@ -6,7 +6,7 @@ function cssNumber(varName, fallback) {
 
 // Farb-Hilfen: gleiche Kategorie -> ähnliche Farben, Kategorien klar unterscheidbar
 const categoryHueCache = new Map();
-function quantizedHueFromCategory(category) {
+export function quantizedHueFromCategory(category) {
   if (categoryHueCache.has(category)) return categoryHueCache.get(category);
   const rawHue = Math.abs(hashCode(String(category))) % 360;
   const step = 40; // große Abstände zwischen Kategorien
@@ -14,7 +14,7 @@ function quantizedHueFromCategory(category) {
   categoryHueCache.set(category, hue);
   return hue;
 }
-function colorForCategoryAttribute(category, attrName, ordinal) {
+export function colorForCategoryAttribute(category, attrName, ordinal) {
   const baseHue = quantizedHueFromCategory(category);
   const localShift = (ordinal % 6) * 10; // kleine Variation innerhalb der Kategorie
   const hue = (baseHue + localShift) % 360;
@@ -28,7 +28,7 @@ function colorForCategoryAttribute(category, attrName, ordinal) {
  * @param {Object} node - Der Node-Datensatz
  * @returns {string} CSS-Farbwert für die Füllung
  */
-function getNodeFillByLevel(node) {
+export function getNodeFillByLevel(node) {
   if (!node || node.type !== 'person') {
     return getComputedStyle(document.documentElement).getPropertyValue('--node-fill') || '#4F46E5';
   }
@@ -59,7 +59,7 @@ function getNodeFillByLevel(node) {
   }
 }
 
-function clustersAtPoint(p) {
+export function clustersAtPoint(p) {
   // Sammle OEs mit ihren IDs und Labels
   const orgItems = [];
   for (const [oid, poly] of clusterPolygons.entries()) {
@@ -79,7 +79,7 @@ function clustersAtPoint(p) {
   return orgItems.map(item => item.label);
 }
 
-function computeClusterPolygon(nodes, pad) {
+export function computeClusterPolygon(nodes, pad) {
   const pts = nodes.map(n => [n.x, n.y]);
   const r = cssNumber('--node-radius', 8) + pad;
   if (pts.length === 0) return [];
@@ -111,7 +111,7 @@ function computeClusterPolygon(nodes, pad) {
 }
 
 // Collect active ancestor chain (including self) for a given org id
-function getActiveAncestorChain(oid) {
+export function getActiveAncestorChain(oid) {
   const active = new Set();
   let cur = String(oid);
   while (cur) {
@@ -125,7 +125,7 @@ function getActiveAncestorChain(oid) {
 
 // Tooltip helpers for overlapping clusters
 let tooltipEl = null;
-function ensureTooltip() {
+export function ensureTooltip() {
   if (tooltipEl) return;
   tooltipEl = document.createElement('div');
   tooltipEl.style.position = 'fixed';
@@ -143,18 +143,18 @@ function ensureTooltip() {
   tooltipEl.style.lineHeight = '1.4';
   document.body.appendChild(tooltipEl);
 }
-function showTooltip(x, y, lines) {
+export function showTooltip(x, y, lines) {
   tooltipEl.textContent = lines.join('\n');
   tooltipEl.style.left = `${x+12}px`;
   tooltipEl.style.top = `${y+12}px`;
   tooltipEl.style.display = 'block';
 }
-function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
+export function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
 
 /**
  * Zeigt Zoom-Level im Debug-Modus in der Statusleiste an [SF]
  */
-function updateDebugZoomDisplay() {
+export function updateDebugZoomDisplay() {
   const statusEl = document.querySelector(STATUS_ID);
   if (!statusEl) return;
   
@@ -178,7 +178,7 @@ function updateDebugZoomDisplay() {
  * @param {Array} visibleOrgs - Array von sichtbaren OE-Labels am Cursor
  * @returns {Array} Array von Tooltip-Zeilen
  */
-function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
+export function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
   const lines = [];
   
   // Section header for node
@@ -222,7 +222,7 @@ function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
 /**
  * Tooltips für Cluster-Hover
  */
-function handleClusterHover(event, svgSel) {
+export function handleClusterHover(event, svgSel) {
   if (!currentZoomTransform) { 
     hideTooltip(); 
     return; 
@@ -272,7 +272,7 @@ function handleClusterHover(event, svgSel) {
  * @param {string} personId - ID of the person
  * @returns {string[]} - Array of organization labels ordered by hierarchy (smallest/lowest unit first)
  */
-function findAllPersonOrgs(personId) {
+export function findAllPersonOrgs(personId) {
   if (!personId || !raw || !Array.isArray(raw.links) || !Array.isArray(raw.orgs)) return [];
 
   const pid = String(personId);
@@ -334,10 +334,10 @@ function findAllPersonOrgs(personId) {
     });
 }
 
-function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; } return h>>>0; }
+export function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; } return h>>>0; }
 const orgColorCache = new Map();
 
-function colorForOrg(oid){
+export function colorForOrg(oid){
   if (orgColorCache.has(oid)) {
     return orgColorCache.get(oid);
   }
@@ -351,7 +351,7 @@ function colorForOrg(oid){
   return colors;
 }
 
-function orgDepth(oid){
+export function orgDepth(oid){
   let d = 0;
   let cur = String(oid);
   const seen = new Set();
@@ -370,7 +370,7 @@ function orgDepth(oid){
  * @param {number} alpha - Alpha-Wert (0-1), default 0.25 wie bei OEs
  * @returns {string} RGBA-Farbe mit Transparenz
  */
-function colorToTransparent(color, alpha = 0.25) {
+export function colorToTransparent(color, alpha = 0.25) {
   // Parse HSL
   const hslMatch = /hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/.exec(color);
   if (hslMatch) {
@@ -389,7 +389,7 @@ function colorToTransparent(color, alpha = 0.25) {
 /**
  * Aktualisiert die Attribute-Statistik in der Fußzeile
  */
-function updateAttributeStats() {
+export function updateAttributeStats() {
   const attributeCountEl = document.getElementById('stats-attributes-count');
   if (attributeCountEl) {
     const loadedCount = attributeTypes.size;
@@ -401,7 +401,7 @@ function updateAttributeStats() {
 /**
  * Aktualisiert nur die Attribut-Kreise ohne ein komplettes Relayout
  */
-function updateAttributeCircles() {
+export function updateAttributeCircles() {
   // Wenn wir aus dem renderGraph-Kontext heraus aufgerufen werden, ist der Graph bereits gerendert
   // Wenn nicht, prüfen wir, ob überhaupt ein Subgraph existiert
   
@@ -579,7 +579,7 @@ function updateAttributeCircles() {
   applyRootStyling();
 }
 
-function updateFooterStats(subgraph) {
+export function updateFooterStats(subgraph) {
   // Update total loaded stats
   const nodesTotal = raw.nodes.length;
   const linksTotal = raw.links.length;

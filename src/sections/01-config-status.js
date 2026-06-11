@@ -1,23 +1,23 @@
 
 // ===== src/constants.js =====
-const SVG_ID = "#graph";
-const STATUS_ID = "#status";
-const INPUT_COMBO_ID = "#comboInput";
-const LIST_COMBO_ID = "#comboList";
-const INPUT_DEPTH_ID = "#depth";
-const BTN_APPLY_ID = "#apply";
+export const SVG_ID = "#graph";
+export const STATUS_ID = "#status";
+export const INPUT_COMBO_ID = "#comboInput";
+export const LIST_COMBO_ID = "#comboList";
+export const INPUT_DEPTH_ID = "#depth";
+export const BTN_APPLY_ID = "#apply";
 
-const WIDTH = 1200;
-const HEIGHT = 800;
-const MAX_DROPDOWN_ITEMS = 100;
-const MIN_SEARCH_LENGTH = 2;
-const MAX_ROOTS = 5;
-const BFS_LEVEL_ANIMATION_DELAY_MS = 1000;
+export const WIDTH = 1200;
+export const HEIGHT = 800;
+export const MAX_DROPDOWN_ITEMS = 100;
+export const MIN_SEARCH_LENGTH = 2;
+export const MAX_ROOTS = 5;
+export const BFS_LEVEL_ANIMATION_DELAY_MS = 1000;
 
 
 // ===== src/utils.js =====
 
-function setStatus(msg) {
+export function setStatus(msg) {
   const el = document.querySelector(STATUS_ID);
   if (el) el.textContent = msg;
 }
@@ -25,7 +25,7 @@ function setStatus(msg) {
 /**
  * Zeigt eine temporäre Benachrichtigung an, ohne den Status zu überschreiben
  */
-function showTemporaryNotification(message, duration = 3000) {
+export function showTemporaryNotification(message, duration = 3000) {
   // Prüfe, ob bereits eine Benachrichtigung existiert
   let notification = document.getElementById('temp-notification');
   
