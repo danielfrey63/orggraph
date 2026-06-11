@@ -217,13 +217,42 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen; `git status` sauber (Audit 4)
 - [x] Alle Skripte idempotent (Audit 2: build/verify-Doppellauf)
 
-## Status: ABGESCHLOSSEN ✅
+## Phase 7 — Ehrliche Coverage über den gesamten App-Code (NEU, 2026-06-11)
 
-Alle Akzeptanzkriterien sind erfüllt und auditiert (Iteration 20). Einziger
-empfohlener manueller Check: `index.html` einmal per Doppelklick öffnen
-(file://-Zugriff war für die Automatisierung nicht verfügbar; durch Konstruktion
-gesichert). Optionale Folgearbeiten (ausserhalb des Auftrags): Sektionen 12/16/17
-weiter entflechten, verbleibende 11-Toggle-Funktionen testen.
+User-Review nach Abschluss von Phase 1–6: Der verengte Nenner (9/19 Sektionen +
+Marker) wurde als Augenwischerei verworfen. AUFTRAG.md Prinzip 4 ist nachgeschärft:
+**Ziel ≥ 80 % brutto über alle Sektionen.** Ist-Stand der ehrlichen Zahlen:
+89,6 % gemessen / 65,6 % inkl. Marker-Zeilen / **22,2 % brutto** (1693/7634).
+
+Vorgehensregel: Gate bleibt in jedem Commit grün — pro Iteration eine Sektion
+**erst per jsdom testen, dann** aus `coverage.exclude` nehmen (bzw. Marker erst
+entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
+(CORS-Meldungen = designtes fetch-Fallback, App fällt korrekt auf Drop-Zone zurück).
+
+### Iterationsplan Phase 7 (Reihenfolge nach Aufwand/Nutzen)
+1. **Marker-Rückbau** in Logik-Sektionen: logiktragende markierte Funktionen
+   (u. a. `updateAttributeCircles`, `updateFooterStats`, `handleClusterHover`,
+   `showTemporaryNotification`, `populateCombo`, `refreshAllLabels`,
+   `renderFullView`, 11er-update*) entmarkern + jsdom-Tests (~692 Zeilen).
+2. **02-icons** (57 Z.): ICON-Registry, setIcon/hydrateIcons via jsdom — leicht.
+3. **05-dropzone** (170 Z.): Overlay/Drop-Handling via jsdom-Events.
+4. **16-legend-attributes** (335 Z.): Attribut-Legende DOM-Aufbau.
+5. **12-legend-org** (1076 Z.): Legendenbaum, Chips, Scope — grösster Block.
+6. **17-fuzzy-dialog** (575 Z.): Dialog-Flow, finalizeFuzzyMatching, Export-Logik.
+7. **18-files-reset** (871 Z.): handleDroppedFiles, resetAllData (fake-indexeddb).
+8. **19-layout-bootstrap** (425 Z.): computeHierarchyLevels, configureLayout, fitToViewport.
+9. **03-export-dialog** (388 Z.): Dialog-Logik + getTimestamp; Canvas/PNG-Pfade ggf. Ausnahme.
+10. **13-clusters-simulation / 14-render** (355+786 Z.): testbare Anteile (Geometrie,
+    transitionGraph-Logik) per Stubs; echte D3-Simulation-Ticks ggf. begründete Ausnahme.
+11. **Schluss:** `coverage.exclude` final leeren bzw. Rest-Ausnahmen begründen,
+    Brutto-Zahl in README/FORTSCHRITT ausweisen, Schluss-Audit wiederholen.
+
+## Nächster Schritt (Iteration 21)
+
+Plan-Punkt 1 beginnen: Marker-Audit — welche markierten Funktionen tragen Logik?
+Diese entmarkern und per jsdom testen, Gate grün halten. Die wirklich
+entscheidungsfreien (z. B. `setStatus`, `hideTooltip`) dürfen markiert bleiben,
+Begründung in FORTSCHRITT.
 
 ## Offene Fragen / Risiken
 

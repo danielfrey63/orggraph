@@ -10,13 +10,14 @@
 1. **Auslieferung = eine einzige, doppelklickbare `index.html`**, offline lauffähig über `file://`, ohne Server, ohne Runtime-Dependencies. Funktional **identisch** zur heutigen App.
 2. **Quellcode = mehrere kleine ES-Module** unter `src/`, saubere Trennung von reiner Logik und DOM/D3/IndexedDB-Seiteneffekten, **ohne Doppelspurigkeiten**, mit **minimaler, nur wo nötig** eingeführter Abstraktion.
 3. **Trivialer Inline-Build**: ein kleines Node-Skript (`build.js`, ohne Bundler-Framework), das die Module + CSS + D3 in die ausgelieferte `index.html` inlined. Idempotent, beliebig oft ausführbar.
-4. **Tests mit >80 % Code-Coverage** (gemessen auf der reinen Logik, siehe Architekturprinzipien), im Editor als **Gutter** sichtbar (VS Code).
+4. **Tests mit >80 % Code-Coverage über den GESAMTEN App-Code** (alle Sektionen unter `src/sections/`, siehe Architekturprinzip 4 — nachgeschärft), im Editor als **Gutter** sichtbar (VS Code), auch in der gebauten `index.html`.
 
 ## Architekturprinzipien (verbindlich)
 1. **Kein TypeScript, kein JSDoc.** Reines, schlichtes ES-Modul-JS. Keine Typ-Annotationen, keine Doc-Comments — maximale Einfachheit.
 2. **Build & Laufzeit = null Dependencies.** `build.js` nutzt ausschliesslich Node-Builtins (`node:fs`, `node:path`) und läuft via `node build.js` **ohne `npm install`**. Die ausgelieferte `index.html` hat keine Runtime-Dependencies (D3 inlined). Vitest/jsdom/coverage sind reine `devDependencies` und berühren weder Build noch Auslieferung.
 3. **Keine Entscheidung an der DOM/D3-Grenze.** Jedes `if`, jede Berechnung, jede Logik-Schleife gehört in eine *reine* Funktion, die fertige Daten/ViewModels zurückgibt. Die DOM/D3-Schicht *appliziert* diese Daten nur mechanisch auf Elemente (`el.attr('fill', d.fill)`), ohne eigene Verzweigung. Der Hebel ist nicht *wenig* Grenzcode, sondern *entscheidungsfreier* Grenzcode — so wird die untestbare Schicht per Augenschein korrekt.
-4. **Coverage misst Logik.** Die demarkierte, entscheidungsfreie Grenzschicht (z. B. `src/render.js`, `src/dom.js`, `src/legend.js`, `src/menus.js`, soweit reiner Applikator) wird aus dem **Coverage-Nenner ausgeschlossen** (`coverage.exclude` in der Vitest-Config). Eiserne Regel: In ausgeschlossenen Dateien steht **keine Verzweigung/Logik** — sonst gehört sie in ein reines Modul. Die ≥ 80 % gelten für die reine Logik und sind damit aussagekräftig.
+4. **Coverage misst das ganze System — ehrlich.** (Nachgeschärft am 2026-06-11 nach User-Review: der ursprüngliche Grenzschicht-Ausschluss verdeckte 2/3 des App-Codes und war Augenwischerei.) Die ≥ 80 % gelten **brutto über alle Sektionen** unter `src/sections/`. DOM-lastige Sektionen werden per **jsdom getestet**, nicht ausgeschlossen. Ausnahmen (`coverage.exclude` oder `/* v8 ignore */`-Marker) sind nur zulässig für Code, der **nachweislich entscheidungsfrei** ist oder in jsdom prinzipiell nicht ausführbar (z. B. echtes Canvas-Rendering) — jede Ausnahme wird einzeln in `FORTSCHRITT.md` begründet, und in den Berichten wird **immer auch die Brutto-Zahl ohne jegliche Ausnahmen** ausgewiesen. Bestehende Marker um logiktragende Funktionen werden zurückgebaut und die Funktionen getestet.
+   **Vorgehensregel:** Das Coverage-Gate (`thresholds.lines: 80`) bleibt in jedem Commit grün — pro Iteration wird eine Sektion erst getestet und dann aus `coverage.exclude` entfernt, nie umgekehrt.
 5. **Minimale Naht, kein Framework.** Die DOM-Grenze ist die kleinste nötige Naht, **keine** Abstraktionsebene. Kein generischer DOM-Wrapper, kein Mini-Framework, keine „schöne" Fassade — das wäre genau die unnötige Abstraktion, die vermieden werden soll.
 
 ## Architektur-Zielstruktur (Richtwert, vom ausführenden Modell zu verfeinern)
@@ -46,8 +47,8 @@ tests/               # *.test.js, gespiegelt zur src-Struktur
 
 ## Test- & Coverage-Strategie
 - **Framework: Vitest** + **jsdom** (DOM-Simulation) + **fake-indexeddb** (Storage-Tests) + **@vitest/coverage-v8**.
-- **Schwerpunkt** der Tests auf den reinen Logik-Modulen (`graph`, `color`, `geometry`, `data`-Klassifizierung, `labels`, `attributes`-Mathe) → dort hohe, gut mappbare Coverage.
-- **Grenzschicht aus dem Coverage-Nenner ausgeschlossen** (siehe Architekturprinzip 4): entscheidungsfreie DOM/D3-Applikatoren werden via `coverage.exclude` ausgenommen, da sie per Augenschein korrekt und nicht sinnvoll unit-testbar sind. Kein Jagen von Prozenten über bedeutungslose D3-Zeilen.
+- **Schwerpunkt** der Tests zuerst auf den reinen Logik-Modulen (erledigt), danach **DOM-Sektionen via jsdom**: Legenden-/Menü-/Dialog-Aufbau, Icons, Drop-Zone, Datei-Handling — geprüft wird erzeugte DOM-Struktur und Verhalten, nicht Pixel.
+- **Keine pauschalen Ausschlüsse** (siehe Architekturprinzip 4 — nachgeschärft): `coverage.exclude` wird schrittweise geleert; verbleibende Ausnahmen einzeln begründet (Kandidaten: D3-Force-Simulation-Ticks, Canvas/PNG-Export-Pfade).
 - **Coverage-Konfiguration** so, dass `coverage/lcov.info` erzeugt wird (Voraussetzung für Editor-Gutters via VS-Code-Extension „Coverage Gutters").
 - `package.json`-Scripts: `test`, `test:coverage`, `build`. Coverage-Gate ≥ 80 % (lines) in der Vitest-Config verankern.
 
@@ -71,7 +72,7 @@ tests/               # *.test.js, gespiegelt zur src-Struktur
 ## Akzeptanzkriterien (messbar)
 - [ ] `npm run build` erzeugt eine einzelne `index.html`, die per Doppelklick (`file://`) offline läuft und **funktional identisch** zur Baseline ist (alle Features: Graph, Suche, Tiefe/Richtung, Drag&Drop-Import, IndexedDB-Persistenz, Attribute, Legende, Kontextmenüs, SVG/PNG-Export).
 - [ ] Quellcode liegt in mehreren kohärenten `src/`-Modulen, reine Logik von Seiteneffekten getrennt, keine erkennbaren Doppelspurigkeiten.
-- [ ] `npm run test:coverage` läuft grün und meldet **≥ 80 % Lines-Coverage auf der reinen Logik** (Grenzschicht via `coverage.exclude` ausgenommen); ausgeschlossene Dateien enthalten nachweislich keine Verzweigung/Logik.
+- [ ] `npm run test:coverage` läuft grün und meldet **≥ 80 % Lines-Coverage brutto über alle Sektionen** (`src/sections/**`); verbleibende Ausnahmen sind einzeln in `FORTSCHRITT.md` begründet und die Brutto-Zahl ohne Ausnahmen wird mit ausgewiesen.
 - [ ] `node build.js` läuft **ohne vorheriges `npm install`** (nur Node-Builtins) und erzeugt die Auslieferungs-`index.html`.
 - [ ] `coverage/lcov.info` wird erzeugt; Gutter-Anzeige in VS Code ist im README beschrieben und funktioniert.
 - [ ] Repo enthält keine regenerierbaren Artefakt-/Fremdtool-Verzeichnisse mehr; `git status` ist sauber.
