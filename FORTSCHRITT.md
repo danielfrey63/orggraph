@@ -92,6 +92,16 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - Learning: jsdoms `File` implementiert `Blob.text()` nicht → Test-Factory nutzt ein
   minimales `{name, text()}`-Objekt (entspricht exakt der von `classifyFile` genutzten Schnittstelle).
 
+### Iteration 10 — Tests für `09-data-load`
+- `tests/09-data-load.test.js`: 10 neue Tests (idOf-Koercion; processData: Node-Aufbau
+  mit Typen, Link-Normalisierung mit Dedupe/Self-Loop/Ghost-Filter, Org-Hierarchie-
+  Ableitung, Hidden-State-Reset, fehlende Arrays, numerische IDs, Attribut-Erhalt).
+  **Total 45 Tests grün**, Verify grün.
+- Technik-Entscheid dokumentiert: `processData` schreibt in implizite Globals
+  (Klassik-Script-Stil); Tests definieren diese als `globalThis`-Properties vor
+  (Strict-Mode-Auflösung) und locken das Ist-Verhalten vor dem späteren
+  State-Refactoring ein.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -102,13 +112,12 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 10)
+## Nächster Schritt (Iteration 11)
 
-Tests für `09-data-load` (idOf, processData — reine Datenverarbeitung; Querbezüge
-prüfen und nötigenfalls Import-Zeilen ergänzen) und danach `11-graph-core`
-(buildAdjacency, computeSubgraph — Kern-Traversierung, grösster Logik-Hebel).
-Parallel die Grenzschicht-Klassifizierung pro Sektion festhalten
-(Basis für die `coverage.exclude`-Liste).
+Tests für `11-graph-core` (buildAdjacency, computeSubgraph, recomputeHiddenNodes,
+collectReportSubtree, hide/unhide-Subtree — Kern-Traversierung, grösster Logik-Hebel;
+gleiche Globals-Technik wie bei 09). Danach 15-ui-apply-search (levenshtein/fuzzySearch,
+parseAttributeList) und 06-pseudo-labels.
 
 ## Offene Fragen / Risiken
 
