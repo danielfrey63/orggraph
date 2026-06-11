@@ -281,13 +281,23 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
 - In 08 bleiben nur noch die drei Tooltip-Setter markiert (begründet).
 - **174 Tests grün, Gate grün: 91,43 %.** Verify grün.
 
-## Nächster Schritt (Iteration 24)
+### Iteration 24 — Marker-Rückbau abgeschlossen (12 Tests)
+- Entmarkert + getestet: 01 `showTemporaryNotification` (Fake-Timer: Fade-In,
+  Reuse, Auto-Remove, Timer-Reset), 06 `refreshAllLabels` (echtes d3: Labels,
+  Legenden-Chips, Hidden-Count, Debug-Koordinaten, Input-Sync),
+  07 `showPasswordDialog` (Submit/Fehlerpfad/Enter/Escape/Cancel/Overlay-Klick).
+- **Marker-Audit FERTIG. Verbleibende 5 begründete Ausnahmen:**
+  01 `setStatus` (1 Zeile, Existenz-Guard + Zuweisung), 08 `ensureTooltip`/
+  `showTooltip`/`hideTooltip` (reine Style-/Append-Setter), 09 `renderFullView`
+  (5 Orchestrierungs-Aufrufe, null Verzweigungen).
+- Learning: jsdom normalisiert Hex-Farben zu `rgb()` in style-Properties.
+- **186 Tests grün, Gate grün: 92,08 %.** Verify grün.
 
-Restliche Marker auditieren: 01 `showTemporaryNotification` (Logik: Reuse-Check,
-Timeout → entmarkern+testen; `setStatus` bleibt), 06 `refreshAllLabels`,
-07 `showPasswordDialog`, 09 `renderFullView` (reine Orchestrierung ohne Branch →
-bleibt markiert, begründen). Danach beginnt der Sektions-Block:
-02-icons als erste Grenzschicht-Sektion testen + aus exclude nehmen.
+## Nächster Schritt (Iteration 25)
+
+Sektions-Block beginnen: `02-icons` testen (ICON-Registry, setIcon, hydrateIcons
+via jsdom; Top-Level-DOM-Zugriff beachten — Import braucht jsdom-Env, ist im
+Vitest-Setup gegeben) und aus `coverage.exclude` nehmen. Danach 05-dropzone.
 
 ## Offene Fragen / Risiken
 

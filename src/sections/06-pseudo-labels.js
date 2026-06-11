@@ -129,7 +129,6 @@ export function getDisplayOrgLabel(orgId) {
 /**
  * Aktualisiert alle sichtbaren Labels nach Pseudonymisierungs-Toggle
  */
-/* v8 ignore start */
 export function refreshAllLabels() {
   const svg = d3.select('#graph');
   
@@ -183,7 +182,6 @@ export function refreshAllLabels() {
   
   Logger.log('[Pseudo] Labels aktualisiert, enabled:', pseudonymizationEnabled);
 }
-/* v8 ignore stop */
 
 /**
  * Zeigt einen Passwort-Dialog für De-Pseudonymisierung [SF][SFT]
