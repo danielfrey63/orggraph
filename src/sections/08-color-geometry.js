@@ -407,7 +407,6 @@ export function updateAttributeStats() {
 /**
  * Aktualisiert nur die Attribut-Kreise ohne ein komplettes Relayout
  */
-/* v8 ignore start */
 export function updateAttributeCircles() {
   // Wenn wir aus dem renderGraph-Kontext heraus aufgerufen werden, ist der Graph bereits gerendert
   // Wenn nicht, prüfen wir, ob überhaupt ein Subgraph existiert
@@ -585,7 +584,6 @@ export function updateAttributeCircles() {
   
   applyRootStyling();
 }
-/* v8 ignore stop */
 
 export function updateFooterStats(subgraph) {
   // Update total loaded stats

@@ -270,13 +270,24 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
   Skripte ohne Backslashes formulieren (`startsWith`).
 - **169 Tests grün, Gate grün: 90,74 %.** Verify grün.
 
-## Nächster Schritt (Iteration 23)
+### Iteration 23 — `updateAttributeCircles` mit echtem d3 (5 Tests)
+- Marker entfernt; getestet mit dem **echten `vendor/d3.v7.min.js` in jsdom**:
+  Ring pro aktivem Attribut mit registrierter Farbe, Label-Verschiebung,
+  Dimmen attributloser Knoten, hiddenCategories-Filter, Toggle-Off-Reset,
+  Root-Hervorhebung.
+- Technik: `require()` liefert unter `"type":"module"` für UMD ein leeres
+  ESM-Namespace-Objekt → Bundle via `new Function('exports','module',src)`
+  gegen die jsdom-Globals evaluiert (578 d3-Exports verfügbar).
+- In 08 bleiben nur noch die drei Tooltip-Setter markiert (begründet).
+- **174 Tests grün, Gate grün: 91,43 %.** Verify grün.
 
-`updateAttributeCircles` entmarkern und mit echtem `vendor/d3.v7.min.js` in jsdom
-testen (UMD via createRequire laden; SVG-Knoten-Fixture aufbauen). Falls echtes d3
-in jsdom nicht trägt: gezielte Selection-Stubs. Danach restliche Marker
-(01: showTemporaryNotification; 06: refreshAllLabels; 07: showPasswordDialog;
-09: renderFullView) auditieren.
+## Nächster Schritt (Iteration 24)
+
+Restliche Marker auditieren: 01 `showTemporaryNotification` (Logik: Reuse-Check,
+Timeout → entmarkern+testen; `setStatus` bleibt), 06 `refreshAllLabels`,
+07 `showPasswordDialog`, 09 `renderFullView` (reine Orchestrierung ohne Branch →
+bleibt markiert, begründen). Danach beginnt der Sektions-Block:
+02-icons als erste Grenzschicht-Sektion testen + aus exclude nehmen.
 
 ## Offene Fragen / Risiken
 
