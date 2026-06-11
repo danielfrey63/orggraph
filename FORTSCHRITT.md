@@ -293,11 +293,19 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
 - Learning: jsdom normalisiert Hex-Farben zu `rgb()` in style-Properties.
 - **186 Tests grün, Gate grün: 92,08 %.** Verify grün.
 
-## Nächster Schritt (Iteration 25)
+### Iteration 25 — Grenzschicht-Sektion `02-icons` in den Nenner (7 Tests)
+- `hydrateIcons` exportiert (war vom Export-Skript wegen `= document` im
+  Default-Parameter übersprungen worden; Build strippt den Export, Verify grün).
+- Tests: ICON-Registry-Invarianten (SVG-Form, gemeinsames Attribut-Set), setIcon
+  (Set/Clear/Null-Guard), hydrateIcons (Injektion, Idempotenz, Root-Scoping).
+- `02-icons` aus `coverage.exclude` entfernt → **100 % Coverage** auf der Sektion.
+- **193 Tests grün, Gate grün: 92,23 %** (Nenner jetzt 10 von 19 Sektionen).
 
-Sektions-Block beginnen: `02-icons` testen (ICON-Registry, setIcon, hydrateIcons
-via jsdom; Top-Level-DOM-Zugriff beachten — Import braucht jsdom-Env, ist im
-Vitest-Setup gegeben) und aus `coverage.exclude` nehmen. Danach 05-dropzone.
+## Nächster Schritt (Iteration 26)
+
+`05-dropzone` (170 Z.): Overlay-Aufbau, showDropZone/hideDropZone,
+installGlobalDrop (DragEvents in jsdom, storeFiles/applyLoaded-Stubs) testen
+und aus `coverage.exclude` nehmen.
 
 ## Offene Fragen / Risiken
 

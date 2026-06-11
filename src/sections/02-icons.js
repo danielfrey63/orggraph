@@ -35,7 +35,7 @@ export function setIcon(el, name) {
 }
 
 /** Inject SVGs into every [data-icon] element under `root` (idempotent). */
-function hydrateIcons(root = document) {
+export function hydrateIcons(root = document) {
   root.querySelectorAll('[data-icon]').forEach(el => {
     const name = el.dataset.icon;
     if (ICON[name]) el.innerHTML = ICON[name];

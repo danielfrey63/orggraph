@@ -17,7 +17,6 @@ export default defineConfig({
       // simulation, drop/bootstrap orchestration). Logic found in these files
       // must move into an included section, not be tested through the DOM.
       exclude: [
-        'src/sections/02-icons.js',
         'src/sections/03-export-dialog.js',
         'src/sections/05-dropzone.js',
         'src/sections/12-legend-org.js',
