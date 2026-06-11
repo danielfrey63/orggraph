@@ -115,6 +115,12 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   Empty-Category-Flag, findPersonIdsByIdentifier, fuzzySearch inkl. Sortierung,
   Label-Match, Abort-Flag, Threshold). **Total 80 Tests grün**, Verify grün.
 
+### Iteration 13 — Tests für `06-pseudo-labels` + `10-combo`
+- `tests/06-pseudo-labels.test.js`: 16 neue Tests (getPseudoName zyklisch+stabil,
+  getPseudoOrgLabel mit Level-Mapping und Fallback, getDisplayLabel inkl. orgDepth-
+  Ableitung, getDisplayOrgLabel, guessIdFromInput mit Prioritätsreihenfolge).
+  **Total 96 Tests grün**, Verify grün.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -125,13 +131,14 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 13)
+## Nächster Schritt (Iteration 14)
 
-Tests für `06-pseudo-labels` (getPseudoName, getPseudoOrgLabel, getDisplayLabel,
-getDisplayOrgLabel) und `10-combo` (guessIdFromInput). Danach die Grenzschicht-
-Klassifizierung aller 19 Sektionen (`coverage.exclude`-Liste + 80%-Threshold
-in vitest.config) — dann zeigt sich, wo noch Coverage-Lücken auf der reinen
-Logik sind.
+Grenzschicht-Klassifizierung aller 19 Sektionen durchführen und in
+`vitest.config.js` umsetzen: `coverage.exclude` für DOM/D3-Applikator-Sektionen,
+`coverage.thresholds.lines: 80` aktivieren. Danach `npm run test:coverage`
+ausführen → zeigt die verbleibende Lücke auf der reinen Logik; diese in den
+Folge-Iterationen schliessen (Kandidaten: 08-Reste wie getNodeFillByLevel/
+orgDepth/getActiveAncestorChain, 12-legend-org-Logikanteile, 16/17-Logikanteile).
 
 ## Offene Fragen / Risiken
 
