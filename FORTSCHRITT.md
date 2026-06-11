@@ -151,6 +151,16 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   buildPersonTooltipLines, findAllPersonOrgs), 09-Load-Orchestrierung,
   15 (applyFromUI, loadAttributesFromFile), 06 (loadPseudoData), 11 (hide/unhide/toggle).
 
+### Iteration 16 — Logik-Lücken Teil 1 (01, 07, 08)
+- 21 neue Tests: 01-Konstanten (100 %), 07-Roots-Helfer (isRoot/setSingleRoot/addRoot
+  mit Seed-/Retro-Seed-/MAX_ROOTS-Verhalten/removeRoot → 91 %), 08-Restlogik
+  (getNodeFillByLevel-Farbstufen, getActiveAncestorChain, clustersAtPoint mit
+  Ray-Casting-Stub für d3.polygonContains, findAllPersonOrgs-Aufwärtskette,
+  buildPersonTooltipLines → 98 %).
+- **Total 117 Tests grün. Coverage Logik-Nenner: 49,26 % → 60,47 %.** Verify grün.
+- Verbleibende Lücken: 09 (22,8 % — Load-Orchestrierung), 15 (37,4 % — applyFromUI,
+  loadAttributesFromFile), 06 (77,7 % — loadPseudoData), 11 (81,6 % — hide/unhide/toggle).
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -161,15 +171,13 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 16)
+## Nächster Schritt (Iteration 17)
 
-Logik-Lücken schliessen, Teil 1: Tests für 01 (Konstanten-Import), 07-Roots-Helfer
-(isRoot/setSingleRoot/addRoot/removeRoot mit Globals-Stubs) und die restliche
-08-Logik (getNodeFillByLevel, clustersAtPoint, getActiveAncestorChain,
-buildPersonTooltipLines, findAllPersonOrgs). Danach Teil 2: 09-Load-Orchestrierung
-(fake-indexeddb + fetch-Mock), 15 (loadAttributesFromFile, applyFromUI-Logikpfade),
-06 (loadPseudoData), 11 (hide/unhide/toggle mit No-op-Stubs für DOM-Aufrufe).
-Ziel: ≥ 80 % — dann Threshold in vitest.config aktivieren.
+Logik-Lücken Teil 2: Tests für die 09-Load-Orchestrierung (loadEnvConfig,
+categoryFromUrl, loadAttributesFromUrl, loadData, loadAttributesPreferStored —
+mit fake-indexeddb + fetch-Mock) und 06-loadPseudoData. Danach Teil 3:
+15 (loadAttributesFromFile, applyFromUI-Logikpfade) und 11 (hide/unhide/toggle
+mit No-op-Stubs). Ziel: ≥ 80 % — dann Threshold in vitest.config aktivieren.
 
 ## Offene Fragen / Risiken
 
