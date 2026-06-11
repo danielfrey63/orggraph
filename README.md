@@ -2,6 +2,51 @@
 
 Minimaler statischer D3-Graph. Benutzer kann Startknoten wählen und Such-Tiefe konfigurieren.
 
+Die Auslieferung ist eine **einzige, doppelklickbare `index.html`** (offline lauffähig über
+`file://`, keine Runtime-Dependencies). Entwickelt wird in ES-Modulen unter `src/`; ein
+dependency-freier Build fügt alles zu einer Datei zusammen.
+
+## Entwicklung
+
+```
+src/sections/*.js     # App-Code als ES-Module (nummeriert = Inlining-Reihenfolge)
+src/styles.css        # Styles
+vendor/d3.v7.min.js   # D3 (wird beim Build inlined)
+index.template.html   # HTML-Gerüst mit @@CSS@@/@@D3@@/@@APP@@-Platzhaltern
+build.js              # Inline-Build (nur Node-Builtins)
+verify.js             # Vergleich Build-Output vs. reference/index.baseline.html
+tests/*.test.js       # Vitest-Suiten
+```
+
+### Build (kein npm install nötig)
+
+```bash
+node build.js     # erzeugt index.html aus Template + Quellen
+npm run verify    # Build + Abgleich gegen die Baseline (modulo Zeilenenden)
+```
+
+`build.js` läuft mit purem Node (nur `node:fs`): Es inlined CSS, D3 und die Sektionen
+in `index.html` und strippt dabei die Modul-Syntax (`import`-Zeilen, `export`-Präfixe)
+sowie die `/* v8 ignore */`-Coverage-Marker. Der Build ist idempotent.
+
+### Tests & Coverage (einmalig `npm install`)
+
+```bash
+npm test               # Vitest-Suiten
+npm run test:coverage  # mit Coverage; Gate: >= 80 % Lines auf der reinen Logik
+```
+
+Die Coverage misst die **reine Logik**: DOM/D3-Applikator-Sektionen sind via
+`coverage.exclude` in `vitest.config.js` ausgenommen, einzelne in Logik-Sektionen
+verschachtelte Applikator-Funktionen über `/* v8 ignore start/stop */`-Marker.
+
+### Coverage-Gutters in VS Code
+
+1. Extension **„Coverage Gutters"** (ryanluker.vscode-coverage-gutters) installieren.
+2. `npm run test:coverage` ausführen — erzeugt `coverage/lcov.info`.
+3. Befehl „Coverage Gutters: Display Coverage" (oder „Watch") ausführen —
+   getestete/ungetestete Zeilen erscheinen farbig im Editor-Gutter.
+
 ## ENV-Konfiguration
 
 Die App kann über eine `env.json` Datei konfiguriert werden. Kopieren Sie `env.example.json` nach `env.json` und passen Sie die Werte an:
@@ -75,8 +120,10 @@ node transform.js --help
 
 ## Start
 
-- Öffne `index.html` direkt im Browser, oder
+- Öffne `index.html` direkt im Browser (Doppelklick, `file://`), oder
 - Starte einen simplen Static-Server (z.B. via VS Code Live Server oder `python -m http.server`).
+
+Nach Änderungen an `src/` zuerst `node build.js` ausführen.
 
 ## Nutzung
 
@@ -125,6 +172,9 @@ Hinweis: Das Browser-Kontextmenü ist global unterdrückt, damit die App-eigenen
 
 ## Anpassen
 
-- UI/Styles: `index.html`, `style.css`
-- Logik/Rendering: `app.js`
-- Transformation: `transform.js`
+- HTML-Gerüst: `index.template.html`
+- Styles: `src/styles.css`
+- Logik/Rendering: `src/sections/*.js` (Nummern-Präfix = Inlining-Reihenfolge)
+- Transformation: `helpers/transform.js` (`npm run transform`)
+
+Niemals `index.html` direkt editieren — sie ist Build-Output.

@@ -12,7 +12,7 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 | 3 | Extraktion CSS/D3/JS → `src/`-Module | 🔶 begonnen (CSS/D3/Template ✅, Modul-Split von `app.js` offen) |
 | 4 | Inline-Build `build.js` + Template | ✅ erledigt (Iteration 4, byte-identisch verifiziert) |
 | 5 | Tests bis ≥ 80 % Logik-Coverage | ⬜ offen |
-| 6 | README aktualisieren | ⬜ offen |
+| 6 | README aktualisieren | ✅ erledigt (Iteration 19) |
 
 ## Iterationen
 
@@ -181,6 +181,14 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - **`coverage.thresholds.lines: 80` in vitest.config.js aktiviert** — `npm run
   test:coverage` ist jetzt ein hartes Gate und läuft grün. Verify grün.
 
+### Iteration 19 — README (Phase 6)
+- README aktualisiert: Single-File-Auslieferungsmodell erklärt, neuer Abschnitt
+  „Entwicklung" (Struktur, `node build.js` ohne npm install, `npm run verify`,
+  Tests/Coverage-Gate, VS-Code-Gutter-Anleitung via „Coverage Gutters" + lcov.info),
+  „Start"- und „Anpassen"-Abschnitte korrigiert (veraltete `style.css`/`app.js`-Verweise
+  ersetzt; Warnung, `index.html` nie direkt zu editieren).
+- Verify grün.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -191,13 +199,16 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 19)
+## Nächster Schritt (Iteration 20)
 
-Phase 6: README aktualisieren — Entwicklung in `src/sections`, `node build.js`
-(ohne npm install), `npm run verify`, `npm run test:coverage`, VS-Code-Gutter-Setup
-(Extension „Coverage Gutters", liest `coverage/lcov.info`). Danach Schluss-Audit
-gegen alle Akzeptanzkriterien (inkl. manueller Browser-Smoke-Test der gebauten
-`index.html` über file://) und Abschlussbilanz.
+Schluss-Audit gegen ALLE Akzeptanzkriterien aus AUFTRAG.md:
+- `node build.js` ohne node_modules (temporär umbenennen) → muss laufen
+- `npm run verify` + `npm run test:coverage` (Gate 80) → grün
+- Browser-Smoke-Test der gebauten `index.html` über file:// (Graph rendert,
+  Suche, Drag&Drop-Zone, Legende, Export-Dialog öffnet)
+- Idempotenz: build/verify doppelt ausführen
+- `git status` sauber, keine Artefakt-Verzeichnisse
+Danach Abschlussbilanz mit `FERTIG:`-Checkliste.
 
 ## Offene Fragen / Risiken
 
