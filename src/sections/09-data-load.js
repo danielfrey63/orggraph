@@ -83,6 +83,7 @@ export function processData(data) {
   Logger.log('[Timing] End: processData');
 }
 
+/* v8 ignore start */
 export function renderFullView(sourceName) {
   populateCombo("");
   // Globalen OE-Baum einmalig aufbauen; Sichtbarkeit wird separat über applyLegendScope gesteuert
@@ -93,6 +94,7 @@ export function renderFullView(sourceName) {
   setStatus(sourceName);
   updateFooterStats(null);
 }
+/* v8 ignore stop */
 
 export function applyLoadedDataObject(data, sourceName) {
   processData(data);

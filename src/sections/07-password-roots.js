@@ -1,3 +1,4 @@
+/* v8 ignore start */
 export function showPasswordDialog(onSubmit) {
   // Existierenden Dialog entfernen falls vorhanden
   const existing = document.getElementById('passwordDialog');
@@ -91,6 +92,7 @@ export function showPasswordDialog(onSubmit) {
   // Fokus auf Input setzen
   setTimeout(() => input.focus(), 50);
 }
+/* v8 ignore stop */
 
 // ========== Ende Pseudonymisierung ==========
 

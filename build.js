@@ -7,11 +7,14 @@ const read = (path) => readFileSync(path, 'utf8');
 // Sections are ES modules for dev/tests; the deliverable inlines them as one
 // classic script. Convention: imports are single-line, export keywords sit at
 // column 0 — both are stripped here, which exactly reverses the module syntax.
+// Coverage-ignore markers (function-level boundary demarcation per AUFTRAG.md
+// principle 4) are dev/test-only and stripped from the deliverable as well.
 const stripModuleSyntax = (code) =>
   code
     .replace(/^import .*\n/gm, '')
     .replace(/^export \{[^}]*\};?\n/gm, '')
-    .replace(/^export (?=(const|let|var|function|async function|class)\b)/gm, '');
+    .replace(/^export (?=(const|let|var|function|async function|class)\b)/gm, '')
+    .replace(/^\/\* v8 ignore (start|stop) \*\/\n/gm, '');
 
 // App sections are concatenated in lexicographic order (numeric prefixes).
 const app = readdirSync('src/sections')

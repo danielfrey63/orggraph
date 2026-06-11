@@ -139,6 +139,18 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   07-Roots-Helfer, 01-Konstanten).
 - 80%-Threshold bleibt aus, bis die Lücke geschlossen ist (kein grüner Schein).
 
+### Iteration 15 — v8-ignore-Marker für verschachtelte DOM-Applikatoren
+- `build.js` strippt jetzt `/* v8 ignore start|stop */`-Markerzeilen beim Inlining —
+  Auslieferung bleibt baseline-identisch (Verify grün).
+- **19 DOM-Applikator-Funktionen markiert** (01: setStatus/Notification; 06: refreshAllLabels;
+  07: showPasswordDialog; 08: Tooltip-Quartett, handleClusterHover, updateAttribute*/Footer;
+  09: renderFullView; 10: populateCombo/setActive/chooseItem; 11: die drei update*-Helfer).
+- **Coverage Logik-Nenner: 36,75 % → 49,26 %.** 10-combo bereits 100 %, 11=82 %, 06=78 %.
+- Verbleibende echte Logik-Lücken: 01 (nie importiert → trivialer Konstanten-Test),
+  07-Roots-Helfer, 08 (getNodeFillByLevel, clustersAtPoint, getActiveAncestorChain,
+  buildPersonTooltipLines, findAllPersonOrgs), 09-Load-Orchestrierung,
+  15 (applyFromUI, loadAttributesFromFile), 06 (loadPseudoData), 11 (hide/unhide/toggle).
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -149,16 +161,15 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 15)
+## Nächster Schritt (Iteration 16)
 
-`v8 ignore`-Marker-Infrastruktur: `build.js` strippt Zeilen der Form
-`/* v8 ignore start */` / `/* v8 ignore stop */` beim Inlining (Output bleibt
-baseline-identisch). Marker um die echten DOM-Applikatoren in den Logik-Sektionen
-setzen (08: ensureTooltip/showTooltip/hideTooltip/handleClusterHover/
-updateAttributeStats/updateAttributeCircles/updateFooterStats/updateDebugZoomDisplay;
-10: populateCombo/setActive/chooseItem; 07: showPasswordDialog; 11: die drei
-update*-DOM-Helfer; 06: refreshAllLabels; 01: setStatus/showTemporaryNotification).
-Danach Coverage neu messen — Rest-Lücke = echte ungetestete Logik.
+Logik-Lücken schliessen, Teil 1: Tests für 01 (Konstanten-Import), 07-Roots-Helfer
+(isRoot/setSingleRoot/addRoot/removeRoot mit Globals-Stubs) und die restliche
+08-Logik (getNodeFillByLevel, clustersAtPoint, getActiveAncestorChain,
+buildPersonTooltipLines, findAllPersonOrgs). Danach Teil 2: 09-Load-Orchestrierung
+(fake-indexeddb + fetch-Mock), 15 (loadAttributesFromFile, applyFromUI-Logikpfade),
+06 (loadPseudoData), 11 (hide/unhide/toggle mit No-op-Stubs für DOM-Aufrufe).
+Ziel: ≥ 80 % — dann Threshold in vitest.config aktivieren.
 
 ## Offene Fragen / Risiken
 

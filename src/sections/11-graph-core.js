@@ -277,6 +277,7 @@ export function toggleAllHiddenVisibility() {
 }
 
 // Eye-Buttons in der Hidden-Legende aktualisieren [DRY]
+/* v8 ignore start */
 export function updateHiddenLegendEyeButtons() {
   const legend = document.getElementById('hiddenLegend');
   if (!legend) return;
@@ -292,8 +293,10 @@ export function updateHiddenLegendEyeButtons() {
     setIcon(btn, isVisible ? 'eye' : 'eyeClosed');
   });
 }
+/* v8 ignore stop */
 
 // Globalen Eye-Button im Header aktualisieren [DRY]
+/* v8 ignore start */
 export function updateGlobalHiddenVisibilityButton() {
   const btn = document.getElementById('toggleAllHiddenVisibility');
   if (!btn) return;
@@ -310,8 +313,10 @@ export function updateGlobalHiddenVisibilityButton() {
     if (icon) setIcon(icon, allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed');
   }
 }
+/* v8 ignore stop */
 
 // Aktualisiert den Titel der Hidden-Legende mit den aktuellen Zahlen
+/* v8 ignore start */
 export function updateHiddenLegendTitle() {
   // Berechne Gesamtanzahl der ausgeblendeten Personen
   let totalHidden = 0;
@@ -332,4 +337,5 @@ export function updateHiddenLegendTitle() {
     }
   }
 }
+/* v8 ignore stop */
 

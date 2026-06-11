@@ -125,6 +125,7 @@ export function getActiveAncestorChain(oid) {
 
 // Tooltip helpers for overlapping clusters
 let tooltipEl = null;
+/* v8 ignore start */
 export function ensureTooltip() {
   if (tooltipEl) return;
   tooltipEl = document.createElement('div');
@@ -143,17 +144,23 @@ export function ensureTooltip() {
   tooltipEl.style.lineHeight = '1.4';
   document.body.appendChild(tooltipEl);
 }
+/* v8 ignore stop */
+/* v8 ignore start */
 export function showTooltip(x, y, lines) {
   tooltipEl.textContent = lines.join('\n');
   tooltipEl.style.left = `${x+12}px`;
   tooltipEl.style.top = `${y+12}px`;
   tooltipEl.style.display = 'block';
 }
+/* v8 ignore stop */
+/* v8 ignore start */
 export function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
+/* v8 ignore stop */
 
 /**
  * Zeigt Zoom-Level im Debug-Modus in der Statusleiste an [SF]
  */
+/* v8 ignore start */
 export function updateDebugZoomDisplay() {
   const statusEl = document.querySelector(STATUS_ID);
   if (!statusEl) return;
@@ -170,6 +177,7 @@ export function updateDebugZoomDisplay() {
   const y = Math.round(currentZoomTransform.y);
   statusEl.textContent = `Zoom: ${k} | Offset: (${x}, ${y})`;
 }
+/* v8 ignore stop */
 
 /**
  * Erstellt Tooltip-Zeilen für eine Person mit Attributen und OE-Zugehörigkeiten
@@ -222,6 +230,7 @@ export function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
 /**
  * Tooltips für Cluster-Hover
  */
+/* v8 ignore start */
 export function handleClusterHover(event, svgSel) {
   if (!currentZoomTransform) { 
     hideTooltip(); 
@@ -265,6 +274,7 @@ export function handleClusterHover(event, svgSel) {
     hideTooltip();
   }
 }
+/* v8 ignore stop */
 
 // Color mapping for OEs (harmonious palette)
 /**
@@ -389,6 +399,7 @@ export function colorToTransparent(color, alpha = 0.25) {
 /**
  * Aktualisiert die Attribute-Statistik in der Fußzeile
  */
+/* v8 ignore start */
 export function updateAttributeStats() {
   const attributeCountEl = document.getElementById('stats-attributes-count');
   if (attributeCountEl) {
@@ -397,10 +408,12 @@ export function updateAttributeStats() {
     attributeCountEl.textContent = `${activeCount}/${loadedCount}`;
   }
 }
+/* v8 ignore stop */
 
 /**
  * Aktualisiert nur die Attribut-Kreise ohne ein komplettes Relayout
  */
+/* v8 ignore start */
 export function updateAttributeCircles() {
   // Wenn wir aus dem renderGraph-Kontext heraus aufgerufen werden, ist der Graph bereits gerendert
   // Wenn nicht, prüfen wir, ob überhaupt ein Subgraph existiert
@@ -578,7 +591,9 @@ export function updateAttributeCircles() {
   
   applyRootStyling();
 }
+/* v8 ignore stop */
 
+/* v8 ignore start */
 export function updateFooterStats(subgraph) {
   // Update total loaded stats
   const nodesTotal = raw.nodes.length;
@@ -617,6 +632,7 @@ export function updateFooterStats(subgraph) {
     orgsCountEl.textContent = activeOrgsCount;
   }
 }
+/* v8 ignore stop */
 
 /**
  * Extrahiert ID aus Objekt oder String

@@ -17,14 +17,17 @@ export const BFS_LEVEL_ANIMATION_DELAY_MS = 1000;
 
 // ===== src/utils.js =====
 
+/* v8 ignore start */
 export function setStatus(msg) {
   const el = document.querySelector(STATUS_ID);
   if (el) el.textContent = msg;
 }
+/* v8 ignore stop */
 
 /**
  * Zeigt eine temporäre Benachrichtigung an, ohne den Status zu überschreiben
  */
+/* v8 ignore start */
 export function showTemporaryNotification(message, duration = 3000) {
   // Prüfe, ob bereits eine Benachrichtigung existiert
   let notification = document.getElementById('temp-notification');
@@ -72,6 +75,7 @@ export function showTemporaryNotification(message, duration = 3000) {
     }, 300); // Dauer der Ausblend-Transition
   }, duration);
 }
+/* v8 ignore stop */
 
 
 // ===== src/icons.js =====

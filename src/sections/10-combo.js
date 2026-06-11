@@ -1,3 +1,4 @@
+/* v8 ignore start */
 export function populateCombo(filterText) {
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
@@ -79,7 +80,9 @@ export function populateCombo(filterText) {
   list.appendChild(frag);
   list.hidden = filteredItems.length === 0;
 }
+/* v8 ignore stop */
 
+/* v8 ignore start */
 export function setActive(idx) {
   const list = document.querySelector(LIST_COMBO_ID);
   if (!list) return;
@@ -90,7 +93,9 @@ export function setActive(idx) {
   activeIndex = idx;
   if (idx >= 0 && items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
 }
+/* v8 ignore stop */
 
+/* v8 ignore start */
 export function chooseItem(idx, addMode) {
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
@@ -127,6 +132,7 @@ export function chooseItem(idx, addMode) {
   // Auto-apply and re-center when selecting from dropdown
   applyFromUI('comboSelect');
 }
+/* v8 ignore stop */
 
 /**
  * Findet Knoten-ID aus Benutzereingabe
