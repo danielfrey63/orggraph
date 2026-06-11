@@ -258,14 +258,25 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
 - **160 Tests grün, Gate grün: 90,27 %** auf dem aktuellen Nenner (10-combo: 97 %,
   11-graph-core: 85 %). Verify grün.
 
-## Nächster Schritt (Iteration 22)
+### Iteration 22 — Marker-Rückbau Teil 2 (08: vier Logik-Funktionen)
+- Entmarkert + getestet (9 neue jsdom-Tests in `tests/08-ui-stats.test.js`):
+  `updateDebugZoomDisplay` (Debug-Reset, Zoom-Formatierung), `updateAttributeStats`
+  (aktiv/geladen-Zähler), `updateFooterStats` (Totals, Visible, Cluster-vs-Aktiv-Anzeige),
+  `handleClusterHover` (Person-Hit via Distanz, Cluster-Labels, Hide-Pfade).
+- **Markiert bleiben in 08 (begründet):** `ensureTooltip`/`showTooltip`/`hideTooltip`
+  (reine Style-/Append-Setter, einzige Bedingung ist ein Existenz-Guard) und
+  `updateAttributeCircles` (180 D3-Zeilen → eigener Schritt mit echtem vendor/d3).
+- Learning: Bash-`node -e` verstümmelt Backslashes (Regex `\b` wurde Backspace) →
+  Skripte ohne Backslashes formulieren (`startsWith`).
+- **169 Tests grün, Gate grün: 90,74 %.** Verify grün.
 
-Marker-Rückbau Teil 2: 08er-Marker auditieren — `updateAttributeCircles`,
-`updateFooterStats`, `handleClusterHover`, `updateDebugZoomDisplay`,
-`updateAttributeStats` tragen Logik → entmarkern + jsdom-Tests (D3-lastige Teile
-mit echtem vendor/d3 in jsdom oder gezielten Stubs). Trivial-Applikatoren
-(`ensureTooltip`, `showTooltip`, `hideTooltip`) bleiben markiert (Begründung:
-zeilenweise entscheidungsfrei bzw. reine Style-Setter). Danach 01/06/07/09-Marker.
+## Nächster Schritt (Iteration 23)
+
+`updateAttributeCircles` entmarkern und mit echtem `vendor/d3.v7.min.js` in jsdom
+testen (UMD via createRequire laden; SVG-Knoten-Fixture aufbauen). Falls echtes d3
+in jsdom nicht trägt: gezielte Selection-Stubs. Danach restliche Marker
+(01: showTemporaryNotification; 06: refreshAllLabels; 07: showPasswordDialog;
+09: renderFullView) auditieren.
 
 ## Offene Fragen / Risiken
 
