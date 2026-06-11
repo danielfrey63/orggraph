@@ -7,7 +7,7 @@
     "build": "node build.js",
     "verify": "node build.js && node verify.js",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage && node build.js && node remap-coverage.js",
     "transform": "node helpers/transform.js"
   },
   "devDependencies": {

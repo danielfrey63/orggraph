@@ -47,6 +47,11 @@ verschachtelte Applikator-Funktionen über `/* v8 ignore start/stop */`-Marker.
 3. Befehl „Coverage Gutters: Display Coverage" (oder „Watch") ausführen —
    getestete/ungetestete Zeilen erscheinen farbig im Editor-Gutter.
 
+Die Gutters funktionieren in den Quell-Sektionen (`src/sections/*.js`) **und** in der
+gebauten `index.html`: `remap-coverage.js` (läuft automatisch am Ende von
+`npm run test:coverage`) übersetzt die Sektions-Coverage zeilengenau auf die
+Auslieferungsdatei und hängt einen `index.html`-Record an `coverage/lcov.info` an.
+
 ## ENV-Konfiguration
 
 Die App kann über eine `env.json` Datei konfiguriert werden. Kopieren Sie `env.example.json` nach `env.json` und passen Sie die Werte an:
