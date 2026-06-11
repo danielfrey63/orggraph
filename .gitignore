@@ -1,17 +1,29 @@
+# Local data & config (examples are tracked)
 data*.json
 !data.example.json
 env*.json
 !env.example.json
 attributes
-helpers
 
-.windsurf
-.kluster
-.vscode
-
-tmp
+# Dependencies & build output
 node_modules
 dist
+
+# Test & coverage artifacts
+coverage
+coverage-report
+playwright-report
+monocart-report
+test-results
+
+# Scratch
+temp
+tmp
 trace
 
-.windsurf/rules/kluster-code-verify.md
+# Local tooling
+.vscode
+.claude
+
+# Pending investigation (see AUFTRAG.md)
+helpers
