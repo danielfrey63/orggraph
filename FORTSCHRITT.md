@@ -121,6 +121,24 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   Ableitung, getDisplayOrgLabel, guessIdFromInput mit Prioritätsreihenfolge).
   **Total 96 Tests grün**, Verify grün.
 
+### Iteration 14 — Grenzschicht-Klassifizierung + ehrliche Coverage-Messung
+- **Klassifizierung aller 19 Sektionen:**
+  - Logik-Nenner (Coverage zählt): `01, 04, 06, 07, 08, 09, 10, 11, 15`
+  - Grenzschicht (`coverage.exclude`): `02-icons, 03-export-dialog, 05-dropzone,
+    12-legend-org, 13-clusters-simulation, 14-render, 16-legend-attributes,
+    17-fuzzy-dialog, 18-files-reset, 19-layout-bootstrap`
+- **Messung auf dem Logik-Nenner: 36,75 % Lines.** Pro Datei: 04=91 %, 11=70 %,
+  06=56 %, 15=37 %, 08=24 %, 09=22 %, 10=16 %, 01=0 %, 07=0 %.
+- **Erkenntnis:** In den Logik-Sektionen stecken verschachtelte DOM-Applikatoren
+  (Tooltip-DOM + updateAttributeCircles in 08, populateCombo in 10, Passwort-Dialog
+  in 07, Eye-Button-Updater in 11). Umgruppieren in eigene Dateien geht nicht, solange
+  `verify.js` textuelle Gleichheit fordert (Reihenfolge fixiert). **Plan:**
+  funktions-granulare `/* v8 ignore start/stop */`-Marker um echte Applikatoren,
+  die `build.js` beim Inlining strippt (Output bleibt identisch) — plus Tests für
+  die echte Rest-Logik (09-Load-Orchestrierung, 15-loadAttributesFromFile,
+  07-Roots-Helfer, 01-Konstanten).
+- 80%-Threshold bleibt aus, bis die Lücke geschlossen ist (kein grüner Schein).
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -131,14 +149,16 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 14)
+## Nächster Schritt (Iteration 15)
 
-Grenzschicht-Klassifizierung aller 19 Sektionen durchführen und in
-`vitest.config.js` umsetzen: `coverage.exclude` für DOM/D3-Applikator-Sektionen,
-`coverage.thresholds.lines: 80` aktivieren. Danach `npm run test:coverage`
-ausführen → zeigt die verbleibende Lücke auf der reinen Logik; diese in den
-Folge-Iterationen schliessen (Kandidaten: 08-Reste wie getNodeFillByLevel/
-orgDepth/getActiveAncestorChain, 12-legend-org-Logikanteile, 16/17-Logikanteile).
+`v8 ignore`-Marker-Infrastruktur: `build.js` strippt Zeilen der Form
+`/* v8 ignore start */` / `/* v8 ignore stop */` beim Inlining (Output bleibt
+baseline-identisch). Marker um die echten DOM-Applikatoren in den Logik-Sektionen
+setzen (08: ensureTooltip/showTooltip/hideTooltip/handleClusterHover/
+updateAttributeStats/updateAttributeCircles/updateFooterStats/updateDebugZoomDisplay;
+10: populateCombo/setActive/chooseItem; 07: showPasswordDialog; 11: die drei
+update*-DOM-Helfer; 06: refreshAllLabels; 01: setStatus/showTemporaryNotification).
+Danach Coverage neu messen — Rest-Lücke = echte ungetestete Logik.
 
 ## Offene Fragen / Risiken
 
