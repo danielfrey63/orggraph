@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   loadEnvConfig,
   categoryFromUrl,
@@ -19,6 +19,9 @@ const okText = (text) => ({ ok: true, text: async () => text });
 const httpError = { ok: false, status: 404, statusText: 'Not Found' };
 
 beforeEach(() => {
+  // error-path tests intentionally trigger app-side console output
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
   store = new Map();
   globalThis.Logger = { log: () => {} };
   globalThis.KEY_ENV = KEY_ENV;
@@ -50,6 +53,10 @@ beforeEach(() => {
   for (const k of ['raw', 'byId', 'allNodesUnique', 'parentOf', 'orgParent', 'orgChildren', 'orgRoots', 'hiddenNodes', 'hiddenByRoot']) {
     globalThis[k] = undefined;
   }
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('loadEnvConfig', () => {

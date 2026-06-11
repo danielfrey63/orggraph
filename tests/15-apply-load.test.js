@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { applyFromUI, loadAttributesFromFile } from '../src/sections/15-ui-apply-search.js';
 import { idOf, processData } from '../src/sections/09-data-load.js';
 import { computeSubgraph } from '../src/sections/11-graph-core.js';
@@ -21,6 +21,8 @@ const setupDom = ({ input = '', depth = '2', up = true, down = true } = {}) => {
 };
 
 beforeEach(() => {
+  // error-path tests intentionally trigger app-side console output
+  vi.spyOn(console, 'error').mockImplementation(() => {});
   globalThis.Logger = { log: () => {} };
   globalThis.idOf = idOf;
   globalThis.computeSubgraph = computeSubgraph;
@@ -75,6 +77,10 @@ beforeEach(() => {
     ],
   });
   setupDom();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('applyFromUI', () => {
