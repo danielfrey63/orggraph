@@ -161,6 +161,15 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - Verbleibende Lücken: 09 (22,8 % — Load-Orchestrierung), 15 (37,4 % — applyFromUI,
   loadAttributesFromFile), 06 (77,7 % — loadPseudoData), 11 (81,6 % — hide/unhide/toggle).
 
+### Iteration 17 — Logik-Lücken Teil 2 (Load-Orchestrierung)
+- `tests/09-load-orchestration.test.js`: 15 neue Tests (loadEnvConfig mit IDB-Vorrang/
+  fetch-Fallback/Fehlerpfaden, categoryFromUrl, loadAttributesFromUrl mit Matching/
+  Composite-Typen/Empty-Category/HTTP-Fehler/Merge, loadData mit Stored/ENV-Fallback/
+  Corrupt-JSON, loadPseudoData). In-Memory-Stubs für die IDB-Accessoren, `vi.fn`-fetch.
+- **Total 132 Tests grün. Coverage Logik-Nenner: 60,47 % → 72,91 %.** Verify grün.
+- Einzige nennenswerte Lücke: `15-ui-apply-search` (37,4 % — applyFromUI,
+  loadAttributesFromFile) und 11 (hide/unhide/toggle, 81,6 %).
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -171,13 +180,14 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 17)
+## Nächster Schritt (Iteration 18)
 
-Logik-Lücken Teil 2: Tests für die 09-Load-Orchestrierung (loadEnvConfig,
-categoryFromUrl, loadAttributesFromUrl, loadData, loadAttributesPreferStored —
-mit fake-indexeddb + fetch-Mock) und 06-loadPseudoData. Danach Teil 3:
-15 (loadAttributesFromFile, applyFromUI-Logikpfade) und 11 (hide/unhide/toggle
-mit No-op-Stubs). Ziel: ≥ 80 % — dann Threshold in vitest.config aktivieren.
+Logik-Lücken Teil 3: Tests für `15-ui-apply-search` (loadAttributesFromFile,
+applyFromUI-Logikpfade — DOM-Aufrufe via No-op-Stubs) und `11-graph-core`
+(hideSubtreeFromRoot/unhideSubtree/toggleHiddenRootVisibility/
+toggleAllHiddenVisibility mit Stubs). Falls applyFromUI als Orchestrierung zu
+DOM-lastig: prüfen, ob Teile als entscheidungsfreier Applikator markierbar sind
+(ehrlich bleiben!). Ziel: ≥ 80 % erreichen → Threshold (lines 80) aktivieren.
 
 ## Offene Fragen / Risiken
 
