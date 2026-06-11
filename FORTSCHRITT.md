@@ -8,7 +8,7 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 | Phase | Beschreibung | Status |
 |---|---|---|
 | 1 | Cleanup Artefakte/Tool-Dirs, `.gitignore` | ✅ erledigt (Iteration 1) |
-| 2 | Baseline sichern | ⬜ offen — nächster Schritt |
+| 2 | Baseline sichern | ✅ erledigt (Iteration 2) |
 | 3 | Extraktion CSS/D3/JS → `src/`-Module | ⬜ offen |
 | 4 | Inline-Build `build.js` + Template | ⬜ offen |
 | 5 | Tests bis ≥ 80 % Logik-Coverage | ⬜ offen |
@@ -24,6 +24,10 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - **Nicht angefasst** (Kategorie „erst untersuchen" laut AUFTRAG): `browser/`, `assets/`, `attributes/`, `helpers/` — Untersuchung steht aus.
 - **Nicht angefasst**: `package-lock.json` ist lokal modifiziert (tracked); Entscheid dazu fällt mit dem devDependencies-Setup in Phase 5.
 
+### Iteration 2 — Baseline sichern (Phase 2)
+- `index.html` byte-identisch nach `reference/index.baseline.html` kopiert (mit `cmp` verifiziert) und tracked.
+- Diese Datei ist ab jetzt die unveränderliche Referenz für Verhaltensgleichheit; sie wird bis Task-Ende nicht mehr angefasst.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -34,11 +38,11 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 2)
+## Nächster Schritt (Iteration 3)
 
-Phase 2: Baseline sichern — aktuelle `index.html` als unveränderliche Referenz nach
-`reference/index.baseline.html` kopieren (tracked), damit Verhaltensgleichheit während
-der Extraktion jederzeit gegenprüfbar ist.
+Vorarbeit zu Phase 3: Die vier „untersuchen"-Verzeichnisse (`browser/`, `assets/`,
+`attributes/`, `helpers/`) auf Relevanz prüfen und Entscheid in FORTSCHRITT.md
+dokumentieren — danach beginnt die Extraktion (CSS → Datei, D3 → `vendor/`).
 
 ## Offene Fragen / Risiken
 
