@@ -1,4 +1,4 @@
-function buildHiddenLegend() {
+export function buildHiddenLegend() {
   const legend = document.getElementById('hiddenLegend');
   if (!legend) return;
   
@@ -81,7 +81,7 @@ function buildHiddenLegend() {
 let legendCollapsedItems = new Set();
 
 // Initialisiert legendCollapsedItems: Erste Kinder mit Geschwistern werden collapsed [SF][CA]
-function initLegendCollapsedItems(scopeSet) {
+export function initLegendCollapsedItems(scopeSet) {
   legendCollapsedItems.clear();
   if (!scopeSet || scopeSet.size === 0) return;
 
@@ -106,7 +106,7 @@ function initLegendCollapsedItems(scopeSet) {
 }
 
 // Gemeinsamer Renderer für OE-Legendeneinträge (voller Baum und Scoped-Baum) [DRY][CA]
-function renderOrgLegendNode(oid, depth, options) {
+export function renderOrgLegendNode(oid, depth, options) {
   const { childrenProvider, scopeSet, registerNode } = options || {};
   const id = String(oid);
 
@@ -296,7 +296,7 @@ function renderOrgLegendNode(oid, depth, options) {
   return li;
 }
 
-function buildOrgLegend() {
+export function buildOrgLegend() {
   const legend = document.querySelector('#legend');
   if (!legend) return;
   legend.innerHTML = '';
@@ -342,7 +342,7 @@ function buildOrgLegend() {
 
 // Baut eine OE-Legende nur fuer die angegebenen sichtbaren OEs (visibleSet)
 // unter Verwendung der globalen OE-Hierarchie orgParent/orgChildren. [CA][SF]
-function buildScopedOrgLegend(visibleSet) {
+export function buildScopedOrgLegend(visibleSet) {
   const legend = document.querySelector('#legend');
   if (!legend) return;
 
@@ -385,7 +385,7 @@ function buildScopedOrgLegend(visibleSet) {
 
 let currentLegendScope = new Set();
 
-function applyLegendScope(scope) {
+export function applyLegendScope(scope) {
   const scopeSet = new Set(Array.from(scope || []).map(String));
   currentLegendScope = scopeSet;
 
@@ -405,7 +405,7 @@ function applyLegendScope(scope) {
   buildScopedOrgLegend(visible);
 }
 
-function updateLegendChips(rootEl) {
+export function updateLegendChips(rootEl) {
   const root = rootEl || document;
   
   // Mit Checkboxen synchronisieren, außer wenn OEs absichtlich ausgeblendet wurden
@@ -427,7 +427,7 @@ function updateLegendChips(rootEl) {
   });
 } 
 
-function updateLegendRowColors(rootEl) {
+export function updateLegendRowColors(rootEl) {
   const root = rootEl || document;
   root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
     const row = li.querySelector(':scope > .legend-row');
@@ -456,7 +456,7 @@ function updateLegendRowColors(rootEl) {
 /**
  * Sammelt alle Knoten im Unterbaum
  */
-function collectSubtree(rootId, children, scopeSet) {
+export function collectSubtree(rootId, children, scopeSet) {
   const out = new Set([rootId]);
   const q = [rootId];
   
@@ -477,7 +477,7 @@ function collectSubtree(rootId, children, scopeSet) {
   return out;
 }
 
-function ensureLegendMenu() {
+export function ensureLegendMenu() {
   if (legendMenuEl) return legendMenuEl;
   const el = document.createElement('div');
   el.style.position = 'fixed';
@@ -520,7 +520,7 @@ function ensureLegendMenu() {
   document.addEventListener('click', (e) => { if (legendMenuEl && legendMenuEl.style.display === 'block') hideLegendMenu(); });
   return el;
 }
-function showLegendMenu(x, y, actions) {
+export function showLegendMenu(x, y, actions) {
   const el = ensureLegendMenu();
   // Wire actions
   const items = el.querySelectorAll('div:not([style*="border-top"])');
@@ -531,12 +531,12 @@ function showLegendMenu(x, y, actions) {
   el.style.top = `${y}px`;
   el.style.display = 'block';
 }
-function hideLegendMenu() { if (legendMenuEl) legendMenuEl.style.display = 'none'; }
+export function hideLegendMenu() { if (legendMenuEl) legendMenuEl.style.display = 'none'; }
 
 /**
  * Fügt einen Knoten zu einem Attribut hinzu
  */
-function addNodeToAttribute(nodeId, categoryKey, attributeName, attributeValue = '1') {
+export function addNodeToAttribute(nodeId, categoryKey, attributeName, attributeValue = '1') {
   const personId = String(nodeId);
   
   // Erstelle Attribut-Key im Format "Kategorie::Attribut"
@@ -582,7 +582,7 @@ function addNodeToAttribute(nodeId, categoryKey, attributeName, attributeValue =
 /**
  * Erstellt ein hierarchisches Attribut-Menü als Submenu
  */
-function addAttributeSubmenu(parentItem, mainMenu, nodeId) {
+export function addAttributeSubmenu(parentItem, mainMenu, nodeId) {
   let submenu = null;
   let submenuVisible = false;
   
@@ -720,7 +720,7 @@ function addAttributeSubmenu(parentItem, mainMenu, nodeId) {
 /**
  * Erstellt ein Submenu-Item mit Hover-Effekt
  */
-function createSubmenuItem(label, handler) {
+export function createSubmenuItem(label, handler) {
   const item = document.createElement('div');
   item.className = 'menu-item';
   const labelSpan = document.createElement('span');
@@ -734,7 +734,7 @@ function createSubmenuItem(label, handler) {
 /**
  * Erstellt ein hierarchisches Kategorie-Item mit eigenem Submenu
  */
-function createCategorySubmenuItem(categoryName, attributes, nodeId, hideAllMenus) {
+export function createCategorySubmenuItem(categoryName, attributes, nodeId, hideAllMenus) {
   const item = document.createElement('div');
   item.className = 'menu-item';
   
@@ -836,7 +836,7 @@ function createCategorySubmenuItem(categoryName, attributes, nodeId, hideAllMenu
 /**
  * Exportiert die Attribute einer Kategorie als CSV/TSV Datei
  */
-function exportCategoryAttributes(categoryName) {
+export function exportCategoryAttributes(categoryName) {
   const sourceInfo = categorySourceFiles.get(categoryName);
   if (!sourceInfo) {
     showTemporaryNotification(`Keine Quell-Informationen für Kategorie "${categoryName}" gefunden`, 3000);
@@ -888,7 +888,7 @@ function exportCategoryAttributes(categoryName) {
  * Exportiert ein einzelnes Attribut als TSV-Datei
  * @param {string} attributeKey - Der vollständige Attribut-Key (z.B. "Kategorie::Attributname")
  */
-function exportSingleAttribute(attributeKey) {
+export function exportSingleAttribute(attributeKey) {
   const [category, attrName] = String(attributeKey).includes('::') 
     ? String(attributeKey).split('::') 
     : ['Attribute', String(attributeKey)];
@@ -936,7 +936,7 @@ function exportSingleAttribute(attributeKey) {
  * Exportiert alle Attribute einer Kategorie als TSV-Datei
  * @param {string} categoryName - Name der Kategorie
  */
-function exportCategoryAsTSV(categoryName) {
+export function exportCategoryAsTSV(categoryName) {
   const lines = [];
   
   // Sammle alle Personen mit Attributen in dieser Kategorie
@@ -984,7 +984,7 @@ function exportCategoryAsTSV(categoryName) {
 /**
  * Prompt für neues Attribut in bestehender Kategorie
  */
-function promptNewAttribute(nodeId, category) {
+export function promptNewAttribute(nodeId, category) {
   const name = prompt(`Neues Attribut für Kategorie "${category}":`, '');
   if (!name || !name.trim()) return;
   
@@ -995,7 +995,7 @@ function promptNewAttribute(nodeId, category) {
 /**
  * Prompt für neue Kategorie
  */
-function promptNewCategory(nodeId) {
+export function promptNewCategory(nodeId) {
   const category = prompt('Name der neuen Kategorie:', '');
   if (!category || !category.trim()) return;
   
@@ -1006,7 +1006,7 @@ function promptNewCategory(nodeId) {
   addNodeToAttribute(nodeId, category.trim(), attrName.trim(), '1');
 }
 
-function ensureNodeMenu() {
+export function ensureNodeMenu() {
   if (nodeMenuEl) return nodeMenuEl;
   const el = document.createElement('div');
   el.className = 'node-context-menu';
@@ -1020,7 +1020,7 @@ function ensureNodeMenu() {
   return el;
 }
 
-function showNodeMenu(x, y, actionsOrOnHide) {
+export function showNodeMenu(x, y, actionsOrOnHide) {
   const el = ensureNodeMenu();
   // Menü dynamisch aufbauen, aber Abwärtskompatibilität für alte Signatur behalten
   // Alte Signatur: actionsOrOnHide ist eine Funktion (Ausblenden)

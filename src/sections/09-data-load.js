@@ -1,10 +1,10 @@
-function idOf(v) {
+export function idOf(v) {
   return String(typeof v === 'object' && v ? v.id : v);
 }
 
 let allowedOrgs = new Set();
 
-function processData(data) {
+export function processData(data) {
   Logger.log('[Timing] Start: processData');
   const persons = Array.isArray(data.persons) ? data.persons : [];
   const orgs = Array.isArray(data.orgs) ? data.orgs : [];
@@ -83,7 +83,7 @@ function processData(data) {
   Logger.log('[Timing] End: processData');
 }
 
-function renderFullView(sourceName) {
+export function renderFullView(sourceName) {
   populateCombo("");
   // Globalen OE-Baum einmalig aufbauen; Sichtbarkeit wird separat über applyLegendScope gesteuert
   buildOrgLegend();
@@ -94,12 +94,12 @@ function renderFullView(sourceName) {
   updateFooterStats(null);
 }
 
-function applyLoadedDataObject(data, sourceName) {
+export function applyLoadedDataObject(data, sourceName) {
   processData(data);
   renderFullView(sourceName);
 }
 
-async function loadEnvConfig() {
+export async function loadEnvConfig() {
   // Verwende Logger hier noch nicht, da debugMode möglicherweise noch false ist, aber wir wollen es erzwingen, wenn die Config es sagt.
   // Wir loggen "Start" nachträglich, falls debugMode aktiviert wird.
   
@@ -145,7 +145,7 @@ async function loadEnvConfig() {
 /**
  * Hilfsfunktion: Kategorie aus Dateinamen ableiten
  */
-function categoryFromUrl(url){
+export function categoryFromUrl(url){
   try{
     const withoutQuery = String(url).split('?')[0].split('#')[0];
     const parts = withoutQuery.split('/');
@@ -158,7 +158,7 @@ function categoryFromUrl(url){
 /**
  * Lädt Attribute aus einer URL gemäß ENV-Konfiguration
  */
-async function loadAttributesFromUrl(url) {
+export async function loadAttributesFromUrl(url) {
   try {
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) {
@@ -284,7 +284,7 @@ async function loadAttributesFromUrl(url) {
   }
 }
 
-async function loadData() {
+export async function loadData() {
   setStatus("Lade Daten...");
   let data = null;
   let sourceName = '(keine Daten)';
@@ -337,7 +337,7 @@ async function loadData() {
 }
 
 // Attribute laden: bevorzugt aus IndexedDB, sonst aus ENV-URLs (Dev-Fallback) [SF][DRY]
-async function loadAttributesPreferStored() {
+export async function loadAttributesPreferStored() {
   const stored = await getStoredAttributes();
   if (stored.length) {
     collapsedCategories = new Set(stored.map(s => s.filename.replace(/\.[^/.]+$/, '')));

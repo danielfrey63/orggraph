@@ -1,35 +1,35 @@
-function getCheckboxSVG(checked = false) {
+export function getCheckboxSVG(checked = false) {
   return checked ? ICON.check : ICON.close;
 }
 
-function getChevronSVG() {
+export function getChevronSVG() {
   return ICON.chevronDown;
 }
 
-function getCheckAllSVG() {
+export function getCheckAllSVG() {
   return ICON.checkAll;
 }
 
-function getEyeSVG(closed = false) {
+export function getEyeSVG(closed = false) {
   return closed ? ICON.eyeClosed : ICON.eye;
 }
 
-function getSaveSVG() {
+export function getSaveSVG() {
   return ICON.save;
 }
 
-function getDownloadSVG() {
+export function getDownloadSVG() {
   return ICON.cloudDownload;
 }
 
-function updateCheckboxIcon(checkboxElement, checked) {
+export function updateCheckboxIcon(checkboxElement, checked) {
   checkboxElement.innerHTML = getCheckboxSVG(checked);
   checkboxElement.className = checked ? 
     checkboxElement.className.replace(/\s*checked/, '') + ' checked' : 
     checkboxElement.className.replace(/\s*checked/, '');
 }
 
-function initializeChevronIcons() {
+export function initializeChevronIcons() {
   // Aktualisiere alle Chevron-Buttons im HTML mit dem zentralen SVG
   document.querySelectorAll('.legend-chevron').forEach(chevronBtn => {
     chevronBtn.innerHTML = getChevronSVG();
@@ -39,7 +39,7 @@ function initializeChevronIcons() {
 /**
  * Initialisiert die Collapsed-Zustände der Legend-Sektionen aus ENV [SF]
  */
-function initializeLegendCollapsedStates() {
+export function initializeLegendCollapsedStates() {
   const sections = [
     { key: 'LEGEND_OES_COLLAPSED', target: 'legend' },
     { key: 'LEGEND_ATTRIBUTES_COLLAPSED', target: 'attributeContainer' },
@@ -70,7 +70,7 @@ function initializeLegendCollapsedStates() {
 /**
  * Erstellt die Attribut-Legende mit einheitlichem legend-row Layout (wie OEs)
  */
-function buildAttributeLegend() {
+export function buildAttributeLegend() {
   const legend = document.getElementById('attributeLegend');
   if (!legend) return;
 

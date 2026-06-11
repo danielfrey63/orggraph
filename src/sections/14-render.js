@@ -1,4 +1,4 @@
-async function transitionGraph(oldSub, newSub, roots, transitionId) {
+export async function transitionGraph(oldSub, newSub, roots, transitionId) {
   Logger.log(`[Timing] Start: transitionGraph-${transitionId}.total`);
   const oldNodes = oldSub ? oldSub.nodes : [];
   const newNodes = newSub ? newSub.nodes : [];
@@ -133,7 +133,7 @@ async function transitionGraph(oldSub, newSub, roots, transitionId) {
 /**
  * Rendert den Graphen basierend auf dem berechneten Subgraphen
  */
-function renderGraph(sub) {
+export function renderGraph(sub) {
   // Aktuellen Zoom-Zustand speichern
   const savedZoomTransform = currentZoomTransform;
 

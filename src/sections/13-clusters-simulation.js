@@ -1,4 +1,4 @@
-function refreshClusters() {
+export function refreshClusters() {
   if (!clusterLayer) return;
   
   // Early exit: Keine Cluster zeichnen wenn keine OEs ausgewählt sind [PA][SF]
@@ -87,7 +87,7 @@ function refreshClusters() {
  * Berechnet den äußersten sichtbaren Radius eines Knotens
  * (Node-Radius + Stroke + Attributringe)
  */
-function getNodeOuterRadius(node) {
+export function getNodeOuterRadius(node) {
   const nodeRadius = cssNumber('--node-radius', 8);
   const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
   
@@ -120,7 +120,7 @@ function getNodeOuterRadius(node) {
 /**
  * Hilfsfunktion: Positioniere Knoten gleichmäßig im Kreis um Parent
  */
-function positionNodesInCircle(nodes, centerX, centerY, radius, startAngle = 0) {
+export function positionNodesInCircle(nodes, centerX, centerY, radius, startAngle = 0) {
   if (nodes.length === 0) return;
   
   if (nodes.length === 1) {
@@ -141,7 +141,7 @@ function positionNodesInCircle(nodes, centerX, centerY, radius, startAngle = 0) 
 /**
  * Findet eine Position außerhalb der konvexen Hülle für einen sekundären Root
  */
-function findPositionOutsideHull(existingNodes, margin = 200) {
+export function findPositionOutsideHull(existingNodes, margin = 200) {
   if (existingNodes.length === 0) {
     return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
   }
@@ -174,7 +174,7 @@ function findPositionOutsideHull(existingNodes, margin = 200) {
 /**
  * Führt eine Breadth-First Expansion für das radiale Layout durch
  */
-function radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positionedSet, includeParents = false) {
+export function radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positionedSet, includeParents = false) {
   const childPadding = 4;
   
   while (queue.length > 0) {
@@ -227,7 +227,7 @@ function radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positi
 /**
  * Erstellt und konfiguriert die D3-Simulation
  */
-function createSimulation(nodes, links) {
+export function createSimulation(nodes, links) {
   // Force-Simulation-Parameter
   const linkDistance = cssNumber('--link-distance', 60);
   const linkStrength = cssNumber('--link-strength', 0.4);
@@ -274,7 +274,7 @@ function createSimulation(nodes, links) {
 /**
  * Hält die Simulation kontinuierlich am Laufen, wenn der Modus aktiviert ist [SF][PA]
  */
-function keepSimulationRunning() {
+export function keepSimulationRunning() {
   if (!continuousSimulation || !currentSimulation) return;
   
   // Alpha auf niedrigem Level halten für sanfte, kontinuierliche Bewegung
@@ -293,7 +293,7 @@ function keepSimulationRunning() {
  * @param {Array} links - Array von Links
  * @returns {Map<string, number>} Map von Node-ID zu Level (0 = Root)
  */
-function getNodesLevels(nodes, rootIds, links) {
+export function getNodesLevels(nodes, rootIds, links) {
   const levelMap = new Map();
   const adjacency = new Map();
   
@@ -344,7 +344,7 @@ function getNodesLevels(nodes, rootIds, links) {
 }
 
 // Entferne altes TS Objekt, da Funktionalität jetzt in Logger ist
-const TS = { now: Logger.ts };
+export const TS = { now: Logger.ts };
 
 // Globaler Counter für Transitionen, um Race-Conditions zu vermeiden
 let lastTransitionId = 0;

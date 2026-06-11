@@ -1,4 +1,4 @@
-function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttributes, attributeTypes) {
+export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttributes, attributeTypes) {
   // Dialog-Container erstellen
   const dialogContainer = document.createElement('div');
   dialogContainer.className = 'fuzzy-match-dialog-container';
@@ -484,7 +484,7 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
 /**
  * Schließt den Fuzzy-Match-Prozess ab und wendet die Attribute an
  */
-function finalizeFuzzyMatching(newPersonAttributes, attributeTypes) {
+export function finalizeFuzzyMatching(newPersonAttributes, attributeTypes) {
   // Generiere Farben für neue Attributtypen
   const attributeNames = new Set();
   for (const [id, attrs] of newPersonAttributes.entries()) {
@@ -521,7 +521,7 @@ function finalizeFuzzyMatching(newPersonAttributes, attributeTypes) {
 /**
  * Exportiert nicht zugeordnete Einträge in eine separate Datei
  */
-function exportUnmatchedEntries(unmatchedEntries) {
+export function exportUnmatchedEntries(unmatchedEntries) {
   if (unmatchedEntries.size === 0) return;
   
   // Erstelle den Export-Inhalt im CSV-Format

@@ -1,4 +1,4 @@
-function buildAdjacency(links) {
+export function buildAdjacency(links) {
   const adj = new Map();
   
   // Hilfsfunktion zum Sicherstellen, dass der Knoten in der Map existiert
@@ -20,7 +20,7 @@ function buildAdjacency(links) {
   return adj;
 }
 
-function computeSubgraph(startId, depth, mode) {
+export function computeSubgraph(startId, depth, mode) {
   const out = new Map();
   const inn = new Map();
   for (const l of raw.links) {
@@ -187,7 +187,7 @@ function computeSubgraph(startId, depth, mode) {
   return { nodes, links, legendOrgs, legendOrgLevels };
 }
 
-function recomputeHiddenNodes() {
+export function recomputeHiddenNodes() {
   const agg = new Set();
   for (const s of hiddenByRoot.values()) {
     for (const id of s) agg.add(String(id));
@@ -196,7 +196,7 @@ function recomputeHiddenNodes() {
 }
 
 // Prüft ob ein Node-ID temporär sichtbar ist (trotz Hidden-Status) [SF]
-function isNodeTemporarilyVisible(nodeId) {
+export function isNodeTemporarilyVisible(nodeId) {
   const nid = String(nodeId);
   if (allHiddenTemporarilyVisible) return true;
   for (const [rootId, setIds] of hiddenByRoot.entries()) {
@@ -207,7 +207,7 @@ function isNodeTemporarilyVisible(nodeId) {
   return false;
 }
 
-function collectReportSubtree(rootId) {
+export function collectReportSubtree(rootId) {
   const rid = String(rootId);
   const out = new Map();
   for (const l of raw.links) {
@@ -228,7 +228,7 @@ function collectReportSubtree(rootId) {
   return seen;
 }
 
-function hideSubtreeFromRoot(rootId) {
+export function hideSubtreeFromRoot(rootId) {
   const rid = String(rootId);
   const n = byId.get(rid);
   if (!n || n.type !== 'person') { setStatus('Bitte eine Management-Person wählen'); return; }
@@ -239,7 +239,7 @@ function hideSubtreeFromRoot(rootId) {
   applyFromUI('hideSubtree');
 }
 
-function unhideSubtree(rootId) {
+export function unhideSubtree(rootId) {
   const rid = String(rootId);
   if (hiddenByRoot.has(rid)) {
     hiddenByRoot.delete(rid);
@@ -252,7 +252,7 @@ function unhideSubtree(rootId) {
 }
 
 // Temporäre Sichtbarkeit eines einzelnen Hidden-Subtrees umschalten [SF]
-function toggleHiddenRootVisibility(rootId) {
+export function toggleHiddenRootVisibility(rootId) {
   const rid = String(rootId);
   if (temporarilyVisibleRoots.has(rid)) {
     temporarilyVisibleRoots.delete(rid);
@@ -265,7 +265,7 @@ function toggleHiddenRootVisibility(rootId) {
 }
 
 // Globale temporäre Sichtbarkeit aller Hidden-Subtrees umschalten [SF]
-function toggleAllHiddenVisibility() {
+export function toggleAllHiddenVisibility() {
   allHiddenTemporarilyVisible = !allHiddenTemporarilyVisible;
   // Bei globalem Toggle: individuelle Einstellungen zurücksetzen
   if (allHiddenTemporarilyVisible) {
@@ -277,7 +277,7 @@ function toggleAllHiddenVisibility() {
 }
 
 // Eye-Buttons in der Hidden-Legende aktualisieren [DRY]
-function updateHiddenLegendEyeButtons() {
+export function updateHiddenLegendEyeButtons() {
   const legend = document.getElementById('hiddenLegend');
   if (!legend) return;
   
@@ -294,7 +294,7 @@ function updateHiddenLegendEyeButtons() {
 }
 
 // Globalen Eye-Button im Header aktualisieren [DRY]
-function updateGlobalHiddenVisibilityButton() {
+export function updateGlobalHiddenVisibilityButton() {
   const btn = document.getElementById('toggleAllHiddenVisibility');
   if (!btn) return;
   
@@ -312,7 +312,7 @@ function updateGlobalHiddenVisibilityButton() {
 }
 
 // Aktualisiert den Titel der Hidden-Legende mit den aktuellen Zahlen
-function updateHiddenLegendTitle() {
+export function updateHiddenLegendTitle() {
   // Berechne Gesamtanzahl der ausgeblendeten Personen
   let totalHidden = 0;
   for (const setIds of hiddenByRoot.values()) {

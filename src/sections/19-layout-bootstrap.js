@@ -1,4 +1,4 @@
-function fitToViewport() {
+export function fitToViewport() {
   const svgEl = document.querySelector(SVG_ID);
   if (!svgEl || !zoomBehavior) return;
   const g = svgEl.querySelector('g');
@@ -17,7 +17,7 @@ function fitToViewport() {
   svg.transition().duration(300).call(zoomBehavior.transform, t);
 }
 // Nach jeder allowedOrgs-Änderung aufrufen
-function syncGraphAndLegendColors() {
+export function syncGraphAndLegendColors() {
   const legend = document.querySelector('#legend');
   if (legend) {
     updateLegendRowColors(legend);
@@ -33,7 +33,7 @@ function syncGraphAndLegendColors() {
 /**
  * Berechnet Hierarchieebenen für Knoten
  */
-function computeHierarchyLevels(nodes, links) {
+export function computeHierarchyLevels(nodes, links) {
   const levels = new Map();
   const nodeSet = new Set(nodes.map(n => String(n.id)));
   
@@ -80,7 +80,7 @@ function computeHierarchyLevels(nodes, links) {
 /**
  * Konfiguriert das Graph-Layout
  */
-function configureLayout(nodes, links, simulation, mode) {
+export function configureLayout(nodes, links, simulation, mode) {
   // Spezifische Parameter für Hierarchie-Layout
   const LEVEL_HEIGHT = 200; // Vertikaler Abstand zwischen Hierarchie-Ebenen
   const LEVEL_FORCE_STRENGTH = 0.5; // Stärke der vertikalen Anziehungskraft
@@ -196,7 +196,7 @@ function configureLayout(nodes, links, simulation, mode) {
 /**
  * Wechselt zwischen Layout-Modi
  */
-function switchLayout(mode, simulation) {
+export function switchLayout(mode, simulation) {
   currentLayoutMode = mode;
   
   const nodes = simulation.nodes();
@@ -211,7 +211,7 @@ function switchLayout(mode, simulation) {
 /**
  * Initialisiert die kollabierbaren Legendenbereiche
  */
-function initializeCollapsibleLegends() {
+export function initializeCollapsibleLegends() {
   // Speichern des Klappzustands im localStorage, wenn verfügbar
   const saveCollapseState = (id, isCollapsed) => {
     try {

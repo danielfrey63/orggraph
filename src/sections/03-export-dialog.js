@@ -13,7 +13,7 @@ let customHeightInput = null;
 /**
  * Initialisiere den Export-Dialog und die zugehörigen Event-Listener
  */
-function initializeExport() {
+export function initializeExport() {
   // Dialog-Elemente abrufen
   exportModal = document.getElementById('exportModal');
   exportOverlay = exportModal.querySelector('.modal-overlay');
@@ -142,7 +142,7 @@ function initializeExport() {
 /**
  * Zeigt den Export-Dialog an
  */
-function showExportDialog() {
+export function showExportDialog() {
   if (exportModal) {
     exportModal.style.display = 'flex';
     
@@ -156,7 +156,7 @@ function showExportDialog() {
 /**
  * Verbirgt den Export-Dialog
  */
-function hideExportDialog() {
+export function hideExportDialog() {
   if (exportModal) {
     exportModal.style.display = 'none';
   }
@@ -165,7 +165,7 @@ function hideExportDialog() {
 /**
  * Exportiert den Graphen als SVG-Datei
  */
-function exportAsSvg() {
+export function exportAsSvg() {
   // SVG-Element abrufen
   const svgElement = document.querySelector(SVG_ID);
   if (!svgElement) {
@@ -246,7 +246,7 @@ function exportAsSvg() {
 /**
  * Exportiert den Graphen als PNG-Datei mit gewählter Auflösung und Qualität
  */
-function exportAsPng() {
+export function exportAsPng() {
   // SVG-Element abrufen
   const svgElement = document.querySelector(SVG_ID);
   if (!svgElement) {
@@ -367,7 +367,7 @@ function exportAsPng() {
  * Generiert einen Zeitstempel im Format YYYYMMDD_HHmmss für Dateinamen
  * @returns {string} Formatierter Zeitstempel
  */
-function getTimestamp() {
+export function getTimestamp() {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');

@@ -1,4 +1,4 @@
-async function loadPseudoData() {
+export async function loadPseudoData() {
   try {
     // 1) IndexedDB (standalone persistence)
     const storedPseudo = await getStoredJson(KEY_PSEUDO);
@@ -29,7 +29,7 @@ async function loadPseudoData() {
 /**
  * Holt ein Pseudonym für einen Personennamen (konsistentes Mapping)
  */
-function getPseudoName(originalName) {
+export function getPseudoName(originalName) {
   if (!pseudoData?.names?.length) return originalName;
   
   const key = String(originalName);
@@ -47,7 +47,7 @@ function getPseudoName(originalName) {
 /**
  * Holt ein Pseudonym für eine OE basierend auf ihrem Level (konsistentes Mapping)
  */
-function getPseudoOrgLabel(originalLabel, level) {
+export function getPseudoOrgLabel(originalLabel, level) {
   if (!pseudoData) return originalLabel;
   
   const key = String(originalLabel);
@@ -93,7 +93,7 @@ function getPseudoOrgLabel(originalLabel, level) {
  * @param {Object} node - Der Knoten mit id, label, type
  * @param {number} [level] - Optional: OE-Level für level-basierte Pseudonyme
  */
-function getDisplayLabel(node, level) {
+export function getDisplayLabel(node, level) {
   if (!node) return '';
   
   const originalLabel = node.label || node.id || '';
@@ -120,7 +120,7 @@ function getDisplayLabel(node, level) {
 /**
  * Gibt das anzuzeigende Label für eine OE-ID zurück
  */
-function getDisplayOrgLabel(orgId) {
+export function getDisplayOrgLabel(orgId) {
   const node = byId.get(String(orgId));
   if (!node) return orgId;
   return getDisplayLabel(node, orgDepth(orgId));
@@ -129,7 +129,7 @@ function getDisplayOrgLabel(orgId) {
 /**
  * Aktualisiert alle sichtbaren Labels nach Pseudonymisierungs-Toggle
  */
-function refreshAllLabels() {
+export function refreshAllLabels() {
   const svg = d3.select('#graph');
   
   // Node-Labels aktualisieren

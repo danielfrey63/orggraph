@@ -1,16 +1,16 @@
-const DB_NAME = 'orggraph';
-const DB_VERSION = 1;
-const STORE = 'files';
+export const DB_NAME = 'orggraph';
+export const DB_VERSION = 1;
+export const STORE = 'files';
 
 // Stable logical keys (decoupled from env URLs).
-const KEY_ENV = 'env';
-const KEY_DATA = 'data';
-const KEY_PSEUDO = 'pseudo';
-const ATTR_PREFIX = 'attr:';
+export const KEY_ENV = 'env';
+export const KEY_DATA = 'data';
+export const KEY_PSEUDO = 'pseudo';
+export const ATTR_PREFIX = 'attr:';
 
 let _dbPromise = null;
 
-function openDb() {
+export function openDb() {
   if (_dbPromise) return _dbPromise;
   _dbPromise = new Promise((resolve, reject) => {
     let req;
@@ -32,7 +32,7 @@ function openDb() {
   return _dbPromise;
 }
 
-function tx(mode, fn) {
+export function tx(mode, fn) {
   return openDb().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(STORE, mode);
     const store = t.objectStore(STORE);
@@ -44,14 +44,14 @@ function tx(mode, fn) {
   }));
 }
 
-function reqAsPromise(request) {
+export function reqAsPromise(request) {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 }
 
-async function idbGet(key) {
+export async function idbGet(key) {
   try {
     return await tx('readonly', store => reqAsPromise(store.get(key)));
   } catch (e) {
@@ -60,15 +60,15 @@ async function idbGet(key) {
   }
 }
 
-async function idbPut(key, value) {
+export async function idbPut(key, value) {
   return tx('readwrite', store => reqAsPromise(store.put(value, key)));
 }
 
-async function idbDelete(key) {
+export async function idbDelete(key) {
   return tx('readwrite', store => reqAsPromise(store.delete(key)));
 }
 
-async function idbKeys() {
+export async function idbKeys() {
   try {
     return await tx('readonly', store => reqAsPromise(store.getAllKeys()));
   } catch (e) {
@@ -77,12 +77,12 @@ async function idbKeys() {
   }
 }
 
-async function idbClear() {
+export async function idbClear() {
   return tx('readwrite', store => reqAsPromise(store.clear()));
 }
 
 // Ask the browser to keep our data durable (avoid eviction under storage pressure).
-async function requestPersistence() {
+export async function requestPersistence() {
   try {
     if (navigator.storage && navigator.storage.persist) {
       const already = navigator.storage.persisted ? await navigator.storage.persisted() : false;
@@ -97,30 +97,30 @@ async function requestPersistence() {
 
 // ---- Classification of dropped files ----
 
-function looksLikeEnv(obj) {
+export function looksLikeEnv(obj) {
   if (!obj || typeof obj !== 'object') return false;
   if ('DATA_URL' in obj) return true;
   return Object.keys(obj).some(k => k.startsWith('TOOLBAR_') || k.startsWith('LEGEND_'));
 }
 
-function looksLikePseudo(obj) {
+export function looksLikePseudo(obj) {
   if (!obj || typeof obj !== 'object') return false;
   if (Array.isArray(obj.names)) return true;
   return Object.keys(obj).some(k => k.startsWith('organizationalUnits'));
 }
 
-function looksLikeData(obj) {
+export function looksLikeData(obj) {
   if (!obj || typeof obj !== 'object') return false;
   return Array.isArray(obj.persons) || Array.isArray(obj.orgs) || Array.isArray(obj.links);
 }
 
-const ATTR_EXT = /\.(tsv|txt|csv)$/i;
+export const ATTR_EXT = /\.(tsv|txt|csv)$/i;
 
 /**
  * Classify a single dropped/picked file into a logical kind.
  * Returns { kind: 'env'|'pseudo'|'data'|'attr'|'unknown', key, filename, text }.
  */
-async function classifyFile(file) {
+export async function classifyFile(file) {
   const filename = file.name || 'unnamed';
   const text = await file.text();
 
@@ -143,7 +143,7 @@ async function classifyFile(file) {
  * Persist a list of files (from a drop or multi-file picker). Returns a summary
  * { stored: [{kind, filename}], unknown: [filename] }.
  */
-async function storeFiles(fileList) {
+export async function storeFiles(fileList) {
   const stored = [];
   const unknown = [];
   for (const file of Array.from(fileList || [])) {
@@ -159,19 +159,19 @@ async function storeFiles(fileList) {
   return { stored, unknown };
 }
 
-async function getStoredText(key) {
+export async function getStoredText(key) {
   const v = await idbGet(key);
   return typeof v === 'string' ? v : undefined;
 }
 
-async function getStoredJson(key) {
+export async function getStoredJson(key) {
   const t = await getStoredText(key);
   if (t == null) return undefined;
   try { return JSON.parse(t); } catch { return undefined; }
 }
 
 /** List stored attribute files as [{ key, filename, text }]. */
-async function getStoredAttributes() {
+export async function getStoredAttributes() {
   const keys = await idbKeys();
   const out = [];
   for (const k of keys) {
@@ -185,7 +185,7 @@ async function getStoredAttributes() {
   return out;
 }
 
-async function hasStoredData() {
+export async function hasStoredData() {
   return (await getStoredText(KEY_DATA)) != null;
 }
 

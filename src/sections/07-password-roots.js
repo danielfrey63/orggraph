@@ -1,4 +1,4 @@
-function showPasswordDialog(onSubmit) {
+export function showPasswordDialog(onSubmit) {
   // Existierenden Dialog entfernen falls vorhanden
   const existing = document.getElementById('passwordDialog');
   if (existing) existing.remove();
@@ -94,15 +94,15 @@ function showPasswordDialog(onSubmit) {
 
 // ========== Ende Pseudonymisierung ==========
 
-function isRoot(id){ return selectedRootIds.includes(String(id)); }
-function setSingleRoot(id){
+export function isRoot(id){ return selectedRootIds.includes(String(id)); }
+export function setSingleRoot(id){
   selectedRootIds = [String(id)];
   lastSingleRootId = String(id);
   // Simulation NICHT auf null setzen - Positionen müssen für transitionGraph erhalten bleiben [SF][PA]
   // Die Simulation wird in renderGraph wiederverwendet oder neu erstellt
   Logger.log('[roots] setSingleRoot', { id: String(id) });
 }
-function addRoot(id){
+export function addRoot(id){
   const s = String(id);
   // Wenn noch kein Multi-Root aktiv ist, aber es einen aktuellen Einzel-Root gibt, übernehme ihn als Start
   if (selectedRootIds.length === 0) {
@@ -124,7 +124,7 @@ function addRoot(id){
   Logger.log('[roots] addRoot', { add: s, before, after: selectedRootIds.slice() });
   return true;
 }
-function removeRoot(id){
+export function removeRoot(id){
   const s = String(id);
   selectedRootIds = selectedRootIds.filter(x => x !== s);
 }

@@ -1,4 +1,4 @@
-function ensureOverlay(onFiles) {
+export function ensureOverlay(onFiles) {
   if (_overlay) return _overlay;
 
   const overlay = document.createElement('div');
@@ -37,11 +37,11 @@ function ensureOverlay(onFiles) {
   return overlay;
 }
 
-function showDropZone(onFiles) {
+export function showDropZone(onFiles) {
   ensureOverlay(onFiles).classList.add('dz-visible');
 }
 
-function hideDropZone() {
+export function hideDropZone() {
   if (_overlay) _overlay.classList.remove('dz-visible');
 }
 
@@ -49,7 +49,7 @@ function hideDropZone() {
  * Install window-wide drag&drop so files can be dropped any time to (re)load.
  * onFiles receives a FileList.
  */
-function installGlobalDrop(onFiles) {
+export function installGlobalDrop(onFiles) {
   const onDragEnter = (e) => {
     if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
     e.preventDefault();
@@ -143,7 +143,7 @@ let pseudoOrgMapping = new Map();    // originalOrgLabel -> pseudoOrgLabel
 let pseudoNameIndex = 0;
 let pseudoOrgIndices = new Map();    // level -> currentIndex
 
-const Logger = {
+export const Logger = {
   ts() {
     const now = new Date();
     const h = String(now.getHours()).padStart(2, '0');

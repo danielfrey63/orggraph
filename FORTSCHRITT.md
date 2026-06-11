@@ -66,6 +66,14 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   mit committet. `package-lock.json` (echte vor-bestehende Inhaltsänderung) bewusst NICHT
   committet — wird in Phase 5 sauber neu erzeugt.
 
+### Iteration 7 — Exports flächendeckend
+- Alle 19 Sektionen: Top-Level-Deklarationen (Spalte 0: `const`/`function`/`async function`)
+  exportiert — total **175 Exports**; Build strippt exakt zurück, `npm run verify` grün.
+- **Importierbarkeits-Check (plain Node):** 16/19 Sektionen sind bereits einzeln importierbar.
+  Ausnahmen: `02-icons` + `18-files-reset` (Top-Level-DOM-Zugriff → braucht jsdom),
+  `13-clusters-simulation` (referenziert `Logger` aus anderer Sektion auf Top-Level →
+  wird beim Import-Wiring gelöst).
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -76,13 +84,16 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 7)
+## Nächster Schritt (Iteration 8)
 
-Exports + Imports flächendeckend: restliche Sektionen mit `export` versehen und die
-Querbezüge als `import`-Zeilen ergänzen (werden beim Build gestrippt), damit jede
-Sektion einzeln von Vitest importierbar wird. Achtung: zirkuläre Bezüge zwischen
-Sektionen sind beim Konkatenieren harmlos, für ES-Module aber relevant — beim
-Import-Setzen prüfen und nötigenfalls Schnitt anpassen. Verifikation: `npm run verify`.
+Test-Infrastruktur aufsetzen (Phase 5 Start): Vitest + jsdom + fake-indexeddb +
+@vitest/coverage-v8 als devDependencies, `vitest.config.js` mit `coverage.exclude`
+für die Grenzschicht-Sektionen, `package-lock.json` dabei sauber neu erzeugen.
+Erste Tests gegen die reinsten, bereits importierbaren Sektionen (08-color-geometry:
+hashCode, quantizedHueFromCategory, colorToTransparent, computeClusterPolygon;
+01-config-status: Konstanten). Damit steht der Coverage-Workflow Ende-zu-Ende
+(lcov.info für Gutters), bevor die Test-Masse wächst. Import-Wiring zwischen
+Sektionen folgt danach testgetrieben (nur wo Tests es brauchen).
 
 ## Offene Fragen / Risiken
 

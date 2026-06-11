@@ -1,4 +1,4 @@
-async function handleDroppedFiles(fileList) {
+export async function handleDroppedFiles(fileList) {
   const summary = await storeFiles(fileList);
   await requestPersistence();
 
@@ -29,7 +29,7 @@ async function handleDroppedFiles(fileList) {
 }
 
 /** Löscht alle lokal gespeicherten Daten und kehrt zum Leerzustand zurück. */
-async function resetAllData() {
+export async function resetAllData() {
   try { await idbClear(); } catch (e) { console.error(e); }
   location.reload();
 }

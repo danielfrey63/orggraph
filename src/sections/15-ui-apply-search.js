@@ -1,4 +1,4 @@
-function applyFromUI(triggerSource = 'unknown', callStack = false) {
+export function applyFromUI(triggerSource = 'unknown', callStack = false) {
   Logger.log(`[Timing] Start: applyFromUI.${triggerSource}`);
   if (!raw || !raw.links || !raw.nodes) return;
   if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
@@ -131,7 +131,7 @@ function applyFromUI(triggerSource = 'unknown', callStack = false) {
  * @param {string} text - The text string to parse.
  * @returns {object} An object containing the parsed attributes.
  */
-function parseAttributeList(text) {
+export function parseAttributeList(text) {
   const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
   const result = new Map();
   const foundAttributes = new Set();
@@ -187,7 +187,7 @@ function parseAttributeList(text) {
  * Berechnet die Levenshtein-Distanz zwischen zwei Strings
  * Gibt einen Wert zurück, der die Ähnlichkeit der Strings angibt (kleinerer Wert = ähnlicher)
  */
-function levenshteinDistance(str1, str2) {
+export function levenshteinDistance(str1, str2) {
   const len1 = str1.length;
   const len2 = str2.length;
   
@@ -221,7 +221,7 @@ function levenshteinDistance(str1, str2) {
  * Berechnet die normalisierte Levenshtein-Distanz zwischen zwei Strings
  * Gibt einen Wert zwischen 0 und 1 zurück (0 = identisch, 1 = komplett verschieden)
  */
-function normalizedLevenshteinDistance(str1, str2) {
+export function normalizedLevenshteinDistance(str1, str2) {
   const distance = levenshteinDistance(str1, str2);
   const maxLength = Math.max(str1.length, str2.length);
   // Vermeide Division durch Null
@@ -232,7 +232,7 @@ function normalizedLevenshteinDistance(str1, str2) {
 /**
  * Führt eine Fuzzy-Suche für einen Identifikator durch und gibt potentielle Treffer zurück
  */
-function fuzzySearch(identifier, threshold = 0.3, progressCallback = null, abortFlag = null) {
+export function fuzzySearch(identifier, threshold = 0.3, progressCallback = null, abortFlag = null) {
   if (!identifier || !String(identifier).trim()) return [];
   
   const normalizedInput = String(identifier).toLowerCase();
@@ -341,7 +341,7 @@ function fuzzySearch(identifier, threshold = 0.3, progressCallback = null, abort
 /**
  * Sucht nach Personen im Datensatz basierend auf ID oder E-Mail
  */
-function findPersonIdsByIdentifier(identifier) {
+export function findPersonIdsByIdentifier(identifier) {
   const normalizedId = String(identifier).toLowerCase();
   const matches = [];
   
@@ -361,7 +361,7 @@ function findPersonIdsByIdentifier(identifier) {
 /**
  * Lädt Attributliste aus einer Datei mit Fuzzy-Search-Unterstützung
  */
-async function loadAttributesFromFile(file) {
+export async function loadAttributesFromFile(file) {
   try {
     const text = await file.text();
     const { attributes, types, count, isEmpty } = parseAttributeList(text);

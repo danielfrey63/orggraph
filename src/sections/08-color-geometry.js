@@ -5,7 +5,7 @@ export function cssNumber(varName, fallback) {
 }
 
 // Farb-Hilfen: gleiche Kategorie -> ähnliche Farben, Kategorien klar unterscheidbar
-const categoryHueCache = new Map();
+export const categoryHueCache = new Map();
 export function quantizedHueFromCategory(category) {
   if (categoryHueCache.has(category)) return categoryHueCache.get(category);
   const rawHue = Math.abs(hashCode(String(category))) % 360;
@@ -335,7 +335,7 @@ export function findAllPersonOrgs(personId) {
 }
 
 export function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; } return h>>>0; }
-const orgColorCache = new Map();
+export const orgColorCache = new Map();
 
 export function colorForOrg(oid){
   if (orgColorCache.has(oid)) {

@@ -1,4 +1,4 @@
-function populateCombo(filterText) {
+export function populateCombo(filterText) {
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
   if (!input || !list) return;
@@ -80,7 +80,7 @@ function populateCombo(filterText) {
   list.hidden = filteredItems.length === 0;
 }
 
-function setActive(idx) {
+export function setActive(idx) {
   const list = document.querySelector(LIST_COMBO_ID);
   if (!list) return;
   const items = Array.from(list.children);
@@ -91,7 +91,7 @@ function setActive(idx) {
   if (idx >= 0 && items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
 }
 
-function chooseItem(idx, addMode) {
+export function chooseItem(idx, addMode) {
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
   if (!input || !list) return;
@@ -131,7 +131,7 @@ function chooseItem(idx, addMode) {
 /**
  * Findet Knoten-ID aus Benutzereingabe
  */
-function guessIdFromInput(val) {
+export function guessIdFromInput(val) {
   if (!val) return null;
   
   // Priorität 1: Exakte Übereinstimmung mit Label
