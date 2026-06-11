@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OrgGraph</title>
+  <link rel="icon" href="data:,">
+  <style>
+@@CSS@@
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-main">
+      <h1>OrgGraph</h1>
+      <div id="combo" class="combo">
+        <input id="comboInput" autocomplete="off" placeholder="Suchen… (Name oder ID)" />
+        <ul id="comboList" class="combo-list" hidden></ul>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="depth-control" id="depthControl">
+        <button class="depth-half depth-up" data-action="increase" title="Tiefe erhöhen"></button>
+        <div class="depth-display">
+          <i data-icon="layers"></i>
+          <span class="depth-value">2</span>
+        </div>
+        <button class="depth-half depth-down" data-action="decrease" title="Tiefe verringern"></button>
+      </div>
+      <input id="depth" type="number" min="0" max="6" value="2" step="1" inputmode="numeric" hidden />
+      
+      <div class="direction-split" id="directionToggle">
+        <button class="direction-half direction-up active" data-dir="up" title="Aufwärts">
+          <i data-icon="arrowUp"></i>
+        </button>
+        <button class="direction-half direction-down active" data-dir="down" title="Abwärts">
+          <i data-icon="arrowDown"></i>
+        </button>
+      </div>
+      
+      <button id="toggleManagement" class="toggle-btn active" title="Management">
+        <i data-icon="organization"></i>
+      </button>
+      
+      <button id="toggleHierarchy" class="toggle-btn active" title="Hierarchie">
+        <i data-icon="hierarchy"></i>
+      </button>
+      
+      <button id="toggleLabels" class="toggle-btn active" title="Namen anzeigen">
+        <i data-icon="tag"></i>
+      </button>
+      
+      <button id="fit" class="toggle-btn" aria-label="Auf Seite einpassen" title="Auf Seite einpassen">
+        <i data-icon="move"></i>
+      </button>
+      
+      <button id="toggleSimulation" class="toggle-btn" aria-label="Animation fortsetzen" title="Animation fortsetzen (Knoten bewegen sich kontinuierlich)">
+        <i data-icon="sync"></i>
+      </button>
+      
+      <button id="exportBtn" class="toggle-btn" aria-label="Grafik exportieren" title="Grafik exportieren">
+        <i data-icon="save"></i>
+      </button>
+    </div>
+    
+    <button id="togglePseudonymization" class="toggle-btn active" aria-label="Pseudonymisierung" title="Pseudonymisierung ein/aus">
+      <i data-icon="shield"></i>
+    </button>
+    
+    <button id="debugBtn" class="toggle-btn" aria-label="Debug-Modus" title="Debug: Koordinaten & Abstände anzeigen">
+      <i data-icon="bug"></i>
+    </button>
+  </header>
+  <main class="viewport">
+    <div class="canvas">
+      <svg id="graph" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <aside id="legendPane" aria-label="Organisationseinheiten">
+      <div class="legend-section">
+        <div class="legend-header">
+          <div class="legend-header-layout">
+            <div class="legend-collapse-area">
+              <button class="legend-chevron expanded" data-target="legend" aria-label="Ein-/Ausklappen">
+                <!-- SVG wird durch JavaScript gesetzt -->
+              </button>
+              <h2 class="legend-title">OEs</h2>
+            </div>
+            <div class="legend-actions-area">
+              <div class="legend-search-container" data-ignore-header-click="true">
+                <input type="text" id="oeFilter" placeholder="OE filtern..." class="legend-search-input" data-ignore-header-click="true">
+                <button class="legend-icon-btn" id="oeFilterBtn" title="OE filtern" data-ignore-header-click="true">
+                  <i data-icon="filter"></i>
+                </button>
+              </div>
+              <button id="toggleAllOes" class="legend-icon-btn" title="Alle OEs an/abwählen" data-ignore-header-click="true">
+                <i data-icon="checkAll"></i>
+              </button>
+              <button id="toggleOesVisibility" class="legend-icon-btn active" title="OEs ausblenden" data-ignore-header-click="true">
+                <i data-icon="eye"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="legend" class="legend-content"></div>
+      </div>
+      
+      <div class="legend-section">
+        <div class="legend-header">
+          <div class="legend-header-layout">
+            <div class="legend-collapse-area">
+              <button class="legend-chevron expanded" data-target="attributeContainer" aria-label="Ein-/Ausklappen">
+                <!-- SVG wird durch JavaScript gesetzt -->
+              </button>
+              <h2 class="legend-title">Attribute</h2>
+            </div>
+            <div class="legend-actions-area">
+              <button id="expandAllAttributes" class="legend-icon-btn" title="Alle Kategorien expandieren/kollabieren" data-ignore-header-click="true">
+                <i data-icon="chevronDown"></i>
+                <i data-icon="chevronDown" style="margin-top: -8px;"></i>
+              </button>
+              <button id="loadAttributes" class="legend-icon-btn" title="Attributliste laden" data-ignore-header-click="true">
+                <i data-icon="cloudUpload"></i>
+              </button>
+              <button id="toggleAllAttributes" class="legend-icon-btn" title="Alle Attribute an/abwählen" data-ignore-header-click="true">
+                <i data-icon="checkAll"></i>
+              </button>
+              <button id="toggleAttributesVisibility" class="legend-icon-btn active" title="Attribute ausblenden" data-ignore-header-click="true">
+                <i data-icon="eye"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="attributeContainer" class="legend-content">
+          <input type="file" id="attributeFileInput" accept=".txt,.csv,text/plain,text/csv,text/tab-separated-values" hidden />
+          <div id="attributeLegend" class="attribute-legend">
+            <!-- Dynamisch generierte Attribut-Legende -->
+          </div>
+        </div>
+      </div>
+      
+      <div class="legend-section">
+        <div class="legend-header">
+          <div class="legend-header-layout">
+            <div class="legend-collapse-area">
+              <button class="legend-chevron expanded" data-target="hiddenLegend" aria-label="Ein-/Ausklappen">
+                <!-- SVG wird durch JavaScript gesetzt -->
+              </button>
+              <h2 class="legend-title" id="hiddenLegendTitle">Ausgeblendet</h2>
+            </div>
+            <div class="legend-actions-area">
+              <button id="toggleAllHiddenVisibility" class="legend-icon-btn" title="Alle temporär einblenden" data-ignore-header-click="true" style="display: none;">
+                <i data-icon="eyeClosed"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="hiddenLegend" class="legend-content"></div>
+      </div>
+    </aside>
+  </main>
+  <footer class="app-footer">
+    <div class="footer-stats">
+      <span id="status">Bereit</span>
+      <span class="stat-separator">|</span>
+      <span id="stats-loaded">Geladen: <strong id="stats-nodes-total">0</strong> Knoten, <strong id="stats-links-total">0</strong> Kanten, <strong id="stats-orgs-total">0</strong> OEs</span>
+      <span class="stat-separator">|</span>
+      <span id="stats-visible">Sichtbar: <strong id="stats-nodes-visible">0</strong> Knoten, <strong id="stats-links-visible">0</strong> Kanten</span>
+      <span class="stat-separator">|</span>
+      <span id="stats-orgs-display">Aktive OEs: <strong id="stats-orgs-count">0</strong></span>
+      <span class="stat-separator">|</span>
+      <span id="stats-attributes">Attribute: <strong id="stats-attributes-count">0</strong></span>
+    </div>
+  </footer>
+  <!-- Export Dialog -->
+  <div id="exportModal" class="modal" style="display:none;">
+    <div class="modal-overlay"></div>
+    <div class="modal-container">
+      <div class="modal-header">
+        <h2>Grafik exportieren</h2>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-content">
+        <div class="export-options">
+          <div class="export-option-group">
+            <h3>Format</h3>
+            <div class="format-button-group">
+              <button class="format-btn" data-format="svg">SVG</button>
+              <button class="format-btn active" data-format="png">PNG</button>
+            </div>
+          </div>
+          
+          <div id="svgOptions" class="export-option-group" style="display:none;">
+            <button id="downloadSvg" class="export-btn-large">SVG herunterladen</button>
+          </div>
+          
+          <div id="pngOptions" class="export-option-group">
+            <h3>Auflösung</h3>
+            <div class="resolution-grid">
+              <button class="resolution-preset active" data-width="1200" data-height="800">1200 × 800</button>
+              <button class="resolution-preset" data-width="1920" data-height="1080">1920 × 1080</button>
+              <button class="resolution-preset" data-width="2560" data-height="1440">2560 × 1440</button>
+              <button class="resolution-preset" data-width="3840" data-height="2160">3840 × 2160</button>
+            </div>
+            
+            <h3>Benutzerdefiniert</h3>
+            <div class="custom-resolution-inline">
+              <input type="number" id="customWidth" value="1200" min="100" max="10000">
+              <input type="number" id="customHeight" value="800" min="100" max="10000">
+            </div>
+            
+            <button id="downloadPng" class="export-btn-large">PNG herunterladen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>@@D3@@
+</script>
+  <script>
+@@APP@@
+</script>
+</body>
+</html>

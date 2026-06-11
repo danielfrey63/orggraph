@@ -9,8 +9,8 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 |---|---|---|
 | 1 | Cleanup Artefakte/Tool-Dirs, `.gitignore` | ✅ erledigt (Iteration 1) |
 | 2 | Baseline sichern | ✅ erledigt (Iteration 2) |
-| 3 | Extraktion CSS/D3/JS → `src/`-Module | ⬜ offen |
-| 4 | Inline-Build `build.js` + Template | ⬜ offen |
+| 3 | Extraktion CSS/D3/JS → `src/`-Module | 🔶 begonnen (CSS/D3/Template ✅, Modul-Split von `app.js` offen) |
+| 4 | Inline-Build `build.js` + Template | ✅ erledigt (Iteration 4, byte-identisch verifiziert) |
 | 5 | Tests bis ≥ 80 % Logik-Coverage | ⬜ offen |
 | 6 | README aktualisieren | ⬜ offen |
 
@@ -35,6 +35,14 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - `helpers/` (lokale Daten-Pipeline: Anonymisierung, Generierung, `transform.js` aus `package.json`-Script) → **behalten**, bleibt gitignored.
 - `git status` ist damit bis auf `package-lock.json` sauber.
 
+### Iteration 4 — Erste Extraktion + Inline-Build (Phase 3/4 Start)
+- `index.html` verlustfrei zerlegt: CSS → `src/styles.css`, D3 → `vendor/d3.v7.min.js`,
+  App-JS (noch monolithisch) → `src/app.js`, Gerüst → `index.template.html` (Platzhalter `@@CSS@@`/`@@D3@@`/`@@APP@@`).
+- `build.js` erstellt (nur `node:fs`, läuft ohne `npm install`); `npm run build`-Script ergänzt.
+- **Verifiziert:** `node build.js` erzeugt `index.html` **byte-identisch** zur Baseline (`cmp`),
+  zweiter Lauf ebenfalls identisch → idempotent. `git diff index.html` leer.
+- Nächster Grossblock: `src/app.js` (~7.760 Zeilen) schrittweise in kohärente Module zerlegen.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -45,12 +53,14 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 4)
+## Nächster Schritt (Iteration 5)
 
-Phase 3 starten — erste Extraktion: CSS (Z. 8–1934 der `index.html`) nach `src/styles.css`
-und D3 (Z. 2141–2143) nach `vendor/d3.v7.min.js` auslagern, `index.template.html` anlegen.
-Direkt gefolgt vom minimalen `build.js` (Phase 4 vorgezogen), damit die Baseline-Gleichheit
-des Build-Outputs ab der ersten Extraktion verifizierbar ist.
+Modul-Split von `src/app.js` beginnen: zuerst die reinen, abhängigkeitsarmen Blöcke
+herauslösen (Konstanten/`config`, `color`/Hash, Geometrie). `build.js` dabei auf eine
+Modul-Liste in definierter Reihenfolge umstellen (Konkatenation), nach jedem Split
+`node build.js` + `cmp` gegen Baseline. Hinweis: byte-identisch bleibt der Output nur,
+solange die Konkatenation die Original-Reihenfolge wahrt — sobald Module umsortiert
+werden, gilt funktionale Gleichheit statt Byte-Gleichheit (dann im Browser smoke-testen).
 
 ## Offene Fragen / Risiken
 
