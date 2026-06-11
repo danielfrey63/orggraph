@@ -170,24 +170,34 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - Einzige nennenswerte Lücke: `15-ui-apply-search` (37,4 % — applyFromUI,
   loadAttributesFromFile) und 11 (hide/unhide/toggle, 81,6 %).
 
+### Iteration 18 — 80%-Marke erreicht, Threshold aktiv ✅
+- `tests/15-apply-load.test.js`: 9 neue Tests (applyFromUI: Early-Bail, fehlender
+  Startknoten, Single-Root mit DOM-Tiefe/Richtung, Root aus Combo-Input,
+  Multi-Root-Union mit Min-Level; loadAttributesFromFile: Empty-Category,
+  Exact-Matches, Unmatched-ohne-Fuzzy-Kandidaten, IO-Fehler).
+- Cross-Section-Stubs ergänzt (hashCode aus 08, exportUnmatchedEntries/
+  showFuzzyMatchDialog aus 17).
+- **Total 141 Tests grün. Coverage Logik-Nenner: 72,91 % → 89,57 %.**
+- **`coverage.thresholds.lines: 80` in vitest.config.js aktiviert** — `npm run
+  test:coverage` ist jetzt ein hartes Gate und läuft grün. Verify grün.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
 - [ ] `node build.js` läuft ohne `npm install`
 - [ ] `src/`-Module kohärent, Logik von Seiteneffekten getrennt, keine Doppelspurigkeiten
-- [ ] `npm run test:coverage` grün, ≥ 80 % Lines auf reiner Logik, Grenzschicht via `coverage.exclude` ausgenommen
+- [x] `npm run test:coverage` grün, ≥ 80 % Lines auf reiner Logik (89,57 %), Grenzschicht via `coverage.exclude` + v8-ignore-Marker ausgenommen, Threshold als hartes Gate aktiv
 - [ ] `coverage/lcov.info` + Gutter-Anzeige in VS Code dokumentiert
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 18)
+## Nächster Schritt (Iteration 19)
 
-Logik-Lücken Teil 3: Tests für `15-ui-apply-search` (loadAttributesFromFile,
-applyFromUI-Logikpfade — DOM-Aufrufe via No-op-Stubs) und `11-graph-core`
-(hideSubtreeFromRoot/unhideSubtree/toggleHiddenRootVisibility/
-toggleAllHiddenVisibility mit Stubs). Falls applyFromUI als Orchestrierung zu
-DOM-lastig: prüfen, ob Teile als entscheidungsfreier Applikator markierbar sind
-(ehrlich bleiben!). Ziel: ≥ 80 % erreichen → Threshold (lines 80) aktivieren.
+Phase 6: README aktualisieren — Entwicklung in `src/sections`, `node build.js`
+(ohne npm install), `npm run verify`, `npm run test:coverage`, VS-Code-Gutter-Setup
+(Extension „Coverage Gutters", liest `coverage/lcov.info`). Danach Schluss-Audit
+gegen alle Akzeptanzkriterien (inkl. manueller Browser-Smoke-Test der gebauten
+`index.html` über file://) und Abschlussbilanz.
 
 ## Offene Fragen / Risiken
 

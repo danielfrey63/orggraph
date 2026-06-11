@@ -12,6 +12,7 @@ export default defineConfig({
       reporter: ['text', 'lcov', 'html'],
       reportsDirectory: 'coverage',
       include: ['src/sections/**/*.js'],
+      thresholds: { lines: 80 },
       // Boundary sections: DOM/D3 applicators (dialogs, legends, rendering,
       // simulation, drop/bootstrap orchestration). Logic found in these files
       // must move into an included section, not be tested through the DOM.
