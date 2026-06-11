@@ -43,6 +43,15 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   zweiter Lauf ebenfalls identisch → idempotent. `git diff index.html` leer.
 - Nächster Grossblock: `src/app.js` (~7.760 Zeilen) schrittweise in kohärente Module zerlegen.
 
+### Iteration 5 — Sektions-Split von `app.js`
+- `src/app.js` (7.761 Zeilen) anhand eindeutiger Anker in **19 geordnete Sektionsdateien**
+  unter `src/sections/` zerlegt (01-config-status … 19-layout-bootstrap); Reassembly vor dem
+  Schreiben programmatisch verifiziert.
+- `build.js` konkateniert die Sektionen in lexikografischer Reihenfolge (Nummern-Präfixe).
+- **Verifiziert:** Build-Output weiterhin **byte-identisch** zur Baseline (`cmp`).
+- Hinweis: Sektionen sind Zwischenschritt (noch globaler Scope, keine Exports) — die Umformung
+  in echte ES-Module mit `export`/`import` + Strip beim Inlining folgt in den nächsten Iterationen.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -53,14 +62,14 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 5)
+## Nächster Schritt (Iteration 6)
 
-Modul-Split von `src/app.js` beginnen: zuerst die reinen, abhängigkeitsarmen Blöcke
-herauslösen (Konstanten/`config`, `color`/Hash, Geometrie). `build.js` dabei auf eine
-Modul-Liste in definierter Reihenfolge umstellen (Konkatenation), nach jedem Split
-`node build.js` + `cmp` gegen Baseline. Hinweis: byte-identisch bleibt der Output nur,
-solange die Konkatenation die Original-Reihenfolge wahrt — sobald Module umsortiert
-werden, gilt funktionale Gleichheit statt Byte-Gleichheit (dann im Browser smoke-testen).
+ES-Modul-Umformung beginnen: `build.js` um Import/Export-Stripping erweitern
+(beim Inlining werden `import`-Zeilen entfernt und `export `-Präfixe gestrichen,
+Konkatenation in fixer Reihenfolge bleibt). Danach erste Sektionen in echte Module
+mit `export`/`import` umformen — beginnend bei den reinsten (08-color-geometry,
+01-config-status). Ab da gilt: Output nicht mehr byte-identisch, daher zusätzlich
+Smoke-Verifikation (Node-Syntax-Check des gebauten Scripts + Browser-Smoke-Test).
 
 ## Offene Fragen / Risiken
 
