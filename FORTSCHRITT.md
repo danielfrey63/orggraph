@@ -28,6 +28,13 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - `index.html` byte-identisch nach `reference/index.baseline.html` kopiert (mit `cmp` verifiziert) und tracked.
 - Diese Datei ist ab jetzt die unveränderliche Referenz für Verhaltensgleichheit; sie wird bis Task-Ende nicht mehr angefasst.
 
+### Iteration 3 — Untersuchung der „untersuchen"-Verzeichnisse
+- `browser/` (Confluence-Scraping-Tool, selbstgeschrieben, nicht regenerierbar) → **behalten**, nach `helpers/browser/` verschoben (gruppiert bei den übrigen lokalen Daten-Tools, gitignored).
+- `assets/monocart-coverage-app.js` (Überbleibsel des gelöschten monocart-Reports, regenerierbar) → **gelöscht**.
+- `attributes/` (echte lokale Nutzdaten, TSV mit realen E-Mails, via `ATTRIBUTES_URL` genutzt) → **behalten, unangetastet**, bleibt gitignored.
+- `helpers/` (lokale Daten-Pipeline: Anonymisierung, Generierung, `transform.js` aus `package.json`-Script) → **behalten**, bleibt gitignored.
+- `git status` ist damit bis auf `package-lock.json` sauber.
+
 ## Akzeptanzkriterien-Stand
 
 - [ ] `npm run build` → eine doppelklickbare, baseline-identische `index.html`
@@ -38,14 +45,15 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
 - [x] Repo frei von regenerierbaren Artefakt-/Fremdtool-Verzeichnissen (Teil von „Repo sauber"; `git status` final sauber steht noch aus)
 - [ ] Alle Skripte idempotent
 
-## Nächster Schritt (Iteration 3)
+## Nächster Schritt (Iteration 4)
 
-Vorarbeit zu Phase 3: Die vier „untersuchen"-Verzeichnisse (`browser/`, `assets/`,
-`attributes/`, `helpers/`) auf Relevanz prüfen und Entscheid in FORTSCHRITT.md
-dokumentieren — danach beginnt die Extraktion (CSS → Datei, D3 → `vendor/`).
+Phase 3 starten — erste Extraktion: CSS (Z. 8–1934 der `index.html`) nach `src/styles.css`
+und D3 (Z. 2141–2143) nach `vendor/d3.v7.min.js` auslagern, `index.template.html` anlegen.
+Direkt gefolgt vom minimalen `build.js` (Phase 4 vorgezogen), damit die Baseline-Gleichheit
+des Build-Outputs ab der ersten Extraktion verifizierbar ist.
 
 ## Offene Fragen / Risiken
 
-- `browser/`, `assets/`, `attributes/`, `helpers/`: Relevanz noch ungeklärt — vor Phase 3 untersuchen.
-  `helpers/transform.js` ist via `package.json`-Script `transform` referenziert, liegt aber gitignored.
 - `package-lock.json` lokal modifiziert, Ursache unklar — bei Phase-5-Setup sauber neu erzeugen.
+- `helpers/` ist gitignored, enthält aber das via `package.json` referenzierte `transform.js` —
+  bewusst so belassen (lokales Tooling mit teils sensiblen Daten); bei Bedarf später entkoppeln.
