@@ -23,7 +23,6 @@ export default defineConfig({
         'src/sections/14-render.js',
         'src/sections/17-fuzzy-dialog.js',
         'src/sections/18-files-reset.js',
-        'src/sections/19-layout-bootstrap.js',
       ],
     },
   },

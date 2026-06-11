@@ -320,12 +320,24 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
   strukturell statt string-identisch formulieren.
 - **215 Tests grün, Gate grün: 93,16 %** (12/19 Sektionen im Nenner).
 
-## Nächster Schritt (Iteration 28)
+### Iteration 28 — `19-layout-bootstrap` in den Nenner (13 Tests, 96,2 %)
+- Tests mit echter d3-forceSimulation: computeHierarchyLevels (BFS-Levels,
+  Org=-1, alle Roots ohne Manager), configureLayout (hierarchy: Level-Force +
+  Vorpositionierung; force: Cluster-Forces um Org-Zentren, alpha-Restart),
+  switchLayout (Mode + verzögerter refreshClusters), fitToViewport (Bail-Pfade +
+  Zentrier-Transform mit gestubbtem getBBox), syncGraphAndLegendColors,
+  initializeCollapsibleLegends (Chevron/Header-Toggle mit localStorage-Persistenz
+  und ignore-Attribut, OE-Filter-Feld, Depth-Control mit Clamping).
+- Learnings: diese jsdom-Instanz hat kein `localStorage` (Map-Shim im Test);
+  `forceSimulation` initialisiert x/y selbst → für Vorpositionierungs-Tests NaN setzen.
+- **228 Tests grün, Gate grün: 93,53 %** (13/19 Sektionen im Nenner).
 
-`19-layout-bootstrap` (425 Z.): computeHierarchyLevels, configureLayout,
-switchLayout, fitToViewport, syncGraphAndLegendColors, initializeCollapsible-
-Legends testen (d3/Stubs nach Bedarf) und aus `coverage.exclude` nehmen.
-Danach die grossen Brocken 12, 17, 18.
+## Nächster Schritt (Iteration 29)
+
+Der grösste Brocken: `12-legend-org` (1076 Z.) — renderOrgLegendNode,
+buildOrgLegend/buildScopedOrgLegend, applyLegendScope, updateLegendChips/
+RowColors, collectSubtree, Legend-Menü, buildHiddenLegend, initLegendCollapsedItems.
+Ggf. auf zwei Iterationen aufteilen (erst Baum-Aufbau + Scope, dann Menü/Hidden).
 
 ## Offene Fragen / Risiken
 
