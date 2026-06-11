@@ -247,12 +247,25 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
 11. **Schluss:** `coverage.exclude` final leeren bzw. Rest-Ausnahmen begründen,
     Brutto-Zahl in README/FORTSCHRITT ausweisen, Schluss-Audit wiederholen.
 
-## Nächster Schritt (Iteration 21)
+### Iteration 21 — Marker-Rückbau Teil 1 (10-combo, 11-Trio)
+- Marker entfernt: `populateCombo`/`setActive`/`chooseItem` (10) und die drei
+  `update*`-Helfer (11) — alle tragen Logik (Filterung, Trunkierung, Seed-Verhalten,
+  konditionale Klassen/Titel/Zähler).
+- 19 neue jsdom-Tests (`tests/10-combo-dom.test.js`, `tests/11-hidden-ui.test.js`):
+  Mindestlängen-Hint, Label/ID-Filter mit Sortierung, MAX_DROPDOWN_ITEMS-Trunkierung,
+  Shift-Mousedown-Root-Add, setActive-Klassen, chooseItem Replace/Seed/Guess/Range,
+  Eye-Buttons per-Root + global, Hidden-Titel-Zählung.
+- **160 Tests grün, Gate grün: 90,27 %** auf dem aktuellen Nenner (10-combo: 97 %,
+  11-graph-core: 85 %). Verify grün.
 
-Plan-Punkt 1 beginnen: Marker-Audit — welche markierten Funktionen tragen Logik?
-Diese entmarkern und per jsdom testen, Gate grün halten. Die wirklich
-entscheidungsfreien (z. B. `setStatus`, `hideTooltip`) dürfen markiert bleiben,
-Begründung in FORTSCHRITT.
+## Nächster Schritt (Iteration 22)
+
+Marker-Rückbau Teil 2: 08er-Marker auditieren — `updateAttributeCircles`,
+`updateFooterStats`, `handleClusterHover`, `updateDebugZoomDisplay`,
+`updateAttributeStats` tragen Logik → entmarkern + jsdom-Tests (D3-lastige Teile
+mit echtem vendor/d3 in jsdom oder gezielten Stubs). Trivial-Applikatoren
+(`ensureTooltip`, `showTooltip`, `hideTooltip`) bleiben markiert (Begründung:
+zeilenweise entscheidungsfrei bzw. reine Style-Setter). Danach 01/06/07/09-Marker.
 
 ## Offene Fragen / Risiken
 
