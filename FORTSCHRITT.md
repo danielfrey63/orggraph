@@ -311,11 +311,21 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
   des Loggers nur im Gesamt-Build erreichbar (Zeilen 157-162, ehrliche Rest-Lücke).
 - **203 Tests grün, Gate grün: 92,45 %** (11/19 Sektionen im Nenner).
 
-## Nächster Schritt (Iteration 27)
+### Iteration 27 — `16-legend-attributes` in den Nenner (12 Tests, 99,4 %)
+- Tests: SVG-Getter-Mapping, updateCheckboxIcon, Chevron-Initialisierung,
+  env-gesteuerte Collapsed-States, buildAttributeLegend (sortierte Kategorien
+  mit Counts, aktive Rows, leere Kategorien, Row-Toggle, Eye-Toggle,
+  Chevron-Collapse, TSV-Download, Save-Button nur bei modified+source).
+- Learning: jsdom serialisiert SVG nicht self-closing → innerHTML-Vergleiche
+  strukturell statt string-identisch formulieren.
+- **215 Tests grün, Gate grün: 93,16 %** (12/19 Sektionen im Nenner).
 
-`16-legend-attributes` (335 Z.): SVG-Icon-Getter, updateCheckboxIcon,
-initializeChevronIcons/LegendCollapsedStates, buildAttributeLegend (jsdom,
-Kategorien/Chips/Toggles) testen und aus `coverage.exclude` nehmen.
+## Nächster Schritt (Iteration 28)
+
+`19-layout-bootstrap` (425 Z.): computeHierarchyLevels, configureLayout,
+switchLayout, fitToViewport, syncGraphAndLegendColors, initializeCollapsible-
+Legends testen (d3/Stubs nach Bedarf) und aus `coverage.exclude` nehmen.
+Danach die grossen Brocken 12, 17, 18.
 
 ## Offene Fragen / Risiken
 

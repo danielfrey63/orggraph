@@ -21,7 +21,6 @@ export default defineConfig({
         'src/sections/12-legend-org.js',
         'src/sections/13-clusters-simulation.js',
         'src/sections/14-render.js',
-        'src/sections/16-legend-attributes.js',
         'src/sections/17-fuzzy-dialog.js',
         'src/sections/18-files-reset.js',
         'src/sections/19-layout-bootstrap.js',
