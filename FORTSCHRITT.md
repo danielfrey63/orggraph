@@ -388,13 +388,24 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
   Debug-Toggles, Enter/Arrow-Navigation, Attribut-Picker, Initial-Load-mit-Daten).
 - **282 Tests grün, Gate grün: 88,14 % brutto** (17/19 Sektionen im Nenner).
 
-## Nächster Schritt (Iteration 34)
+### Iteration 34 — 18er-Lücke geschlossen: 81,5 % auf der Sektion (13 Tests)
+- Zweites Bootstrap-File (`tests/18-bootstrap-loaded.test.js`, frischer
+  Modul-Graph pro Testdatei) mit voller ENV-Konfiguration und `loadData→true`:
+  env-Defaults (Depth/Direction/Management/Labels-String/Simulation/Hierarchy/
+  Attribute), Start-Roots inkl. Invalid-Report, Default-Hidden-Roots,
+  Management-/Label-3-Zustands-/Simulation-/Debug-/Hierarchy-Toggles,
+  Pseudo-Deaktivierung mit Passwort-Dialog-Callback, Direction-Constraint
+  (mindestens eine Hälfte aktiv), Tastatur-Navigation (ArrowDown/Enter/Escape),
+  Attribut-Datei-Input mit IDB-Persistenz, Footer-Reset-Button (clear+reload).
+- **295 Tests grün, Gate grün: 92,0 % brutto**, Sektion 18: 692/849 = 81,5 %.
 
-18er-Lücke schliessen: zweites Bootstrap-Testfile mit `loadData→true`-Pfad
-(Initial-Render, GRAPH_START_ID_DEFAULT, LEGEND_HIDDEN_ROOTS_DEFAULT) und
-Klicks auf die restlichen Toggles (Hierarchy, Labels, Simulation, Debug,
-Management, Pseudo inkl. Passwort-Dialog-Stub, Enter-Taste, resetData-Link,
-Status-Picker). Danach 03-export-dialog, zuletzt 13/14.
+## Nächster Schritt (Iteration 35)
+
+`03-export-dialog` (388 Z.): initializeExport/showExportDialog/hideExportDialog,
+exportAsSvg (XMLSerializer in jsdom ok), exportAsPng (Canvas/Image → testbare
+Anteile, Rest ggf. begründete Ausnahme), getTimestamp. Danach als letzte:
+13-clusters-simulation + 14-render (testbare Anteile mit echtem d3, D3-Tick-/
+Render-Pfade ggf. als begründete Rest-Ausnahmen dokumentieren).
 
 ## Offene Fragen / Risiken
 
