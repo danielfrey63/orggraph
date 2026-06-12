@@ -376,13 +376,25 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
 - Sektion bleibt in exclude bis der Bootstrap (Teil 2) per DOMContentLoaded-
   Dispatch getestet ist. **272 Tests grün**, Verify grün.
 
-## Nächster Schritt (Iteration 33)
+### Iteration 33 — 18er-Bootstrap getestet, Sektion im Nenner (10 Tests)
+- `tests/18-bootstrap.test.js`: volles Toolbar-DOM-Fixture + defensive Stubs,
+  Bootstrap via `DOMContentLoaded`-Dispatch ausgeführt. Geprüft: Init-Pfad
+  (env/pseudo/data-Loads, DropZone-Fallback, Export-/Legend-Init), Apply-Button,
+  Such-Debounce (150 ms → populateCombo), Toggle-All OEs/Attribute,
+  OE-Sichtbarkeits-Stash/Restore, OE-Filter mit no-matches, Direction-Halves,
+  Attribut-Sichtbarkeit, Fit-Button.
+- Sektion 18 aus exclude: **54,7 % auf der Sektion** (464/849) — Rest sind
+  ungeklickte Handler-Bodies (Pseudo-Passwort-Flow, Hierarchy/Labels/Simulation/
+  Debug-Toggles, Enter/Arrow-Navigation, Attribut-Picker, Initial-Load-mit-Daten).
+- **282 Tests grün, Gate grün: 88,14 % brutto** (17/19 Sektionen im Nenner).
 
-`18-files-reset` Teil 2: Bootstrap-Block testen — vollständiges DOM-Fixture
-(Toolbar-Buttons, Combo, Status, Toggles), alle benötigten Globals/Stubs setzen,
-`DOMContentLoaded` dispatchen, dann zentrale Verdrahtungen prüfen (Status-Klick-
-Picker, OE-Sichtbarkeits-Toggle mit savedAllowedOrgs-Logik, Apply-Button,
-Suche/Debounce, Direction-Toggle, Reset-Link). Danach Sektion 18 aus exclude.
+## Nächster Schritt (Iteration 34)
+
+18er-Lücke schliessen: zweites Bootstrap-Testfile mit `loadData→true`-Pfad
+(Initial-Render, GRAPH_START_ID_DEFAULT, LEGEND_HIDDEN_ROOTS_DEFAULT) und
+Klicks auf die restlichen Toggles (Hierarchy, Labels, Simulation, Debug,
+Management, Pseudo inkl. Passwort-Dialog-Stub, Enter-Taste, resetData-Link,
+Status-Picker). Danach 03-export-dialog, zuletzt 13/14.
 
 ## Offene Fragen / Risiken
 
