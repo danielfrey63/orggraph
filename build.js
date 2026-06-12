@@ -23,10 +23,15 @@ const app = readdirSync('src/sections')
   .map((f) => stripModuleSyntax(read(`src/sections/${f}`)))
   .join('');
 
+// Single source of truth for the app version: package.json. The versioning
+// hooks bump it there; the build stamps it into the deliverable.
+const version = JSON.parse(read('package.json')).version;
+
 const out = read('index.template.html')
   .replace('@@CSS@@', () => read('src/styles.css'))
   .replace('@@D3@@', () => read('vendor/d3.v7.min.js'))
-  .replace('@@APP@@', () => app);
+  .replace('@@APP@@', () => app)
+  .replace(/@@VERSION@@/g, () => version);
 
 writeFileSync('index.html', out);
 console.log(`index.html written (${out.length} bytes)`);

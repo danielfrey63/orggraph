@@ -29,6 +29,15 @@ npm run verify    # Re-Build + Sync-Check des committeten index.html (modulo Zei
 in `index.html` und strippt dabei die Modul-Syntax (`import`-Zeilen, `export`-Präfixe)
 sowie die `/* v8 ignore */`-Coverage-Marker. Der Build ist idempotent.
 
+### Versionierung
+
+Single Source of Truth für die App-Version ist das `version`-Feld in
+`package.json`. Der Build stempelt sie als `@@VERSION@@` ins Template: sichtbar
+im Header neben dem Titel (`#appVersion`) und als globale JS-Konstante
+`APP_VERSION` in `index.html`. Version anheben (z.B. durch die
+Versioning-Hooks oder manuell via `npm version patch --no-git-tag-version`),
+danach `node build.js` — die Auslieferung trägt dann den neuen Stand.
+
 ### Tests & Coverage (einmalig `npm install`)
 
 ```bash

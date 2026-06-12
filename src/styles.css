@@ -10,6 +10,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .app-header { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; width: 100%; }
 .app-header-main { display: flex; align-items: center; gap: 16px; margin-right: 16px; }
 .app-header h1 { margin: 0; font-size: 18px; color: var(--text-strong); flex-shrink: 0; }
+.app-header h1 .app-version { font-size: 11px; font-weight: 400; color: var(--text-muted); vertical-align: middle; }
 .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1; }
 #togglePseudonymization { margin-left: 12px; }
 #debugBtn { margin-left: 12px; }
