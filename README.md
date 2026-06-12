@@ -57,41 +57,67 @@ Auslieferungsdatei und hängt einen `index.html`-Record an `coverage/lcov.info` 
 
 ## ENV-Konfiguration
 
-Die App kann über eine `env.json` Datei konfiguriert werden. Kopieren Sie `env.example.json` nach `env.json` und passen Sie die Werte an:
+Die App wird über eine Env-Datei im JSON-Format konfiguriert (Vorlage:
+`public/env.example.json`). Sie kann auf zwei Wegen geladen werden:
 
-```bash
-cp env.example.json env.json
-```
+1. **Import** (empfohlen, funktioniert überall inkl. `file://`): Datei, Ordner
+   oder ZIP per Drag & Drop importieren — siehe [Import per Drag & Drop](#import-per-drag--drop).
+   Die Config landet in IndexedDB und wird bei jedem Start von dort gelesen.
+2. **Dev-Server-Fallback**: Liegt nichts in IndexedDB, versucht die App
+   `./env.json` per `fetch` relativ zur Seite zu laden (funktioniert nur über
+   einen Server, nicht über `file://`).
 
 ```json
 {
-  "DATA_URL": "./data.default.json",
-  "DEFAULT_START_ID": "p-1",
-  "DEFAULT_DEPTH": 2,
-  "DEFAULT_DIR": "both",
-  "DEFAULT_MANAGEMENT": true,
-  "DEFAULT_LABELS": true,
-  "DEFAULT_HIERARCHY": true,
-  "DEFAULT_DEBUG": false,
-  "DEFAULT_ATTRIBUTES": true,
-  "DEFAULT_HIDDEN_ROOTS": ["p-1"],
-  "ATTRIBUTES_URL": "./attributes.tsv.txt"
+  "DATA_URL": "./data.example.json",
+  "DATA_ATTRIBUTES_URL": "./attributes.example.txt",
+
+  "TOOLBAR_DEPTH_DEFAULT": 2,
+  "TOOLBAR_DIRECTION_DEFAULT": "down",
+  "TOOLBAR_MANAGEMENT_ACTIVE": false,
+  "TOOLBAR_HIERARCHY_ACTIVE": false,
+  "TOOLBAR_LABELS_ACTIVE": false,
+  "TOOLBAR_ZOOM_DEFAULT": 0.3,
+  "TOOLBAR_PSEUDO_ACTIVE": true,
+  "TOOLBAR_PSEUDO_PASSWORD": "",
+  "TOOLBAR_DEBUG_ACTIVE": false,
+  "TOOLBAR_SIMULATION_ACTIVE": false,
+
+  "LEGEND_OES_COLLAPSED": false,
+  "LEGEND_ATTRIBUTES_COLLAPSED": false,
+  "LEGEND_ATTRIBUTES_ACTIVE": false,
+  "LEGEND_HIDDEN_COLLAPSED": false,
+  "LEGEND_HIDDEN_ROOTS_DEFAULT": [],
+
+  "GRAPH_START_ID_DEFAULT": "p-29"
 }
 ```
 
 ### Konfigurationsoptionen
 
-- **`DATA_URL`**: URL zur Datendatei (optional)
-- **`DEFAULT_START_ID`**: Standard-Startknoten-ID
-- **`DEFAULT_DEPTH`**: Standard-Suchtiefe
-- **`DEFAULT_DIR`**: Standard-Richtung (`both`, `down`, `up`)
-- **`DEFAULT_MANAGEMENT`**: Management-Filter standardmäßig aktiviert
-- **`DEFAULT_LABELS`**: Knoten-Labels standardmäßig sichtbar
-- **`DEFAULT_HIERARCHY`**: Hierarchie-Layout standardmäßig aktiviert
-- **`DEFAULT_DEBUG`**: Debug-Modus standardmäßig aktiviert (zeigt Koordinaten statt Namen)
-- **`DEFAULT_ATTRIBUTES`**: Attribut-Sichtbarkeit standardmäßig aktiviert
-- **`DEFAULT_HIDDEN_ROOTS`**: Array von Knoten-IDs, die standardmäßig ausgeblendet werden
-- **`ATTRIBUTES_URL`**: URL zur Attributdatei (TSV/CSV-Format, optional)
+- **`DATA_URL`**: Pfad/URL zur Datendatei (beim Import relativ zur Env-Datei
+  aufgelöst, am Dev-Server relativ zur Seite)
+- **`DATA_ATTRIBUTES_URL`**: Pfad/URL zu Attributdateien (String oder Array;
+  TSV/CSV/TXT)
+- **`TOOLBAR_DEPTH_DEFAULT`**: Standard-Suchtiefe
+- **`TOOLBAR_DIRECTION_DEFAULT`**: Standard-Richtung (`both`, `down`, `up`)
+- **`TOOLBAR_MANAGEMENT_ACTIVE`**: Management-Filter standardmässig aktiviert
+- **`TOOLBAR_HIERARCHY_ACTIVE`**: Hierarchie-Layout standardmässig aktiviert
+- **`TOOLBAR_LABELS_ACTIVE`**: Label-Sichtbarkeit (`true`/`false` oder
+  `"all"`/`"attributes"`/`"none"`)
+- **`TOOLBAR_ZOOM_DEFAULT`**: initialer Zoomfaktor (Zahl > 0)
+- **`TOOLBAR_PSEUDO_ACTIVE`**: Pseudonymisierung standardmässig aktiviert
+- **`TOOLBAR_PSEUDO_PASSWORD`**: Passwort zum Deaktivieren der
+  Pseudonymisierung (leer = kein Schutz)
+- **`TOOLBAR_DEBUG_ACTIVE`**: Debug-Modus (zeigt Koordinaten statt Namen)
+- **`TOOLBAR_SIMULATION_ACTIVE`**: kontinuierliche Simulation aktiviert
+- **`LEGEND_OES_COLLAPSED`** / **`LEGEND_ATTRIBUTES_COLLAPSED`** /
+  **`LEGEND_HIDDEN_COLLAPSED`**: jeweilige Legenden-Sektion initial eingeklappt
+- **`LEGEND_ATTRIBUTES_ACTIVE`**: Attribut-Sichtbarkeit im Graph
+- **`LEGEND_HIDDEN_ROOTS_DEFAULT`**: Array von Knoten-IDs, deren Subtrees
+  standardmässig ausgeblendet werden
+- **`GRAPH_START_ID_DEFAULT`**: Startknoten-ID (String oder Array für
+  Mehrfach-Roots)
 
 ## Datenformat
 
@@ -140,22 +166,58 @@ Dateiauswahl-Button der Drop-Zone). Alles wird lokal im Browser (IndexedDB)
 gespeichert und beim nächsten Öffnen automatisch geladen — funktioniert damit
 vollständig offline über `file://`, ohne Server.
 
-Unterstützte Drops:
+### Desktop-Workflow (file://)
 
-- **Einzeldateien** (auch mehrere gleichzeitig): Datensatz-JSON, `env.json`,
-  `pseudo.data.json`, Attribut-Dateien (`.tsv`/`.csv`/`.txt`). Die Erkennung
-  erfolgt inhaltsbasiert, Dateinamen sind frei.
-- **Ordner**: Der Ordner wird rekursiv eingelesen.
-- **ZIP-Archiv**: Wird direkt im Browser entpackt (ohne Dependencies, via
+1. `index.html` per Doppelklick öffnen.
+2. Den **Ordner** (oder das **ZIP**) mit Env-, Daten- und Attributdateien aus
+   dem Explorer/Finder direkt ins Browserfenster ziehen — ein
+   Verzeichnis-Dialog ist nicht nötig, der Drop ersetzt das «Verzeichnis
+   öffnen».
+3. Die App speichert alles in IndexedDB und lädt sich neu; ab dann startet sie
+   auch ohne erneuten Import direkt mit diesen Daten.
+
+Der Button «Dateien auswählen…» öffnet einen Datei-Dialog (mehrere Dateien
+inkl. ZIP möglich, aber keine Ordner) — für ganze Ordner den Drag & Drop-Weg
+nutzen. Hinweis: Beim Drop einer *einzelnen* Env-Datei kann der Browser aus
+Sicherheitsgründen nicht auf deren Nachbardateien zugreifen; die referenzierten
+Dateien müssen Teil desselben Drops sein (Ordner/ZIP) oder separat gedroppt
+werden.
+
+### Unterstützte Drops
+
+- **Einzeldateien** (auch mehrere gleichzeitig): Datensatz-JSON, Env-JSON,
+  Pseudo-Daten, Attribut-Dateien (`.tsv`/`.csv`/`.txt`).
+- **Ordner**: wird rekursiv eingelesen.
+- **ZIP-Archiv**: wird direkt im Browser entpackt (ohne Dependencies, via
   `DecompressionStream`; Stored- und Deflate-Einträge).
 
-Enthält ein Ordner-/ZIP-Drop eine `env.json`, ist sie **massgebend**: Die in
+### Wie Dateien erkannt werden
+
+Die Erkennung erfolgt **inhaltsbasiert, nicht über den Dateinamen** — die
+Dateien dürfen beliebig heissen:
+
+- **Env-Config**: parsebares JSON, das einen `DATA_URL`-Schlüssel oder
+  Schlüssel mit Präfix `TOOLBAR_`/`LEGEND_` enthält.
+- **Datensatz**: JSON mit `persons`-, `orgs`- oder `links`-Array.
+- **Pseudo-Daten**: JSON mit `names`-Array oder `organizationalUnits*`-Schlüsseln.
+- **Attribute**: Dateiendung `.tsv`/`.csv`/`.txt`.
+
+Nur wenn ein Drop **mehrere** Env-Kandidaten enthält, zählt der Name: Die Datei
+mit dem exakten Namen `env.json` gewinnt (sonst die alphabetisch erste).
+
+### Env-gesteuertes Nachziehen
+
+Enthält ein Ordner-/ZIP-Drop eine Env-Config, ist sie **massgebend**: Die in
 `DATA_URL` und `DATA_ATTRIBUTES_URL` referenzierten Dateien werden relativ zur
-Lage der `env.json` im Drop aufgelöst und gezielt übernommen; nicht
-referenzierte Datensatz-/Env-Kandidaten werden ignoriert (mit Hinweis).
-Referenzen, die im Drop fehlen, werden gemeldet — auf einem Dev-Server greift
-dafür weiterhin der `fetch`-Fallback. Liegen mehrere Env-Dateien im Drop,
-gewinnt die Datei mit dem Namen `env.json`.
+Lage der Env-Datei im Drop aufgelöst (Fallback: eindeutiger Dateiname) und
+gezielt übernommen; nicht referenzierte Datensatz-/Env-Kandidaten werden
+ignoriert (mit Hinweis). Referenzen, die im Drop fehlen, werden gemeldet — auf
+einem Dev-Server greift dafür weiterhin der `fetch`-Fallback.
+
+Nach dem Import liest die App die Konfiguration bei jedem Start zuerst aus
+IndexedDB; der `fetch` auf `./env.json` ist nur noch Fallback für den
+Dev-Server-Betrieb ohne importierte Daten. «Daten zurücksetzen» im Footer
+leert den lokalen Speicher wieder.
 
 ## Nutzung
 
