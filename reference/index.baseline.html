@@ -174,6 +174,32 @@ input#depth {
 .combo-list li.is-active {
   background: var(--control-hover);
 }
+
+/* Body-attached floating variant (fuzzy dialog); coordinates stay inline */
+.combo-list-floating {
+  position: fixed;
+  z-index: 99999;
+  display: none;
+}
+.combo-list-floating.open {
+  display: block;
+}
+
+/* Informational list entries (hints, empty results) */
+.combo-list li.combo-hint {
+  padding: 8px;
+  color: #666;
+  font-style: italic;
+}
+.combo-list li.combo-hint--more {
+  border-top: 1px solid #e5e7eb;
+}
+.combo-list li.no-results {
+  font-style: italic;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 10px;
+}
 .viewport { display: grid; grid-template-columns: 1fr 320px; gap: 0; overflow: hidden; }
 .canvas { position: relative; overflow: hidden; background: var(--panel-bg); }
 #graph { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
@@ -1976,6 +2002,19 @@ body.dz-dragging::after {
 .menu-divider {
   border-top: 1px solid #374151;
   margin: 4px 0;
+}
+
+/* Farb-Indikator in der Attribut-Legende (Ring wie im Graphen);
+   nur die border-color kommt dynamisch aus JS */
+.attribute-color-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: transparent;
+  border: 3px solid transparent;
+  margin-right: 8px;
+  flex-shrink: 0;
 }
 
 /* Save Button für geänderte Kategorien - gleiche Farbe wie andere Icons */
@@ -4413,7 +4452,7 @@ function populateCombo(filterText) {
 
   // Require minimum search length for large datasets
   if (term.length > 0 && term.length < MIN_SEARCH_LENGTH) {
-    list.innerHTML = '<li style="padding: 8px; color: #666; font-style: italic;">Mindestens ' + MIN_SEARCH_LENGTH + ' Zeichen eingeben...</li>';
+    list.innerHTML = '<li class="combo-hint">Mindestens ' + MIN_SEARCH_LENGTH + ' Zeichen eingeben...</li>';
     list.hidden = false;
     filteredItems = [];
     activeIndex = -1;
@@ -4466,10 +4505,7 @@ function populateCombo(filterText) {
   // Show "more results" hint if truncated
   if (count >= MAX_DROPDOWN_ITEMS) {
     const hint = document.createElement('li');
-    hint.style.padding = '8px';
-    hint.style.color = '#666';
-    hint.style.fontStyle = 'italic';
-    hint.style.borderTop = '1px solid #e5e7eb';
+    hint.className = 'combo-hint combo-hint--more';
     hint.textContent = `Nur erste ${MAX_DROPDOWN_ITEMS} Ergebnisse angezeigt. Suchbegriff verfeinern...`;
     frag.appendChild(hint);
   }
@@ -5366,17 +5402,11 @@ function ensureLegendMenu() {
   if (legendMenuEl) return legendMenuEl;
   const el = document.createElement('div');
   el.className = 'node-context-menu';
-  const mkItem = (label, handler) => {
-    const it = document.createElement('div');
-    it.className = 'menu-item';
-    it.textContent = label;
-    it.addEventListener('click', () => { hideLegendMenu(); handler(); });
-    return it;
-  };
+  const mkItem = (label) => createSubmenuItem(label, hideLegendMenu);
 
   // Erweiterte Menü-Optionen
-  el.appendChild(mkItem('Alle einblenden', () => {}));
-  el.appendChild(mkItem('Alle ausblenden', () => {}));
+  el.appendChild(mkItem('Alle einblenden'));
+  el.appendChild(mkItem('Alle ausblenden'));
 
   // Trennlinie
   const divider = document.createElement('div');
@@ -5384,7 +5414,7 @@ function ensureLegendMenu() {
   el.appendChild(divider);
   
   // Neue Option: Nur direkte Kinder anzeigen
-  el.appendChild(mkItem('Nur direkte Kinder anzeigen', () => {}));
+  el.appendChild(mkItem('Nur direkte Kinder anzeigen'));
   
   document.body.appendChild(el);
   legendMenuEl = el;
@@ -5591,15 +5621,22 @@ function addAttributeSubmenu(parentItem, mainMenu, nodeId) {
 
 /**
  * Erstellt ein Submenu-Item mit Hover-Effekt
+ * Optionen: arrow (Submenu-Pfeil rechts), disabled (ausgegraut, nicht klickbar)
  */
-function createSubmenuItem(label, handler) {
+function createSubmenuItem(label, handler, { arrow = false, disabled = false } = {}) {
   const item = document.createElement('div');
-  item.className = 'menu-item';
+  item.className = 'menu-item' + (disabled ? ' disabled' : '');
   const labelSpan = document.createElement('span');
   labelSpan.className = 'menu-item-label';
   labelSpan.textContent = label;
   item.appendChild(labelSpan);
-  item.onclick = handler;
+  if (arrow) {
+    const arrowSpan = document.createElement('span');
+    arrowSpan.className = 'menu-item-arrow';
+    arrowSpan.textContent = '▶';
+    item.appendChild(arrowSpan);
+  }
+  if (handler) item.onclick = handler;
   return item;
 }
 
@@ -5607,18 +5644,7 @@ function createSubmenuItem(label, handler) {
  * Erstellt ein hierarchisches Kategorie-Item mit eigenem Submenu
  */
 function createCategorySubmenuItem(categoryName, attributes, nodeId, hideAllMenus) {
-  const item = document.createElement('div');
-  item.className = 'menu-item';
-  
-  const labelSpan = document.createElement('span');
-  labelSpan.className = 'menu-item-label';
-  labelSpan.textContent = categoryName;
-  item.appendChild(labelSpan);
-  
-  const arrow = document.createElement('span');
-  arrow.className = 'menu-item-arrow';
-  arrow.textContent = '▶';
-  item.appendChild(arrow);
+  const item = createSubmenuItem(categoryName, null, { arrow: true });
   
   let categorySubmenu = null;
   let categorySubmenuVisible = false;
@@ -5882,10 +5908,7 @@ function ensureNodeMenu() {
   if (nodeMenuEl) return nodeMenuEl;
   const el = document.createElement('div');
   el.className = 'node-context-menu';
-  const it = document.createElement('div');
-  it.className = 'menu-item';
-  it.textContent = 'Ausblenden';
-  el.appendChild(it);
+  el.appendChild(createSubmenuItem('Ausblenden', null));
   document.body.appendChild(el);
   nodeMenuEl = el;
   document.addEventListener('click', () => { if (nodeMenuEl && nodeMenuEl.style.display === 'block') nodeMenuEl.style.display = 'none'; });
@@ -5900,24 +5923,10 @@ function showNodeMenu(x, y, actionsOrOnHide) {
   while (el.firstChild) el.removeChild(el.firstChild);
   
   const addItem = (label, handler, hasSubmenu = false, disabled = false) => {
-    const it = document.createElement('div');
-    it.className = 'menu-item' + (disabled ? ' disabled' : '');
-    
-    const labelSpan = document.createElement('span');
-    labelSpan.className = 'menu-item-label';
-    labelSpan.textContent = label;
-    it.appendChild(labelSpan);
-    
-    if (hasSubmenu) {
-      const arrow = document.createElement('span');
-      arrow.className = 'menu-item-arrow';
-      arrow.textContent = '▶';
-      it.appendChild(arrow);
-    }
-    
-    if (!hasSubmenu && !disabled && handler) {
-      it.onclick = () => { el.style.display = 'none'; handler(); };
-    }
+    const wrapped = (!hasSubmenu && !disabled && handler)
+      ? () => { el.style.display = 'none'; handler(); }
+      : null;
+    const it = createSubmenuItem(label, wrapped, { arrow: hasSubmenu, disabled });
     el.appendChild(it);
     return it;
   };
@@ -8000,17 +8009,7 @@ function buildAttributeLegend() {
       // Farb-Indikator (nur Border, wie Attribut-Ringe im Graphen)
       const colorSpan = document.createElement('span');
       colorSpan.className = 'attribute-color-dot';
-      const circleDiameter = 12;
-      colorSpan.style.display = 'inline-block';
-      colorSpan.style.width = `${circleDiameter}px`;
-      colorSpan.style.height = `${circleDiameter}px`;
-      colorSpan.style.borderRadius = '50%';
-      colorSpan.style.backgroundColor = 'transparent';
-      // Border = 50% des Radius = 1/4 des Durchmessers
-      const borderWidth = circleDiameter / 4;
-      colorSpan.style.border = `${borderWidth}px solid ${it.color}`;
-      colorSpan.style.marginRight = '8px';
-      colorSpan.style.flexShrink = '0';
+      colorSpan.style.borderColor = it.color;
       itemLeftArea.appendChild(colorSpan);
       
       // Item-Label mit Count
@@ -8197,11 +8196,8 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
     
     // Dropdown-Liste mit verbesserter Sichtbarkeit
     const dropdownList = document.createElement('ul');
-    dropdownList.className = 'combo-list';
+    dropdownList.className = 'combo-list combo-list-floating';
     dropdownList.id = `fuzzy-list-${identifier}`;
-    
-    // Beginn: unsichtbar, aber bereit zum Anzeigen
-    dropdownList.style.cssText = 'display: none; visibility: hidden; opacity: 0;';
     
     // Füge das Dropdown direkt an body an, damit es nicht von anderen Elementen verdeckt wird
     // Wir werden die Position später anpassen
@@ -8219,7 +8215,7 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
     noMatchItem.addEventListener('click', (e) => {
       e.stopPropagation(); // Verhindern, dass das Klick-Event zu anderen Elementen propagiert
       searchInput.value = noMatchItem.textContent;
-      dropdownList.style.cssText = 'display: none !important;';
+      dropdownList.classList.remove('open');
       // "Keine Übereinstimmung" - zur unmatched Liste hinzufügen
       unmatchedEntries.set(identifier, attrs);
       
@@ -8262,8 +8258,8 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
         // Setze den Wert im Suchfeld
         searchInput.value = match.label + (match.email ? ` (${match.email})` : ` (ID: ${match.id})`);
         
-        // Dropdown vollständig ausblenden mit !important
-        dropdownList.style.cssText = 'display: none !important; visibility: hidden !important;';
+        // Dropdown ausblenden
+        dropdownList.classList.remove('open');
         
         // Aus unmatched entfernen, falls vorhanden
         unmatchedEntries.delete(identifier);
@@ -8355,8 +8351,7 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
           break;
         case 'Escape':
           e.preventDefault();
-          // Vollständiges Ausblenden mit !important
-          dropdownList.style.cssText = 'display: none !important; visibility: hidden !important;';
+          dropdownList.classList.remove('open');
           break;
       }
     });
@@ -8406,10 +8401,6 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
         const noResults = document.createElement('li');
         noResults.className = 'no-results';
         noResults.textContent = 'Keine Ergebnisse gefunden';
-        noResults.style.fontStyle = 'italic';
-        noResults.style.color = 'var(--text-muted)';
-        noResults.style.textAlign = 'center';
-        noResults.style.padding = '10px';
         dropdown.appendChild(noResults);
       } else {
         // Entferne no-results falls vorhanden
@@ -8424,42 +8415,20 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
     // Hilfsfunktion zum Positionieren des Dropdowns unter dem Eingabefeld
     const positionDropdown = () => {
       const rect = searchInput.getBoundingClientRect();
-      dropdownList.style.position = 'fixed';
       dropdownList.style.top = (rect.bottom + window.scrollY) + 'px';
       dropdownList.style.left = (rect.left + window.scrollX) + 'px';
-      
+
       // Setze die Breite exakt auf die Breite des Eingabefelds
       const inputWidth = rect.width;
       dropdownList.style.width = inputWidth + 'px';
       dropdownList.style.minWidth = inputWidth + 'px';
       dropdownList.style.maxWidth = inputWidth + 'px';
     };
-    
+
     // Hilfsfunktion zum Anzeigen des Dropdowns
     const showDropdown = () => {
-      // Positioniere das Dropdown korrekt
       positionDropdown();
-      
-      // Hole die aktuellen Maße des Eingabefelds
-      const rect = searchInput.getBoundingClientRect();
-      const inputWidth = rect.width;
-      
-      // Mache es sichtbar mit !important Eigenschaften
-      dropdownList.style.cssText = `
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        position: fixed !important;
-        z-index: 99999 !important;
-        top: ${(rect.bottom + window.scrollY)}px !important;
-        left: ${(rect.left + window.scrollX)}px !important;
-        width: ${inputWidth}px !important;
-        min-width: ${inputWidth}px !important;
-        max-width: ${inputWidth}px !important;
-      `;
-      
-      // Force DOM Reflow für bessere Sichtbarkeit
-      void dropdownList.offsetWidth;
+      dropdownList.classList.add('open');
     };
     
     // Fokus-Handler für Suchfeld
@@ -8473,7 +8442,7 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
     
     // Wenn das Fenster oder ein Element die Größe ändert, Dropdown neu positionieren
     window.addEventListener('resize', () => {
-      if (dropdownList.style.display !== 'none') {
+      if (dropdownList.classList.contains('open')) {
         positionDropdown();
       }
     });
@@ -8486,7 +8455,7 @@ function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttribute
     // Klick außerhalb schließt die Dropdown-Liste
     document.addEventListener('click', function(e) {
       if (!combo.contains(e.target) && e.target !== dropdownList && !dropdownList.contains(e.target)) {
-        dropdownList.style.display = 'none';
+        dropdownList.classList.remove('open');
       }
     });
     

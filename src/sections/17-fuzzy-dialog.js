@@ -142,11 +142,8 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
     
     // Dropdown-Liste mit verbesserter Sichtbarkeit
     const dropdownList = document.createElement('ul');
-    dropdownList.className = 'combo-list';
+    dropdownList.className = 'combo-list combo-list-floating';
     dropdownList.id = `fuzzy-list-${identifier}`;
-    
-    // Beginn: unsichtbar, aber bereit zum Anzeigen
-    dropdownList.style.cssText = 'display: none; visibility: hidden; opacity: 0;';
     
     // Füge das Dropdown direkt an body an, damit es nicht von anderen Elementen verdeckt wird
     // Wir werden die Position später anpassen
@@ -164,7 +161,7 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
     noMatchItem.addEventListener('click', (e) => {
       e.stopPropagation(); // Verhindern, dass das Klick-Event zu anderen Elementen propagiert
       searchInput.value = noMatchItem.textContent;
-      dropdownList.style.cssText = 'display: none !important;';
+      dropdownList.classList.remove('open');
       // "Keine Übereinstimmung" - zur unmatched Liste hinzufügen
       unmatchedEntries.set(identifier, attrs);
       
@@ -207,8 +204,8 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
         // Setze den Wert im Suchfeld
         searchInput.value = match.label + (match.email ? ` (${match.email})` : ` (ID: ${match.id})`);
         
-        // Dropdown vollständig ausblenden mit !important
-        dropdownList.style.cssText = 'display: none !important; visibility: hidden !important;';
+        // Dropdown ausblenden
+        dropdownList.classList.remove('open');
         
         // Aus unmatched entfernen, falls vorhanden
         unmatchedEntries.delete(identifier);
@@ -300,8 +297,7 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
           break;
         case 'Escape':
           e.preventDefault();
-          // Vollständiges Ausblenden mit !important
-          dropdownList.style.cssText = 'display: none !important; visibility: hidden !important;';
+          dropdownList.classList.remove('open');
           break;
       }
     });
@@ -351,10 +347,6 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
         const noResults = document.createElement('li');
         noResults.className = 'no-results';
         noResults.textContent = 'Keine Ergebnisse gefunden';
-        noResults.style.fontStyle = 'italic';
-        noResults.style.color = 'var(--text-muted)';
-        noResults.style.textAlign = 'center';
-        noResults.style.padding = '10px';
         dropdown.appendChild(noResults);
       } else {
         // Entferne no-results falls vorhanden
@@ -369,42 +361,20 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
     // Hilfsfunktion zum Positionieren des Dropdowns unter dem Eingabefeld
     const positionDropdown = () => {
       const rect = searchInput.getBoundingClientRect();
-      dropdownList.style.position = 'fixed';
       dropdownList.style.top = (rect.bottom + window.scrollY) + 'px';
       dropdownList.style.left = (rect.left + window.scrollX) + 'px';
-      
+
       // Setze die Breite exakt auf die Breite des Eingabefelds
       const inputWidth = rect.width;
       dropdownList.style.width = inputWidth + 'px';
       dropdownList.style.minWidth = inputWidth + 'px';
       dropdownList.style.maxWidth = inputWidth + 'px';
     };
-    
+
     // Hilfsfunktion zum Anzeigen des Dropdowns
     const showDropdown = () => {
-      // Positioniere das Dropdown korrekt
       positionDropdown();
-      
-      // Hole die aktuellen Maße des Eingabefelds
-      const rect = searchInput.getBoundingClientRect();
-      const inputWidth = rect.width;
-      
-      // Mache es sichtbar mit !important Eigenschaften
-      dropdownList.style.cssText = `
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        position: fixed !important;
-        z-index: 99999 !important;
-        top: ${(rect.bottom + window.scrollY)}px !important;
-        left: ${(rect.left + window.scrollX)}px !important;
-        width: ${inputWidth}px !important;
-        min-width: ${inputWidth}px !important;
-        max-width: ${inputWidth}px !important;
-      `;
-      
-      // Force DOM Reflow für bessere Sichtbarkeit
-      void dropdownList.offsetWidth;
+      dropdownList.classList.add('open');
     };
     
     // Fokus-Handler für Suchfeld
@@ -418,7 +388,7 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
     
     // Wenn das Fenster oder ein Element die Größe ändert, Dropdown neu positionieren
     window.addEventListener('resize', () => {
-      if (dropdownList.style.display !== 'none') {
+      if (dropdownList.classList.contains('open')) {
         positionDropdown();
       }
     });
@@ -431,7 +401,7 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
     // Klick außerhalb schließt die Dropdown-Liste
     document.addEventListener('click', function(e) {
       if (!combo.contains(e.target) && e.target !== dropdownList && !dropdownList.contains(e.target)) {
-        dropdownList.style.display = 'none';
+        dropdownList.classList.remove('open');
       }
     });
     

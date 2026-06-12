@@ -166,6 +166,32 @@ input#depth {
 .combo-list li.is-active {
   background: var(--control-hover);
 }
+
+/* Body-attached floating variant (fuzzy dialog); coordinates stay inline */
+.combo-list-floating {
+  position: fixed;
+  z-index: 99999;
+  display: none;
+}
+.combo-list-floating.open {
+  display: block;
+}
+
+/* Informational list entries (hints, empty results) */
+.combo-list li.combo-hint {
+  padding: 8px;
+  color: #666;
+  font-style: italic;
+}
+.combo-list li.combo-hint--more {
+  border-top: 1px solid #e5e7eb;
+}
+.combo-list li.no-results {
+  font-style: italic;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 10px;
+}
 .viewport { display: grid; grid-template-columns: 1fr 320px; gap: 0; overflow: hidden; }
 .canvas { position: relative; overflow: hidden; background: var(--panel-bg); }
 #graph { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
@@ -1968,6 +1994,19 @@ body.dz-dragging::after {
 .menu-divider {
   border-top: 1px solid #374151;
   margin: 4px 0;
+}
+
+/* Farb-Indikator in der Attribut-Legende (Ring wie im Graphen);
+   nur die border-color kommt dynamisch aus JS */
+.attribute-color-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: transparent;
+  border: 3px solid transparent;
+  margin-right: 8px;
+  flex-shrink: 0;
 }
 
 /* Save Button für geänderte Kategorien - gleiche Farbe wie andere Icons */

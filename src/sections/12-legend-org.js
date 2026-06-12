@@ -481,17 +481,11 @@ export function ensureLegendMenu() {
   if (legendMenuEl) return legendMenuEl;
   const el = document.createElement('div');
   el.className = 'node-context-menu';
-  const mkItem = (label, handler) => {
-    const it = document.createElement('div');
-    it.className = 'menu-item';
-    it.textContent = label;
-    it.addEventListener('click', () => { hideLegendMenu(); handler(); });
-    return it;
-  };
+  const mkItem = (label) => createSubmenuItem(label, hideLegendMenu);
 
   // Erweiterte Menü-Optionen
-  el.appendChild(mkItem('Alle einblenden', () => {}));
-  el.appendChild(mkItem('Alle ausblenden', () => {}));
+  el.appendChild(mkItem('Alle einblenden'));
+  el.appendChild(mkItem('Alle ausblenden'));
 
   // Trennlinie
   const divider = document.createElement('div');
@@ -499,7 +493,7 @@ export function ensureLegendMenu() {
   el.appendChild(divider);
   
   // Neue Option: Nur direkte Kinder anzeigen
-  el.appendChild(mkItem('Nur direkte Kinder anzeigen', () => {}));
+  el.appendChild(mkItem('Nur direkte Kinder anzeigen'));
   
   document.body.appendChild(el);
   legendMenuEl = el;
@@ -706,15 +700,22 @@ export function addAttributeSubmenu(parentItem, mainMenu, nodeId) {
 
 /**
  * Erstellt ein Submenu-Item mit Hover-Effekt
+ * Optionen: arrow (Submenu-Pfeil rechts), disabled (ausgegraut, nicht klickbar)
  */
-export function createSubmenuItem(label, handler) {
+export function createSubmenuItem(label, handler, { arrow = false, disabled = false } = {}) {
   const item = document.createElement('div');
-  item.className = 'menu-item';
+  item.className = 'menu-item' + (disabled ? ' disabled' : '');
   const labelSpan = document.createElement('span');
   labelSpan.className = 'menu-item-label';
   labelSpan.textContent = label;
   item.appendChild(labelSpan);
-  item.onclick = handler;
+  if (arrow) {
+    const arrowSpan = document.createElement('span');
+    arrowSpan.className = 'menu-item-arrow';
+    arrowSpan.textContent = '▶';
+    item.appendChild(arrowSpan);
+  }
+  if (handler) item.onclick = handler;
   return item;
 }
 
@@ -722,18 +723,7 @@ export function createSubmenuItem(label, handler) {
  * Erstellt ein hierarchisches Kategorie-Item mit eigenem Submenu
  */
 export function createCategorySubmenuItem(categoryName, attributes, nodeId, hideAllMenus) {
-  const item = document.createElement('div');
-  item.className = 'menu-item';
-  
-  const labelSpan = document.createElement('span');
-  labelSpan.className = 'menu-item-label';
-  labelSpan.textContent = categoryName;
-  item.appendChild(labelSpan);
-  
-  const arrow = document.createElement('span');
-  arrow.className = 'menu-item-arrow';
-  arrow.textContent = '▶';
-  item.appendChild(arrow);
+  const item = createSubmenuItem(categoryName, null, { arrow: true });
   
   let categorySubmenu = null;
   let categorySubmenuVisible = false;
@@ -997,10 +987,7 @@ export function ensureNodeMenu() {
   if (nodeMenuEl) return nodeMenuEl;
   const el = document.createElement('div');
   el.className = 'node-context-menu';
-  const it = document.createElement('div');
-  it.className = 'menu-item';
-  it.textContent = 'Ausblenden';
-  el.appendChild(it);
+  el.appendChild(createSubmenuItem('Ausblenden', null));
   document.body.appendChild(el);
   nodeMenuEl = el;
   document.addEventListener('click', () => { if (nodeMenuEl && nodeMenuEl.style.display === 'block') nodeMenuEl.style.display = 'none'; });
@@ -1015,24 +1002,10 @@ export function showNodeMenu(x, y, actionsOrOnHide) {
   while (el.firstChild) el.removeChild(el.firstChild);
   
   const addItem = (label, handler, hasSubmenu = false, disabled = false) => {
-    const it = document.createElement('div');
-    it.className = 'menu-item' + (disabled ? ' disabled' : '');
-    
-    const labelSpan = document.createElement('span');
-    labelSpan.className = 'menu-item-label';
-    labelSpan.textContent = label;
-    it.appendChild(labelSpan);
-    
-    if (hasSubmenu) {
-      const arrow = document.createElement('span');
-      arrow.className = 'menu-item-arrow';
-      arrow.textContent = '▶';
-      it.appendChild(arrow);
-    }
-    
-    if (!hasSubmenu && !disabled && handler) {
-      it.onclick = () => { el.style.display = 'none'; handler(); };
-    }
+    const wrapped = (!hasSubmenu && !disabled && handler)
+      ? () => { el.style.display = 'none'; handler(); }
+      : null;
+    const it = createSubmenuItem(label, wrapped, { arrow: hasSubmenu, disabled });
     el.appendChild(it);
     return it;
   };

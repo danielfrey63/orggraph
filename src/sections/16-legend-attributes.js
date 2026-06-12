@@ -280,17 +280,7 @@ export function buildAttributeLegend() {
       // Farb-Indikator (nur Border, wie Attribut-Ringe im Graphen)
       const colorSpan = document.createElement('span');
       colorSpan.className = 'attribute-color-dot';
-      const circleDiameter = 12;
-      colorSpan.style.display = 'inline-block';
-      colorSpan.style.width = `${circleDiameter}px`;
-      colorSpan.style.height = `${circleDiameter}px`;
-      colorSpan.style.borderRadius = '50%';
-      colorSpan.style.backgroundColor = 'transparent';
-      // Border = 50% des Radius = 1/4 des Durchmessers
-      const borderWidth = circleDiameter / 4;
-      colorSpan.style.border = `${borderWidth}px solid ${it.color}`;
-      colorSpan.style.marginRight = '8px';
-      colorSpan.style.flexShrink = '0';
+      colorSpan.style.borderColor = it.color;
       itemLeftArea.appendChild(colorSpan);
       
       // Item-Label mit Count
