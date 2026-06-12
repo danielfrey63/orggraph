@@ -1,9 +1,15 @@
-export async function handleDroppedFiles(fileList) {
-  const summary = await storeFiles(fileList);
+export async function handleDroppedFiles(entryList) {
+  const summary = await storeEntries(entryList);
   await requestPersistence();
 
   if (summary.unknown.length) {
     showTemporaryNotification(`Nicht erkannt, ignoriert: ${summary.unknown.join(', ')}`, 5000);
+  }
+  if (summary.missing.length) {
+    showTemporaryNotification(`In env.json referenziert, aber nicht im Import enthalten: ${summary.missing.join(', ')}`, 6000);
+  }
+  if (summary.ignored.length) {
+    showTemporaryNotification(`Nicht verwendet (env.json ist massgebend): ${summary.ignored.join(', ')}`, 5000);
   }
   if (!summary.stored.length) return;
 
@@ -13,7 +19,8 @@ export async function handleDroppedFiles(fileList) {
   if (onlyAttributes) {
     // Datensatz steht bereits – Attribute inkrementell nachladen.
     for (const s of summary.stored) {
-      const file = Array.from(fileList).find(f => f.name === s.filename);
+      const entry = Array.from(entryList).find(en => (en && en.file ? en.file : en)?.name === s.filename);
+      const file = entry && (entry.file || entry);
       if (file) {
         try { await loadAttributesFromFile(file); } catch (e) { console.error(e); }
       }

@@ -133,6 +133,30 @@ node transform.js --help
 
 Nach Änderungen an `src/` zuerst `node build.js` ausführen.
 
+## Import per Drag & Drop
+
+Daten lassen sich jederzeit per Drag & Drop ins Fenster laden (oder über den
+Dateiauswahl-Button der Drop-Zone). Alles wird lokal im Browser (IndexedDB)
+gespeichert und beim nächsten Öffnen automatisch geladen — funktioniert damit
+vollständig offline über `file://`, ohne Server.
+
+Unterstützte Drops:
+
+- **Einzeldateien** (auch mehrere gleichzeitig): Datensatz-JSON, `env.json`,
+  `pseudo.data.json`, Attribut-Dateien (`.tsv`/`.csv`/`.txt`). Die Erkennung
+  erfolgt inhaltsbasiert, Dateinamen sind frei.
+- **Ordner**: Der Ordner wird rekursiv eingelesen.
+- **ZIP-Archiv**: Wird direkt im Browser entpackt (ohne Dependencies, via
+  `DecompressionStream`; Stored- und Deflate-Einträge).
+
+Enthält ein Ordner-/ZIP-Drop eine `env.json`, ist sie **massgebend**: Die in
+`DATA_URL` und `DATA_ATTRIBUTES_URL` referenzierten Dateien werden relativ zur
+Lage der `env.json` im Drop aufgelöst und gezielt übernommen; nicht
+referenzierte Datensatz-/Env-Kandidaten werden ignoriert (mit Hinweis).
+Referenzen, die im Drop fehlen, werden gemeldet — auf einem Dev-Server greift
+dafür weiterhin der `fetch`-Fallback. Liegen mehrere Env-Dateien im Drop,
+gewinnt die Datei mit dem Namen `env.json`.
+
 ## Nutzung
 
 - **Suchfeld**: Namen oder ID eingeben (min. 2 Zeichen für große Datensätze)

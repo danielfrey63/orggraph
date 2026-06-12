@@ -132,7 +132,7 @@ beforeAll(async () => {
   globalThis.showTemporaryNotification = vi.fn();
   globalThis.showPasswordDialog = vi.fn();
   globalThis.setSingleRoot = vi.fn();
-  globalThis.storeFiles = vi.fn(async () => ({ stored: [], unknown: [] }));
+  globalThis.storeEntries = vi.fn(async () => ({ stored: [], unknown: [], missing: [], ignored: [] }));
   vi.stubGlobal('location', { reload: vi.fn() });
 
   await import('../src/sections/18-files-reset.js');

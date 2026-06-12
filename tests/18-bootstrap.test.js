@@ -118,7 +118,7 @@ const setupGlobals = () => {
   globalThis.showPasswordDialog = vi.fn();
   globalThis.setSingleRoot = vi.fn();
   globalThis.confirm = vi.fn(() => true);
-  globalThis.storeFiles = vi.fn(async () => ({ stored: [], unknown: [] }));
+  globalThis.storeEntries = vi.fn(async () => ({ stored: [], unknown: [], missing: [], ignored: [] }));
 };
 
 beforeAll(async () => {

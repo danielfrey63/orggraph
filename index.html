@@ -2923,24 +2923,141 @@ async function classifyFile(file) {
   return { kind: 'unknown', key: null, filename, text };
 }
 
+// ---- Relative-path resolution for folder/ZIP drops ----
+
+/** Normalize a relative path: backslashes to slashes, resolve '.'/'..' segments. */
+function normalizeRelPath(path) {
+  const out = [];
+  for (const part of String(path || '').replace(/\\/g, '/').split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') { out.pop(); continue; }
+    out.push(part);
+  }
+  return out.join('/');
+}
+
+/** Directory portion of a normalized path ('a/b/c.json' -> 'a/b', 'c.json' -> ''). */
+function dirOf(path) {
+  const n = normalizeRelPath(path);
+  const i = n.lastIndexOf('/');
+  return i >= 0 ? n.slice(0, i) : '';
+}
+
+/** Final path segment without query/fragment ('a/b/c.txt?v=1' -> 'c.txt'). */
+function basenameOf(path) {
+  const n = normalizeRelPath(String(path || '').split('?')[0].split('#')[0]);
+  const i = n.lastIndexOf('/');
+  return i >= 0 ? n.slice(i + 1) : n;
+}
+
 /**
- * Persist a list of files (from a drop or multi-file picker). Returns a summary
- * { stored: [{kind, filename}], unknown: [filename] }.
+ * Resolve an env reference (e.g. "./data.json") against the env file's
+ * location inside the dropped file set. Absolute URLs (http:, data:, …)
+ * cannot be resolved within a drop and yield null.
  */
-async function storeFiles(fileList) {
+function resolveRefPath(envPath, ref) {
+  const r = String(ref || '');
+  if (!r || /^[a-z][a-z0-9+.-]*:/i.test(r)) return null;
+  return normalizeRelPath(dirOf(envPath) + '/' + r.split('?')[0].split('#')[0]);
+}
+
+/** Find the dropped entry an env reference points at (path match, unique-basename fallback). */
+function findEntryByRef(entries, envPath, ref) {
+  const target = resolveRefPath(envPath, ref);
+  if (target) {
+    const hit = entries.find(en => normalizeRelPath(en.path) === target);
+    if (hit) return hit;
+  }
+  const base = basenameOf(ref);
+  const hits = entries.filter(en => basenameOf(en.path) === base);
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * Persist dropped entries [{path, file}] from a folder/ZIP/multi-file drop;
+ * plain File objects are tolerated (path defaults to the filename). When an
+ * env config is part of the drop it is authoritative: its DATA_URL /
+ * DATA_ATTRIBUTES_URL references decide which dataset/attribute files are
+ * stored, and unreferenced dataset/env candidates are ignored instead of
+ * clobbering each other. Without an env file every entry is classified by
+ * content as before. Returns { stored, unknown, missing, ignored }.
+ */
+async function storeEntries(entryList) {
   const stored = [];
   const unknown = [];
-  for (const file of Array.from(fileList || [])) {
-    const c = await classifyFile(file);
-    if (c.kind === 'unknown') { unknown.push(c.filename); continue; }
-    await idbPut(c.key, c.text);
-    if (c.kind === 'attr') {
-      // remember original filename alongside the content for category derivation
-      await idbPut(c.key + '::name', c.filename);
+  const missing = [];
+  const ignored = [];
+
+  const classified = [];
+  for (const raw of Array.from(entryList || [])) {
+    const file = raw && raw.file ? raw.file : raw;
+    if (!file || typeof file.text !== 'function') continue;
+    const path = (raw && raw.path) || file.name || 'unnamed';
+    classified.push({ path, ...(await classifyFile(file)) });
+  }
+
+  const storeAttr = async (c) => {
+    // remember original filename alongside the content for category derivation
+    await idbPut(ATTR_PREFIX + c.filename, c.text);
+    await idbPut(ATTR_PREFIX + c.filename + '::name', c.filename);
+    stored.push({ kind: 'attr', filename: c.filename });
+  };
+
+  // Pick the authoritative env: a file named env.json wins over variants.
+  const envs = classified.filter(c => c.kind === 'env');
+  const env = envs.length <= 1
+    ? (envs[0] || null)
+    : envs.find(c => basenameOf(c.path).toLowerCase() === 'env.json')
+      || [...envs].sort((a, b) => a.path.localeCompare(b.path))[0];
+
+  const used = new Set();
+  if (env) {
+    used.add(env);
+    await idbPut(KEY_ENV, env.text);
+    stored.push({ kind: 'env', filename: env.filename });
+
+    // classifyFile only marks parseable JSON as env, so this cannot throw.
+    const cfg = JSON.parse(env.text);
+
+    if (cfg.DATA_URL) {
+      const hit = findEntryByRef(classified, env.path, cfg.DATA_URL);
+      if (hit) {
+        used.add(hit);
+        await idbPut(KEY_DATA, hit.text);
+        stored.push({ kind: 'data', filename: hit.filename });
+      } else {
+        missing.push(String(cfg.DATA_URL));
+      }
     }
+
+    const attrRefs = cfg.DATA_ATTRIBUTES_URL
+      ? (Array.isArray(cfg.DATA_ATTRIBUTES_URL) ? cfg.DATA_ATTRIBUTES_URL : [cfg.DATA_ATTRIBUTES_URL])
+      : [];
+    for (const ref of attrRefs) {
+      const hit = findEntryByRef(classified, env.path, ref);
+      if (hit) { used.add(hit); await storeAttr(hit); }
+      else missing.push(String(ref));
+    }
+  }
+
+  for (const c of classified) {
+    if (used.has(c)) continue;
+    if (c.kind === 'unknown') { unknown.push(c.filename); continue; }
+    if (env && (c.kind === 'env' || c.kind === 'data')) { ignored.push(c.filename); continue; }
+    if (c.kind === 'attr') { await storeAttr(c); continue; }
+    await idbPut(c.key, c.text);
     stored.push({ kind: c.kind, filename: c.filename });
   }
-  return { stored, unknown };
+
+  return { stored, unknown, missing, ignored };
+}
+
+/**
+ * Persist a list of files (from a drop or multi-file picker). Returns a summary
+ * { stored: [{kind, filename}], unknown: [filename], missing, ignored }.
+ */
+async function storeFiles(fileList) {
+  return storeEntries(Array.from(fileList || []));
 }
 
 async function getStoredText(key) {
@@ -2982,6 +3099,161 @@ async function hasStoredData() {
 let _overlay = null;
 let _dragDepth = 0;
 
+// ---- ZIP intake (dependency-free, DecompressionStream-based) ----
+
+function isZipName(name) {
+  return /\.zip$/i.test(String(name || ''));
+}
+
+/** Inflate a raw-deflate byte stream via the browser-native DecompressionStream. */
+async function inflateRaw(bytes) {
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  writer.write(bytes).catch(() => {}); // errors surface via reader.read()
+  writer.close().catch(() => {});
+  const reader = ds.readable.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.length;
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
+/**
+ * Minimal ZIP reader (central directory; stored + deflate entries). Returns
+ * [{ path, file }] where file is a blob-like { name, text(), arrayBuffer() } —
+ * downstream code only needs those, and jsdom's File lacks both methods.
+ */
+async function readZipEntries(zipFile) {
+  const buf = new Uint8Array(await zipFile.arrayBuffer());
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+
+  // End-of-central-directory record: scan backwards (trailing comment possible).
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= 0; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('Kein gültiges ZIP-Archiv');
+
+  const count = view.getUint16(eocd + 10, true);
+  let off = view.getUint32(eocd + 16, true);
+  const decoder = new TextDecoder();
+  const entries = [];
+  for (let n = 0; n < count; n++) {
+    if (view.getUint32(off, true) !== 0x02014b50) throw new Error('ZIP-Verzeichnis beschädigt');
+    const flags = view.getUint16(off + 8, true);
+    const method = view.getUint16(off + 10, true);
+    const csize = view.getUint32(off + 20, true);
+    const nameLen = view.getUint16(off + 28, true);
+    const extraLen = view.getUint16(off + 30, true);
+    const commentLen = view.getUint16(off + 32, true);
+    const localOff = view.getUint32(off + 42, true);
+    const path = decoder.decode(buf.subarray(off + 46, off + 46 + nameLen));
+    off += 46 + nameLen + extraLen + commentLen;
+
+    if (path.endsWith('/')) continue; // directory entry
+    if (flags & 0x1) throw new Error(`Verschlüsselte ZIP-Einträge werden nicht unterstützt: ${path}`);
+    if (method !== 0 && method !== 8) throw new Error(`Nicht unterstützte ZIP-Kompression (${method}): ${path}`);
+
+    // The local header repeats name/extra with possibly different lengths.
+    const lNameLen = view.getUint16(localOff + 26, true);
+    const lExtraLen = view.getUint16(localOff + 28, true);
+    const start = localOff + 30 + lNameLen + lExtraLen;
+    const raw = buf.subarray(start, start + csize);
+    const bytes = method === 0 ? raw : await inflateRaw(raw);
+    const name = path.split('/').pop();
+    entries.push({
+      path,
+      file: {
+        name,
+        text: async () => decoder.decode(bytes),
+        arrayBuffer: async () => bytes.slice().buffer,
+      },
+    });
+  }
+  return entries;
+}
+
+/** Expand ZIP archives within a flat entry list; unreadable archives are reported and skipped. */
+async function expandZipEntries(entries) {
+  const out = [];
+  for (const en of entries) {
+    if (!isZipName(en.path)) { out.push(en); continue; }
+    try {
+      out.push(...(await readZipEntries(en.file)));
+    } catch (e) {
+      console.error('[dropzone] ZIP konnte nicht gelesen werden:', en.path, e);
+      showTemporaryNotification(`ZIP-Archiv konnte nicht gelesen werden: ${en.path}`, 5000);
+    }
+  }
+  return out;
+}
+
+// ---- Folder traversal (webkitGetAsEntry FileSystem API) ----
+
+function readEntryFile(entry) {
+  return new Promise((resolve, reject) => entry.file(resolve, reject));
+}
+
+function readDirectoryEntries(reader) {
+  return new Promise((resolve, reject) => {
+    const all = [];
+    // readEntries delivers batches (~100); loop until an empty batch arrives.
+    const step = () => reader.readEntries((batch) => {
+      if (!batch.length) { resolve(all); return; }
+      all.push(...batch);
+      step();
+    }, reject);
+    step();
+  });
+}
+
+async function walkFsEntry(entry, prefix, out) {
+  if (entry.isFile) {
+    out.push({ path: prefix + entry.name, file: await readEntryFile(entry) });
+  } else if (entry.isDirectory) {
+    const children = await readDirectoryEntries(entry.createReader());
+    for (const child of children) await walkFsEntry(child, prefix + entry.name + '/', out);
+  }
+}
+
+/**
+ * Turn a drop's DataTransfer into flat [{path, file}] entries: folders are
+ * walked recursively, ZIP archives unpacked. Must be CALLED SYNCHRONOUSLY
+ * from the drop handler — webkitGetAsEntry() only works while the event is
+ * live; the entry handles are materialized before the first await.
+ */
+async function collectDropPayload(dataTransfer) {
+  const handles = [];
+  const items = dataTransfer && dataTransfer.items;
+  if (items && items.length) {
+    for (const item of Array.from(items)) {
+      const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+      if (entry) { handles.push({ entry }); continue; }
+      const file = typeof item.getAsFile === 'function' ? item.getAsFile() : null;
+      if (file) handles.push({ file });
+    }
+  } else {
+    for (const file of Array.from((dataTransfer && dataTransfer.files) || [])) {
+      if (file) handles.push({ file });
+    }
+  }
+
+  const flat = [];
+  for (const h of handles) {
+    if (h.entry) await walkFsEntry(h.entry, '', flat);
+    else flat.push({ path: h.file.name, file: h.file });
+  }
+  return expandZipEntries(flat);
+}
+
 function ensureOverlay(onFiles) {
   if (_overlay) return _overlay;
 
@@ -2994,8 +3266,10 @@ function ensureOverlay(onFiles) {
       <p class="dz-text">
         JSON-Datensatz, optional <code>pseudo.data.json</code>, <code>env.json</code>
         und Attribut-Dateien (<code>.tsv</code>/<code>.csv</code>/<code>.txt</code>).<br>
-        Mehrere Dateien gleichzeitig sind möglich. Die Inhalte werden lokal im Browser
-        (IndexedDB) gespeichert und beim nächsten Öffnen automatisch geladen.
+        Auch möglich: ein ganzer Ordner oder ein ZIP-Archiv mit <code>env.json</code> —
+        die darin referenzierten Dateien werden automatisch mitgeladen.<br>
+        Die Inhalte werden lokal im Browser (IndexedDB) gespeichert und beim
+        nächsten Öffnen automatisch geladen.
       </p>
       <button class="dz-pick" type="button">Dateien auswählen…</button>
     </div>`;
@@ -3005,13 +3279,16 @@ function ensureOverlay(onFiles) {
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.multiple = true;
-    picker.accept = '.json,.tsv,.csv,.txt,application/json';
+    picker.accept = '.json,.tsv,.csv,.txt,.zip,application/json,application/zip';
     picker.style.display = 'none';
     document.body.appendChild(picker);
     picker.addEventListener('change', () => {
-      const files = picker.files;
+      const files = Array.from(picker.files || []);
       picker.remove();
-      if (files && files.length) onFiles(files);
+      if (!files.length) return;
+      expandZipEntries(files.map((f) => ({ path: f.name, file: f }))).then((entries) => {
+        if (entries.length) onFiles(entries);
+      });
     });
     picker.click();
   });
@@ -3030,8 +3307,8 @@ function hideDropZone() {
 }
 
 /**
- * Install window-wide drag&drop so files can be dropped any time to (re)load.
- * onFiles receives a FileList.
+ * Install window-wide drag&drop so files, folders or ZIP archives can be
+ * dropped any time to (re)load. onFiles receives flat [{path, file}] entries.
  */
 function installGlobalDrop(onFiles) {
   const onDragEnter = (e) => {
@@ -3054,8 +3331,11 @@ function installGlobalDrop(onFiles) {
     e.preventDefault();
     _dragDepth = 0;
     document.body.classList.remove('dz-dragging');
-    const files = e.dataTransfer && e.dataTransfer.files;
-    if (files && files.length) onFiles(files);
+    if (!e.dataTransfer) return;
+    // collectDropPayload materializes the entry handles synchronously here.
+    collectDropPayload(e.dataTransfer).then((entries) => {
+      if (entries.length) onFiles(entries);
+    });
   };
 
   window.addEventListener('dragenter', onDragEnter);
@@ -8559,12 +8839,18 @@ let savedAllowedOrgs = new Set();
  * geladen, damit der reguläre Init-Pfad (inkl. Start-Knoten) greift. Reine
  * Attribut-Drops werden live nachgeladen, ohne die Ansicht zu verlieren.
  */
-async function handleDroppedFiles(fileList) {
-  const summary = await storeFiles(fileList);
+async function handleDroppedFiles(entryList) {
+  const summary = await storeEntries(entryList);
   await requestPersistence();
 
   if (summary.unknown.length) {
     showTemporaryNotification(`Nicht erkannt, ignoriert: ${summary.unknown.join(', ')}`, 5000);
+  }
+  if (summary.missing.length) {
+    showTemporaryNotification(`In env.json referenziert, aber nicht im Import enthalten: ${summary.missing.join(', ')}`, 6000);
+  }
+  if (summary.ignored.length) {
+    showTemporaryNotification(`Nicht verwendet (env.json ist massgebend): ${summary.ignored.join(', ')}`, 5000);
   }
   if (!summary.stored.length) return;
 
@@ -8574,7 +8860,8 @@ async function handleDroppedFiles(fileList) {
   if (onlyAttributes) {
     // Datensatz steht bereits – Attribute inkrementell nachladen.
     for (const s of summary.stored) {
-      const file = Array.from(fileList).find(f => f.name === s.filename);
+      const entry = Array.from(entryList).find(en => (en && en.file ? en.file : en)?.name === s.filename);
+      const file = entry && (entry.file || entry);
       if (file) {
         try { await loadAttributesFromFile(file); } catch (e) { console.error(e); }
       }

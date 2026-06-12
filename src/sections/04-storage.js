@@ -139,24 +139,141 @@ export async function classifyFile(file) {
   return { kind: 'unknown', key: null, filename, text };
 }
 
+// ---- Relative-path resolution for folder/ZIP drops ----
+
+/** Normalize a relative path: backslashes to slashes, resolve '.'/'..' segments. */
+export function normalizeRelPath(path) {
+  const out = [];
+  for (const part of String(path || '').replace(/\\/g, '/').split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') { out.pop(); continue; }
+    out.push(part);
+  }
+  return out.join('/');
+}
+
+/** Directory portion of a normalized path ('a/b/c.json' -> 'a/b', 'c.json' -> ''). */
+export function dirOf(path) {
+  const n = normalizeRelPath(path);
+  const i = n.lastIndexOf('/');
+  return i >= 0 ? n.slice(0, i) : '';
+}
+
+/** Final path segment without query/fragment ('a/b/c.txt?v=1' -> 'c.txt'). */
+export function basenameOf(path) {
+  const n = normalizeRelPath(String(path || '').split('?')[0].split('#')[0]);
+  const i = n.lastIndexOf('/');
+  return i >= 0 ? n.slice(i + 1) : n;
+}
+
 /**
- * Persist a list of files (from a drop or multi-file picker). Returns a summary
- * { stored: [{kind, filename}], unknown: [filename] }.
+ * Resolve an env reference (e.g. "./data.json") against the env file's
+ * location inside the dropped file set. Absolute URLs (http:, data:, …)
+ * cannot be resolved within a drop and yield null.
  */
-export async function storeFiles(fileList) {
+export function resolveRefPath(envPath, ref) {
+  const r = String(ref || '');
+  if (!r || /^[a-z][a-z0-9+.-]*:/i.test(r)) return null;
+  return normalizeRelPath(dirOf(envPath) + '/' + r.split('?')[0].split('#')[0]);
+}
+
+/** Find the dropped entry an env reference points at (path match, unique-basename fallback). */
+export function findEntryByRef(entries, envPath, ref) {
+  const target = resolveRefPath(envPath, ref);
+  if (target) {
+    const hit = entries.find(en => normalizeRelPath(en.path) === target);
+    if (hit) return hit;
+  }
+  const base = basenameOf(ref);
+  const hits = entries.filter(en => basenameOf(en.path) === base);
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * Persist dropped entries [{path, file}] from a folder/ZIP/multi-file drop;
+ * plain File objects are tolerated (path defaults to the filename). When an
+ * env config is part of the drop it is authoritative: its DATA_URL /
+ * DATA_ATTRIBUTES_URL references decide which dataset/attribute files are
+ * stored, and unreferenced dataset/env candidates are ignored instead of
+ * clobbering each other. Without an env file every entry is classified by
+ * content as before. Returns { stored, unknown, missing, ignored }.
+ */
+export async function storeEntries(entryList) {
   const stored = [];
   const unknown = [];
-  for (const file of Array.from(fileList || [])) {
-    const c = await classifyFile(file);
-    if (c.kind === 'unknown') { unknown.push(c.filename); continue; }
-    await idbPut(c.key, c.text);
-    if (c.kind === 'attr') {
-      // remember original filename alongside the content for category derivation
-      await idbPut(c.key + '::name', c.filename);
+  const missing = [];
+  const ignored = [];
+
+  const classified = [];
+  for (const raw of Array.from(entryList || [])) {
+    const file = raw && raw.file ? raw.file : raw;
+    if (!file || typeof file.text !== 'function') continue;
+    const path = (raw && raw.path) || file.name || 'unnamed';
+    classified.push({ path, ...(await classifyFile(file)) });
+  }
+
+  const storeAttr = async (c) => {
+    // remember original filename alongside the content for category derivation
+    await idbPut(ATTR_PREFIX + c.filename, c.text);
+    await idbPut(ATTR_PREFIX + c.filename + '::name', c.filename);
+    stored.push({ kind: 'attr', filename: c.filename });
+  };
+
+  // Pick the authoritative env: a file named env.json wins over variants.
+  const envs = classified.filter(c => c.kind === 'env');
+  const env = envs.length <= 1
+    ? (envs[0] || null)
+    : envs.find(c => basenameOf(c.path).toLowerCase() === 'env.json')
+      || [...envs].sort((a, b) => a.path.localeCompare(b.path))[0];
+
+  const used = new Set();
+  if (env) {
+    used.add(env);
+    await idbPut(KEY_ENV, env.text);
+    stored.push({ kind: 'env', filename: env.filename });
+
+    // classifyFile only marks parseable JSON as env, so this cannot throw.
+    const cfg = JSON.parse(env.text);
+
+    if (cfg.DATA_URL) {
+      const hit = findEntryByRef(classified, env.path, cfg.DATA_URL);
+      if (hit) {
+        used.add(hit);
+        await idbPut(KEY_DATA, hit.text);
+        stored.push({ kind: 'data', filename: hit.filename });
+      } else {
+        missing.push(String(cfg.DATA_URL));
+      }
     }
+
+    const attrRefs = cfg.DATA_ATTRIBUTES_URL
+      ? (Array.isArray(cfg.DATA_ATTRIBUTES_URL) ? cfg.DATA_ATTRIBUTES_URL : [cfg.DATA_ATTRIBUTES_URL])
+      : [];
+    for (const ref of attrRefs) {
+      const hit = findEntryByRef(classified, env.path, ref);
+      if (hit) { used.add(hit); await storeAttr(hit); }
+      else missing.push(String(ref));
+    }
+  }
+
+  for (const c of classified) {
+    if (used.has(c)) continue;
+    if (c.kind === 'unknown') { unknown.push(c.filename); continue; }
+    if (env && (c.kind === 'env' || c.kind === 'data')) { ignored.push(c.filename); continue; }
+    if (c.kind === 'attr') { await storeAttr(c); continue; }
+    await idbPut(c.key, c.text);
     stored.push({ kind: c.kind, filename: c.filename });
   }
-  return { stored, unknown };
+
+  return { stored, unknown, missing, ignored };
+}
+
+/**
+ * Persist a list of files (from a drop or multi-file picker). Returns a summary
+ * { stored: [{kind, filename}], unknown: [filename], missing, ignored }.
+ */
+export async function storeFiles(fileList) {
+  return storeEntries(Array.from(fileList || []));
 }
 
 export async function getStoredText(key) {

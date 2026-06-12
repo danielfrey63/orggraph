@@ -10,6 +10,12 @@ import {
   looksLikePseudo,
   looksLikeData,
   classifyFile,
+  normalizeRelPath,
+  dirOf,
+  basenameOf,
+  resolveRefPath,
+  findEntryByRef,
+  storeEntries,
   storeFiles,
   idbGet,
   idbPut,
@@ -121,8 +127,136 @@ describe('storeFiles', () => {
   });
 
   it('handles an empty or missing file list', async () => {
-    expect(await storeFiles([])).toEqual({ stored: [], unknown: [] });
-    expect(await storeFiles(null)).toEqual({ stored: [], unknown: [] });
+    expect(await storeFiles([])).toEqual({ stored: [], unknown: [], missing: [], ignored: [] });
+    expect(await storeFiles(null)).toEqual({ stored: [], unknown: [], missing: [], ignored: [] });
+  });
+});
+
+describe('path helpers', () => {
+  it('normalizeRelPath strips ./, resolves .. and unifies backslashes', () => {
+    expect(normalizeRelPath('./data.json')).toBe('data.json');
+    expect(normalizeRelPath('a/./b/../c.json')).toBe('a/c.json');
+    expect(normalizeRelPath('a\\b\\c.txt')).toBe('a/b/c.txt');
+    expect(normalizeRelPath('')).toBe('');
+    expect(normalizeRelPath(null)).toBe('');
+  });
+
+  it('dirOf returns the directory portion or empty string', () => {
+    expect(dirOf('a/b/c.json')).toBe('a/b');
+    expect(dirOf('c.json')).toBe('');
+  });
+
+  it('basenameOf returns the final segment without query/fragment', () => {
+    expect(basenameOf('a/b/c.txt?v=1')).toBe('c.txt');
+    expect(basenameOf('./Team.tsv#x')).toBe('Team.tsv');
+    expect(basenameOf('plain.json')).toBe('plain.json');
+  });
+});
+
+describe('env reference resolution', () => {
+  it('resolveRefPath resolves relative refs against the env location', () => {
+    expect(resolveRefPath('pkg/env.json', './data.json')).toBe('pkg/data.json');
+    expect(resolveRefPath('env.json', './attrs/Team.tsv')).toBe('attrs/Team.tsv');
+    expect(resolveRefPath('pkg/env.json', '../shared/d.json')).toBe('shared/d.json');
+  });
+
+  it('resolveRefPath returns null for absolute URLs and empty refs', () => {
+    expect(resolveRefPath('env.json', 'https://example.com/d.json')).toBeNull();
+    expect(resolveRefPath('env.json', 'data:application/json,{}')).toBeNull();
+    expect(resolveRefPath('env.json', '')).toBeNull();
+  });
+
+  it('findEntryByRef matches by resolved path first', () => {
+    const entries = [{ path: 'pkg/data.json' }, { path: 'other/data.json' }];
+    expect(findEntryByRef(entries, 'pkg/env.json', './data.json')).toBe(entries[0]);
+  });
+
+  it('findEntryByRef falls back to a unique basename match', () => {
+    const entries = [{ path: 'somewhere/else/data.hrm.json' }];
+    expect(findEntryByRef(entries, 'env.json', './data.hrm.json')).toBe(entries[0]);
+  });
+
+  it('findEntryByRef returns null on ambiguous or absent matches', () => {
+    const two = [{ path: 'a/d.json' }, { path: 'b/d.json' }];
+    expect(findEntryByRef(two, 'env.json', './d.json')).toBeNull();
+    expect(findEntryByRef([], 'env.json', './d.json')).toBeNull();
+    expect(findEntryByRef(two, 'env.json', 'https://x/d.json')).toBeNull();
+  });
+});
+
+describe('storeEntries (env-driven folder/zip drops)', () => {
+  const entry = (path, content) => ({
+    path,
+    file: { name: path.split('/').pop(), text: async () => content },
+  });
+
+  it('lets env.json decide which dataset and attribute files are stored', async () => {
+    const result = await storeEntries([
+      entry('pkg/env.json', JSON.stringify({
+        DATA_URL: './data.hrm.json',
+        DATA_ATTRIBUTES_URL: ['./attrs/Team.tsv'],
+      })),
+      entry('pkg/data.json', '{"persons":[{"id":"p-other"}]}'),
+      entry('pkg/data.hrm.json', '{"persons":[{"id":"p-hrm"}]}'),
+      entry('pkg/attrs/Team.tsv', 'a@b\tRole'),
+      entry('pkg/pseudo.data.json', '{"names":["Alias"]}'),
+      entry('pkg/junk.bin', 'garbage'),
+    ]);
+
+    expect(result.stored).toEqual([
+      { kind: 'env', filename: 'env.json' },
+      { kind: 'data', filename: 'data.hrm.json' },
+      { kind: 'attr', filename: 'Team.tsv' },
+      { kind: 'pseudo', filename: 'pseudo.data.json' },
+    ]);
+    expect(result.ignored).toEqual(['data.json']);
+    expect(result.unknown).toEqual(['junk.bin']);
+    expect(result.missing).toEqual([]);
+    expect(await getStoredText(KEY_DATA)).toContain('p-hrm');
+    expect(await getStoredText(KEY_PSEUDO)).toContain('Alias');
+    expect(await getStoredText(ATTR_PREFIX + 'Team.tsv::name')).toBe('Team.tsv');
+  });
+
+  it('reports references that are not part of the drop as missing', async () => {
+    const result = await storeEntries([
+      entry('env.json', JSON.stringify({
+        DATA_URL: './data.json',
+        DATA_ATTRIBUTES_URL: './Team.tsv',
+      })),
+    ]);
+    expect(result.stored).toEqual([{ kind: 'env', filename: 'env.json' }]);
+    expect(result.missing).toEqual(['./data.json', './Team.tsv']);
+    expect(await getStoredText(KEY_ENV)).toContain('DATA_URL');
+  });
+
+  it('prefers a file named env.json over env variants', async () => {
+    const result = await storeEntries([
+      entry('pkg/env.sem.json', '{"DATA_URL":"./data.sem.json"}'),
+      entry('pkg/env.json', '{"DATA_URL":"./data.json"}'),
+      entry('pkg/data.json', '{"persons":[{"id":"p-main"}]}'),
+      entry('pkg/data.sem.json', '{"persons":[{"id":"p-sem"}]}'),
+    ]);
+    expect(result.stored).toContainEqual({ kind: 'env', filename: 'env.json' });
+    expect(result.ignored.sort()).toEqual(['data.sem.json', 'env.sem.json']);
+    expect(await getStoredText(KEY_DATA)).toContain('p-main');
+    expect(await getStoredJson(KEY_ENV)).toEqual({ DATA_URL: './data.json' });
+  });
+
+  it('stores unreferenced attribute files additively alongside an env drop', async () => {
+    const result = await storeEntries([
+      entry('env.json', '{"TOOLBAR_DEPTH_DEFAULT":2}'),
+      entry('Extra.csv', 'x@y,Z'),
+    ]);
+    expect(result.stored).toEqual([
+      { kind: 'env', filename: 'env.json' },
+      { kind: 'attr', filename: 'Extra.csv' },
+    ]);
+    expect(result.missing).toEqual([]);
+  });
+
+  it('skips entries without a readable text() function', async () => {
+    const result = await storeEntries([null, { path: 'x.json' }, entry('d.json', '{"persons":[]}')]);
+    expect(result.stored).toEqual([{ kind: 'data', filename: 'd.json' }]);
   });
 });
 

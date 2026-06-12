@@ -452,6 +452,29 @@ Ausgangslage 22,2 % brutto → Endstand **90,6 % absolut brutto** über alle
 19 Sektionen, ohne Datei-Ausschlüsse, mit 5 begründeten Funktions-Ausnahmen.
 327 Tests in 24 Suiten. Gate `thresholds.lines: 80` dauerhaft aktiv.
 
+## Feature: env-gesteuerter Import per Ordner-/ZIP-Drop (Juni 2026)
+
+Erste Funktionserweiterung nach Abschluss der Refactoring-Phasen — die Baseline
+wird ab jetzt mit jedem Feature-Commit nachgezogen (`verify` bleibt das Gate
+gegen unbeabsichtigte Build-Drift).
+
+- **Ordner-Drop**: rekursive Traversierung via `webkitGetAsEntry` (Batch-Loop
+  über `readEntries`), flache `{path, file}`-Entries mit relativen Pfaden.
+- **ZIP-Drop**: dependency-freier Minimal-Reader (`05-dropzone.js`) — Central
+  Directory + Stored/Deflate via nativem `DecompressionStream('deflate-raw')`;
+  verschlüsselte/exotische Einträge werden mit klarer Meldung abgelehnt.
+  Gegen echtes PowerShell-`Compress-Archive`-Archiv (2,7 MB Datendatei)
+  verifiziert.
+- **env.json als Quelle der Wahrheit** (`storeEntries` in `04-storage.js`):
+  `DATA_URL`/`DATA_ATTRIBUTES_URL` werden relativ zur env-Position im Drop
+  aufgelöst (Pfad-Match, eindeutiger Basename-Fallback); nicht referenzierte
+  Datensatz-/Env-Kandidaten → `ignored`, fehlende Referenzen → `missing`
+  (beides als Notification in `18-files-reset.js`). Bei mehreren Env-Dateien
+  gewinnt `env.json`. Ohne Env-Datei unverändert inhaltsbasierte Klassifikation.
+- Alles landet wie bisher in IndexedDB → läuft offline über `file://`.
+- **356 Tests in 31 Suiten grün, Coverage 91,22 % Lines (brutto 6796/7450 =
+  91,2 % im assemblierten `index.html`), Verify grün, Baseline aktualisiert.**
+
 ## Offene Fragen / Risiken
 
 - `package-lock.json` lokal modifiziert, Ursache unklar — bei Phase-5-Setup sauber neu erzeugen.
