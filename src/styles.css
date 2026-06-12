@@ -915,7 +915,7 @@ input#depth {
   --cluster-fill: rgba(79,70,229,0.10);
   --cluster-stroke: rgba(79,70,229,0.25);
   --cluster-opacity: 1;
-  --cluster-pad: 20;
+  --cluster-pad: 10;
   --attribute-circle-gap: 1;
   --attribute-circle-stroke-width: 4;
   --node-with-attributes-fill: #000000;
