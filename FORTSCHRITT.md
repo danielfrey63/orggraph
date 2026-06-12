@@ -420,13 +420,25 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
   nach Global-Setup (gleiche Technik wie 18er-Bootstrap).
 - **320 Tests grün, Gate grün: 92,47 % brutto.** Nur noch `14-render` in exclude.
 
-## Nächster Schritt (Iteration 37)
+### Iteration 37 — `14-render` im Nenner, **exclude-Liste LEER** (7 Tests)
+- Integrationstests mit echtem d3 + echten 13er-Layout-Helfern: renderGraph
+  (SVG-Skelett mit defs/marker/zoom-layer/Gruppen, Personen-Filter inkl.
+  Org-Link-Ausschluss, inkrementelles Re-Render mit Exit-Removal) und
+  transitionGraph (Teardown/Buildup level-weise mit Fake-Timern, Race-Abort
+  bei neuerer Transition-ID, No-Change-Direktpfad, Erst-Render mit null-oldSub).
+- **`coverage.exclude` ist leer — alle 19 Sektionen zählen.**
+- **327 Tests grün, Gate grün: 91,09 % BRUTTO über den gesamten App-Code.**
+  14-render einzeln: 593/751 = 79 % (ungedeckt: Drag-/Zoom-Handler-Bodies,
+  Tick-Interna — nur in echten Browser-Gesten erreichbar).
+- Verify grün.
 
-Letzte Sektion `14-render` (786 Z.): transitionGraph (Async-Orchestrierung mit
-Transition-ID-Race-Guard — Logikpfade mit Stubs), renderGraph (testbare Anteile
-mit echtem d3 + SVG-Fixture; Drag-/Zoom-Handler ggf. als begründete Ausnahmen).
-Danach Schluss-Audit Phase 7: Brutto-Zahl mit und ohne verbleibende Ausnahmen,
-README-Abgleich, FERTIG-Bilanz.
+## Nächster Schritt (Iteration 38)
+
+Schluss-Audit Phase 7: Brutto-Zahl mit und ohne die 5 verbleibenden
+v8-ignore-Marker ausweisen (Skript aus Iteration 14 wiederverwenden),
+README-Coverage-Abschnitt auf den neuen Stand bringen (91 % brutto, keine
+Datei-Ausschlüsse), Audits aus Iteration 20 wiederholen (Build ohne
+node_modules, Idempotenz, git status), dann FERTIG-Bilanz.
 
 ## Offene Fragen / Risiken
 
