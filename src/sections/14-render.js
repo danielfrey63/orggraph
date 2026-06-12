@@ -402,7 +402,24 @@ export function renderGraph(sub) {
             positioned.add(String(n.id));
         }
     });
-    
+
+    // New root nodes have no positioned parent and would otherwise fall into
+    // the random center fallback, landing in the middle of the existing cloud.
+    // Place them outside the hull instead and expand their subtree from there.
+    const rootIds = selectedRootIds.length > 0 ? selectedRootIds : [currentSelectedId].filter(Boolean);
+    for (const rootIdRaw of rootIds) {
+      const rootId = String(rootIdRaw);
+      if (!newNodeIds.has(rootId)) continue;
+      const rootNode = personNodes.find(n => String(n.id) === rootId);
+      if (!rootNode) continue;
+      const alreadyPositioned = personNodes.filter(n => positioned.has(String(n.id)));
+      const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius', 8) * 1.5);
+      rootNode.x = pos.x;
+      rootNode.y = pos.y;
+      positioned.add(rootId);
+      queue.push({ nodeId: rootId, x: pos.x, y: pos.y, level: 0 });
+    }
+
     // Expansion ohne Parents (includeParents = false)
     radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positioned, false);
     

@@ -922,8 +922,7 @@ input#depth {
   --node-with-attributes-stroke: #4682b4;
   --node-with-attributes-stroke-width: 6;
   --nodes-without-attributes-opacity: 0.2;
-  --root-node-stroke: #f97316;
-  --root-node-stroke-width: 3;
+  --root-node-fill: #86efac;
 
   /* Simulation-Parameter */
   --link-distance: 20;
