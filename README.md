@@ -14,7 +14,7 @@ src/styles.css        # Styles
 vendor/d3.v7.min.js   # D3 (wird beim Build inlined)
 index.template.html   # HTML-Gerüst mit @@CSS@@/@@D3@@/@@APP@@-Platzhaltern
 build.js              # Inline-Build (nur Node-Builtins)
-verify.js             # Vergleich Build-Output vs. reference/index.baseline.html
+verify.js             # Prüft, ob index.html mit den Quellen in Sync ist (Re-Build + Vergleich)
 tests/*.test.js       # Vitest-Suiten
 ```
 
@@ -22,7 +22,7 @@ tests/*.test.js       # Vitest-Suiten
 
 ```bash
 node build.js     # erzeugt index.html aus Template + Quellen
-npm run verify    # Build + Abgleich gegen die Baseline (modulo Zeilenenden)
+npm run verify    # Re-Build + Sync-Check des committeten index.html (modulo Zeilenenden)
 ```
 
 `build.js` läuft mit purem Node (nur `node:fs`): Es inlined CSS, D3 und die Sektionen
