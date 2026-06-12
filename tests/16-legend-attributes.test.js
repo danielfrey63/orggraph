@@ -13,12 +13,27 @@ import {
 } from '../src/sections/16-legend-attributes.js';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
 import { colorToTransparent } from '../src/sections/08-color-geometry.js';
+import {
+  createLegendRow,
+  createLegendDepthSpacer,
+  createLegendTreeSpacer,
+  createLegendChip,
+  createLegendIconButton,
+  createLegendChevron,
+} from '../src/sections/12-legend-org.js';
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="attributeLegend"></div><span id="stats-attributes-count">0</span>';
   globalThis.ICON = ICON;
   globalThis.setIcon = setIcon;
   globalThis.colorToTransparent = colorToTransparent;
+  globalThis.createLegendRow = createLegendRow;
+  globalThis.createLegendDepthSpacer = createLegendDepthSpacer;
+  globalThis.createLegendTreeSpacer = createLegendTreeSpacer;
+  globalThis.createLegendChip = createLegendChip;
+  globalThis.createLegendIconButton = createLegendIconButton;
+  globalThis.createLegendChevron = createLegendChevron;
+  globalThis.getChevronSVG = getChevronSVG;
   globalThis.updateAttributeStats = vi.fn();
   globalThis.updateAttributeCircles = vi.fn();
   globalThis.exportCategoryAsTSV = vi.fn();

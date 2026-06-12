@@ -4919,6 +4919,82 @@ function updateHiddenLegendTitle() {
   }
 }
 
+// ===== Gemeinsame Legend-Row-Factories (OE-, Hidden- und Attribut-Legende) [DRY][CA] =====
+
+// Row-Skelett: .legend-row mit .legend-row-left (+ optional .legend-row-right)
+function createLegendRow({ active = false, withRight = true } = {}) {
+  const row = document.createElement('div');
+  row.className = active ? 'legend-row active' : 'legend-row';
+  const left = document.createElement('div');
+  left.className = 'legend-row-left';
+  row.appendChild(left);
+  let right = null;
+  if (withRight) {
+    right = document.createElement('div');
+    right.className = 'legend-row-right';
+    row.appendChild(right);
+  }
+  return { row, left, right };
+}
+
+// Einrückung pro Baum-Tiefe
+function createLegendDepthSpacer(widthPx) {
+  const spacer = document.createElement('div');
+  spacer.className = 'legend-depth-spacer';
+  spacer.style.width = `${widthPx}px`;
+  return spacer;
+}
+
+// Platzhalter, wo kein Chevron sitzt
+function createLegendTreeSpacer() {
+  const spacer = document.createElement('div');
+  spacer.className = 'legend-tree-spacer';
+  return spacer;
+}
+
+// Label-Chip
+function createLegendChip(text, title) {
+  const chip = document.createElement('span');
+  chip.className = 'legend-label-chip';
+  chip.textContent = text;
+  if (title) chip.title = title;
+  return chip;
+}
+
+// Aktions-Button rechts in der Row; onClick bekommt stopPropagation
+function createLegendIconButton({ icon, svg, title, className = '', onClick } = {}) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = className ? `legend-icon-btn ${className}` : 'legend-icon-btn';
+  if (title) btn.title = title;
+  if (icon) setIcon(btn, icon);
+  else if (svg) btn.innerHTML = svg;
+  btn.setAttribute('data-ignore-header-click', 'true');
+  if (onClick) btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(e); });
+  return btn;
+}
+
+// Auf-/Zuklapp-Chevron: toggelt das erste <ul> im umgebenden <li>
+// und meldet den neuen Zustand über onToggle(nowCollapsed)
+function createLegendChevron({ collapsed = false, onToggle } = {}) {
+  const chevron = document.createElement('button');
+  chevron.type = 'button';
+  chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
+  chevron.title = 'Ein-/Ausklappen';
+  chevron.innerHTML = getChevronSVG();
+  chevron.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const li = chevron.closest('li');
+    const sub = li && li.querySelector('ul');
+    if (!sub) return;
+    const wasCollapsed = sub.style.display === 'none';
+    sub.style.display = wasCollapsed ? '' : 'none';
+    chevron.className = wasCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
+    if (onToggle) onToggle(!wasCollapsed);
+  });
+  return chevron;
+}
+
 function buildHiddenLegend() {
   const legend = document.getElementById('hiddenLegend');
   if (!legend) return;
@@ -4936,63 +5012,37 @@ function buildHiddenLegend() {
   ul.className = 'legend-list';
   for (const [root, setIds] of hiddenByRoot.entries()) {
     const li = document.createElement('li');
-    const row = document.createElement('div');
-    row.className = 'legend-row'; // Kein .active State für ausgeblendete Items
-    
-    // Linker Bereich: Spacer + Label
-    const leftArea = document.createElement('div');
-    leftArea.className = 'legend-row-left';
-    
-    // Rechter Bereich: X-Button
-    const rightArea = document.createElement('div');
-    rightArea.className = 'legend-row-right';
-    
+    // Kein .active State für ausgeblendete Items
+    const { row, left, right } = createLegendRow();
+
     // Spacer statt Chevron
-    const spacer = document.createElement('div');
-    spacer.className = 'legend-tree-spacer';
-    leftArea.appendChild(spacer);
-    
+    left.appendChild(createLegendTreeSpacer());
+
     // Label (pseudonymisiert wenn aktiv)
     const node = byId.get(root);
     const name = getDisplayLabel(node);
-    const chip = document.createElement('span');
-    chip.className = 'legend-label-chip';
+    const chip = createLegendChip(`${name} (${setIds.size})`, name);
     chip.dataset.rootId = root; // Für spätere Aktualisierung
-    chip.textContent = `${name} (${setIds.size})`;
-    chip.title = name;
-    leftArea.appendChild(chip);
-    
+    left.appendChild(chip);
+
     // X-Button zum Entfernen (unhide)
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'legend-icon-btn';
-    removeBtn.title = 'Wieder einblenden';
-    setIcon(removeBtn, 'close');
-    removeBtn.setAttribute('data-ignore-header-click', 'true');
-    removeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      unhideSubtree(root);
-    });
-    rightArea.appendChild(removeBtn);
-    
+    right.appendChild(createLegendIconButton({
+      icon: 'close',
+      title: 'Wieder einblenden',
+      onClick: () => unhideSubtree(root),
+    }));
+
     // Eye-Button zum temporären Ein-/Ausblenden (ganz rechts)
     const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(root);
-    const eyeBtn = document.createElement('button');
-    eyeBtn.type = 'button';
-    // Verwende active-Klasse wie bei OEs/Attributen
-    eyeBtn.className = isVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
-    eyeBtn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
-    setIcon(eyeBtn, isVisible ? 'eye' : 'eyeClosed');
-    eyeBtn.dataset.rootId = root;
-    eyeBtn.setAttribute('data-ignore-header-click', 'true');
-    eyeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleHiddenRootVisibility(root);
+    const eyeBtn = createLegendIconButton({
+      icon: isVisible ? 'eye' : 'eyeClosed',
+      title: isVisible ? 'Temporär ausblenden' : 'Temporär einblenden',
+      className: isVisible ? 'active' : '',
+      onClick: () => toggleHiddenRootVisibility(root),
     });
-    rightArea.appendChild(eyeBtn);
-    
-    row.appendChild(leftArea);
-    row.appendChild(rightArea);
+    eyeBtn.dataset.rootId = root;
+    right.appendChild(eyeBtn);
+
     li.appendChild(row);
     ul.appendChild(li);
   }
@@ -5039,19 +5089,9 @@ function renderOrgLegendNode(oid, depth, options) {
   const lbl = getDisplayLabel(node, depth);
   const idAttr = `org_${id}`;
 
-  const row = document.createElement('div');
-  row.className = 'legend-row';
+  const { row, left } = createLegendRow();
 
-  const leftArea = document.createElement('div');
-  leftArea.className = 'legend-row-left';
-
-  const rightArea = document.createElement('div');
-  rightArea.className = 'legend-row-right';
-
-  const depthSpacer = document.createElement('div');
-  depthSpacer.className = 'legend-depth-spacer';
-  depthSpacer.style.width = `${Math.max(0, Number(depth) || 0) * 16}px`;
-  leftArea.appendChild(depthSpacer);
+  left.appendChild(createLegendDepthSpacer(Math.max(0, Number(depth) || 0) * 16));
 
   const rawChildren = Array.from((childrenProvider && childrenProvider(id)) || []);
   const kids = scopeSet
@@ -5059,43 +5099,18 @@ function renderOrgLegendNode(oid, depth, options) {
     : rawChildren;
 
   if (kids.length) {
-    const chevron = document.createElement('button');
-    chevron.type = 'button';
-    const isCollapsed = legendCollapsedItems.has(id);
-    chevron.className = isCollapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
-    chevron.title = 'Ein-/Ausklappen';
-    chevron.innerHTML = getChevronSVG();
-
-    chevron.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const sub = li.querySelector('ul');
-      const currentlyCollapsed = sub && sub.style.display === 'none';
-      if (sub) {
-        sub.style.display = currentlyCollapsed ? '' : 'none';
-        chevron.className = currentlyCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
-        if (currentlyCollapsed) {
-          legendCollapsedItems.delete(id);
-        } else {
-          legendCollapsedItems.add(id);
-        }
-      }
-    });
-
-    leftArea.appendChild(chevron);
+    left.appendChild(createLegendChevron({
+      collapsed: legendCollapsedItems.has(id),
+      onToggle: (nowCollapsed) => {
+        if (nowCollapsed) legendCollapsedItems.add(id);
+        else legendCollapsedItems.delete(id);
+      },
+    }));
   } else {
-    const spacer = document.createElement('div');
-    spacer.className = 'legend-tree-spacer';
-    leftArea.appendChild(spacer);
+    left.appendChild(createLegendTreeSpacer());
   }
 
-  const chip = document.createElement('span');
-  chip.className = 'legend-label-chip';
-  chip.textContent = lbl;
-  chip.title = lbl;
-  leftArea.appendChild(chip);
-
-  row.appendChild(leftArea);
-  row.appendChild(rightArea);
+  left.appendChild(createLegendChip(lbl, lbl));
 
   const updateRowState = () => {
     const isActive = allowedOrgs.has(id);
@@ -7848,75 +7863,36 @@ function buildAttributeLegend() {
     // Kategorie-Listenelement
     const catLi = document.createElement('li');
     
-    // Haupt-Row für Kategorie
-    const catRow = document.createElement('div');
-    catRow.className = 'legend-row';
-    
-    // Linker Bereich: Chevron + Label
-    const catLeftArea = document.createElement('div');
-    catLeftArea.className = 'legend-row-left';
-    
-    // Rechter Bereich: Action-Buttons
-    const catRightArea = document.createElement('div');
-    catRightArea.className = 'legend-row-right';
-    
+    // Haupt-Row für Kategorie (links Chevron + Label, rechts Action-Buttons)
+    const { row: catRow, left: catLeftArea, right: catRightArea } = createLegendRow();
+
     // Chevron für Kategorie
-    const chevron = document.createElement('button');
-    chevron.type = 'button';
-    chevron.className = collapsedCategories.has(cat) ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
-    chevron.title = 'Ein-/Ausklappen';
-    chevron.innerHTML = getChevronSVG();
-    
-    chevron.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const sub = catLi.querySelector('ul');
-      const isCollapsed = sub && sub.style.display === 'none';
-      
-      if (sub) {
-        sub.style.display = isCollapsed ? '' : 'none';
-        chevron.className = isCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
-        
-        if (isCollapsed) {
-          collapsedCategories.delete(cat);
-        } else {
-          collapsedCategories.add(cat);
-        }
-      }
-    });
-    
-    catLeftArea.appendChild(chevron);
-    
+    catLeftArea.appendChild(createLegendChevron({
+      collapsed: collapsedCategories.has(cat),
+      onToggle: (nowCollapsed) => {
+        if (nowCollapsed) collapsedCategories.add(cat);
+        else collapsedCategories.delete(cat);
+      },
+    }));
+
     // Kategorie-Label mit Anzahl
-    const catLabel = document.createElement('span');
-    catLabel.className = 'legend-label-chip';
     const total = items.reduce((s,it)=> s + (it.count||0), 0);
-    catLabel.textContent = `${cat} (${total})`;
-    catLabel.title = `${cat} - ${total} Einträge`;
-    catLeftArea.appendChild(catLabel);
-    
+    catLeftArea.appendChild(createLegendChip(`${cat} (${total})`, `${cat} - ${total} Einträge`));
+
     // Download-Button für Kategorie (TSV-Export) - vor Eye-Button
-    const catDownloadBtn = document.createElement('button');
-    catDownloadBtn.type = 'button';
-    catDownloadBtn.className = 'legend-icon-btn';
-    catDownloadBtn.title = `"${cat}" als TSV herunterladen`;
-    catDownloadBtn.innerHTML = getDownloadSVG();
-    catDownloadBtn.setAttribute('data-ignore-header-click', 'true');
-    
-    catDownloadBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      exportCategoryAsTSV(cat);
-    });
-    
-    catRightArea.appendChild(catDownloadBtn);
-    
+    catRightArea.appendChild(createLegendIconButton({
+      svg: getDownloadSVG(),
+      title: `"${cat}" als TSV herunterladen`,
+      onClick: () => exportCategoryAsTSV(cat),
+    }));
+
     // Eye-Toggle Button (rechts) - blendet Kategorie temporär aus
-    const eyeBtn = document.createElement('button');
-    eyeBtn.type = 'button';
     const isHidden = hiddenCategories.has(cat);
-    eyeBtn.className = isHidden ? 'legend-icon-btn hidden' : 'legend-icon-btn';
-    eyeBtn.title = isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden';
-    setIcon(eyeBtn, isHidden ? 'eyeClosed' : 'eye');
-    eyeBtn.setAttribute('data-ignore-header-click', 'true');
+    const eyeBtn = createLegendIconButton({
+      icon: isHidden ? 'eyeClosed' : 'eye',
+      title: isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
+      className: isHidden ? 'hidden' : '',
+    });
 
     eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -7952,24 +7928,14 @@ function buildAttributeLegend() {
     }
     
     if (isModified && hasSource) {
-      const saveBtn = document.createElement('button');
-      saveBtn.type = 'button';
-      saveBtn.className = 'legend-icon-btn save-btn';
-      saveBtn.title = `Änderungen in "${cat}" speichern`;
-      saveBtn.innerHTML = getSaveSVG();
-      saveBtn.setAttribute('data-ignore-header-click', 'true');
-      
-      saveBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        exportCategoryAttributes(cat);
-      });
-      
-      catRightArea.appendChild(saveBtn);
+      catRightArea.appendChild(createLegendIconButton({
+        svg: getSaveSVG(),
+        title: `Änderungen in "${cat}" speichern`,
+        className: 'save-btn',
+        onClick: () => exportCategoryAttributes(cat),
+      }));
     }
-    
-    // Bereiche zu Kategorie-Row hinzufügen
-    catRow.appendChild(catLeftArea);
-    catRow.appendChild(catRightArea);
+
     catLi.appendChild(catRow);
     
     // Unter-Liste für Attribute-Items
@@ -7979,45 +7945,31 @@ function buildAttributeLegend() {
     for (const it of items) {
       const itemLi = document.createElement('li');
       
-      // Item-Row (ganze Zeile klickbar)
-      const itemRow = document.createElement('div');
-      const isItemActive = activeAttributes.has(it.key);
-      itemRow.className = isItemActive ? 'legend-row active' : 'legend-row';
+      // Item-Row (ganze Zeile klickbar, ohne rechten Action-Bereich)
+      const { row: itemRow, left: itemLeftArea } = createLegendRow({
+        active: activeAttributes.has(it.key),
+        withRight: false,
+      });
       itemRow.setAttribute('data-attribute-color', it.color);
-      
+
       // Setze die Attribut-Farbe als CSS-Variable für den Hintergrund (transparent wie bei OEs)
       const transparentBg = colorToTransparent(it.color, 0.25);
       const transparentHoverBg = colorToTransparent(it.color, 0.35);
       itemRow.style.setProperty('--attribute-bg', transparentBg);
       itemRow.style.setProperty('--attribute-bg-hover', transparentHoverBg);
-      
-      // Linker Bereich: Spacer + Farbe + Label
-      const itemLeftArea = document.createElement('div');
-      itemLeftArea.className = 'legend-row-left';
-      
-      // Tiefe-Spacer für Einrückung (16px wie bei OEs)
-      const depthSpacer = document.createElement('div');
-      depthSpacer.className = 'legend-depth-spacer';
-      depthSpacer.style.width = '16px';
-      itemLeftArea.appendChild(depthSpacer);
-      
-      // Spacer statt Chevron
-      const spacer = document.createElement('div');
-      spacer.className = 'legend-tree-spacer';
-      itemLeftArea.appendChild(spacer);
-      
+
+      // Tiefe-Spacer für Einrückung (16px wie bei OEs), dann Spacer statt Chevron
+      itemLeftArea.appendChild(createLegendDepthSpacer(16));
+      itemLeftArea.appendChild(createLegendTreeSpacer());
+
       // Farb-Indikator (nur Border, wie Attribut-Ringe im Graphen)
       const colorSpan = document.createElement('span');
       colorSpan.className = 'attribute-color-dot';
       colorSpan.style.borderColor = it.color;
       itemLeftArea.appendChild(colorSpan);
-      
+
       // Item-Label mit Count
-      const itemLabel = document.createElement('span');
-      itemLabel.className = 'legend-label-chip';
-      itemLabel.textContent = `${it.name} (${it.count})`;
-      itemLabel.title = `${cat} :: ${it.name} - ${it.count} Einträge`;
-      itemLeftArea.appendChild(itemLabel);
+      itemLeftArea.appendChild(createLegendChip(`${it.name} (${it.count})`, `${cat} :: ${it.name} - ${it.count} Einträge`));
       
       // Ganze Zeile klickbar für Toggle
       itemRow.addEventListener('click', (e) => {
@@ -8035,8 +7987,6 @@ function buildAttributeLegend() {
         updateAttributeCircles();
       });
       
-      // Bereiche zu Item-Row hinzufügen
-      itemRow.appendChild(itemLeftArea);
       itemLi.appendChild(itemRow);
       itemsUl.appendChild(itemLi);
     }

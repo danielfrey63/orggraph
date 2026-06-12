@@ -1,3 +1,79 @@
+// ===== Gemeinsame Legend-Row-Factories (OE-, Hidden- und Attribut-Legende) [DRY][CA] =====
+
+// Row-Skelett: .legend-row mit .legend-row-left (+ optional .legend-row-right)
+export function createLegendRow({ active = false, withRight = true } = {}) {
+  const row = document.createElement('div');
+  row.className = active ? 'legend-row active' : 'legend-row';
+  const left = document.createElement('div');
+  left.className = 'legend-row-left';
+  row.appendChild(left);
+  let right = null;
+  if (withRight) {
+    right = document.createElement('div');
+    right.className = 'legend-row-right';
+    row.appendChild(right);
+  }
+  return { row, left, right };
+}
+
+// Einrückung pro Baum-Tiefe
+export function createLegendDepthSpacer(widthPx) {
+  const spacer = document.createElement('div');
+  spacer.className = 'legend-depth-spacer';
+  spacer.style.width = `${widthPx}px`;
+  return spacer;
+}
+
+// Platzhalter, wo kein Chevron sitzt
+export function createLegendTreeSpacer() {
+  const spacer = document.createElement('div');
+  spacer.className = 'legend-tree-spacer';
+  return spacer;
+}
+
+// Label-Chip
+export function createLegendChip(text, title) {
+  const chip = document.createElement('span');
+  chip.className = 'legend-label-chip';
+  chip.textContent = text;
+  if (title) chip.title = title;
+  return chip;
+}
+
+// Aktions-Button rechts in der Row; onClick bekommt stopPropagation
+export function createLegendIconButton({ icon, svg, title, className = '', onClick } = {}) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = className ? `legend-icon-btn ${className}` : 'legend-icon-btn';
+  if (title) btn.title = title;
+  if (icon) setIcon(btn, icon);
+  else if (svg) btn.innerHTML = svg;
+  btn.setAttribute('data-ignore-header-click', 'true');
+  if (onClick) btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(e); });
+  return btn;
+}
+
+// Auf-/Zuklapp-Chevron: toggelt das erste <ul> im umgebenden <li>
+// und meldet den neuen Zustand über onToggle(nowCollapsed)
+export function createLegendChevron({ collapsed = false, onToggle } = {}) {
+  const chevron = document.createElement('button');
+  chevron.type = 'button';
+  chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
+  chevron.title = 'Ein-/Ausklappen';
+  chevron.innerHTML = getChevronSVG();
+  chevron.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const li = chevron.closest('li');
+    const sub = li && li.querySelector('ul');
+    if (!sub) return;
+    const wasCollapsed = sub.style.display === 'none';
+    sub.style.display = wasCollapsed ? '' : 'none';
+    chevron.className = wasCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
+    if (onToggle) onToggle(!wasCollapsed);
+  });
+  return chevron;
+}
+
 export function buildHiddenLegend() {
   const legend = document.getElementById('hiddenLegend');
   if (!legend) return;
@@ -15,63 +91,37 @@ export function buildHiddenLegend() {
   ul.className = 'legend-list';
   for (const [root, setIds] of hiddenByRoot.entries()) {
     const li = document.createElement('li');
-    const row = document.createElement('div');
-    row.className = 'legend-row'; // Kein .active State für ausgeblendete Items
-    
-    // Linker Bereich: Spacer + Label
-    const leftArea = document.createElement('div');
-    leftArea.className = 'legend-row-left';
-    
-    // Rechter Bereich: X-Button
-    const rightArea = document.createElement('div');
-    rightArea.className = 'legend-row-right';
-    
+    // Kein .active State für ausgeblendete Items
+    const { row, left, right } = createLegendRow();
+
     // Spacer statt Chevron
-    const spacer = document.createElement('div');
-    spacer.className = 'legend-tree-spacer';
-    leftArea.appendChild(spacer);
-    
+    left.appendChild(createLegendTreeSpacer());
+
     // Label (pseudonymisiert wenn aktiv)
     const node = byId.get(root);
     const name = getDisplayLabel(node);
-    const chip = document.createElement('span');
-    chip.className = 'legend-label-chip';
+    const chip = createLegendChip(`${name} (${setIds.size})`, name);
     chip.dataset.rootId = root; // Für spätere Aktualisierung
-    chip.textContent = `${name} (${setIds.size})`;
-    chip.title = name;
-    leftArea.appendChild(chip);
-    
+    left.appendChild(chip);
+
     // X-Button zum Entfernen (unhide)
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'legend-icon-btn';
-    removeBtn.title = 'Wieder einblenden';
-    setIcon(removeBtn, 'close');
-    removeBtn.setAttribute('data-ignore-header-click', 'true');
-    removeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      unhideSubtree(root);
-    });
-    rightArea.appendChild(removeBtn);
-    
+    right.appendChild(createLegendIconButton({
+      icon: 'close',
+      title: 'Wieder einblenden',
+      onClick: () => unhideSubtree(root),
+    }));
+
     // Eye-Button zum temporären Ein-/Ausblenden (ganz rechts)
     const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(root);
-    const eyeBtn = document.createElement('button');
-    eyeBtn.type = 'button';
-    // Verwende active-Klasse wie bei OEs/Attributen
-    eyeBtn.className = isVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
-    eyeBtn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
-    setIcon(eyeBtn, isVisible ? 'eye' : 'eyeClosed');
-    eyeBtn.dataset.rootId = root;
-    eyeBtn.setAttribute('data-ignore-header-click', 'true');
-    eyeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleHiddenRootVisibility(root);
+    const eyeBtn = createLegendIconButton({
+      icon: isVisible ? 'eye' : 'eyeClosed',
+      title: isVisible ? 'Temporär ausblenden' : 'Temporär einblenden',
+      className: isVisible ? 'active' : '',
+      onClick: () => toggleHiddenRootVisibility(root),
     });
-    rightArea.appendChild(eyeBtn);
-    
-    row.appendChild(leftArea);
-    row.appendChild(rightArea);
+    eyeBtn.dataset.rootId = root;
+    right.appendChild(eyeBtn);
+
     li.appendChild(row);
     ul.appendChild(li);
   }
@@ -118,19 +168,9 @@ export function renderOrgLegendNode(oid, depth, options) {
   const lbl = getDisplayLabel(node, depth);
   const idAttr = `org_${id}`;
 
-  const row = document.createElement('div');
-  row.className = 'legend-row';
+  const { row, left } = createLegendRow();
 
-  const leftArea = document.createElement('div');
-  leftArea.className = 'legend-row-left';
-
-  const rightArea = document.createElement('div');
-  rightArea.className = 'legend-row-right';
-
-  const depthSpacer = document.createElement('div');
-  depthSpacer.className = 'legend-depth-spacer';
-  depthSpacer.style.width = `${Math.max(0, Number(depth) || 0) * 16}px`;
-  leftArea.appendChild(depthSpacer);
+  left.appendChild(createLegendDepthSpacer(Math.max(0, Number(depth) || 0) * 16));
 
   const rawChildren = Array.from((childrenProvider && childrenProvider(id)) || []);
   const kids = scopeSet
@@ -138,43 +178,18 @@ export function renderOrgLegendNode(oid, depth, options) {
     : rawChildren;
 
   if (kids.length) {
-    const chevron = document.createElement('button');
-    chevron.type = 'button';
-    const isCollapsed = legendCollapsedItems.has(id);
-    chevron.className = isCollapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
-    chevron.title = 'Ein-/Ausklappen';
-    chevron.innerHTML = getChevronSVG();
-
-    chevron.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const sub = li.querySelector('ul');
-      const currentlyCollapsed = sub && sub.style.display === 'none';
-      if (sub) {
-        sub.style.display = currentlyCollapsed ? '' : 'none';
-        chevron.className = currentlyCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
-        if (currentlyCollapsed) {
-          legendCollapsedItems.delete(id);
-        } else {
-          legendCollapsedItems.add(id);
-        }
-      }
-    });
-
-    leftArea.appendChild(chevron);
+    left.appendChild(createLegendChevron({
+      collapsed: legendCollapsedItems.has(id),
+      onToggle: (nowCollapsed) => {
+        if (nowCollapsed) legendCollapsedItems.add(id);
+        else legendCollapsedItems.delete(id);
+      },
+    }));
   } else {
-    const spacer = document.createElement('div');
-    spacer.className = 'legend-tree-spacer';
-    leftArea.appendChild(spacer);
+    left.appendChild(createLegendTreeSpacer());
   }
 
-  const chip = document.createElement('span');
-  chip.className = 'legend-label-chip';
-  chip.textContent = lbl;
-  chip.title = lbl;
-  leftArea.appendChild(chip);
-
-  row.appendChild(leftArea);
-  row.appendChild(rightArea);
+  left.appendChild(createLegendChip(lbl, lbl));
 
   const updateRowState = () => {
     const isActive = allowedOrgs.has(id);
