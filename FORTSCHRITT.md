@@ -367,13 +367,22 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
   (CSV-Quoting, Header, Leer-Guard).
 - **266 Tests grün, Gate grün: 93,75 %** (15/19 Sektionen im Nenner).
 
-## Nächster Schritt (Iteration 32)
+### Iteration 32 — `18-files-reset` Teil 1 (6 Tests)
+- Befund: Sektion 18 = handleDroppedFiles + resetAllData (~35 Z.) plus ein
+  830-Zeilen-`DOMContentLoaded`-Bootstrap (gesamte Toolbar-/UI-Verdrahtung).
+- Getestet: handleDroppedFiles (Unknown-Report, Attribut-only-Live-Reload inkl.
+  Fehlertoleranz, Datensatz→Reload-Pfad mit Status/DropZone), resetAllData
+  (Clear+Reload, Reload trotz IDB-Fehler). `location.reload` via stubGlobal.
+- Sektion bleibt in exclude bis der Bootstrap (Teil 2) per DOMContentLoaded-
+  Dispatch getestet ist. **272 Tests grün**, Verify grün.
 
-`18-files-reset` (871 Z.): handleDroppedFiles (storeFiles-Stub, Reload-Pfad vs.
-Attribut-Live-Reload), resetAllData (fake-indexeddb, Bestätigungs-Dialog) und
-die übrigen Funktionen der Sektion sichten + testen, dann aus exclude nehmen.
-Danach 03-export-dialog, zuletzt 13/14 (D3-Kern, testbare Anteile + begründete
-Ausnahmen).
+## Nächster Schritt (Iteration 33)
+
+`18-files-reset` Teil 2: Bootstrap-Block testen — vollständiges DOM-Fixture
+(Toolbar-Buttons, Combo, Status, Toggles), alle benötigten Globals/Stubs setzen,
+`DOMContentLoaded` dispatchen, dann zentrale Verdrahtungen prüfen (Status-Klick-
+Picker, OE-Sichtbarkeits-Toggle mit savedAllowedOrgs-Logik, Apply-Button,
+Suche/Debounce, Direction-Toggle, Reset-Link). Danach Sektion 18 aus exclude.
 
 ## Offene Fragen / Risiken
 
