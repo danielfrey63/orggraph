@@ -27,16 +27,29 @@ npm run verify    # Re-Build + Sync-Check des committeten index.html (modulo Zei
 
 `build.js` läuft mit purem Node (nur `node:fs`): Es inlined CSS, D3 und die Sektionen
 in `index.html` und strippt dabei die Modul-Syntax (`import`-Zeilen, `export`-Präfixe)
-sowie die `/* v8 ignore */`-Coverage-Marker. Der Build ist idempotent.
+sowie die `/* v8 ignore */`-Coverage-Marker. Mit `--no-bump` ist der Build
+idempotent; ohne zählt er die Build-Nummer hoch (siehe Versionierung).
 
 ### Versionierung
 
 Single Source of Truth für die App-Version ist das `version`-Feld in
-`package.json`. Der Build stempelt sie als `@@VERSION@@` ins Template: sichtbar
-im Header neben dem Titel (`#appVersion`) und als globale JS-Konstante
-`APP_VERSION` in `index.html`. Version anheben (z.B. durch die
-Versioning-Hooks oder manuell via `npm version patch --no-git-tag-version`),
-danach `node build.js` — die Auslieferung trägt dann den neuen Stand.
+`package.json` (Schema `MAJOR.MINOR.BUILD`). Der Build stempelt sie als
+`@@VERSION@@` ins Template: sichtbar im Header neben dem Titel (`#appVersion`)
+und als globale JS-Konstante `APP_VERSION` in `index.html`.
+
+Das Hochzählen passiert automatisch (`bump-version.js`):
+
+- **Build-Nummer** (drittes Segment): jeder `node build.js` zählt sie hoch.
+  Ausnahme ist `--no-bump` für reproduzierbare Re-Builds — `verify.js`,
+  `test:coverage` und der Pre-Commit-Hook nutzen das.
+- **Minor** (zweites Segment): der Hook `.githooks/pre-commit` zählt sie bei
+  jedem Commit hoch, setzt die Build-Nummer auf 0, baut `index.html` neu und
+  staged beide Dateien mit.
+
+Der Hook-Pfad wird via `prepare`-Script (`git config core.hooksPath .githooks`)
+bei `npm install` gesetzt — nach einem frischen Clone einmal `npm install`
+ausführen. **Major** wird bewusst nur manuell angehoben (direkt in
+`package.json` editieren).
 
 ### Tests & Coverage (einmalig `npm install`)
 

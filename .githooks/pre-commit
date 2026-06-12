@@ -1,0 +1,8 @@
+#!/bin/sh
+# Versioning hook: every commit bumps the minor version (build counter resets
+# to 0) and ships a freshly stamped index.html. Deliverable builds in between
+# bump the build counter via build.js (see bump-version.js).
+set -e
+node bump-version.js minor
+node build.js --no-bump
+git add package.json index.html

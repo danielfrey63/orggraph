@@ -9,7 +9,7 @@ import { execSync } from 'node:child_process';
 const norm = (s) => s.replace(/\r\n?/g, '\n');
 
 const before = norm(readFileSync('index.html', 'utf8'));
-execSync('node build.js', { stdio: 'inherit' });
+execSync('node build.js --no-bump', { stdio: 'inherit' });
 const after = norm(readFileSync('index.html', 'utf8'));
 
 if (before === after) {

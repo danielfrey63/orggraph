@@ -1,14 +1,15 @@
 {
   "name": "orggraph",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "OrgGraph Visualization — dependency-free single-file app (index.html)",
   "type": "module",
   "scripts": {
     "build": "node build.js",
     "verify": "node verify.js",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage && node build.js && node remap-coverage.js",
-    "transform": "node helpers/transform.js"
+    "test:coverage": "vitest run --coverage && node build.js --no-bump && node remap-coverage.js",
+    "transform": "node helpers/transform.js",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "@babel/generator": "^7.28.5",

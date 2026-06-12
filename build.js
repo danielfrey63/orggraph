@@ -1,6 +1,7 @@
 // Assemble the single-file deliverable index.html from template + sources.
 // Zero dependencies — runs with plain `node build.js`, no npm install needed.
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { bumpVersion } from './bump-version.js';
 
 const read = (path) => readFileSync(path, 'utf8');
 
@@ -23,9 +24,13 @@ const app = readdirSync('src/sections')
   .map((f) => stripModuleSyntax(read(`src/sections/${f}`)))
   .join('');
 
-// Single source of truth for the app version: package.json. The versioning
-// hooks bump it there; the build stamps it into the deliverable.
-const version = JSON.parse(read('package.json')).version;
+// Single source of truth for the app version: package.json. Every deliverable
+// build bumps the build counter (third segment); --no-bump skips that for
+// reproducible re-builds (verify.js, coverage remap, pre-commit hook — the
+// hook bumps the minor segment itself before building).
+const version = process.argv.includes('--no-bump')
+  ? JSON.parse(read('package.json')).version
+  : bumpVersion('build');
 
 const out = read('index.template.html')
   .replace('@@CSS@@', () => read('src/styles.css'))
