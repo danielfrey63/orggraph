@@ -35,18 +35,8 @@ export function showTemporaryNotification(message, duration = 3000) {
   if (!notification) {
     notification = document.createElement('div');
     notification.id = 'temp-notification';
-    notification.style.position = 'fixed';
-    notification.style.bottom = '60px'; // Über dem Footer
-    notification.style.left = '50%';
-    notification.style.transform = 'translateX(-50%)';
-    notification.style.background = 'var(--text-strong)';
-    notification.style.color = 'var(--panel-bg)';
-    notification.style.padding = '8px 16px';
-    notification.style.borderRadius = '4px';
-    notification.style.boxShadow = '0 2px 8px rgba(0,0,0,0.25)';
-    notification.style.zIndex = '1000';
+    notification.className = 'toast';
     notification.style.opacity = '0';
-    notification.style.transition = 'opacity 0.3s ease';
     document.body.appendChild(notification);
   }
   

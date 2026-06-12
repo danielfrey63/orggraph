@@ -124,7 +124,7 @@ describe('buildOrgLegend', () => {
         .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       const menu = globalThis.legendMenuEl;
       expect(menu.style.display).toBe('block');
-      return menu.querySelectorAll('div:not([style*="border-top"])');
+      return menu.querySelectorAll('.menu-item');
     };
 
     let items = openMenu();

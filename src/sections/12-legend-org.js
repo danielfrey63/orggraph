@@ -480,35 +480,22 @@ export function collectSubtree(rootId, children, scopeSet) {
 export function ensureLegendMenu() {
   if (legendMenuEl) return legendMenuEl;
   const el = document.createElement('div');
-  el.style.position = 'fixed';
-  el.style.background = '#111';
-  el.style.color = '#fff';
-  el.style.fontSize = '12px';
-  el.style.padding = '6px 0';
-  el.style.borderRadius = '6px';
-  el.style.minWidth = '160px';
-  el.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)';
-  el.style.zIndex = 2000;
-  el.style.display = 'none';
+  el.className = 'node-context-menu';
   const mkItem = (label, handler) => {
     const it = document.createElement('div');
+    it.className = 'menu-item';
     it.textContent = label;
-    it.style.padding = '6px 12px';
-    it.style.cursor = 'pointer';
     it.addEventListener('click', () => { hideLegendMenu(); handler(); });
-    it.addEventListener('mouseenter', () => it.style.background = '#1f2937');
-    it.addEventListener('mouseleave', () => it.style.background = 'transparent');
     return it;
   };
-  
+
   // Erweiterte Menü-Optionen
   el.appendChild(mkItem('Alle einblenden', () => {}));
   el.appendChild(mkItem('Alle ausblenden', () => {}));
-  
+
   // Trennlinie
   const divider = document.createElement('div');
-  divider.style.borderTop = '1px solid rgba(255,255,255,0.2)';
-  divider.style.margin = '4px 0';
+  divider.className = 'menu-divider';
   el.appendChild(divider);
   
   // Neue Option: Nur direkte Kinder anzeigen
@@ -523,7 +510,7 @@ export function ensureLegendMenu() {
 export function showLegendMenu(x, y, actions) {
   const el = ensureLegendMenu();
   // Wire actions
-  const items = el.querySelectorAll('div:not([style*="border-top"])');
+  const items = el.querySelectorAll('.menu-item');
   items[0].onclick = () => { hideLegendMenu(); actions.onShowAll(); };
   items[1].onclick = () => { hideLegendMenu(); actions.onHideAll(); };
   items[2].onclick = () => { hideLegendMenu(); actions.onShowDirectChildrenOnly(); };

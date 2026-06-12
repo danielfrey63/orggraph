@@ -3,56 +3,42 @@ export function showPasswordDialog(onSubmit) {
   const existing = document.getElementById('passwordDialog');
   if (existing) existing.remove();
   
-  // Dialog erstellen
+  // Dialog erstellen — nutzt den .modal-Vertrag aus styles.css (wie #exportModal)
   const overlay = document.createElement('div');
   overlay.id = 'passwordDialog';
-  overlay.style.cssText = `
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.5); z-index: 10000;
-    display: flex; align-items: center; justify-content: center;
-  `;
-  
+  overlay.className = 'modal';
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-overlay';
+
   const dialog = document.createElement('div');
-  dialog.style.cssText = `
-    background: var(--bg-primary, #1e1e1e); border-radius: 8px;
-    padding: 20px; min-width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-  `;
-  
+  dialog.className = 'modal-container';
+
+  const content = document.createElement('div');
+  content.className = 'modal-content';
+
   const title = document.createElement('h3');
   title.textContent = 'Passwort erforderlich';
-  title.style.cssText = 'margin: 0 0 16px 0; color: var(--text-primary, #fff);';
-  
+  title.className = 'modal-title';
+
   const input = document.createElement('input');
   input.type = 'password';
   input.placeholder = 'Passwort eingeben...';
-  input.style.cssText = `
-    width: 100%; padding: 8px 12px; border: 1px solid var(--border-color, #444);
-    border-radius: 4px; background: var(--bg-secondary, #2d2d2d);
-    color: var(--text-primary, #fff); font-size: 14px; box-sizing: border-box;
-  `;
-  
+  input.className = 'modal-input';
+
   const errorMsg = document.createElement('div');
-  errorMsg.style.cssText = `
-    color: #ef4444; font-size: 12px; margin-top: 8px; min-height: 18px;
-  `;
-  
+  errorMsg.className = 'modal-error';
+
   const btnRow = document.createElement('div');
-  btnRow.style.cssText = 'display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end;';
-  
+  btnRow.className = 'modal-btn-row';
+
   const cancelBtn = document.createElement('button');
   cancelBtn.textContent = 'Abbrechen';
-  cancelBtn.style.cssText = `
-    padding: 8px 16px; border: 1px solid var(--border-color, #444);
-    border-radius: 4px; background: transparent; color: var(--text-primary, #fff);
-    cursor: pointer;
-  `;
-  
+  cancelBtn.className = 'btn';
+
   const submitBtn = document.createElement('button');
   submitBtn.textContent = 'Bestätigen';
-  submitBtn.style.cssText = `
-    padding: 8px 16px; border: none; border-radius: 4px;
-    background: var(--accent-color, #4F46E5); color: #fff; cursor: pointer;
-  `;
+  submitBtn.className = 'btn-primary';
   
   const closeDialog = () => overlay.remove();
   
@@ -76,15 +62,17 @@ export function showPasswordDialog(onSubmit) {
     if (e.key === 'Escape') closeDialog();
   });
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeDialog();
+    if (e.target === overlay || e.target === backdrop) closeDialog();
   });
-  
+
   btnRow.appendChild(cancelBtn);
   btnRow.appendChild(submitBtn);
-  dialog.appendChild(title);
-  dialog.appendChild(input);
-  dialog.appendChild(errorMsg);
-  dialog.appendChild(btnRow);
+  content.appendChild(title);
+  content.appendChild(input);
+  content.appendChild(errorMsg);
+  content.appendChild(btnRow);
+  dialog.appendChild(content);
+  overlay.appendChild(backdrop);
   overlay.appendChild(dialog);
   document.body.appendChild(overlay);
   
