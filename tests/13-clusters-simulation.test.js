@@ -48,6 +48,8 @@ beforeEach(() => {
   globalThis.activeAttributes = new Set();
   globalThis.hiddenCategories = new Set();
   globalThis.countVisibleAttributeRings = countVisibleAttributeRings;
+  globalThis.getNodeOuterRadius = mod.getNodeOuterRadius;
+  globalThis.nodeOuterRadiusMetrics = mod.nodeOuterRadiusMetrics;
   globalThis.continuousSimulation = false;
   globalThis.currentSimulation = null;
 });

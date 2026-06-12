@@ -84,26 +84,27 @@ export function refreshClusters() {
 }
 
 /**
+ * CSS-derived constants for getNodeOuterRadius. Hoist this out of per-node
+ * loops (cluster polygons recompute on every simulation tick) so
+ * getComputedStyle is not hit once per node.
+ */
+export function nodeOuterRadiusMetrics() {
+  const base = cssNumber('--node-radius', 8) + cssNumber('--node-stroke-width', 3) / 2;
+  const ringStep = attributesVisible
+    ? cssNumber('--attribute-circle-gap', 4) + cssNumber('--attribute-circle-stroke-width', 2)
+    : 0;
+  return { base, ringStep };
+}
+
+/**
  * Berechnet den äußersten sichtbaren Radius eines Knotens
  * (Node-Radius + Stroke + Attributringe)
  */
-export function getNodeOuterRadius(node) {
-  const nodeRadius = cssNumber('--node-radius', 8);
-  const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
-  
-  // Basis: Node-Radius + halber Stroke
-  let outerRadius = nodeRadius + (nodeStrokeWidth / 2);
-  
-  // Wenn Attribute sichtbar sind, addiere Attributringe
-  if (attributesVisible) {
-    const circleGap = cssNumber('--attribute-circle-gap', 4);
-    const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-
-    // Only rings that are actually drawn (active + category visible) count
-    outerRadius += countVisibleAttributeRings(node.id) * (circleGap + circleWidth);
-  }
-  
-  return outerRadius;
+export function getNodeOuterRadius(node, metrics = nodeOuterRadiusMetrics()) {
+  const { base, ringStep } = metrics;
+  if (!ringStep) return base;
+  // Only rings that are actually drawn (active + category visible) count
+  return base + countVisibleAttributeRings(node.id) * ringStep;
 }
 
 /**

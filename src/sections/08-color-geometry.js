@@ -80,34 +80,22 @@ export function clustersAtPoint(p) {
 }
 
 export function computeClusterPolygon(nodes, pad) {
-  const pts = nodes.map(n => [n.x, n.y]);
-  const r = cssNumber('--node-radius', 8) + pad;
-  if (pts.length === 0) return [];
-  if (pts.length === 1) {
-    const [x,y] = pts[0];
-    const poly = [];
-    for (let i=0;i<12;i++){ const a=(i/12)*Math.PI*2; poly.push([x+Math.cos(a)*r, y+Math.sin(a)*r]); }
-    return poly;
+  if (nodes.length === 0) return [];
+  // Sample each node's outline at its outer radius (incl. attribute rings,
+  // see getNodeOuterRadius) so the cloud encloses the rings, not just the
+  // bare node circles.
+  const metrics = nodeOuterRadiusMetrics();
+  const pts = [];
+  for (const n of nodes) {
+    const r = getNodeOuterRadius(n, metrics) + pad;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      pts.push([n.x + Math.cos(a) * r, n.y + Math.sin(a) * r]);
+    }
   }
-  if (pts.length === 2) {
-    const [a,b] = pts;
-    const dx=b[0]-a[0], dy=b[1]-a[1];
-    const len=Math.hypot(dx,dy)||1;
-    const ux=dx/len, uy=dy/len; const nx=-uy, ny=ux;
-    return [
-      [a[0]+nx*r, a[1]+ny*r],
-      [b[0]+nx*r, b[1]+ny*r],
-      [b[0]-nx*r, b[1]-ny*r],
-      [a[0]-nx*r, a[1]-ny*r]
-    ];
-  }
+  if (nodes.length === 1) return pts;
   const hull = d3.polygonHull(pts);
-  if (!hull || hull.length<3) return [];
-  const cx=d3.mean(hull,p=>p[0]);
-  const cy=d3.mean(hull,p=>p[1]);
-  return hull.map(([x,y])=>{
-    const vx=x-cx, vy=y-cy; const L=Math.hypot(vx,vy)||1; const s=(L+pad)/L; return [cx+vx*s, cy+vy*s];
-  });
+  return (hull && hull.length >= 3) ? hull : [];
 }
 
 // Collect active ancestor chain (including self) for a given org id

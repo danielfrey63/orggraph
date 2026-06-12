@@ -330,9 +330,14 @@ export function recomputeAttributeFocusHidden() {
 
 /** Re-renders the graph after attribute visibility changes while focus mode is on. */
 export function notifyAttributeVisibilityChanged() {
-  if (!attributeFocusEnabled) return;
-  recomputeAttributeFocusHidden();
-  try { applyFromUI('attributeFocus'); } catch (_) {}
+  if (attributeFocusEnabled) {
+    recomputeAttributeFocusHidden();
+    try { applyFromUI('attributeFocus'); } catch (_) {}
+    return;
+  }
+  // Cluster clouds size with the attribute rings (getNodeOuterRadius), so a
+  // ring toggle must redraw them even without a full re-render.
+  try { refreshClusters(); } catch (_) {}
 }
 
 // Prüft ob ein Node-ID temporär sichtbar ist (trotz Hidden-Status) [SF]

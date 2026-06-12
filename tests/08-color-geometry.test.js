@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   hashCode,
   quantizedHueFromCategory,
@@ -6,8 +7,34 @@ import {
   colorForOrg,
   colorToTransparent,
   computeClusterPolygon,
+  countVisibleAttributeRings,
   cssNumber,
 } from '../src/sections/08-color-geometry.js';
+
+const d3Src = readFileSync('vendor/d3.v7.min.js', 'utf8');
+const d3Mod = { exports: {} };
+new Function('exports', 'module', d3Src)(d3Mod.exports, d3Mod);
+const d3 = d3Mod.exports;
+
+// section 13 references Logger at module top level -> import after globals
+let clusterMod;
+beforeAll(async () => {
+  globalThis.Logger = { log: () => {}, ts: () => '00:00:00.000' };
+  clusterMod = await import('../src/sections/13-clusters-simulation.js');
+});
+
+// computeClusterPolygon resolves these as bundle globals at call time
+beforeEach(() => {
+  globalThis.d3 = d3;
+  globalThis.cssNumber = cssNumber;
+  globalThis.attributesVisible = false;
+  globalThis.personAttributes = new Map();
+  globalThis.activeAttributes = new Set();
+  globalThis.hiddenCategories = new Set();
+  globalThis.countVisibleAttributeRings = countVisibleAttributeRings;
+  globalThis.getNodeOuterRadius = clusterMod.getNodeOuterRadius;
+  globalThis.nodeOuterRadiusMetrics = clusterMod.nodeOuterRadiusMetrics;
+});
 
 describe('hashCode', () => {
   it('returns a stable unsigned integer for the same input', () => {
@@ -95,24 +122,50 @@ describe('cssNumber', () => {
 });
 
 describe('computeClusterPolygon', () => {
+  // base radius (8 + 3/2 stroke) + pad 10, no rings visible
+  const R = 19.5;
+
   it('returns an empty polygon for no nodes', () => {
     expect(computeClusterPolygon([], 10)).toEqual([]);
   });
 
-  it('returns a 12-point circle around a single node', () => {
-    const poly = computeClusterPolygon([{ x: 100, y: 50 }], 10);
+  it('returns a 12-point circle at outer radius + pad around a single node', () => {
+    const poly = computeClusterPolygon([{ id: 'p1', x: 100, y: 50 }], 10);
     expect(poly).toHaveLength(12);
-    const r = Math.hypot(poly[0][0] - 100, poly[0][1] - 50);
     for (const [x, y] of poly) {
-      expect(Math.hypot(x - 100, y - 50)).toBeCloseTo(r, 6);
+      expect(Math.hypot(x - 100, y - 50)).toBeCloseTo(R, 6);
     }
   });
 
-  it('returns a 4-point band around two nodes', () => {
-    const poly = computeClusterPolygon([{ x: 0, y: 0 }, { x: 100, y: 0 }], 10);
-    expect(poly).toHaveLength(4);
-    // band is symmetric around the segment y=0
-    expect(poly[0][1]).toBeCloseTo(-poly[3][1], 6);
-    expect(poly[1][1]).toBeCloseTo(-poly[2][1], 6);
+  it('encloses both node circles for two nodes, including the outer ends', () => {
+    const poly = computeClusterPolygon([{ id: 'p1', x: 0, y: 0 }, { id: 'p2', x: 100, y: 0 }], 10);
+    const xs = poly.map((p) => p[0]);
+    const ys = poly.map((p) => p[1]);
+    expect(Math.min(...xs)).toBeCloseTo(-R, 6);
+    expect(Math.max(...xs)).toBeCloseTo(100 + R, 6);
+    expect(Math.min(...ys)).toBeCloseTo(-R, 6);
+    expect(Math.max(...ys)).toBeCloseTo(R, 6);
+  });
+
+  it('grows the polygon for nodes with visible attribute rings', () => {
+    globalThis.attributesVisible = true;
+    globalThis.personAttributes = new Map([['p1', new Map([['A', '1'], ['B', '1']])]]);
+    globalThis.activeAttributes = new Set(['A', 'B']);
+    const poly = computeClusterPolygon([{ id: 'p1', x: 0, y: 0 }], 10);
+    // base 9.5 + 2 rings * (gap 4 + width 2) + pad 10
+    for (const [x, y] of poly) {
+      expect(Math.hypot(x, y)).toBeCloseTo(31.5, 6);
+    }
+  });
+
+  it('spans mixed-radius nodes with their individual outer radii', () => {
+    globalThis.attributesVisible = true;
+    globalThis.personAttributes = new Map([['p1', new Map([['A', '1']])]]);
+    globalThis.activeAttributes = new Set(['A']);
+    const poly = computeClusterPolygon([{ id: 'p1', x: 0, y: 0 }, { id: 'p2', x: 100, y: 0 }], 10);
+    const xs = poly.map((p) => p[0]);
+    // p1 has one ring (base 9.5 + 6 + pad = 25.5), p2 none (19.5)
+    expect(Math.min(...xs)).toBeCloseTo(-25.5, 6);
+    expect(Math.max(...xs)).toBeCloseTo(100 + R, 6);
   });
 });
