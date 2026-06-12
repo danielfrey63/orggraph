@@ -7859,7 +7859,17 @@ async function loadAttributesFromFile(file) {
     // Erkenne das verwendete Format für die Statusmeldung
     const hasTabFormat = text.includes('\t');
     const formatInfo = hasTabFormat ? 'Tab-separiert' : 'Komma-separiert';
-    
+
+    // Prefix attribute names with the category (filename without extension)
+    // so the legend groups them hierarchically, same as loadAttributesFromUrl
+    const category = file.name.replace(/\.[^/.]+$/, '');
+    const compositeAttributes = new Map();
+    for (const [identifier, attrs] of attributes.entries()) {
+      const m = new Map();
+      for (const [name, value] of attrs.entries()) m.set(`${category}::${name}`, value);
+      compositeAttributes.set(identifier, m);
+    }
+
     // Verknüpfe die geladenen Attribute mit den Personen-IDs
     const newPersonAttributes = new Map();
     const fuzzyMatches = new Map();
@@ -7934,7 +7944,7 @@ async function loadAttributesFromFile(file) {
     // Verarbeite alle Attribute
     // Sammle explizit alle Einträge ohne exakte Zuordnung für die spätere Fuzzy-Suche
     const unmatchedToSearch = [];
-    for (const [identifier, attrs] of attributes.entries()) {
+    for (const [identifier, attrs] of compositeAttributes.entries()) {
       const personIds = findPersonIdsByIdentifier(identifier);
       if (personIds.length > 0) {
         for (const id of personIds) {
@@ -8036,15 +8046,18 @@ async function loadAttributesFromFile(file) {
       return false;
     }
     
-    // Generiere Farben für neue Attributtypen
+    // Register composite types with category-consistent colors (same as loadAttributesFromUrl)
+    let existingInCategory = 0;
+    for (const k of attributeTypes.keys()) if (String(k).startsWith(category + '::')) existingInCategory++;
+    let typeOrdinal = 0;
     for (const type of types) {
-      if (!attributeTypes.has(type)) {
-        // Generiere eine neue Farbe für diesen Attributtyp
-        const hue = (hashCode(type) % 360);
-        const color = `hsl(${hue}, 70%, 50%)`;
-        attributeTypes.set(type, color);
-        activeAttributes.add(type); // Neue Attribute standardmäßig aktivieren
+      const composite = `${category}::${type}`;
+      if (!attributeTypes.has(composite)) {
+        const color = colorForCategoryAttribute(category, type, existingInCategory + typeOrdinal);
+        attributeTypes.set(composite, color);
+        activeAttributes.add(composite); // Neue Attribute standardmäßig aktivieren
       }
+      typeOrdinal++;
     }
     
     // Wenn es Fuzzy-Matches gibt, zeige den Dialog
@@ -8058,11 +8071,21 @@ async function loadAttributesFromFile(file) {
       exportUnmatchedEntries(unmatchedEntries);
     }
     
-    // Setze die neuen Attribute und aktualisiere
-    personAttributes = newPersonAttributes;
-    
+    // Merge into existing attributes so previously loaded categories survive
+    if (personAttributes.size === 0) {
+      personAttributes = newPersonAttributes;
+    } else {
+      for (const [pid, attrsMap] of newPersonAttributes.entries()) {
+        if (!personAttributes.has(pid)) {
+          personAttributes.set(pid, new Map(attrsMap));
+        } else {
+          const target = personAttributes.get(pid);
+          for (const [k, v] of attrsMap.entries()) target.set(k, v);
+        }
+      }
+    }
+
     // Speichere Quell-Informationen für späteres Speichern
-    const category = file.name.replace(/\.[^/.]+$/, '');
     categorySourceFiles.set(category, {
       filename: file.name,
       url: null, // Von Datei geladen, nicht von URL
@@ -8828,9 +8851,20 @@ function finalizeFuzzyMatching(newPersonAttributes, attributeTypes) {
     }
   }
   
-  // Setze die neuen Attribute und aktualisiere
-  personAttributes = newPersonAttributes;
-  
+  // Merge into existing attributes so previously loaded categories survive
+  if (personAttributes.size === 0) {
+    personAttributes = newPersonAttributes;
+  } else {
+    for (const [pid, attrsMap] of newPersonAttributes.entries()) {
+      if (!personAttributes.has(pid)) {
+        personAttributes.set(pid, new Map(attrsMap));
+      } else {
+        const target = personAttributes.get(pid);
+        for (const [k, v] of attrsMap.entries()) target.set(k, v);
+      }
+    }
+  }
+
   // UI aktualisieren
   buildAttributeLegend();
   updateAttributeStats();

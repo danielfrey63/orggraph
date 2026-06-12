@@ -474,9 +474,20 @@ export function finalizeFuzzyMatching(newPersonAttributes, attributeTypes) {
     }
   }
   
-  // Setze die neuen Attribute und aktualisiere
-  personAttributes = newPersonAttributes;
-  
+  // Merge into existing attributes so previously loaded categories survive
+  if (personAttributes.size === 0) {
+    personAttributes = newPersonAttributes;
+  } else {
+    for (const [pid, attrsMap] of newPersonAttributes.entries()) {
+      if (!personAttributes.has(pid)) {
+        personAttributes.set(pid, new Map(attrsMap));
+      } else {
+        const target = personAttributes.get(pid);
+        for (const [k, v] of attrsMap.entries()) target.set(k, v);
+      }
+    }
+  }
+
   // UI aktualisieren
   buildAttributeLegend();
   updateAttributeStats();
