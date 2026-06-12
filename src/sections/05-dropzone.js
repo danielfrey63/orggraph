@@ -347,6 +347,7 @@ let hiddenNodes = new Set();
 let hiddenByRoot = new Map();
 let attributeFocusEnabled = false;          // focus mode: hide nodes without visible attributes in self or below
 let attributeFocusHiddenNodes = new Set();  // transient set of nodes pruned by the focus mode
+let attributeFocusSeeds = new Set();        // persons carrying an effectively visible attribute
 let temporarilyVisibleRoots = new Set(); // Roots deren Hidden-Subtrees temporär sichtbar sind
 let allHiddenTemporarilyVisible = false; // Globaler Toggle für alle Hidden-Subtrees
 let currentHiddenCount = 0; // Anzahl der ausgeblendeten Knoten in der aktuellen Ansicht

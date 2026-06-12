@@ -184,7 +184,41 @@ export function computeSubgraph(startId, depth, mode) {
       }
     }
   }
-  
+
+  // Attribute focus: peel branches that do not end in a visibly attributed
+  // node within THIS view. The global subtree pruning keeps every ancestor of
+  // an attributed person, but depth cut-offs, hidden subtrees and the
+  // management filter can remove that person from the view and leave
+  // unattributed dead ends behind.
+  if (attributeFocusEnabled) {
+    const startKey = String(startId);
+    const present = new Set(nodes.map(n => String(n.id)));
+    const adj = new Map();
+    for (const l of raw.links) {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (s === t || !present.has(s) || !present.has(t)) continue;
+      if (!adj.has(s)) adj.set(s, new Set());
+      if (!adj.has(t)) adj.set(t, new Set());
+      adj.get(s).add(t);
+      adj.get(t).add(s);
+    }
+    const isRemovableLeaf = (id) =>
+      id !== startKey && !attributeFocusSeeds.has(id) && ((adj.get(id)?.size || 0) <= 1);
+    const removed = new Set();
+    const peelQueue = Array.from(present).filter(isRemovableLeaf);
+    for (let qi = 0; qi < peelQueue.length; qi++) {
+      const id = peelQueue[qi];
+      if (removed.has(id) || !isRemovableLeaf(id)) continue;
+      removed.add(id);
+      for (const nb of adj.get(id) || []) {
+        adj.get(nb)?.delete(id);
+        if (!removed.has(nb) && isRemovableLeaf(nb)) peelQueue.push(nb);
+      }
+      adj.delete(id);
+    }
+    if (removed.size > 0) nodes = nodes.filter(n => !removed.has(String(n.id)));
+  }
+
   // Drop orgs that are disabled
   const nodeSet = new Set(nodes.map(n => String(n.id)));
   const links = raw.links
@@ -213,6 +247,7 @@ export function recomputeHiddenNodes() {
  */
 export function recomputeAttributeFocusHidden() {
   attributeFocusHiddenNodes = new Set();
+  attributeFocusSeeds = new Set();
   if (!raw || !Array.isArray(raw.nodes) || raw.nodes.length === 0) return;
 
   const visibleKeys = new Set();
@@ -236,6 +271,7 @@ export function recomputeAttributeFocusHidden() {
       }
     }
   }
+  attributeFocusSeeds = new Set(queue);
 
   // Upward adjacency: report -> manager, member -> org, child org -> parent org
   const parentsOfNode = new Map();

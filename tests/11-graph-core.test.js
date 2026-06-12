@@ -50,6 +50,7 @@ beforeEach(() => {
   globalThis.temporarilyVisibleRoots = new Set();
   globalThis.attributeFocusEnabled = false;
   globalThis.attributeFocusHiddenNodes = new Set();
+  globalThis.attributeFocusSeeds = new Set();
   globalThis.hiddenCategories = new Set();
   processData(sample());
 });
@@ -217,6 +218,27 @@ describe('recomputeAttributeFocusHidden', () => {
     globalThis.personAttributes = new Map();
     recomputeAttributeFocusHidden();
     globalThis.attributeFocusEnabled = true;
+    const result = computeSubgraph('p1', 3, 'down');
+    expect(ids(result)).toEqual(['p1']);
+  });
+
+  it('peels ancestors whose attributed descendant is cut off by the depth limit', () => {
+    // attribute on p4, but depth 1 only reaches p3 -> p3 must not stay as bare leaf
+    globalThis.activeAttributes = new Set(['Team::Coach']);
+    globalThis.personAttributes = new Map([['p4', new Map([['Team::Coach', '1']])]]);
+    recomputeAttributeFocusHidden();
+    globalThis.attributeFocusEnabled = true;
+    const result = computeSubgraph('p1', 1, 'down');
+    expect(ids(result)).toEqual(['p1']);
+  });
+
+  it('peels managers whose attributed report is dropped by the management filter', () => {
+    // p4 is attributed but isBasis -> management filter removes it from the view
+    globalThis.activeAttributes = new Set(['Team::Coach']);
+    globalThis.personAttributes = new Map([['p4', new Map([['Team::Coach', '1']])]]);
+    recomputeAttributeFocusHidden();
+    globalThis.attributeFocusEnabled = true;
+    globalThis.managementEnabled = true;
     const result = computeSubgraph('p1', 3, 'down');
     expect(ids(result)).toEqual(['p1']);
   });
