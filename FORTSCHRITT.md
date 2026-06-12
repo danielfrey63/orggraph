@@ -62,7 +62,7 @@ was getan wurde, Stand der Akzeptanzkriterien, nächster Schritt, offene Fragen.
   `* text=auto eol=lf` + `reference/** -text` (Baseline bleibt byte-exakt). Verifikation
   ab jetzt via `verify.js`: Gleichheit **modulo Zeilenenden** (verhaltensneutral für
   HTML/CSS/JS). `npm run verify` = build + verify.
-- `git add --renormalize` ausgeführt; reine EOL-Diffs in `public/*` und `rename-env-keys.ps1`
+- `git add --renormalize` ausgeführt; reine EOL-Diffs in `data/*` und `rename-env-keys.ps1`
   mit committet. `package-lock.json` (echte vor-bestehende Inhaltsänderung) bewusst NICHT
   committet — wird in Phase 5 sauber neu erzeugt.
 

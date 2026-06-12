@@ -990,7 +990,7 @@
     },
     {
       "id": "OE-00049",
-      "code": "PUBLICA",
+      "code": "dataA",
       "name": "Pensionskasse des Bundes",
       "parent": "OE-00006",
       "level": 2,
@@ -2982,7 +2982,7 @@
     },
     {
       "id": "OE-00298",
-      "code": "PUBLICA-A1",
+      "code": "dataA-A1",
       "name": "Abteilung Internationale Beziehungen",
       "parent": "OE-00049",
       "level": 3,
@@ -2990,7 +2990,7 @@
     },
     {
       "id": "OE-00299",
-      "code": "PUBLICA-A2",
+      "code": "dataA-A2",
       "name": "Abteilung Direktion",
       "parent": "OE-00049",
       "level": 3,
@@ -2998,7 +2998,7 @@
     },
     {
       "id": "OE-00300",
-      "code": "PUBLICA-A3",
+      "code": "dataA-A3",
       "name": "Abteilung Facility Management",
       "parent": "OE-00049",
       "level": 3,
@@ -3006,7 +3006,7 @@
     },
     {
       "id": "OE-00301",
-      "code": "PUBLICA-A4",
+      "code": "dataA-A4",
       "name": "Abteilung Projektmanagement",
       "parent": "OE-00049",
       "level": 3,
@@ -3014,7 +3014,7 @@
     },
     {
       "id": "OE-00302",
-      "code": "PUBLICA-A5",
+      "code": "dataA-A5",
       "name": "Abteilung Qualitätsmanagement",
       "parent": "OE-00049",
       "level": 3,
@@ -3022,7 +3022,7 @@
     },
     {
       "id": "OE-00303",
-      "code": "PUBLICA-A6",
+      "code": "dataA-A6",
       "name": "Abteilung Kommunikation",
       "parent": "OE-00049",
       "level": 3,

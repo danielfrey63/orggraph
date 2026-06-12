@@ -67,7 +67,7 @@ Auslieferungsdatei und hängt einen `index.html`-Record an `coverage/lcov.info` 
 ## ENV-Konfiguration
 
 Die App wird über eine Env-Datei im JSON-Format konfiguriert (Vorlage:
-`public/env.example.json`). Sie kann auf zwei Wegen geladen werden:
+`data/env.example.json`). Sie kann auf zwei Wegen geladen werden:
 
 1. **Import** (empfohlen, funktioniert überall inkl. `file://`): Datei, Ordner
    oder ZIP per Drag & Drop importieren — siehe [Import per Drag & Drop](#import-per-drag--drop).

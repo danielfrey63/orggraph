@@ -28,8 +28,8 @@ $keyMapping = @{
 }
 
 $targetFiles = @(
-    "public/env.example.json",
-    "public/env.json",
+    "data/env.example.json",
+    "data/env.json",
     "src/app.js",
     "src/constants.js",
     "src/utils.js",

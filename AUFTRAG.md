@@ -58,7 +58,7 @@ tests/               # *.test.js, gespiegelt zur src-Struktur
 - **Untersuchen, nicht blind löschen:** `browser`, `assets`, `attributes`, `helpers` (Letzteres ist via `package.json` → `transform`-Script referenziert). Erst Relevanz prüfen, dann entscheiden.
 - **`node_modules`** sauber gemäss finaler `package.json` neu aufsetzen.
 - **`.gitignore`** an die neue Struktur anpassen (`src/` tracked, `dist/`+`coverage/` ignoriert).
-- **Behalten:** `.vscode`, `.githooks`, `public/*.example.*`, `README.md`.
+- **Behalten:** `.vscode`, `.githooks`, `data/*.example.*`, `README.md`.
 - Regel: Nichts ausserhalb von `.gitignore` Stehendes ohne Rückfrage entfernen.
 
 ## Vorgehen in Phasen (jede Phase einzeln committen)

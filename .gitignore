@@ -1,7 +1,7 @@
 # Local data & config (examples are tracked)
-public/SEM
-public/HRM
-public/backup
+data/SEM
+data/HRM
+data/backup
 env*.json
 attributes
 
