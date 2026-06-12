@@ -193,21 +193,14 @@ export function buildAttributeLegend() {
 
     catRightArea.appendChild(eyeBtn);
     
-    // Save-Button (nur sichtbar wenn Kategorie geändert wurde)
-    const isModified = modifiedCategories.has(cat);
-    const hasSource = categorySourceFiles.has(cat);
-    
-    // Debug: Log wenn eine Kategorie geändert wurde aber keinen Source hat
-    if (isModified && !hasSource && debugMode) {
-      console.log(`Kategorie "${cat}" ist geändert, hat aber keine Quelldatei. Verfügbare Quellen:`, Array.from(categorySourceFiles.keys()));
-    }
-    
-    if (isModified && hasSource) {
+    // Save-Button (nur sichtbar wenn Kategorie geändert wurde); saveCategory
+    // legt für UI-erstellte Kategorien selbst einen Quell-Eintrag an
+    if (modifiedCategories.has(cat)) {
       catRightArea.appendChild(createLegendIconButton({
         svg: getSaveSVG(),
-        title: `Änderungen in "${cat}" speichern`,
+        title: `Änderungen in "${cat}" speichern (lokal + Datei)`,
         className: 'save-btn',
-        onClick: () => exportCategoryAttributes(cat),
+        onClick: () => saveCategory(cat),
       }));
     }
 

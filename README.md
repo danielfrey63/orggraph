@@ -318,6 +318,26 @@ Ausblendung sofort neu. Der Zustand ist transient: keine Einträge in der
 Hidden-Legende, nichts persistiert, Ausschalten stellt alles wieder her; der
 Root-Knoten bleibt immer sichtbar.
 
+### Attribute erstellen & speichern
+
+Per Rechtsklick auf einen Personen-Knoten («Attribute») lassen sich bestehende
+Attribute zuweisen sowie **neue Attribute und neue Kategorien** anlegen.
+Geänderte Kategorien zeigen in der Legende einen **Speichern-Button**
+(Diskette) — auch frisch im UI erstellte Kategorien.
+
+Speichern wirkt zweistufig:
+
+1. **IndexedDB**: Der aktuelle Stand der Kategorie wird unter dem Schlüssel
+   der importierten Datei abgelegt und überlebt damit jeden Reload —
+   unabhängig von der Festplatte.
+2. **Festplatte**: In Browsern mit File System Access API (Chrome/Edge)
+   öffnet sich ein Speichern-Dialog; das gewählte Datei-Handle wird pro
+   Kategorie gemerkt, weitere Speichervorgänge überschreiben die Datei
+   direkt ohne Dialog. Andere Browser erhalten einen normalen Download.
+
+Hinweis: Gespeichert werden zwei Spalten (`identifier<TAB>attributname`);
+allfällige Attributwerte aus der Quelldatei gehen beim Speichern verloren.
+
 ### Fuzzy-Matching & gespeicherte Zuordnungen
 
 Identifier ohne exakten Treffer durchlaufen beim Import eine Fuzzy-Suche

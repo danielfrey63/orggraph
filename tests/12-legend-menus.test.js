@@ -3,7 +3,7 @@ import {
   addNodeToAttribute,
   createSubmenuItem,
   createCategorySubmenuItem,
-  exportCategoryAttributes,
+  saveCategory,
   exportSingleAttribute,
   exportCategoryAsTSV,
   promptNewAttribute,
@@ -12,6 +12,7 @@ import {
   showNodeMenu,
 } from '../src/sections/12-legend-org.js';
 import { colorForCategoryAttribute } from '../src/sections/08-color-geometry.js';
+import { ATTR_PREFIX } from '../src/sections/04-storage.js';
 
 let downloads;
 
@@ -34,6 +35,9 @@ beforeEach(() => {
   globalThis.updateAttributeCircles = vi.fn();
   globalThis.showTemporaryNotification = vi.fn();
   globalThis.prompt = vi.fn();
+  globalThis.ATTR_PREFIX = ATTR_PREFIX;
+  globalThis.idbStore = new Map();
+  globalThis.idbPut = vi.fn(async (k, v) => { globalThis.idbStore.set(k, v); });
   vi.stubGlobal('Blob', class FakeBlob {
     constructor(parts, opts) { this.content = parts.join(''); this.type = opts?.type; }
   });
@@ -165,20 +169,35 @@ describe('exports', () => {
     ]);
   });
 
-  it('exportCategoryAttributes writes sorted identifier/name pairs in the source format', () => {
+  it('saveCategory persists to IndexedDB, clears the flag and downloads', async () => {
     globalThis.categorySourceFiles = new Map([['Team', { filename: 'Team.tsv', format: 'tab' }]]);
     globalThis.modifiedCategories = new Set(['Team']);
-    exportCategoryAttributes('Team');
-    expect(downloads[0].blob.content).toBe('alice@x.ch\tCoach\np9\tPL');
-    expect(downloads[0].download).toBe('Team.tsv');
+    expect(await saveCategory('Team')).toBe(true);
+    // IndexedDB updated under the imported file's key (reload-safe)
+    expect(globalThis.idbStore.get(ATTR_PREFIX + 'Team.tsv')).toBe('alice@x.ch\tCoach\np9\tPL');
+    expect(globalThis.idbStore.get(ATTR_PREFIX + 'Team.tsv::name')).toBe('Team.tsv');
+    expect(globalThis.categorySourceFiles.get('Team').originalText).toBe('alice@x.ch\tCoach\np9\tPL');
     expect(globalThis.modifiedCategories.has('Team')).toBe(false);
     expect(globalThis.buildAttributeLegend).toHaveBeenCalled();
+    // jsdom has no showSaveFilePicker -> download fallback
+    expect(downloads[0].blob.content).toBe('alice@x.ch\tCoach\np9\tPL');
+    expect(downloads[0].download).toBe('Team.tsv');
   });
 
-  it('exportCategoryAttributes warns when no source info exists', () => {
-    exportCategoryAttributes('Unbekannt');
+  it('saveCategory creates a source entry for UI-created categories', async () => {
+    globalThis.modifiedCategories = new Set(['Team']);
+    expect(await saveCategory('Team')).toBe(true);
+    expect(globalThis.categorySourceFiles.get('Team')).toMatchObject({ filename: 'Team.tsv', format: 'tab', url: null });
+    expect(globalThis.idbStore.get(ATTR_PREFIX + 'Team.tsv')).toContain('Coach');
+  });
+
+  it('saveCategory keeps the modified flag when the IndexedDB write fails', async () => {
+    globalThis.idbPut = vi.fn(async () => { throw new Error('quota'); });
+    globalThis.modifiedCategories = new Set(['Team']);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await saveCategory('Team')).toBe(false);
+    expect(globalThis.modifiedCategories.has('Team')).toBe(true);
     expect(downloads).toHaveLength(0);
-    expect(globalThis.showTemporaryNotification.mock.calls[0][0]).toContain('Keine Quell-Informationen');
   });
 
   it('exportSingleAttribute downloads a sanitized per-attribute file', () => {

@@ -562,8 +562,16 @@ export function addNodeToAttribute(nodeId, categoryKey, attributeName, attribute
   
   // Markiere Kategorie als geändert
   modifiedCategories.add(categoryKey);
-  if (debugMode) {
-    console.log(`Kategorie "${categoryKey}" als geändert markiert. Hat Quelle:`, categorySourceFiles.has(categoryKey));
+
+  // Categories created in the UI get a source entry right away so the
+  // save button appears for them as well
+  if (!categorySourceFiles.has(categoryKey)) {
+    categorySourceFiles.set(categoryKey, {
+      filename: `${categoryKey}.tsv`,
+      url: null,
+      originalText: '',
+      format: 'tab',
+    });
   }
   
   // UI aktualisieren
@@ -825,55 +833,116 @@ export function createCategorySubmenuItem(categoryName, attributes, nodeId, hide
   return item;
 }
 
-/**
- * Exportiert die Attribute einer Kategorie als CSV/TSV Datei
- */
-export function exportCategoryAttributes(categoryName) {
-  const sourceInfo = categorySourceFiles.get(categoryName);
-  if (!sourceInfo) {
-    showTemporaryNotification(`Keine Quell-Informationen für Kategorie "${categoryName}" gefunden`, 3000);
-    return;
-  }
-  
-  const separator = sourceInfo.format === 'tab' ? '\t' : ',';
-  const lines = [];
-  
-  // Sammle alle Personen mit Attributen in dieser Kategorie
-  for (const [personId, attrs] of personAttributes.entries()) {
-    for (const [attrKey, attrValue] of attrs.entries()) {
-      const [cat, attrName] = String(attrKey).includes('::') ? String(attrKey).split('::') : ['Attribute', String(attrKey)];
-      
-      if (cat === categoryName) {
-        // Versuche E-Mail oder ID zu finden
-        const person = byId.get(personId);
-        const identifier = person?.email || personId;
-        
-        // Nur 2 Spalten: ID/Email und Attributname (ohne Wert)
-        lines.push(`${identifier}${separator}${attrName}`);
-      }
-    }
-  }
-  
-  // Sortiere alphabetisch
-  lines.sort();
-  
-  const content = lines.join('\n');
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+/** Triggers a browser download for the given text content. */
+export function triggerDownload(filename, content, mime = 'text/tab-separated-values;charset=utf-8') {
+  const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
-  
   const a = document.createElement('a');
   a.href = url;
-  a.download = sourceInfo.filename;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  
-  // Markiere Kategorie als nicht mehr geändert
+}
+
+/** Collects a category's assignments as sorted `identifier<sep>attrName` lines. */
+export function buildCategoryLines(categoryName, separator = '\t') {
+  const lines = [];
+  for (const [personId, attrs] of personAttributes.entries()) {
+    for (const attrKey of attrs.keys()) {
+      const [cat, attrName] = String(attrKey).includes('::') ? String(attrKey).split('::') : ['Attribute', String(attrKey)];
+      if (cat !== categoryName) continue;
+      const person = byId.get(personId);
+      const identifier = person?.email || personId;
+      lines.push(`${identifier}${separator}${attrName}`);
+    }
+  }
+  lines.sort();
+  return lines;
+}
+
+// Remembered file handles per category for direct overwrites (FS Access API)
+let categoryFileHandles = new Map();
+
+/**
+ * Writes a category file to disk: via the File System Access API when the
+ * browser supports it (the picked handle is remembered per category, so
+ * subsequent saves overwrite the same file without a dialog), otherwise as
+ * a plain download. Returns 'picker' | 'download' | 'aborted'.
+ */
+export async function writeCategoryFile(categoryName, filename, content) {
+  if (typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function') {
+    try {
+      let handle = categoryFileHandles.get(categoryName);
+      if (handle && handle.queryPermission) {
+        let perm = await handle.queryPermission({ mode: 'readwrite' });
+        if (perm !== 'granted' && handle.requestPermission) {
+          perm = await handle.requestPermission({ mode: 'readwrite' });
+        }
+        if (perm !== 'granted') handle = null;
+      }
+      if (!handle) {
+        handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{
+            description: 'Attribut-Datei',
+            accept: { 'text/plain': ['.tsv', '.txt', '.csv'] },
+          }],
+        });
+        categoryFileHandles.set(categoryName, handle);
+      }
+      const writable = await handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      return 'picker';
+    } catch (e) {
+      if (e && e.name === 'AbortError') return 'aborted';
+      console.error('Direktes Speichern fehlgeschlagen, Fallback auf Download:', e);
+      categoryFileHandles.delete(categoryName);
+    }
+  }
+  triggerDownload(filename, content);
+  return 'download';
+}
+
+/**
+ * Saves a category permanently: first into IndexedDB (under the same key as
+ * the imported file, so every reload re-parses the updated content), then to
+ * disk. The modified flag is only cleared after the IndexedDB write succeeded.
+ */
+export async function saveCategory(categoryName) {
+  // Categories created in the UI may lack a source entry; create one here
+  let sourceInfo = categorySourceFiles.get(categoryName);
+  if (!sourceInfo) {
+    sourceInfo = { filename: `${categoryName}.tsv`, url: null, originalText: '', format: 'tab' };
+    categorySourceFiles.set(categoryName, sourceInfo);
+  }
+  const separator = sourceInfo.format === 'tab' ? '\t' : ',';
+  const content = buildCategoryLines(categoryName, separator).join('\n');
+
+  try {
+    await idbPut(ATTR_PREFIX + sourceInfo.filename, content);
+    await idbPut(ATTR_PREFIX + sourceInfo.filename + '::name', sourceInfo.filename);
+    sourceInfo.originalText = content;
+  } catch (e) {
+    console.error('Speichern in IndexedDB fehlgeschlagen:', e);
+    showTemporaryNotification(`Speichern von "${categoryName}" fehlgeschlagen`, 4000);
+    return false;
+  }
+
   modifiedCategories.delete(categoryName);
   buildAttributeLegend();
-  
-  showTemporaryNotification(`"${sourceInfo.filename}" heruntergeladen`, 2000);
+
+  const disk = await writeCategoryFile(categoryName, sourceInfo.filename, content);
+  if (disk === 'picker') {
+    showTemporaryNotification(`"${sourceInfo.filename}" gespeichert (lokal + Datei)`, 2500);
+  } else if (disk === 'download') {
+    showTemporaryNotification(`"${sourceInfo.filename}" gespeichert (lokal) und heruntergeladen`, 2500);
+  } else {
+    showTemporaryNotification(`"${sourceInfo.filename}" lokal gespeichert – Dateiexport abgebrochen`, 2500);
+  }
+  return true;
 }
 
 /**
@@ -900,27 +969,16 @@ export function exportSingleAttribute(attributeKey) {
     showTemporaryNotification(`Keine Einträge für "${attrName}" gefunden`, 2000);
     return;
   }
-  
+
   // Sortiere alphabetisch
   lines.sort();
-  
-  const content = lines.join('\n');
-  const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  
+
   // Dateiname: Kategorie_Attributname.tsv
   const safeCategory = category.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_');
   const safeAttrName = attrName.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_');
   const filename = `${safeCategory}_${safeAttrName}.tsv`;
-  
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  
+  triggerDownload(filename, lines.join('\n'));
+
   showTemporaryNotification(`"${filename}" heruntergeladen (${lines.length} Einträge)`, 2000);
 }
 
@@ -929,47 +987,18 @@ export function exportSingleAttribute(attributeKey) {
  * @param {string} categoryName - Name der Kategorie
  */
 export function exportCategoryAsTSV(categoryName) {
-  const lines = [];
-  
-  // Sammle alle Personen mit Attributen in dieser Kategorie
-  for (const [personId, attrs] of personAttributes.entries()) {
-    for (const [attrKey, attrValue] of attrs.entries()) {
-      const [cat, attrName] = String(attrKey).includes('::') 
-        ? String(attrKey).split('::') 
-        : ['Attribute', String(attrKey)];
-      
-      if (cat === categoryName) {
-        const person = byId.get(personId);
-        const identifier = person?.email || personId;
-        lines.push(`${identifier}\t${attrName}`);
-      }
-    }
-  }
-  
+  const lines = buildCategoryLines(categoryName);
+
   if (lines.length === 0) {
     showTemporaryNotification(`Keine Einträge für Kategorie "${categoryName}" gefunden`, 2000);
     return;
   }
-  
-  // Sortiere alphabetisch
-  lines.sort();
-  
-  const content = lines.join('\n');
-  const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  
+
   // Dateiname: Kategorie.tsv
   const safeCategory = categoryName.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_');
   const filename = `${safeCategory}.tsv`;
-  
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  
+  triggerDownload(filename, lines.join('\n'));
+
   showTemporaryNotification(`"${filename}" heruntergeladen (${lines.length} Einträge)`, 2000);
 }
 

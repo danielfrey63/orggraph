@@ -38,7 +38,7 @@ beforeEach(() => {
   globalThis.updateAttributeCircles = vi.fn();
   globalThis.notifyAttributeVisibilityChanged = vi.fn();
   globalThis.exportCategoryAsTSV = vi.fn();
-  globalThis.exportCategoryAttributes = vi.fn();
+  globalThis.saveCategory = vi.fn();
   globalThis.attributeTypes = new Map();
   globalThis.emptyCategories = new Set();
   globalThis.personAttributes = new Map();
@@ -190,14 +190,15 @@ describe('buildAttributeLegend', () => {
     expect(globalThis.exportCategoryAsTSV).toHaveBeenCalledWith('Team');
   });
 
-  it('shows the save button only for modified categories with a source', () => {
+  it('shows the save button for every modified category', () => {
     setupAttrs();
+    // 'Rolle' has no source entry (UI-created) and still gets a save button
     globalThis.modifiedCategories = new Set(['Team', 'Rolle']);
     globalThis.categorySourceFiles = new Map([['Team', { filename: 'Team.tsv' }]]);
     buildAttributeLegend();
     const saveButtons = document.querySelectorAll('#attributeLegend .save-btn');
-    expect(saveButtons).toHaveLength(1);
+    expect(saveButtons).toHaveLength(2);
     saveButtons[0].click();
-    expect(globalThis.exportCategoryAttributes).toHaveBeenCalledWith('Team');
+    expect(globalThis.saveCategory).toHaveBeenCalled();
   });
 });
