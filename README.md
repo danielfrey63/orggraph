@@ -33,12 +33,15 @@ sowie die `/* v8 ignore */`-Coverage-Marker. Der Build ist idempotent.
 
 ```bash
 npm test               # Vitest-Suiten
-npm run test:coverage  # mit Coverage; Gate: >= 80 % Lines auf der reinen Logik
+npm run test:coverage  # mit Coverage; Gate: >= 80 % Lines brutto ueber ALLE Sektionen
 ```
 
-Die Coverage misst die **reine Logik**: DOM/D3-Applikator-Sektionen sind via
-`coverage.exclude` in `vitest.config.js` ausgenommen, einzelne in Logik-Sektionen
-verschachtelte Applikator-Funktionen über `/* v8 ignore start/stop */`-Marker.
+Die Coverage misst den **gesamten App-Code**: alle 19 Sektionen zählen, es gibt
+keine Datei-Ausschlüsse (`coverage.exclude` ist leer). Aktueller Stand: ~91 %
+Lines brutto. Einzige Ausnahmen sind 5 nachweislich verzweigungsfreie
+Applikator-Funktionen (`setStatus`, Tooltip-Setter, `renderFullView`, zusammen
+39 Zeilen), markiert mit `/* v8 ignore start/stop */`; inklusive dieser Zeilen
+liegt die absolute Brutto-Coverage bei ~90,6 %.
 
 ### Coverage-Gutters in VS Code
 

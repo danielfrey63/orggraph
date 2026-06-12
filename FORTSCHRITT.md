@@ -432,13 +432,25 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
   Tick-Interna — nur in echten Browser-Gesten erreichbar).
 - Verify grün.
 
-## Nächster Schritt (Iteration 38)
+### Iteration 38 — Schluss-Audit Phase 7 ✅
+- **Finale Coverage-Zahlen (beide ausgewiesen, AUFTRAG Prinzip 4):**
+  - Gemessen (5 Marker ausgenommen): **91,10 %** (6725/7382 Zeilen)
+  - **Absolut brutto inkl. aller Marker: 90,62 %** (6725/7421 Zeilen)
+- **Die 5 verbleibenden Ausnahmen (39 Zeilen, einzeln begründet):**
+  - `01: setStatus` (4 Z.) — Existenz-Guard + eine Zuweisung
+  - `08: ensureTooltip` (18 Z.) — reine Style-Zuweisungen + append, einzige
+    Bedingung ist der Singleton-Guard
+  - `08: showTooltip` (6 Z.) / `hideTooltip` (1 Z.) — reine Style-Setter
+  - `09: renderFullView` (10 Z.) — fünf Orchestrierungs-Aufrufe, null Verzweigungen
+- Audits wiederholt und grün: Build ohne node_modules ✓, Idempotenz (Doppellauf) ✓,
+  Gate (327 Tests, 91,09 %) ✓, `coverage/lcov.info` ✓, git status sauber ✓.
+- README-Coverage-Abschnitt auf den ehrlichen Stand gebracht (beide Zahlen).
 
-Schluss-Audit Phase 7: Brutto-Zahl mit und ohne die 5 verbleibenden
-v8-ignore-Marker ausweisen (Skript aus Iteration 14 wiederverwenden),
-README-Coverage-Abschnitt auf den neuen Stand bringen (91 % brutto, keine
-Datei-Ausschlüsse), Audits aus Iteration 20 wiederholen (Build ohne
-node_modules, Idempotenz, git status), dann FERTIG-Bilanz.
+## Status Phase 7: ABGESCHLOSSEN ✅
+
+Ausgangslage 22,2 % brutto → Endstand **90,6 % absolut brutto** über alle
+19 Sektionen, ohne Datei-Ausschlüsse, mit 5 begründeten Funktions-Ausnahmen.
+327 Tests in 24 Suiten. Gate `thresholds.lines: 80` dauerhaft aktiv.
 
 ## Offene Fragen / Risiken
 
