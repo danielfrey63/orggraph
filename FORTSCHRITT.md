@@ -346,12 +346,22 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
   Global stubben — gegen das echte Menü-DOM testen.
 - **243 Tests grün**, Verify grün. Sektion 12 bleibt bis Teil 2 in exclude.
 
-## Nächster Schritt (Iteration 30)
+### Iteration 30 — `12-legend-org` komplett in den Nenner (13 Tests, 94,4 %)
+- Teil 2 getestet: addNodeToAttribute (Registrierung/Aktivierung/modified/
+  emptyCategories-Bereinigung, Typ-Reuse), Node-Kontextmenü (Legacy- und
+  Action-Signatur, Root-Disable, „Als Root entfernen" nur bei Multi-Root),
+  Attribut-Submenü Ebene 2+3 (sortierte Kategorien, Add via Sub-Submenu,
+  Menü-Schliessen), Prompts (trim/cancel/blank), alle drei Exporte
+  (Inhalt sortiert, Quellformat, sanitisierte Dateinamen, Fehlpfade) —
+  Downloads via Anchor-Click-Spy + Blob-Stub abgefangen.
+- Sektion 12 (1076 Z., grösster Brocken) aus exclude → **94,4 %**.
+- **256 Tests grün, Gate grün: 93,72 %** (14/19 Sektionen im Nenner).
 
-`12-legend-org` Teil 2: addNodeToAttribute, addAttributeSubmenu/createSubmenu-
-Items, exportCategoryAttributes/exportSingleAttribute/exportCategoryAsTSV
-(Blob/URL.createObjectURL stubben), promptNewAttribute/Category (window.prompt
-stubben), ensureNodeMenu/showNodeMenu. Danach Sektion 12 aus exclude nehmen.
+## Nächster Schritt (Iteration 31)
+
+`17-fuzzy-dialog` (575 Z.): showFuzzyMatchDialog (Dialog-Aufbau, Auswahl-Flows),
+finalizeFuzzyMatching, exportUnmatchedEntries (Download-Spy wie gehabt) testen
+und aus exclude nehmen. Danach 18-files-reset, dann 03/13/14.
 
 ## Offene Fragen / Risiken
 
