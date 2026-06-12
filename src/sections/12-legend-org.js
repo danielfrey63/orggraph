@@ -846,16 +846,21 @@ export function triggerDownload(filename, content, mime = 'text/tab-separated-va
   URL.revokeObjectURL(url);
 }
 
-/** Collects a category's assignments as sorted `identifier<sep>attrName` lines. */
+/**
+ * Collects a category's assignments as sorted `identifier<sep>attrName` lines.
+ * A value other than the default '1' is kept as third column, so files with
+ * attribute values survive a load/save roundtrip.
+ */
 export function buildCategoryLines(categoryName, separator = '\t') {
   const lines = [];
   for (const [personId, attrs] of personAttributes.entries()) {
-    for (const attrKey of attrs.keys()) {
+    for (const [attrKey, attrValue] of attrs.entries()) {
       const [cat, attrName] = String(attrKey).includes('::') ? String(attrKey).split('::') : ['Attribute', String(attrKey)];
       if (cat !== categoryName) continue;
       const person = byId.get(personId);
       const identifier = person?.email || personId;
-      lines.push(`${identifier}${separator}${attrName}`);
+      const valueSuffix = (attrValue != null && String(attrValue) !== '1') ? `${separator}${attrValue}` : '';
+      lines.push(`${identifier}${separator}${attrName}${valueSuffix}`);
     }
   }
   lines.sort();
@@ -961,7 +966,9 @@ export function exportSingleAttribute(attributeKey) {
     if (attrs.has(attributeKey)) {
       const person = byId.get(personId);
       const identifier = person?.email || personId;
-      lines.push(`${identifier}\t${attrName}`);
+      const attrValue = attrs.get(attributeKey);
+      const valueSuffix = (attrValue != null && String(attrValue) !== '1') ? `\t${attrValue}` : '';
+      lines.push(`${identifier}\t${attrName}${valueSuffix}`);
     }
   }
   

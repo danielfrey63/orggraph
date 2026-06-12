@@ -335,8 +335,9 @@ Speichern wirkt zweistufig:
    Kategorie gemerkt, weitere Speichervorgänge überschreiben die Datei
    direkt ohne Dialog. Andere Browser erhalten einen normalen Download.
 
-Hinweis: Gespeichert werden zwei Spalten (`identifier<TAB>attributname`);
-allfällige Attributwerte aus der Quelldatei gehen beim Speichern verloren.
+Gespeichert wird `identifier<TAB>attributname`; ein optionaler Attributwert
+aus der Quelldatei (dritte Spalte, Default `1`) bleibt dabei erhalten —
+Laden und Speichern sind verlustfrei.
 
 ### Fuzzy-Matching & gespeicherte Zuordnungen
 

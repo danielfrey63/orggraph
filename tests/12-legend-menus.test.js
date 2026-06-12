@@ -184,6 +184,15 @@ describe('exports', () => {
     expect(downloads[0].download).toBe('Team.tsv');
   });
 
+  it('saveCategory keeps attribute values as third column', async () => {
+    globalThis.personAttributes = new Map([
+      ['p1', new Map([['Team::Coach', 'Lead'], ['Team::PL', '1']])],
+    ]);
+    globalThis.modifiedCategories = new Set(['Team']);
+    await saveCategory('Team');
+    expect(globalThis.idbStore.get(ATTR_PREFIX + 'Team.tsv')).toBe('alice@x.ch\tCoach\tLead\nalice@x.ch\tPL');
+  });
+
   it('saveCategory creates a source entry for UI-created categories', async () => {
     globalThis.modifiedCategories = new Set(['Team']);
     expect(await saveCategory('Team')).toBe(true);
