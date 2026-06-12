@@ -228,7 +228,29 @@ window.addEventListener("DOMContentLoaded", async () => {
     const initialIcon = attributesVisibilityBtn.querySelector('[data-icon]');
     if (initialIcon) setIcon(initialIcon, attributesVisible ? 'eye' : 'eyeClosed');
     
-    attributesVisibilityBtn.addEventListener('click', () => {
+    attributesVisibilityBtn.addEventListener('click', (e) => {
+      // Stop bubbling to the section header: setIcon replaces the clicked SVG,
+      // so the header's data-ignore-header-click check cannot find the button
+      // anymore via the detached e.target and would toggle the collapse state
+      e.stopPropagation();
+
+      if (e.shiftKey) {
+        // Shift+Click: toggle the visibility of every category,
+        // leaving the global visibility state untouched
+        const cats = new Set(Array.from(attributeTypes.keys()).map(k => String(k).split('::')[0]));
+        for (const c of emptyCategories) cats.add(c);
+        if (hiddenCategories.size > 0) {
+          hiddenCategories.clear();
+          showTemporaryNotification('Alle Attribut-Kategorien eingeblendet');
+        } else {
+          cats.forEach(c => hiddenCategories.add(c));
+          showTemporaryNotification('Alle Attribut-Kategorien ausgeblendet');
+        }
+        buildAttributeLegend();
+        updateAttributeCircles();
+        return;
+      }
+
       // Toggle Button-Status
       attributesVisibilityBtn.classList.toggle('active');
       attributesVisible = attributesVisibilityBtn.classList.contains('active');

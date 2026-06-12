@@ -2168,7 +2168,7 @@ body.dz-dragging::after {
               <button id="toggleAllAttributes" class="legend-icon-btn" title="Alle Attribute an/abwählen" data-ignore-header-click="true">
                 <i data-icon="checkAll"></i>
               </button>
-              <button id="toggleAttributesVisibility" class="legend-icon-btn active" title="Attribute ausblenden" data-ignore-header-click="true">
+              <button id="toggleAttributesVisibility" class="legend-icon-btn active" title="Attribute global ein-/ausblenden – Shift+Klick: Sichtbarkeit aller Kategorien umschalten" data-ignore-header-click="true">
                 <i data-icon="eye"></i>
               </button>
             </div>
@@ -8252,6 +8252,23 @@ function buildAttributeLegend() {
     const total = items.reduce((s,it)=> s + (it.count||0), 0);
     catLeftArea.appendChild(createLegendChip(`${cat} (${total})`, `${cat} - ${total} Einträge`));
 
+    // Toggle all attributes of this category on/off (mirrors the section-wide checkAll)
+    if (items.length > 0) {
+      catRightArea.appendChild(createLegendIconButton({
+        icon: 'checkAll',
+        title: `Alle Attribute in "${cat}" an/abwählen`,
+        onClick: () => {
+          const anyActive = items.some(it => activeAttributes.has(it.key));
+          for (const it of items) {
+            if (anyActive) activeAttributes.delete(it.key);
+            else activeAttributes.add(it.key);
+          }
+          buildAttributeLegend();
+          updateAttributeCircles();
+        },
+      }));
+    }
+
     // Download-Button für Kategorie (TSV-Export) - vor Eye-Button
     catRightArea.appendChild(createLegendIconButton({
       svg: getDownloadSVG(),
@@ -9161,7 +9178,29 @@ window.addEventListener("DOMContentLoaded", async () => {
     const initialIcon = attributesVisibilityBtn.querySelector('[data-icon]');
     if (initialIcon) setIcon(initialIcon, attributesVisible ? 'eye' : 'eyeClosed');
     
-    attributesVisibilityBtn.addEventListener('click', () => {
+    attributesVisibilityBtn.addEventListener('click', (e) => {
+      // Stop bubbling to the section header: setIcon replaces the clicked SVG,
+      // so the header's data-ignore-header-click check cannot find the button
+      // anymore via the detached e.target and would toggle the collapse state
+      e.stopPropagation();
+
+      if (e.shiftKey) {
+        // Shift+Click: toggle the visibility of every category,
+        // leaving the global visibility state untouched
+        const cats = new Set(Array.from(attributeTypes.keys()).map(k => String(k).split('::')[0]));
+        for (const c of emptyCategories) cats.add(c);
+        if (hiddenCategories.size > 0) {
+          hiddenCategories.clear();
+          showTemporaryNotification('Alle Attribut-Kategorien eingeblendet');
+        } else {
+          cats.forEach(c => hiddenCategories.add(c));
+          showTemporaryNotification('Alle Attribut-Kategorien ausgeblendet');
+        }
+        buildAttributeLegend();
+        updateAttributeCircles();
+        return;
+      }
+
       // Toggle Button-Status
       attributesVisibilityBtn.classList.toggle('active');
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
@@ -10095,17 +10134,29 @@ function initializeCollapsibleLegends() {
       const header = btn.closest('.legend-header');
       if (header) {
         header.addEventListener('click', (e) => {
-          // Prüfe, ob auf ein Element geklickt wurde, das vom Header-Klick ausgenommen werden soll
+          // Check whether the click landed on an element opting out of the
+          // header toggle. Prefer composedPath: it still contains the original
+          // ancestors even if a button handler replaced its icon DOM (which
+          // detaches e.target) before the event bubbled up here.
           let shouldIgnore = false;
-          let element = e.target;
-
-          // Prüfe, ob das Zielelement oder einer seiner Eltern das data-ignore-header-click Attribut hat
-          while (element && element !== header) {
-            if (element.hasAttribute && element.hasAttribute('data-ignore-header-click')) {
-              shouldIgnore = true;
-              break;
+          const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+          if (path.length) {
+            for (const element of path) {
+              if (element === header) break;
+              if (element.hasAttribute && element.hasAttribute('data-ignore-header-click')) {
+                shouldIgnore = true;
+                break;
+              }
             }
-            element = element.parentElement;
+          } else {
+            let element = e.target;
+            while (element && element !== header) {
+              if (element.hasAttribute && element.hasAttribute('data-ignore-header-click')) {
+                shouldIgnore = true;
+                break;
+              }
+              element = element.parentElement;
+            }
           }
           
           // Wenn der Klick nicht auf den collapse-button selbst war und nicht auf ein zu ignorierendes Element

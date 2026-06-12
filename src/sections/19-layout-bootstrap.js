@@ -287,17 +287,29 @@ export function initializeCollapsibleLegends() {
       const header = btn.closest('.legend-header');
       if (header) {
         header.addEventListener('click', (e) => {
-          // Prüfe, ob auf ein Element geklickt wurde, das vom Header-Klick ausgenommen werden soll
+          // Check whether the click landed on an element opting out of the
+          // header toggle. Prefer composedPath: it still contains the original
+          // ancestors even if a button handler replaced its icon DOM (which
+          // detaches e.target) before the event bubbled up here.
           let shouldIgnore = false;
-          let element = e.target;
-
-          // Prüfe, ob das Zielelement oder einer seiner Eltern das data-ignore-header-click Attribut hat
-          while (element && element !== header) {
-            if (element.hasAttribute && element.hasAttribute('data-ignore-header-click')) {
-              shouldIgnore = true;
-              break;
+          const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+          if (path.length) {
+            for (const element of path) {
+              if (element === header) break;
+              if (element.hasAttribute && element.hasAttribute('data-ignore-header-click')) {
+                shouldIgnore = true;
+                break;
+              }
             }
-            element = element.parentElement;
+          } else {
+            let element = e.target;
+            while (element && element !== header) {
+              if (element.hasAttribute && element.hasAttribute('data-ignore-header-click')) {
+                shouldIgnore = true;
+                break;
+              }
+              element = element.parentElement;
+            }
           }
           
           // Wenn der Klick nicht auf den collapse-button selbst war und nicht auf ein zu ignorierendes Element

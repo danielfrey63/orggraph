@@ -135,6 +135,23 @@ export function buildAttributeLegend() {
     const total = items.reduce((s,it)=> s + (it.count||0), 0);
     catLeftArea.appendChild(createLegendChip(`${cat} (${total})`, `${cat} - ${total} Einträge`));
 
+    // Toggle all attributes of this category on/off (mirrors the section-wide checkAll)
+    if (items.length > 0) {
+      catRightArea.appendChild(createLegendIconButton({
+        icon: 'checkAll',
+        title: `Alle Attribute in "${cat}" an/abwählen`,
+        onClick: () => {
+          const anyActive = items.some(it => activeAttributes.has(it.key));
+          for (const it of items) {
+            if (anyActive) activeAttributes.delete(it.key);
+            else activeAttributes.add(it.key);
+          }
+          buildAttributeLegend();
+          updateAttributeCircles();
+        },
+      }));
+    }
+
     // Download-Button für Kategorie (TSV-Export) - vor Eye-Button
     catRightArea.appendChild(createLegendIconButton({
       svg: getDownloadSVG(),
