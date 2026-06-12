@@ -19,6 +19,9 @@ const makeFuzzyMatches = () => new Map([
 ]);
 
 beforeEach(() => {
+  // exportUnmatchedEntries removes its download anchor via setTimeout(100);
+  // fake timers let afterEach flush that cleanup while the DOM still exists.
+  vi.useFakeTimers();
   document.body.innerHTML = '';
   downloads = [];
   globalThis.hashCode = hashCode;
@@ -40,6 +43,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.runAllTimers();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
