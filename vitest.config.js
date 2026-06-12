@@ -17,7 +17,6 @@ export default defineConfig({
       // simulation, drop/bootstrap orchestration). Logic found in these files
       // must move into an included section, not be tested through the DOM.
       exclude: [
-        'src/sections/13-clusters-simulation.js',
         'src/sections/14-render.js',
       ],
     },

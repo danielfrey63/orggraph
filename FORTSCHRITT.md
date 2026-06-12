@@ -408,14 +408,25 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
 - **304 Tests grün, Gate grün: 92,07 % brutto** (18/19 Sektionen im Nenner).
 - In exclude verbleiben nur noch 13-clusters-simulation + 14-render (~1141 Z.).
 
-## Nächster Schritt (Iteration 36)
+### Iteration 36 — `13-clusters-simulation` in den Nenner: 100 % (16 Tests)
+- Mit echtem d3: refreshClusters (Clear-Pfad, Hüllen um Root-Org-Mitglieder
+  inkl. Nachfahren-Rollup, Layer-Guard), getNodeOuterRadius (Basis + Ringe),
+  positionNodesInCircle (Einzel/Gleichverteilung), findPositionOutsideHull
+  (Fallbacks + BBox-Platzierung), radialLayoutExpansion (BFS-Positionierung,
+  Parents-at-North), createSimulation (alle vier Forces, attributabhängiger
+  Collide-Radius), keepSimulationRunning (Continuous-Guard + Re-Energize),
+  getNodesLevels (BFS + 999-Fallback), TS-Proxy.
+- Learning: Sektion 13 referenziert `Logger` auf Top-Level → dynamischer Import
+  nach Global-Setup (gleiche Technik wie 18er-Bootstrap).
+- **320 Tests grün, Gate grün: 92,47 % brutto.** Nur noch `14-render` in exclude.
 
-Letzter Block: `13-clusters-simulation` (355 Z.) mit echtem d3 testen
-(getNodeOuterRadius, positionNodesInCircle, findPositionOutsideHull,
-radialLayoutExpansion, createSimulation, getNodesLevels, refreshClusters mit
-SVG-Fixture; Tick-Handler ggf. Ausnahme). Danach 14-render (transitionGraph-
-Logikpfade, renderGraph testbare Anteile) — Rest-Ausnahmen einzeln begründen,
-dann Schluss-Audit Phase 7 (Brutto-Zahl mit und ohne Ausnahmen ausweisen).
+## Nächster Schritt (Iteration 37)
+
+Letzte Sektion `14-render` (786 Z.): transitionGraph (Async-Orchestrierung mit
+Transition-ID-Race-Guard — Logikpfade mit Stubs), renderGraph (testbare Anteile
+mit echtem d3 + SVG-Fixture; Drag-/Zoom-Handler ggf. als begründete Ausnahmen).
+Danach Schluss-Audit Phase 7: Brutto-Zahl mit und ohne verbleibende Ausnahmen,
+README-Abgleich, FERTIG-Bilanz.
 
 ## Offene Fragen / Risiken
 
