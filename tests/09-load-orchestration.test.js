@@ -3,13 +3,15 @@ import {
   loadEnvConfig,
   categoryFromUrl,
   loadAttributesFromUrl,
+  loadAttributesPreferStored,
+  parseAttributeDirListing,
   loadData,
   idOf,
 } from '../src/sections/09-data-load.js';
 import { loadPseudoData } from '../src/sections/06-pseudo-labels.js';
 import { parseAttributeList, findPersonIdsByIdentifier } from '../src/sections/15-ui-apply-search.js';
 import { colorForCategoryAttribute } from '../src/sections/08-color-geometry.js';
-import { KEY_ENV, KEY_DATA, KEY_PSEUDO } from '../src/sections/04-storage.js';
+import { KEY_ENV, KEY_DATA, KEY_PSEUDO, ATTR_EXT } from '../src/sections/04-storage.js';
 
 // In-memory stand-in for the IndexedDB-backed accessors.
 let store;
@@ -27,6 +29,7 @@ beforeEach(() => {
   globalThis.KEY_ENV = KEY_ENV;
   globalThis.KEY_DATA = KEY_DATA;
   globalThis.KEY_PSEUDO = KEY_PSEUDO;
+  globalThis.ATTR_EXT = ATTR_EXT;
   globalThis.getStoredJson = async (k) => store.get(k);
   globalThis.getStoredText = async (k) => store.get(k);
   globalThis.getStoredAttributes = async () => [];
@@ -88,6 +91,64 @@ describe('categoryFromUrl', () => {
     expect(categoryFromUrl('https://x/y/Roles.txt?v=2#top')).toBe('Roles');
     expect(categoryFromUrl('NoExtension')).toBe('NoExtension');
     expect(categoryFromUrl('.hidden')).toBe('.hidden');
+  });
+});
+
+describe('parseAttributeDirListing', () => {
+  it('extracts decoded attribute file names from listing HTML', () => {
+    const html = `
+      <a href="ERZ%20Rollen%20Rom.tsv">ERZ Rollen Rom.tsv</a>
+      <a href="/base/path/Roles.txt?v=1#x">Roles.txt</a>
+      <a href='Team.csv'>Team.csv</a>
+      <a href="subdir/">subdir/</a>
+      <a href="readme.md">readme.md</a>
+      <a href="ERZ%20Rollen%20Rom.tsv">duplicate</a>`;
+    expect(parseAttributeDirListing(html).sort()).toEqual(['ERZ Rollen Rom.tsv', 'Roles.txt', 'Team.csv']);
+  });
+
+  it('returns an empty list for non-listing HTML', () => {
+    expect(parseAttributeDirListing('<html><body>Hello</body></html>')).toEqual([]);
+  });
+});
+
+describe('loadAttributesPreferStored — DATA_ATTRIBUTES_DIR', () => {
+  beforeEach(() => {
+    globalThis.raw = { persons: [{ id: 'p-1', label: 'Alice', email: 'alice@x.ch' }] };
+  });
+
+  it('discovers and loads attribute files via the directory listing', async () => {
+    globalThis.envConfig = { DATA_ATTRIBUTES_DIR: './attrs' };
+    globalThis.fetch = vi.fn(async (url) => {
+      if (String(url) === './attrs/') return okText('<a href="Team%20Rom.tsv">Team Rom.tsv</a>');
+      return okText('alice@x.ch\tCoach');
+    });
+    await loadAttributesPreferStored();
+    expect(globalThis.attributeTypes.has('Team Rom::Coach')).toBe(true);
+    expect(globalThis.collapsedCategories.has('Team Rom')).toBe(true);
+  });
+
+  it('merges directory files with explicit URLs without duplicating categories', async () => {
+    globalThis.envConfig = {
+      DATA_ATTRIBUTES_URL: './attrs/Team.tsv',
+      DATA_ATTRIBUTES_DIR: './attrs',
+    };
+    globalThis.fetch = vi.fn(async (url) => {
+      if (String(url) === './attrs/') return okText('<a href="Team.tsv">x</a><a href="Extra.tsv">y</a>');
+      return okText('alice@x.ch\tCoach');
+    });
+    await loadAttributesPreferStored();
+    // Team.tsv only fetched once (listing + 2 distinct files = 3 calls)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+    expect(globalThis.attributeTypes.has('Team::Coach')).toBe(true);
+    expect(globalThis.attributeTypes.has('Extra::Coach')).toBe(true);
+  });
+
+  it('reports an unreadable directory without failing', async () => {
+    globalThis.envConfig = { DATA_ATTRIBUTES_DIR: './attrs' };
+    const notify = vi.fn();
+    globalThis.showTemporaryNotification = notify;
+    await loadAttributesPreferStored();
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining('konnte nicht gelesen werden'), 5000);
   });
 });
 

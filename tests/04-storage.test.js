@@ -15,6 +15,7 @@ import {
   basenameOf,
   resolveRefPath,
   findEntryByRef,
+  isPathUnderDir,
   storeEntries,
   storeFiles,
   idbGet,
@@ -306,5 +307,64 @@ describe('stored attribute match resolutions', () => {
     await mergeStoredAttrMatches({ 'a@x.ch': 'p1', 'b@x.ch': null });
     await mergeStoredAttrMatches({ 'b@x.ch': 'p2', 'c@x.ch': null });
     expect(await getStoredAttrMatches()).toEqual({ 'a@x.ch': 'p1', 'b@x.ch': 'p2', 'c@x.ch': null });
+  });
+});
+
+describe('isPathUnderDir', () => {
+  it('matches paths inside the directory only', () => {
+    expect(isPathUnderDir('pkg/attrs/Team.tsv', 'pkg/attrs')).toBe(true);
+    expect(isPathUnderDir('pkg/attrs/sub/X.tsv', 'pkg/attrs')).toBe(true);
+    expect(isPathUnderDir('pkg/other/Team.tsv', 'pkg/attrs')).toBe(false);
+    expect(isPathUnderDir('pkg/attrs-2/Team.tsv', 'pkg/attrs')).toBe(false);
+  });
+
+  it('treats the empty dir (drop root) as matching everything and null as nothing', () => {
+    expect(isPathUnderDir('Team.tsv', '')).toBe(true);
+    expect(isPathUnderDir('a/b/Team.tsv', '')).toBe(true);
+    expect(isPathUnderDir('Team.tsv', null)).toBe(false);
+  });
+});
+
+describe('storeEntries with DATA_ATTRIBUTES_DIR', () => {
+  const entry = (path, content) => ({
+    path,
+    file: { name: path.split('/').pop(), text: async () => content },
+  });
+
+  it('stores every attribute file inside the configured directory', async () => {
+    const result = await storeEntries([
+      entry('pkg/env.json', JSON.stringify({
+        DATA_URL: './data.json',
+        DATA_ATTRIBUTES_DIR: './attrs/',
+      })),
+      entry('pkg/data.json', '{"persons":[]}'),
+      entry('pkg/attrs/Team.tsv', 'a@b\tX'),
+      entry('pkg/attrs/Roles.txt', 'a@b\tY'),
+    ]);
+    const attrNames = result.stored.filter(s => s.kind === 'attr').map(s => s.filename).sort();
+    expect(attrNames).toEqual(['Roles.txt', 'Team.tsv']);
+    expect(result.missing).toEqual([]);
+    expect(await getStoredText(ATTR_PREFIX + 'Team.tsv')).toBe('a@b\tX');
+  });
+
+  it('combines explicit refs and directories without storing twice', async () => {
+    const result = await storeEntries([
+      entry('env.json', JSON.stringify({
+        DATA_ATTRIBUTES_URL: ['./attrs/Team.tsv'],
+        DATA_ATTRIBUTES_DIR: './attrs',
+      })),
+      entry('attrs/Team.tsv', 'a@b\tX'),
+      entry('attrs/Extra.tsv', 'a@b\tY'),
+    ]);
+    const attrNames = result.stored.filter(s => s.kind === 'attr').map(s => s.filename).sort();
+    expect(attrNames).toEqual(['Extra.tsv', 'Team.tsv']);
+  });
+
+  it('reports a directory without attribute files as missing', async () => {
+    const result = await storeEntries([
+      entry('env.json', JSON.stringify({ DATA_ATTRIBUTES_DIR: './attrs' })),
+      entry('other/Team.tsv', 'a@b\tX'),
+    ]);
+    expect(result.missing).toEqual(['./attrs']);
   });
 });

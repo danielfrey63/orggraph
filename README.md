@@ -120,7 +120,13 @@ Die App wird über eine Env-Datei im JSON-Format konfiguriert (Vorlage:
 - **`DATA_URL`**: Pfad/URL zur Datendatei (beim Import relativ zur Env-Datei
   aufgelöst, am Dev-Server relativ zur Seite)
 - **`DATA_ATTRIBUTES_URL`**: Pfad/URL zu Attributdateien (String oder Array;
-  TSV/CSV/TXT)
+  TSV/CSV/TXT) — explizite Auflistung einzelner Dateien
+- **`DATA_ATTRIBUTES_DIR`**: Verzeichnis(se) mit Attributdateien (String oder
+  Array). Alle TSV/CSV/TXT-Dateien darin werden geladen, ohne sie einzeln
+  aufzulisten; kombinierbar mit `DATA_ATTRIBUTES_URL` (Duplikate werden
+  übersprungen). Beim Import zählt die Verzeichnisstruktur des Drops; am
+  Dev-Server wird das Directory-Listing des Servers ausgewertet (funktioniert
+  z.B. mit `python -m http.server`, VS Code Live Server, nginx autoindex)
 - **`TOOLBAR_DEPTH_DEFAULT`**: Standard-Suchtiefe
 - **`TOOLBAR_DIRECTION_DEFAULT`**: Standard-Richtung (`both`, `down`, `up`)
 - **`TOOLBAR_MANAGEMENT_ACTIVE`**: Management-Filter standardmässig aktiviert
@@ -275,10 +281,12 @@ Endung** wird zur Kategorie: Die Attribut-Legende gruppiert hierarchisch nach
 Kategorie → Attribut (mit Trefferzahl pro Attribut), die Farben sind innerhalb
 einer Kategorie ähnlich und zwischen Kategorien klar unterscheidbar.
 
-Geladen wird über `DATA_ATTRIBUTES_URL` (Env; String oder Array), per
-Drag & Drop oder über den Upload-Button im Legenden-Header. Importierte
-Dateien landen in IndexedDB und werden beim nächsten Start automatisch
-geladen. Leere Dateien registrieren eine Kategorie als Platzhalter.
+Geladen wird über die Env-Konfiguration — `DATA_ATTRIBUTES_DIR` (ganzes
+Verzeichnis, keine Einzelauflistung nötig) und/oder `DATA_ATTRIBUTES_URL`
+(explizite Dateiliste) —, per Drag & Drop oder über den Upload-Button im
+Legenden-Header. Importierte Dateien landen in IndexedDB und werden beim
+nächsten Start automatisch geladen. Leere Dateien registrieren eine Kategorie
+als Platzhalter.
 
 ### Bedienung der Attribut-Legende
 

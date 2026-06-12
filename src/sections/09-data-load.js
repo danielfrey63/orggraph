@@ -339,7 +339,34 @@ export async function loadData() {
   return true;
 }
 
-// Attribute laden: bevorzugt aus IndexedDB, sonst aus ENV-URLs (Dev-Fallback) [SF][DRY]
+/**
+ * Extracts attribute file names (.tsv/.csv/.txt) from a server directory
+ * listing (HTML with <a href> entries). Returns decoded basenames.
+ */
+export function parseAttributeDirListing(html) {
+  const names = new Set();
+  const re = /href\s*=\s*["']([^"']+)["']/gi;
+  let m;
+  while ((m = re.exec(String(html)))) {
+    let href = m[1].split('?')[0].split('#')[0];
+    try { href = decodeURIComponent(href); } catch (_) { /* keep raw */ }
+    if (!ATTR_EXT.test(href)) continue;
+    const parts = href.split('/');
+    names.add(parts[parts.length - 1]);
+  }
+  return Array.from(names);
+}
+
+/** Lists attribute file URLs inside a directory via the server's listing. */
+export async function listAttributeUrlsFromDir(dirRef) {
+  const dir = String(dirRef).endsWith('/') ? String(dirRef) : `${dirRef}/`;
+  const res = await fetch(dir, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  const names = parseAttributeDirListing(await res.text());
+  return names.map(n => dir + n);
+}
+
+// Attribute laden: bevorzugt aus IndexedDB, sonst aus ENV (Dev-Fallback) [SF][DRY]
 export async function loadAttributesPreferStored() {
   const stored = await getStoredAttributes();
   if (stored.length) {
@@ -354,25 +381,45 @@ export async function loadAttributesPreferStored() {
     return;
   }
 
-  // Fallback: Attribute aus ENV-URLs (string oder string[]) – nur im Dev-Server
+  // Fallback: Attribute aus ENV – explizite URLs (string oder string[]) und/oder
+  // Verzeichnisse (DATA_ATTRIBUTES_DIR), aufgelöst über das Directory-Listing
+  // des Dev-Servers
   const attrCfg = envConfig?.DATA_ATTRIBUTES_URL;
-  if (attrCfg) {
-    const urls = Array.isArray(attrCfg) ? attrCfg : [attrCfg];
-    collapsedCategories = new Set(urls.map(u => categoryFromUrl(u)));
-    for (const u of urls) {
+  const dirCfg = envConfig?.DATA_ATTRIBUTES_DIR;
+  const urls = attrCfg ? (Array.isArray(attrCfg) ? attrCfg : [attrCfg]).slice() : [];
+  if (dirCfg) {
+    for (const dir of (Array.isArray(dirCfg) ? dirCfg : [dirCfg])) {
       try {
-        const result = await loadAttributesFromUrl(u);
-        if (result.loaded) {
-          const catName = categoryFromUrl(u);
-          if (result.isEmpty) {
-            showTemporaryNotification(`Kategorie "${catName}" geladen (leer - nur Platzhalter)`, 2500);
-          } else if (result.unmatchedCount > 0) {
-            showTemporaryNotification(`Attribute geladen (${catName}): ${result.matchedCount} zugeordnet, ${result.unmatchedCount} nicht gefunden`, 2500);
-          }
+        const found = await listAttributeUrlsFromDir(dir);
+        if (found.length === 0) {
+          showTemporaryNotification(`Keine Attributdateien in "${dir}" gefunden`, 4000);
+        }
+        for (const u of found) {
+          // skip files already covered by an explicit entry (same category)
+          if (!urls.some(existing => categoryFromUrl(existing) === categoryFromUrl(u))) urls.push(u);
         }
       } catch (error) {
-        console.error('Automatisches Laden der Attribute fehlgeschlagen:', error);
+        console.error('Attribut-Verzeichnis konnte nicht gelistet werden:', error);
+        showTemporaryNotification(`Attribut-Verzeichnis "${dir}" konnte nicht gelesen werden (Server ohne Directory-Listing?)`, 5000);
       }
+    }
+  }
+  if (urls.length === 0) return;
+
+  collapsedCategories = new Set(urls.map(u => categoryFromUrl(u)));
+  for (const u of urls) {
+    try {
+      const result = await loadAttributesFromUrl(u);
+      if (result.loaded) {
+        const catName = categoryFromUrl(u);
+        if (result.isEmpty) {
+          showTemporaryNotification(`Kategorie "${catName}" geladen (leer - nur Platzhalter)`, 2500);
+        } else if (result.unmatchedCount > 0) {
+          showTemporaryNotification(`Attribute geladen (${catName}): ${result.matchedCount} zugeordnet, ${result.unmatchedCount} nicht gefunden`, 2500);
+        }
+      }
+    } catch (error) {
+      console.error('Automatisches Laden der Attribute fehlgeschlagen:', error);
     }
   }
 }

@@ -100,8 +100,8 @@ export async function requestPersistence() {
 
 export function looksLikeEnv(obj) {
   if (!obj || typeof obj !== 'object') return false;
-  if ('DATA_URL' in obj) return true;
-  return Object.keys(obj).some(k => k.startsWith('TOOLBAR_') || k.startsWith('LEGEND_'));
+  return Object.keys(obj).some(k =>
+    k.startsWith('DATA_') || k.startsWith('TOOLBAR_') || k.startsWith('LEGEND_'));
 }
 
 export function looksLikePseudo(obj) {
@@ -176,6 +176,14 @@ export function resolveRefPath(envPath, ref) {
   const r = String(ref || '');
   if (!r || /^[a-z][a-z0-9+.-]*:/i.test(r)) return null;
   return normalizeRelPath(dirOf(envPath) + '/' + r.split('?')[0].split('#')[0]);
+}
+
+/** True when `path` lies inside `dirPath` (both relative to the drop root). */
+export function isPathUnderDir(path, dirPath) {
+  if (dirPath == null) return false;
+  const n = normalizeRelPath(path);
+  const d = normalizeRelPath(dirPath);
+  return d === '' ? true : n.startsWith(d + '/');
 }
 
 /** Find the dropped entry an env reference points at (path match, unique-basename fallback). */
@@ -254,6 +262,19 @@ export async function storeEntries(entryList) {
       const hit = findEntryByRef(classified, env.path, ref);
       if (hit) { used.add(hit); await storeAttr(hit); }
       else missing.push(String(ref));
+    }
+
+    // Attribute directories (DATA_ATTRIBUTES_DIR): every attribute file
+    // inside the directory counts as referenced — no explicit listing needed
+    const attrDirs = cfg.DATA_ATTRIBUTES_DIR
+      ? (Array.isArray(cfg.DATA_ATTRIBUTES_DIR) ? cfg.DATA_ATTRIBUTES_DIR : [cfg.DATA_ATTRIBUTES_DIR])
+      : [];
+    for (const dirRef of attrDirs) {
+      const dirPath = resolveRefPath(env.path, String(dirRef).replace(/\/+$/, ''));
+      const hits = classified.filter(c =>
+        c.kind === 'attr' && !used.has(c) && isPathUnderDir(c.path, dirPath));
+      if (!hits.length) { missing.push(String(dirRef)); continue; }
+      for (const hit of hits) { used.add(hit); await storeAttr(hit); }
     }
   }
 
