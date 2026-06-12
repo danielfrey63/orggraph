@@ -399,13 +399,23 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
   Attribut-Datei-Input mit IDB-Persistenz, Footer-Reset-Button (clear+reload).
 - **295 Tests grün, Gate grün: 92,0 % brutto**, Sektion 18: 692/849 = 81,5 %.
 
-## Nächster Schritt (Iteration 35)
+### Iteration 35 — `03-export-dialog` in den Nenner (9 Tests, 93,2 %)
+- Tests: getTimestamp-Format, Dialog-Flow (Open mit Preset-Default, Close/Overlay,
+  Format-Umschaltung, Preset→Inputs, Input löscht Preset, Escape/Enter-Shortcuts),
+  exportAsSvg (serialisierter Style-Klon, Blob-Typ, Timestamp-Dateiname,
+  Fehlpfad ohne SVG), exportAsPng (Canvas-Pipeline via Image-/Canvas-Stubs,
+  PNG-Download, Image-onerror-Pfad).
+- **304 Tests grün, Gate grün: 92,07 % brutto** (18/19 Sektionen im Nenner).
+- In exclude verbleiben nur noch 13-clusters-simulation + 14-render (~1141 Z.).
 
-`03-export-dialog` (388 Z.): initializeExport/showExportDialog/hideExportDialog,
-exportAsSvg (XMLSerializer in jsdom ok), exportAsPng (Canvas/Image → testbare
-Anteile, Rest ggf. begründete Ausnahme), getTimestamp. Danach als letzte:
-13-clusters-simulation + 14-render (testbare Anteile mit echtem d3, D3-Tick-/
-Render-Pfade ggf. als begründete Rest-Ausnahmen dokumentieren).
+## Nächster Schritt (Iteration 36)
+
+Letzter Block: `13-clusters-simulation` (355 Z.) mit echtem d3 testen
+(getNodeOuterRadius, positionNodesInCircle, findPositionOutsideHull,
+radialLayoutExpansion, createSimulation, getNodesLevels, refreshClusters mit
+SVG-Fixture; Tick-Handler ggf. Ausnahme). Danach 14-render (transitionGraph-
+Logikpfade, renderGraph testbare Anteile) — Rest-Ausnahmen einzeln begründen,
+dann Schluss-Audit Phase 7 (Brutto-Zahl mit und ohne Ausnahmen ausweisen).
 
 ## Offene Fragen / Risiken
 
