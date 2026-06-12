@@ -20,7 +20,6 @@ export default defineConfig({
         'src/sections/03-export-dialog.js',
         'src/sections/13-clusters-simulation.js',
         'src/sections/14-render.js',
-        'src/sections/17-fuzzy-dialog.js',
         'src/sections/18-files-reset.js',
       ],
     },

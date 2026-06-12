@@ -357,11 +357,23 @@ entfernen, wenn Tests da sind). Manueller file://-Check durch User: bestanden
 - Sektion 12 (1076 Z., grösster Brocken) aus exclude → **94,4 %**.
 - **256 Tests grün, Gate grün: 93,72 %** (14/19 Sektionen im Nenner).
 
-## Nächster Schritt (Iteration 31)
+### Iteration 31 — `17-fuzzy-dialog` in den Nenner (10 Tests, 94 %)
+- Tests: Dialog-Aufbau (Zeilen pro Fuzzy-Eintrag, Default unmatched,
+  Kandidaten mit Ähnlichkeits-%), Kandidaten-Auswahl per Klick und per
+  ArrowDown+Enter, Live-Filter mit no-results, drei Abbruch-Wege (Close/ESC/
+  Overlay) inkl. Dropdown-Cleanup, Confirm-Flow (Unmatched-CSV-Export +
+  finalizeFuzzyMatching + Schliessen), finalizeFuzzyMatching direkt
+  (Farb-Registrierung, Aktivierung, Anwendung), exportUnmatchedEntries
+  (CSV-Quoting, Header, Leer-Guard).
+- **266 Tests grün, Gate grün: 93,75 %** (15/19 Sektionen im Nenner).
 
-`17-fuzzy-dialog` (575 Z.): showFuzzyMatchDialog (Dialog-Aufbau, Auswahl-Flows),
-finalizeFuzzyMatching, exportUnmatchedEntries (Download-Spy wie gehabt) testen
-und aus exclude nehmen. Danach 18-files-reset, dann 03/13/14.
+## Nächster Schritt (Iteration 32)
+
+`18-files-reset` (871 Z.): handleDroppedFiles (storeFiles-Stub, Reload-Pfad vs.
+Attribut-Live-Reload), resetAllData (fake-indexeddb, Bestätigungs-Dialog) und
+die übrigen Funktionen der Sektion sichten + testen, dann aus exclude nehmen.
+Danach 03-export-dialog, zuletzt 13/14 (D3-Kern, testbare Anteile + begründete
+Ausnahmen).
 
 ## Offene Fragen / Risiken
 
