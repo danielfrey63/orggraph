@@ -7,6 +7,7 @@ export const KEY_ENV = 'env';
 export const KEY_DATA = 'data';
 export const KEY_PSEUDO = 'pseudo';
 export const ATTR_PREFIX = 'attr:';
+export const KEY_ATTR_MATCHES = 'attrMatches';
 
 let _dbPromise = null;
 
@@ -304,6 +305,21 @@ export async function getStoredAttributes() {
 
 export async function hasStoredData() {
   return (await getStoredText(KEY_DATA)) != null;
+}
+
+/**
+ * Persisted resolutions for attribute identifiers without an exact match:
+ * identifier -> person id (confirmed assignment) or null (confirmed unmatched).
+ * Saves re-running the fuzzy search and re-asking the user on every reload.
+ */
+export async function getStoredAttrMatches() {
+  return (await getStoredJson(KEY_ATTR_MATCHES)) || {};
+}
+
+export async function mergeStoredAttrMatches(updates) {
+  const merged = { ...(await getStoredAttrMatches()), ...updates };
+  await idbPut(KEY_ATTR_MATCHES, JSON.stringify(merged));
+  return merged;
 }
 
 

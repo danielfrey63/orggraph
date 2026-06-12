@@ -491,12 +491,37 @@ export async function loadAttributesFromFile(file) {
         }
         matchedCount++;
       } else {
-        // Zähle nicht exakt zugeordnete Einträge
-        searchCount++;
         unmatchedToSearch.push([identifier, attrs]);
       }
     }
-    
+
+    // Apply previously confirmed resolutions (fuzzy dialog choices and
+    // confirmed no-matches) so the expensive fuzzy search and the dialog
+    // only run for identifiers the user has not resolved yet
+    const storedMatches = await getStoredAttrMatches();
+    const toSearch = [];
+    for (const [identifier, attrs] of unmatchedToSearch) {
+      if (!Object.prototype.hasOwnProperty.call(storedMatches, identifier)) {
+        toSearch.push([identifier, attrs]);
+        continue;
+      }
+      const pid = storedMatches[identifier] != null ? String(storedMatches[identifier]) : null;
+      if (pid != null && byId && byId.has(pid)) {
+        if (!newPersonAttributes.has(pid)) {
+          newPersonAttributes.set(pid, new Map());
+        }
+        for (const [attrName, attrValue] of attrs.entries()) {
+          newPersonAttributes.get(pid).set(attrName, attrValue);
+        }
+        matchedCount++;
+      } else if (pid != null) {
+        // Stored person no longer exists in the dataset -> resolve again
+        toSearch.push([identifier, attrs]);
+      }
+      // pid === null: previously confirmed as unmatched -> skip silently
+    }
+    searchCount = toSearch.length;
+
     // Abbruch-Flag außerhalb des Blocks deklarieren, damit es nachher sicher verfügbar ist
     let abortFlagObj = null;
 
@@ -548,10 +573,10 @@ export async function loadAttributesFromFile(file) {
       });
       
       // Fuzzy-Suche nur über die tatsächlich nicht zugeordneten Einträge durchführen
-      for (let i = 0; i < unmatchedToSearch.length; i++) {
+      for (let i = 0; i < toSearch.length; i++) {
         if (searchAborted || (abortFlagObj && abortFlagObj.aborted)) break;
 
-        const [identifier, attrs] = unmatchedToSearch[i];
+        const [identifier, attrs] = toSearch[i];
 
         // Fortschritt-Handler für diesen Eintrag (Index i ist 0-basiert)
         const entryProgressHandler = (processed, total) => {
@@ -602,9 +627,13 @@ export async function loadAttributesFromFile(file) {
     
     // Wenn nur unmatched entries existieren, exportiere diese
     if (unmatchedEntries.size > 0) {
+      // Remember no-candidate identifiers so they are not searched again
+      const noMatchUpdates = {};
+      for (const identifier of unmatchedEntries.keys()) noMatchUpdates[identifier] = null;
+      try { await mergeStoredAttrMatches(noMatchUpdates); } catch (_) {}
       exportUnmatchedEntries(unmatchedEntries);
     }
-    
+
     // Merge into existing attributes so previously loaded categories survive
     if (personAttributes.size === 0) {
       personAttributes = newPersonAttributes;

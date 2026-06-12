@@ -32,6 +32,7 @@ beforeEach(() => {
   globalThis.updateAttributeStats = vi.fn();
   globalThis.updateAttributeCircles = vi.fn();
   globalThis.notifyAttributeVisibilityChanged = vi.fn();
+  globalThis.mergeStoredAttrMatches = vi.fn(async (u) => u);
   globalThis.showTemporaryNotification = vi.fn();
   vi.stubGlobal('Blob', class FakeBlob {
     constructor(parts, opts) { this.content = parts.join(''); this.type = opts?.type; }
@@ -131,6 +132,15 @@ describe('showFuzzyMatchDialog', () => {
     expect(downloads[0].download).toMatch(/^unmatched_attributes_.*\.csv$/);
     expect(globalThis.personAttributes).toBe(assigned); // finalize applied
     expect(types.has('Team::Coach')).toBe(true);
+    // unresolved entry persisted as confirmed no-match
+    expect(globalThis.mergeStoredAttrMatches).toHaveBeenCalledWith({ 'ghost@x.ch': null });
+  });
+
+  it('confirms: persists a chosen candidate as stored resolution', () => {
+    showFuzzyMatchDialog(makeFuzzyMatches(), new Map(), new Map(), new Map());
+    document.querySelectorAll('body > .combo-list li')[1].click(); // Alice (p1)
+    document.querySelector('.fuzzy-match-confirm-btn').click();
+    expect(globalThis.mergeStoredAttrMatches).toHaveBeenCalledWith({ 'ghost@x.ch': 'p1' });
   });
 });
 

@@ -59,6 +59,8 @@ beforeEach(() => {
   globalThis.updateAttributeCircles = vi.fn();
   globalThis.exportUnmatchedEntries = vi.fn();
   globalThis.showFuzzyMatchDialog = vi.fn();
+  globalThis.getStoredAttrMatches = vi.fn(async () => ({}));
+  globalThis.mergeStoredAttrMatches = vi.fn(async (u) => u);
   globalThis.personAttributes = new Map();
   globalThis.attributeTypes = new Map();
   globalThis.activeAttributes = new Set();
@@ -161,5 +163,32 @@ describe('loadAttributesFromFile', () => {
   it('returns false for unreadable files', async () => {
     const broken = { name: 'x.tsv', text: async () => { throw new Error('io'); } };
     expect(await loadAttributesFromFile(broken)).toBe(false);
+  });
+
+  it('applies stored fuzzy resolutions without searching again', async () => {
+    globalThis.getStoredAttrMatches = vi.fn(async () => ({ 'ghost@x.ch': 'p2' }));
+    const ok = await loadAttributesFromFile(makeFile('Team.tsv', 'ghost@x.ch\tCoach'));
+    expect(ok).toBe(true);
+    expect(globalThis.personAttributes.get('p2').get('Team::Coach')).toBe('1');
+    expect(globalThis.showFuzzyMatchDialog).not.toHaveBeenCalled();
+    expect(globalThis.exportUnmatchedEntries).not.toHaveBeenCalled();
+  });
+
+  it('skips identifiers previously confirmed as unmatched', async () => {
+    globalThis.getStoredAttrMatches = vi.fn(async () => ({ 'ghost@x.ch': null }));
+    const ok = await loadAttributesFromFile(makeFile('Team.tsv', 'ghost@x.ch\tCoach\nboss@x.ch\tPL'));
+    expect(ok).toBe(true);
+    expect(globalThis.personAttributes.get('p1').get('Team::PL')).toBe('1');
+    expect(globalThis.showFuzzyMatchDialog).not.toHaveBeenCalled();
+    expect(globalThis.exportUnmatchedEntries).not.toHaveBeenCalled();
+  });
+
+  it('re-resolves stored matches whose person vanished from the dataset', async () => {
+    globalThis.getStoredAttrMatches = vi.fn(async () => ({ 'zzzzzzzzzzzzzzzz': 'p-gone' }));
+    const ok = await loadAttributesFromFile(makeFile('Team.tsv', 'zzzzzzzzzzzzzzzz\tGhost'));
+    expect(ok).toBe(true);
+    // falls back to the normal unmatched flow and remembers the no-match
+    expect(globalThis.mergeStoredAttrMatches).toHaveBeenCalledWith({ 'zzzzzzzzzzzzzzzz': null });
+    expect(globalThis.exportUnmatchedEntries).toHaveBeenCalled();
   });
 });

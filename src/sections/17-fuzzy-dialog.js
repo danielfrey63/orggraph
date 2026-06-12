@@ -1,4 +1,8 @@
 export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAttributes, attributeTypes) {
+  // Tracks the user's choice per identifier (person id or null = unmatched)
+  // so it can be persisted on confirm and skipped on future reloads
+  const resolvedMatches = new Map();
+
   // Dialog-Container erstellen
   const dialogContainer = document.createElement('div');
   dialogContainer.className = 'fuzzy-match-dialog-container';
@@ -164,6 +168,7 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
       dropdownList.classList.remove('open');
       // "Keine Übereinstimmung" - zur unmatched Liste hinzufügen
       unmatchedEntries.set(identifier, attrs);
+      resolvedMatches.set(identifier, null);
       
       // Fokus zurück auf Eingabefeld setzen
       searchInput.focus();
@@ -218,6 +223,7 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
         for (const [attrName, attrValue] of attrs.entries()) {
           newPersonAttributes.get(personId).set(attrName, attrValue);
         }
+        resolvedMatches.set(identifier, String(personId));
         
         // Fokus zurück auf Eingabefeld setzen
         searchInput.focus();
@@ -431,6 +437,14 @@ export function showFuzzyMatchDialog(fuzzyMatches, unmatchedEntries, newPersonAt
       }
     }
     
+    // Persist all resolutions (chosen person or confirmed unmatched) so the
+    // fuzzy search and this dialog are skipped for them on future reloads
+    const matchUpdates = {};
+    for (const identifier of fuzzyMatches.keys()) {
+      matchUpdates[identifier] = resolvedMatches.has(identifier) ? resolvedMatches.get(identifier) : null;
+    }
+    try { mergeStoredAttrMatches(matchUpdates).catch(() => {}); } catch (_) {}
+
     // Unmatched exportieren
     if (unmatchedEntries.size > 0) {
       exportUnmatchedEntries(unmatchedEntries);

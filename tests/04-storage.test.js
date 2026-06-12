@@ -25,6 +25,8 @@ import {
   getStoredText,
   getStoredJson,
   getStoredAttributes,
+  getStoredAttrMatches,
+  mergeStoredAttrMatches,
   hasStoredData,
   requestPersistence,
 } from '../src/sections/04-storage.js';
@@ -292,5 +294,17 @@ describe('stored accessors', () => {
 describe('requestPersistence', () => {
   it('returns false when navigator.storage.persist is unavailable', async () => {
     expect(await requestPersistence()).toBe(false);
+  });
+});
+
+describe('stored attribute match resolutions', () => {
+  it('returns an empty object when nothing is stored', async () => {
+    expect(await getStoredAttrMatches()).toEqual({});
+  });
+
+  it('merges updates over existing resolutions and round-trips', async () => {
+    await mergeStoredAttrMatches({ 'a@x.ch': 'p1', 'b@x.ch': null });
+    await mergeStoredAttrMatches({ 'b@x.ch': 'p2', 'c@x.ch': null });
+    expect(await getStoredAttrMatches()).toEqual({ 'a@x.ch': 'p1', 'b@x.ch': 'p2', 'c@x.ch': null });
   });
 });
