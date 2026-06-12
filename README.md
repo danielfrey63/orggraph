@@ -256,7 +256,7 @@ leert den lokalen Speicher wieder.
 - **OE-Legende**: Organisationseinheiten ein-/ausblenden (Rechtsklick für Subtree-Aktionen)
   - Single-Root: Legende zeigt OEs im Kontext des Startknotens
   - Multi-Root: Legende zeigt die Vereinigungsmenge aller relevanten OEs der ausgewählten Roots
-- **Attribute**: Über ENV-Datei konfigurierbar - bei Angabe von `ATTRIBUTES_URL` werden Attribute automatisch geladen und angezeigt
+- **Attribute**: siehe eigene Sektion [Attribute](#attribute)
 
 ### Kontextmenü
 
@@ -265,6 +265,65 @@ leert den lokalen Speicher wieder.
   - „Als Root entfernen“: nur sichtbar, wenn der Knoten aktueller Root ist und mindestens 2 Roots ausgewählt sind
 
 Hinweis: Das Browser-Kontextmenü ist global unterdrückt, damit die App-eigenen Menüs konsistent funktionieren.
+
+## Attribute
+
+Attributdateien (`.tsv`/`.csv`/`.txt`) ordnen Personen Attribute zu — eine
+Zeile pro Zuordnung: `identifier<TAB>attributname` (Identifier = E-Mail oder
+Personen-ID; Komma statt Tab funktioniert ebenfalls). Der **Dateiname ohne
+Endung** wird zur Kategorie: Die Attribut-Legende gruppiert hierarchisch nach
+Kategorie → Attribut (mit Trefferzahl pro Attribut), die Farben sind innerhalb
+einer Kategorie ähnlich und zwischen Kategorien klar unterscheidbar.
+
+Geladen wird über `DATA_ATTRIBUTES_URL` (Env; String oder Array), per
+Drag & Drop oder über den Upload-Button im Legenden-Header. Importierte
+Dateien landen in IndexedDB und werden beim nächsten Start automatisch
+geladen. Leere Dateien registrieren eine Kategorie als Platzhalter.
+
+### Bedienung der Attribut-Legende
+
+- **Attribut-Zeile anklicken**: Attribut an-/abwählen (zeichnet die farbigen
+  Ringe um die Personen-Knoten).
+- **Kategorie-Zeile**: Chevron klappt auf/zu; **Doppelhäkchen** wählt alle
+  Attribute der Kategorie an/ab; **Auge** blendet die Kategorie temporär aus
+  (ohne die Anwahl zu ändern); **Download** exportiert die Kategorie als TSV.
+- **Header-Buttons**: Doppel-Chevron expandiert/kollabiert alle Kategorien;
+  **Doppelhäkchen** wählt alle Attribute an/ab; **Trichter** schaltet den
+  Attribut-Fokus (siehe unten); **Auge** schaltet die globale
+  Attribut-Sichtbarkeit im Graph — **Shift+Klick** auf das Auge toggelt
+  stattdessen die Sichtbarkeit aller Kategorien auf einmal, ohne den globalen
+  Status anzufassen.
+
+Pfeil-Endpunkte, Knotenabstände und Label-Positionen richten sich nach den
+tatsächlich gezeichneten Ringen: Wird eine Kategorie ausgeblendet, rücken die
+Pfeile entsprechend näher an den Knoten.
+
+### Attribut-Fokus
+
+Der Trichter-Button im Legenden-Header blendet alle Knoten aus, die weder
+selbst ein sichtbares Attribut tragen noch auf dem Pfad (Manager,
+Mitglieds-OEs, übergeordnete OEs) zu einem solchen liegen — es bleibt also
+genau das Verbindungsgerüst zu den attributierten Personen stehen. «Sichtbar»
+heisst: Attribut angewählt und Kategorie nicht per Auge ausgeblendet (das
+globale Auge zählt bewusst nicht). Jede Attribut-Änderung berechnet die
+Ausblendung sofort neu. Der Zustand ist transient: keine Einträge in der
+Hidden-Legende, nichts persistiert, Ausschalten stellt alles wieder her; der
+Root-Knoten bleibt immer sichtbar.
+
+### Fuzzy-Matching & gespeicherte Zuordnungen
+
+Identifier ohne exakten Treffer durchlaufen beim Import eine Fuzzy-Suche
+(Levenshtein über Namen und E-Mails). Gefundene Kandidaten werden in einem
+Dialog zur Bestätigung angeboten; Einträge ohne Zuordnung werden als CSV
+exportiert.
+
+Alle Auflösungen werden in IndexedDB persistiert (`identifier → Personen-ID`
+bzw. `null` für bestätigte Nicht-Treffer): Beim nächsten Reload werden sie
+direkt angewendet — Fuzzy-Suche und Dialog laufen nur noch für neue
+Identifier. Zeigt eine gespeicherte Zuordnung auf eine Person, die es im
+aktuellen Datensatz nicht mehr gibt, wird der Identifier automatisch neu
+aufgelöst. «Daten zurücksetzen» (Footer) löscht auch diese Zuordnungen; ein
+erneuter Ordner-Drop behält sie.
 
 ## Beispiel
 
@@ -289,7 +348,8 @@ Hinweis: Das Browser-Kontextmenü ist global unterdrückt, damit die App-eigenen
 ## Anpassen
 
 - HTML-Gerüst: `index.template.html`
-- Styles: `src/styles.css`
+- Styles: `src/styles.css` (u.a. `--root-node-fill` für die Füllfarbe der
+  Root-Knoten und die `--attribute-circle-*`-Variablen für die Attributringe)
 - Logik/Rendering: `src/sections/*.js` (Nummern-Präfix = Inlining-Reihenfolge)
 - Transformation: `helpers/transform.js` (`npm run transform`)
 
