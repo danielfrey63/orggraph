@@ -392,6 +392,24 @@ export function updateAttributeStats() {
   }
 }
 
+/** True when an attribute ring is effectively drawn: active and category not eye-hidden. */
+export function isAttributeRingVisible(attrName) {
+  if (!activeAttributes.has(attrName)) return false;
+  const [category] = String(attrName).includes('::') ? String(attrName).split('::') : ['Attribute'];
+  return !hiddenCategories.has(category);
+}
+
+/** Number of attribute rings effectively drawn around a person node. */
+export function countVisibleAttributeRings(personId) {
+  const nodeAttrs = personAttributes.get(String(personId));
+  if (!nodeAttrs || nodeAttrs.size === 0) return 0;
+  let count = 0;
+  for (const attrName of nodeAttrs.keys()) {
+    if (isAttributeRingVisible(attrName)) count++;
+  }
+  return count;
+}
+
 /**
  * Aktualisiert nur die Attribut-Kreise ohne ein komplettes Relayout
  */
@@ -492,13 +510,7 @@ export function updateAttributeCircles() {
     if (nodeAttrs && nodeAttrs.size > 0) {
       // Filtere auf aktive Attribute und nicht-ausgeblendete Kategorien
       const activeNodeAttrs = Array.from(nodeAttrs.entries())
-        .filter(([attrName]) => {
-          if (!activeAttributes.has(attrName)) return false;
-          // Kategorie aus Attributnamen extrahieren
-          const [category] = String(attrName).includes('::') ? String(attrName).split('::') : ['Attribute'];
-          // Nur anzeigen, wenn Kategorie nicht ausgeblendet ist
-          return !hiddenCategories.has(category);
-        })
+        .filter(([attrName]) => isAttributeRingVisible(attrName))
         .sort((a, b) => {
           const [ca, na] = String(a[0]).split('::');
           const [cb, nb] = String(b[0]).split('::');

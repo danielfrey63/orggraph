@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { idOf } from '../src/sections/09-data-load.js';
-import { cssNumber, getNodeFillByLevel } from '../src/sections/08-color-geometry.js';
+import { cssNumber, getNodeFillByLevel, countVisibleAttributeRings } from '../src/sections/08-color-geometry.js';
 import {
   SVG_ID, WIDTH, HEIGHT, BFS_LEVEL_ANIMATION_DELAY_MS,
 } from '../src/sections/01-config-status.js';
@@ -59,6 +59,8 @@ beforeEach(() => {
   globalThis.attributesVisible = false;
   globalThis.personAttributes = new Map();
   globalThis.activeAttributes = new Set();
+  globalThis.hiddenCategories = new Set();
+  globalThis.countVisibleAttributeRings = countVisibleAttributeRings;
   globalThis.allowedOrgs = new Set();
   globalThis.clusterPolygons = new Map();
   globalThis.parentOf = new Map();

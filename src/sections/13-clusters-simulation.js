@@ -96,22 +96,11 @@ export function getNodeOuterRadius(node) {
   
   // Wenn Attribute sichtbar sind, addiere Attributringe
   if (attributesVisible) {
-    const personId = String(node.id);
-    const nodeAttrs = personAttributes.get(personId);
     const circleGap = cssNumber('--attribute-circle-gap', 4);
     const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-    
-    let attrCount = 0;
-    if (nodeAttrs && nodeAttrs.size > 0) {
-      for (const attrName of nodeAttrs.keys()) {
-        if (activeAttributes.has(attrName)) {
-          attrCount++;
-        }
-      }
-    }
-    
-    // Attributringe hinzufügen
-    outerRadius += attrCount * (circleGap + circleWidth);
+
+    // Only rings that are actually drawn (active + category visible) count
+    outerRadius += countVisibleAttributeRings(node.id) * (circleGap + circleWidth);
   }
   
   return outerRadius;
@@ -245,21 +234,12 @@ export function createSimulation(nodes, links) {
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
     .force("collide", d3.forceCollide().radius(d => {
       // Kollisionsradius basierend auf Attribut-Kreisen berechnen
-      const personId = String(d.id);
-      const nodeAttrs = personAttributes.get(personId);
       const circleGap = cssNumber('--attribute-circle-gap', 4);
       const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-      
-      // Zähle aktive Attribute für diese Person
-      let attrCount = 0;
-      if (nodeAttrs && nodeAttrs.size > 0) {
-        for (const attrName of nodeAttrs.keys()) {
-          if (activeAttributes.has(attrName)) {
-            attrCount++;
-          }
-        }
-      }
-      
+
+      // Only rings that are actually drawn (active + category visible) count
+      const attrCount = countVisibleAttributeRings(d.id);
+
       // Äußerer Radius der Attributringe relativ zum Knotenzentrum:
       // outer = nodeRadius + nodeStroke/2 + attrCount * (gap + width)
       const outerExtra = (attrCount > 0)

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { idOf } from '../src/sections/09-data-load.js';
-import { cssNumber, computeClusterPolygon, colorForOrg, orgDepth } from '../src/sections/08-color-geometry.js';
+import { cssNumber, computeClusterPolygon, colorForOrg, orgDepth, countVisibleAttributeRings } from '../src/sections/08-color-geometry.js';
 import { WIDTH, HEIGHT } from '../src/sections/01-config-status.js';
 
 const d3Src = readFileSync('vendor/d3.v7.min.js', 'utf8');
@@ -46,6 +46,8 @@ beforeEach(() => {
   globalThis.attributesVisible = true;
   globalThis.personAttributes = new Map();
   globalThis.activeAttributes = new Set();
+  globalThis.hiddenCategories = new Set();
+  globalThis.countVisibleAttributeRings = countVisibleAttributeRings;
   globalThis.continuousSimulation = false;
   globalThis.currentSimulation = null;
 });
@@ -85,6 +87,14 @@ describe('getNodeOuterRadius', () => {
     globalThis.personAttributes = new Map([['p1', new Map([['A', '1'], ['B', '1']])]]);
     globalThis.activeAttributes = new Set(['A']);
     // 8 + 1.5 + 1 * (4 + 2)
+    expect(mod.getNodeOuterRadius({ id: 'p1' })).toBeCloseTo(15.5);
+  });
+
+  it('ignores rings whose category is hidden via the eye toggle', () => {
+    globalThis.personAttributes = new Map([['p1', new Map([['Team::A', '1'], ['Rolle::B', '1']])]]);
+    globalThis.activeAttributes = new Set(['Team::A', 'Rolle::B']);
+    globalThis.hiddenCategories = new Set(['Rolle']);
+    // only the Team ring is drawn, so only it counts
     expect(mod.getNodeOuterRadius({ id: 'p1' })).toBeCloseTo(15.5);
   });
 });

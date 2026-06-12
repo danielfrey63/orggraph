@@ -533,21 +533,13 @@ export function renderGraph(sub) {
         return nodeRadius;
       }
       
-      const personId = String(d.id);
-      const nodeAttrs = personAttributes.get(personId);
       const circleGap = cssNumber('--attribute-circle-gap', 2);
       const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
       const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
-      
-      let attrCount = 0;
-      if (nodeAttrs && nodeAttrs.size > 0) {
-        for (const attrName of nodeAttrs.keys()) {
-          if (activeAttributes.has(attrName)) {
-            attrCount++;
-          }
-        }
-      }
-      
+
+      // Only rings that are actually drawn (active + category visible) count
+      const attrCount = countVisibleAttributeRings(d.id);
+
       // Äusserster Radius: nodeRadius + nodeStroke/2 + attrCount * (gap + width)
       return nodeRadius + (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth));
     };

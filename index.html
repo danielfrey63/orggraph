@@ -4196,6 +4196,24 @@ function updateAttributeStats() {
   }
 }
 
+/** True when an attribute ring is effectively drawn: active and category not eye-hidden. */
+function isAttributeRingVisible(attrName) {
+  if (!activeAttributes.has(attrName)) return false;
+  const [category] = String(attrName).includes('::') ? String(attrName).split('::') : ['Attribute'];
+  return !hiddenCategories.has(category);
+}
+
+/** Number of attribute rings effectively drawn around a person node. */
+function countVisibleAttributeRings(personId) {
+  const nodeAttrs = personAttributes.get(String(personId));
+  if (!nodeAttrs || nodeAttrs.size === 0) return 0;
+  let count = 0;
+  for (const attrName of nodeAttrs.keys()) {
+    if (isAttributeRingVisible(attrName)) count++;
+  }
+  return count;
+}
+
 /**
  * Aktualisiert nur die Attribut-Kreise ohne ein komplettes Relayout
  */
@@ -4296,13 +4314,7 @@ function updateAttributeCircles() {
     if (nodeAttrs && nodeAttrs.size > 0) {
       // Filtere auf aktive Attribute und nicht-ausgeblendete Kategorien
       const activeNodeAttrs = Array.from(nodeAttrs.entries())
-        .filter(([attrName]) => {
-          if (!activeAttributes.has(attrName)) return false;
-          // Kategorie aus Attributnamen extrahieren
-          const [category] = String(attrName).includes('::') ? String(attrName).split('::') : ['Attribute'];
-          // Nur anzeigen, wenn Kategorie nicht ausgeblendet ist
-          return !hiddenCategories.has(category);
-        })
+        .filter(([attrName]) => isAttributeRingVisible(attrName))
         .sort((a, b) => {
           const [ca, na] = String(a[0]).split('::');
           const [cb, nb] = String(b[0]).split('::');
@@ -6509,22 +6521,11 @@ function getNodeOuterRadius(node) {
   
   // Wenn Attribute sichtbar sind, addiere Attributringe
   if (attributesVisible) {
-    const personId = String(node.id);
-    const nodeAttrs = personAttributes.get(personId);
     const circleGap = cssNumber('--attribute-circle-gap', 4);
     const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-    
-    let attrCount = 0;
-    if (nodeAttrs && nodeAttrs.size > 0) {
-      for (const attrName of nodeAttrs.keys()) {
-        if (activeAttributes.has(attrName)) {
-          attrCount++;
-        }
-      }
-    }
-    
-    // Attributringe hinzufügen
-    outerRadius += attrCount * (circleGap + circleWidth);
+
+    // Only rings that are actually drawn (active + category visible) count
+    outerRadius += countVisibleAttributeRings(node.id) * (circleGap + circleWidth);
   }
   
   return outerRadius;
@@ -6658,21 +6659,12 @@ function createSimulation(nodes, links) {
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
     .force("collide", d3.forceCollide().radius(d => {
       // Kollisionsradius basierend auf Attribut-Kreisen berechnen
-      const personId = String(d.id);
-      const nodeAttrs = personAttributes.get(personId);
       const circleGap = cssNumber('--attribute-circle-gap', 4);
       const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-      
-      // Zähle aktive Attribute für diese Person
-      let attrCount = 0;
-      if (nodeAttrs && nodeAttrs.size > 0) {
-        for (const attrName of nodeAttrs.keys()) {
-          if (activeAttributes.has(attrName)) {
-            attrCount++;
-          }
-        }
-      }
-      
+
+      // Only rings that are actually drawn (active + category visible) count
+      const attrCount = countVisibleAttributeRings(d.id);
+
       // Äußerer Radius der Attributringe relativ zum Knotenzentrum:
       // outer = nodeRadius + nodeStroke/2 + attrCount * (gap + width)
       const outerExtra = (attrCount > 0)
@@ -7301,21 +7293,13 @@ function renderGraph(sub) {
         return nodeRadius;
       }
       
-      const personId = String(d.id);
-      const nodeAttrs = personAttributes.get(personId);
       const circleGap = cssNumber('--attribute-circle-gap', 2);
       const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
       const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
-      
-      let attrCount = 0;
-      if (nodeAttrs && nodeAttrs.size > 0) {
-        for (const attrName of nodeAttrs.keys()) {
-          if (activeAttributes.has(attrName)) {
-            attrCount++;
-          }
-        }
-      }
-      
+
+      // Only rings that are actually drawn (active + category visible) count
+      const attrCount = countVisibleAttributeRings(d.id);
+
       // Äusserster Radius: nodeRadius + nodeStroke/2 + attrCount * (gap + width)
       return nodeRadius + (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth));
     };
