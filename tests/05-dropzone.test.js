@@ -220,6 +220,69 @@ describe('collectDropPayload', () => {
     expect(await collectDropPayload(null)).toEqual([]);
     expect(await collectDropPayload({ files: { length: 0 } })).toEqual([]);
   });
+
+  // ---- file:// regression: Chromium's entry API fails there with EncodingError ----
+
+  const handleFile = (name) => ({ kind: 'file', name, getFile: async () => ({ name }) });
+  const handleDir = (name, children) => ({
+    kind: 'directory',
+    name,
+    values: () => (async function* () { for (const c of children) yield c; })(),
+  });
+  const brokenDirEntry = (name) => ({
+    isDirectory: true,
+    name,
+    createReader: () => ({ readEntries: (_ok, err) => err(new Error('EncodingError')) }),
+  });
+
+  it('prefers the File System Access API over the (file://-broken) entry API', async () => {
+    const root = handleDir('pkg', [handleFile('env.json'), handleDir('attrs', [handleFile('T.tsv')])]);
+    const entries = await collectDropPayload({
+      items: [{ getAsFileSystemHandle: async () => root, webkitGetAsEntry: () => brokenDirEntry('pkg') }],
+    });
+    expect(entries.map((e) => e.path).sort()).toEqual(['pkg/attrs/T.tsv', 'pkg/env.json']);
+  });
+
+  it('uses getAsFile for file entries instead of entry.file()', async () => {
+    const file = { name: 'data.json' };
+    const entry = { isFile: true, name: 'data.json', file: (_ok, err) => err(new Error('EncodingError')) };
+    const entries = await collectDropPayload({
+      items: [{ webkitGetAsEntry: () => entry, getAsFile: () => file }],
+    });
+    expect(entries).toEqual([{ path: 'data.json', file }]);
+  });
+
+  it('falls back to the entry API when the handle promise rejects or traversal fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const root = fsDir('pkg', [fsFile('env.json')]);
+    const rejected = await collectDropPayload({
+      items: [{ getAsFileSystemHandle: () => Promise.reject(new Error('nope')), webkitGetAsEntry: () => root }],
+    });
+    expect(rejected.map((e) => e.path)).toEqual(['pkg/env.json']);
+
+    const failingHandle = handleDir('pkg', [{ kind: 'file', name: 'x.json', getFile: async () => { throw new Error('io'); } }]);
+    const root2 = fsDir('pkg', [fsFile('env.json')]);
+    const walked = await collectDropPayload({
+      items: [{ getAsFileSystemHandle: async () => failingHandle, webkitGetAsEntry: () => root2 }],
+    });
+    expect(walked.map((e) => e.path)).toEqual(['pkg/env.json']);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('reports unreadable folders with a ZIP hint and keeps the rest of the drop', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const file = { name: 'ok.json' };
+    const entries = await collectDropPayload({
+      items: [
+        { webkitGetAsEntry: () => brokenDirEntry('pkg') },
+        { webkitGetAsEntry: () => null, getAsFile: () => file },
+      ],
+    });
+    expect(entries).toEqual([{ path: 'ok.json', file }]);
+    expect(globalThis.showTemporaryNotification.mock.calls[0][0]).toContain('ZIP');
+    warnSpy.mockRestore();
+  });
 });
 
 describe('installGlobalDrop', () => {
@@ -268,6 +331,20 @@ describe('installGlobalDrop', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(onFiles).not.toHaveBeenCalled();
+  });
+
+  it('surfaces drop processing failures as a notification, not an uncaught error', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onFiles = vi.fn();
+    installGlobalDrop(onFiles);
+    fireDrag('drop', {
+      types: ['Files'],
+      items: { length: 1, 0: { webkitGetAsEntry: () => { throw new Error('boom'); } } },
+    });
+    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
+    expect(onFiles).not.toHaveBeenCalled();
+    expect(globalThis.showTemporaryNotification.mock.calls.some(c => c[0].includes('ZIP'))).toBe(true);
+    errorSpy.mockRestore();
   });
 });
 

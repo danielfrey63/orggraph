@@ -1,8 +1,8 @@
 # Local data & config (examples are tracked)
-data*.json
-!data.example.json
+public/SEM
+public/HRM
+public/backup
 env*.json
-!env.example.json
 attributes
 
 # Dependencies & build output

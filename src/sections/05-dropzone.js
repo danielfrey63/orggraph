@@ -123,32 +123,83 @@ async function walkFsEntry(entry, prefix, out) {
   }
 }
 
+// ---- Folder traversal (File System Access API, Chrome/Edge) ----
+// Preferred over the entry API above: on file:// pages Chromium's entry API
+// fails with EncodingError (it needs filesystem: URLs, which file:// origins
+// cannot mint), while FileSystemHandles work there.
+
+async function walkFsHandle(handle, prefix, out) {
+  if (handle.kind === 'file') {
+    out.push({ path: prefix + handle.name, file: await handle.getFile() });
+  } else if (handle.kind === 'directory') {
+    for await (const child of handle.values()) {
+      await walkFsHandle(child, prefix + handle.name + '/', out);
+    }
+  }
+}
+
+async function collectViaHandle(handlePromise, out) {
+  const handle = handlePromise ? await handlePromise : null;
+  if (!handle) return false;
+  try {
+    const tmp = [];
+    await walkFsHandle(handle, '', tmp);
+    out.push(...tmp);
+    return true;
+  } catch (e) {
+    console.warn('[dropzone] FileSystemHandle-Traversierung fehlgeschlagen:', e);
+    return false;
+  }
+}
+
+async function collectViaEntry(entry, out) {
+  try {
+    const tmp = [];
+    await walkFsEntry(entry, '', tmp);
+    out.push(...tmp);
+    return true;
+  } catch (e) {
+    console.warn('[dropzone] FileSystem-Entry-Traversierung fehlgeschlagen:', e);
+    return false;
+  }
+}
+
 /**
  * Turn a drop's DataTransfer into flat [{path, file}] entries: folders are
  * walked recursively, ZIP archives unpacked. Must be CALLED SYNCHRONOUSLY
- * from the drop handler — webkitGetAsEntry() only works while the event is
- * live; the entry handles are materialized before the first await.
+ * from the drop handler — getAsFileSystemHandle()/webkitGetAsEntry()/
+ * getAsFile() only work while the event is live; all handles are
+ * materialized before the first await.
  */
 export async function collectDropPayload(dataTransfer) {
   const handles = [];
   const items = dataTransfer && dataTransfer.items;
   if (items && items.length) {
     for (const item of Array.from(items)) {
+      const handlePromise = typeof item.getAsFileSystemHandle === 'function'
+        ? item.getAsFileSystemHandle().catch(() => null)
+        : null;
       const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
-      if (entry) { handles.push({ entry }); continue; }
       const file = typeof item.getAsFile === 'function' ? item.getAsFile() : null;
-      if (file) handles.push({ file });
+      if (handlePromise || entry || file) handles.push({ handlePromise, entry, file });
     }
   } else {
     for (const file of Array.from((dataTransfer && dataTransfer.files) || [])) {
-      if (file) handles.push({ file });
+      if (file) handles.push({ handlePromise: null, entry: null, file });
     }
   }
 
   const flat = [];
   for (const h of handles) {
-    if (h.entry) await walkFsEntry(h.entry, '', flat);
-    else flat.push({ path: h.file.name, file: h.file });
+    if (await collectViaHandle(h.handlePromise, flat)) continue;
+    if (h.entry && h.entry.isDirectory) {
+      if (await collectViaEntry(h.entry, flat)) continue;
+      showTemporaryNotification(`Ordner "${h.entry.name}" konnte nicht gelesen werden – bitte als ZIP-Archiv packen und droppen.`, 6000);
+      continue;
+    }
+    // Plain file: prefer the File from getAsFile — entry.file() breaks on file:// pages.
+    if (h.file) { flat.push({ path: h.file.name, file: h.file }); continue; }
+    if (h.entry && h.entry.isFile && (await collectViaEntry(h.entry, flat))) continue;
   }
   return expandZipEntries(flat);
 }
@@ -232,9 +283,14 @@ export function installGlobalDrop(onFiles) {
     document.body.classList.remove('dz-dragging');
     if (!e.dataTransfer) return;
     // collectDropPayload materializes the entry handles synchronously here.
-    collectDropPayload(e.dataTransfer).then((entries) => {
-      if (entries.length) onFiles(entries);
-    });
+    collectDropPayload(e.dataTransfer)
+      .then((entries) => {
+        if (entries.length) onFiles(entries);
+      })
+      .catch((err) => {
+        console.error('[dropzone] Drop konnte nicht verarbeitet werden:', err);
+        showTemporaryNotification('Drop konnte nicht verarbeitet werden – Ordner ggf. als ZIP-Archiv droppen.', 6000);
+      });
   };
 
   window.addEventListener('dragenter', onDragEnter);
