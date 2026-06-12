@@ -129,19 +129,7 @@ let tooltipEl = null;
 export function ensureTooltip() {
   if (tooltipEl) return;
   tooltipEl = document.createElement('div');
-  tooltipEl.style.position = 'fixed';
-  tooltipEl.style.pointerEvents = 'none';
-  tooltipEl.style.background = 'rgba(17,17,17,0.9)';
-  tooltipEl.style.color = '#fff';
-  tooltipEl.style.fontSize = '12px';
-  tooltipEl.style.padding = '10px 12px';
-  tooltipEl.style.borderRadius = '6px';
-  tooltipEl.style.zIndex = 1000;
-  tooltipEl.style.whiteSpace = 'pre';
-  tooltipEl.style.display = 'none';
-  tooltipEl.style.maxWidth = '400px';
-  tooltipEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-  tooltipEl.style.lineHeight = '1.4';
+  tooltipEl.className = 'cluster-tooltip';
   document.body.appendChild(tooltipEl);
 }
 /* v8 ignore stop */

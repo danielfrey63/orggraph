@@ -1691,6 +1691,30 @@ body > .combo-list li {
   cursor: pointer;
 }
 
+/* Cluster-Tooltip (ensureTooltip); nur left/top/display kommen dynamisch aus JS */
+.cluster-tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: rgba(17, 17, 17, 0.9);
+  color: #fff;
+  font-size: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  z-index: 1000;
+  white-space: pre;
+  display: none;
+  max-width: 400px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  line-height: 1.4;
+}
+
+/* Leermeldung der OE-Suche in der Legende */
+.no-matches-message {
+  padding: 8px;
+  font-style: italic;
+  color: #666;
+}
+
 /* Temporary toast notification (showTemporaryNotification) */
 .toast {
   position: fixed;
@@ -3566,19 +3590,7 @@ let tooltipEl = null;
 function ensureTooltip() {
   if (tooltipEl) return;
   tooltipEl = document.createElement('div');
-  tooltipEl.style.position = 'fixed';
-  tooltipEl.style.pointerEvents = 'none';
-  tooltipEl.style.background = 'rgba(17,17,17,0.9)';
-  tooltipEl.style.color = '#fff';
-  tooltipEl.style.fontSize = '12px';
-  tooltipEl.style.padding = '10px 12px';
-  tooltipEl.style.borderRadius = '6px';
-  tooltipEl.style.zIndex = 1000;
-  tooltipEl.style.whiteSpace = 'pre';
-  tooltipEl.style.display = 'none';
-  tooltipEl.style.maxWidth = '400px';
-  tooltipEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-  tooltipEl.style.lineHeight = '1.4';
+  tooltipEl.className = 'cluster-tooltip';
   document.body.appendChild(tooltipEl);
 }
 function showTooltip(x, y, lines) {
@@ -8910,9 +8922,6 @@ window.addEventListener("DOMContentLoaded", async () => {
           noMatchesMsg = document.createElement('div');
           noMatchesMsg.className = 'no-matches-message';
           noMatchesMsg.textContent = 'Keine OEs gefunden';
-          noMatchesMsg.style.padding = '8px';
-          noMatchesMsg.style.fontStyle = 'italic';
-          noMatchesMsg.style.color = '#666';
           legend.appendChild(noMatchesMsg);
         }
       } else if (noMatchesMsg) {

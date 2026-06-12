@@ -361,9 +361,6 @@ window.addEventListener("DOMContentLoaded", async () => {
           noMatchesMsg = document.createElement('div');
           noMatchesMsg.className = 'no-matches-message';
           noMatchesMsg.textContent = 'Keine OEs gefunden';
-          noMatchesMsg.style.padding = '8px';
-          noMatchesMsg.style.fontStyle = 'italic';
-          noMatchesMsg.style.color = '#666';
           legend.appendChild(noMatchesMsg);
         }
       } else if (noMatchesMsg) {
