@@ -494,7 +494,8 @@ export function finalizeFuzzyMatching(newPersonAttributes, attributeTypes) {
   
   // Nur die Attribut-Kreise aktualisieren, ohne Layout-Neuberechnung
   if (currentSubgraph) updateAttributeCircles();
-  
+  notifyAttributeVisibilityChanged();
+
   // Benachrichtigung anzeigen
   showTemporaryNotification(`Attribute wurden erfolgreich zugeordnet und aktualisiert`);
 }

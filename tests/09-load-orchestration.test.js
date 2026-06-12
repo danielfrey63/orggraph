@@ -35,6 +35,7 @@ beforeEach(() => {
   globalThis.buildAttributeLegend = () => {};
   globalThis.updateAttributeStats = () => {};
   globalThis.updateAttributeCircles = () => {};
+  globalThis.notifyAttributeVisibilityChanged = () => {};
   globalThis.parseAttributeList = parseAttributeList;
   globalThis.findPersonIdsByIdentifier = findPersonIdsByIdentifier;
   globalThis.colorForCategoryAttribute = colorForCategoryAttribute;

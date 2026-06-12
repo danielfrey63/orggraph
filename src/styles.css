@@ -704,6 +704,11 @@ input#depth {
 #toggleAttributesVisibility:not(.active) svg {
   opacity: 0.5;
 }
+
+/* Attribut-Fokus-Toggle: gedimmt solange der Modus aus ist */
+#toggleAttributeFocus:not(.active) svg {
+  opacity: 0.5;
+}
 .attribute-legend-item:hover { background: var(--control-hover); }
 .attribute-color { 
   display: inline-block; 

@@ -712,6 +712,11 @@ input#depth {
 #toggleAttributesVisibility:not(.active) svg {
   opacity: 0.5;
 }
+
+/* Attribut-Fokus-Toggle: gedimmt solange der Modus aus ist */
+#toggleAttributeFocus:not(.active) svg {
+  opacity: 0.5;
+}
 .attribute-legend-item:hover { background: var(--control-hover); }
 .attribute-color { 
   display: inline-block; 
@@ -2168,6 +2173,9 @@ body.dz-dragging::after {
               <button id="toggleAllAttributes" class="legend-icon-btn" title="Alle Attribute an/abwählen" data-ignore-header-click="true">
                 <i data-icon="checkAll"></i>
               </button>
+              <button id="toggleAttributeFocus" class="legend-icon-btn" title="Attribut-Fokus: Knoten ohne sichtbare Attribute (bei sich oder darunter) temporär ausblenden" data-ignore-header-click="true">
+                <i data-icon="filter"></i>
+              </button>
               <button id="toggleAttributesVisibility" class="legend-icon-btn active" title="Attribute global ein-/ausblenden – Shift+Klick: Sichtbarkeit aller Kategorien umschalten" data-ignore-header-click="true">
                 <i data-icon="eye"></i>
               </button>
@@ -3448,6 +3456,8 @@ let collapsedCategories = new Set(); // Kategorien mit eingeklapptem Zustand
 let hiddenCategories = new Set();    // Kategorien die temporär ausgeblendet sind (ohne Attribut-Status zu ändern)
 let hiddenNodes = new Set();
 let hiddenByRoot = new Map();
+let attributeFocusEnabled = false;          // focus mode: hide nodes without visible attributes in self or below
+let attributeFocusHiddenNodes = new Set();  // transient set of nodes pruned by the focus mode
 let temporarilyVisibleRoots = new Set(); // Roots deren Hidden-Subtrees temporär sichtbar sind
 let allHiddenTemporarilyVisible = false; // Globaler Toggle für alle Hidden-Subtrees
 let currentHiddenCount = 0; // Anzahl der ausgeblendeten Knoten in der aktuellen Ansicht
@@ -4681,7 +4691,8 @@ async function loadAttributesFromUrl(url) {
     updateAttributeStats();
     // Falls bereits ein Graph gerendert ist, Attribute sofort sichtbar machen
     updateAttributeCircles();
-    
+    notifyAttributeVisibilityChanged();
+
     return {
       loaded: true,
       matchedCount,
@@ -5092,6 +5103,12 @@ function computeSubgraph(startId, depth, mode) {
     const hiddenInThisCall = beforeCount - nodes.length;
     currentHiddenCount += hiddenInThisCall; // Addieren statt überschreiben für Multi-Root
   }
+  // Attribute focus mode: prune nodes without visible attributes in self or
+  // below; the start node always stays visible so the view never goes blank
+  if (attributeFocusEnabled && attributeFocusHiddenNodes.size > 0) {
+    const startKey = String(startId);
+    nodes = nodes.filter(n => String(n.id) === startKey || !attributeFocusHiddenNodes.has(String(n.id)));
+  }
   if (managementEnabled) {
     // Filter out basis persons (leaf nodes without direct reports)
     nodes = nodes.filter(n => !n.isBasis);
@@ -5104,6 +5121,8 @@ function computeSubgraph(startId, depth, mode) {
       if (nodeSet.has(t) && !nodeSet.has(s)) {
         // Prüfe ob hidden und nicht temporär sichtbar
         if (hiddenNodes && hiddenNodes.has(String(s)) && !isNodeTemporarilyVisible(s)) continue;
+        // Respect the attribute focus mode for re-added managers as well
+        if (attributeFocusEnabled && attributeFocusHiddenNodes.has(String(s))) continue;
         // In 'down' mode, only add managers that are below or at the start node level
         // (dist > 0 means they were reached during traversal, dist === 0 is the start node)
         if (mode === 'down' && !dist.has(s)) continue;
@@ -5129,6 +5148,76 @@ function recomputeHiddenNodes() {
     for (const id of s) agg.add(String(id));
   }
   hiddenNodes = agg;
+}
+
+/**
+ * Recomputes the transient set of nodes hidden by the attribute focus mode.
+ * A node stays visible if it carries an effectively visible attribute itself
+ * or lies on the upward path (managers, member orgs, parent orgs) from such a
+ * node — i.e. every maximal attribute-free subtree is pruned at its root.
+ * Effectively visible = attribute is active and its category is not hidden
+ * via the eye toggle; the global attribute eye is deliberately ignored.
+ */
+function recomputeAttributeFocusHidden() {
+  attributeFocusHiddenNodes = new Set();
+  if (!raw || !Array.isArray(raw.nodes) || raw.nodes.length === 0) return;
+
+  const visibleKeys = new Set();
+  for (const key of activeAttributes) {
+    const cat = String(key).split('::')[0];
+    if (!hiddenCategories.has(cat)) visibleKeys.add(key);
+  }
+
+  // Seed: persons carrying at least one effectively visible attribute
+  const keep = new Set();
+  const queue = [];
+  if (visibleKeys.size > 0) {
+    for (const [pid, attrs] of personAttributes.entries()) {
+      for (const k of attrs.keys()) {
+        if (visibleKeys.has(k)) {
+          const id = String(pid);
+          keep.add(id);
+          queue.push(id);
+          break;
+        }
+      }
+    }
+  }
+
+  // Upward adjacency: report -> manager, member -> org, child org -> parent org
+  const parentsOfNode = new Map();
+  const addParent = (child, parent) => {
+    let list = parentsOfNode.get(child);
+    if (!list) { list = []; parentsOfNode.set(child, list); }
+    list.push(parent);
+  };
+  for (const l of raw.links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    const sType = byId.get(s)?.type, tType = byId.get(t)?.type;
+    if (!sType || !tType) continue;
+    if (sType === 'person' && tType === 'person') addParent(t, s);
+    else if (sType === 'org' && tType === 'org') addParent(t, s);
+    else if (sType === 'person' && tType === 'org') addParent(s, t);
+  }
+
+  // Everything reachable upwards from a seed stays visible
+  for (let qi = 0; qi < queue.length; qi++) {
+    for (const p of parentsOfNode.get(queue[qi]) || []) {
+      if (!keep.has(p)) { keep.add(p); queue.push(p); }
+    }
+  }
+
+  for (const n of raw.nodes) {
+    const nid = String(n.id);
+    if (!keep.has(nid)) attributeFocusHiddenNodes.add(nid);
+  }
+}
+
+/** Re-renders the graph after attribute visibility changes while focus mode is on. */
+function notifyAttributeVisibilityChanged() {
+  if (!attributeFocusEnabled) return;
+  recomputeAttributeFocusHidden();
+  try { applyFromUI('attributeFocus'); } catch (_) {}
 }
 
 // Prüft ob ein Node-ID temporär sichtbar ist (trotz Hidden-Status) [SF]
@@ -8099,7 +8188,8 @@ async function loadAttributesFromFile(file) {
     
     // Nur die Attribut-Kreise aktualisieren, ohne Layout-Neuberechnung
     if (currentSubgraph) updateAttributeCircles();
-    
+    notifyAttributeVisibilityChanged();
+
     // Zeige eine temporäre Benachrichtigung ohne den Status zu überschreiben
     showTemporaryNotification(`Attribute geladen: ${count} Einträge, ${matchedCount} gefunden (${formatInfo})`);
     
@@ -8265,6 +8355,7 @@ function buildAttributeLegend() {
           }
           buildAttributeLegend();
           updateAttributeCircles();
+          notifyAttributeVisibilityChanged();
         },
       }));
     }
@@ -8304,8 +8395,9 @@ function buildAttributeLegend() {
 
       // Attribut-Kreise neu zeichnen
       updateAttributeCircles();
+      notifyAttributeVisibilityChanged();
     });
-    
+
     catRightArea.appendChild(eyeBtn);
     
     // Save-Button (nur sichtbar wenn Kategorie geändert wurde)
@@ -8372,9 +8464,10 @@ function buildAttributeLegend() {
           activeAttributes.add(it.key);
           itemRow.classList.add('active');
         }
-        
+
         updateAttributeStats();
         updateAttributeCircles();
+        notifyAttributeVisibilityChanged();
       });
       
       itemLi.appendChild(itemRow);
@@ -8888,7 +8981,8 @@ function finalizeFuzzyMatching(newPersonAttributes, attributeTypes) {
   
   // Nur die Attribut-Kreise aktualisieren, ohne Layout-Neuberechnung
   if (currentSubgraph) updateAttributeCircles();
-  
+  notifyAttributeVisibilityChanged();
+
   // Benachrichtigung anzeigen
   showTemporaryNotification(`Attribute wurden erfolgreich zugeordnet und aktualisiert`);
 }
@@ -9198,6 +9292,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
         buildAttributeLegend();
         updateAttributeCircles();
+        notifyAttributeVisibilityChanged();
         return;
       }
 
@@ -9279,6 +9374,26 @@ window.addEventListener("DOMContentLoaded", async () => {
       buildAttributeLegend();
       updateAttributeCircles();
       updateAttributeStats();
+      notifyAttributeVisibilityChanged();
+    });
+  }
+
+  // Attribut-Fokus: prune nodes without visible attributes in self or below
+  const attributeFocusBtn = document.getElementById('toggleAttributeFocus');
+  if (attributeFocusBtn) {
+    attributeFocusBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      attributeFocusBtn.classList.toggle('active');
+      attributeFocusEnabled = attributeFocusBtn.classList.contains('active');
+      if (attributeFocusEnabled) {
+        recomputeAttributeFocusHidden();
+      } else {
+        attributeFocusHiddenNodes = new Set();
+      }
+      try { applyFromUI('attributeFocus'); } catch (_) {}
+      showTemporaryNotification(attributeFocusEnabled
+        ? 'Attribut-Fokus aktiviert – Knoten ohne sichtbare Attribute werden ausgeblendet'
+        : 'Attribut-Fokus deaktiviert');
     });
   }
   

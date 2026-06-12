@@ -93,6 +93,7 @@ const setupGlobals = () => {
   globalThis.syncGraphAndLegendColors = vi.fn();
   globalThis.buildAttributeLegend = vi.fn();
   globalThis.updateAttributeCircles = vi.fn();
+  globalThis.notifyAttributeVisibilityChanged = vi.fn();
   globalThis.updateAttributeStats = vi.fn();
   globalThis.updateGlobalHiddenVisibilityButton = vi.fn();
   globalThis.toggleAllHiddenVisibility = vi.fn();

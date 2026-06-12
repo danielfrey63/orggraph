@@ -272,7 +272,8 @@ export async function loadAttributesFromUrl(url) {
     updateAttributeStats();
     // Falls bereits ein Graph gerendert ist, Attribute sofort sichtbar machen
     updateAttributeCircles();
-    
+    notifyAttributeVisibilityChanged();
+
     return {
       loaded: true,
       matchedCount,

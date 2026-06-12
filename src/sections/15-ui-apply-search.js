@@ -633,7 +633,8 @@ export async function loadAttributesFromFile(file) {
     
     // Nur die Attribut-Kreise aktualisieren, ohne Layout-Neuberechnung
     if (currentSubgraph) updateAttributeCircles();
-    
+    notifyAttributeVisibilityChanged();
+
     // Zeige eine temporäre Benachrichtigung ohne den Status zu überschreiben
     showTemporaryNotification(`Attribute geladen: ${count} Einträge, ${matchedCount} gefunden (${formatInfo})`);
     

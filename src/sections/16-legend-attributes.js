@@ -148,6 +148,7 @@ export function buildAttributeLegend() {
           }
           buildAttributeLegend();
           updateAttributeCircles();
+          notifyAttributeVisibilityChanged();
         },
       }));
     }
@@ -187,8 +188,9 @@ export function buildAttributeLegend() {
 
       // Attribut-Kreise neu zeichnen
       updateAttributeCircles();
+      notifyAttributeVisibilityChanged();
     });
-    
+
     catRightArea.appendChild(eyeBtn);
     
     // Save-Button (nur sichtbar wenn Kategorie geändert wurde)
@@ -255,9 +257,10 @@ export function buildAttributeLegend() {
           activeAttributes.add(it.key);
           itemRow.classList.add('active');
         }
-        
+
         updateAttributeStats();
         updateAttributeCircles();
+        notifyAttributeVisibilityChanged();
       });
       
       itemLi.appendChild(itemRow);

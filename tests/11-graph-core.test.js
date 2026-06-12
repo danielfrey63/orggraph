@@ -4,6 +4,7 @@ import {
   buildAdjacency,
   computeSubgraph,
   recomputeHiddenNodes,
+  recomputeAttributeFocusHidden,
   isNodeTemporarilyVisible,
   collectReportSubtree,
 } from '../src/sections/11-graph-core.js';
@@ -47,6 +48,9 @@ beforeEach(() => {
   globalThis.currentHiddenCount = 0;
   globalThis.allHiddenTemporarilyVisible = false;
   globalThis.temporarilyVisibleRoots = new Set();
+  globalThis.attributeFocusEnabled = false;
+  globalThis.attributeFocusHiddenNodes = new Set();
+  globalThis.hiddenCategories = new Set();
   processData(sample());
 });
 
@@ -162,5 +166,58 @@ describe('collectReportSubtree', () => {
 
   it('returns just the root for a leaf person', () => {
     expect(Array.from(collectReportSubtree('p4'))).toEqual(['p4']);
+  });
+});
+
+describe('recomputeAttributeFocusHidden', () => {
+  const focusHidden = () => Array.from(globalThis.attributeFocusHiddenNodes).sort();
+
+  it('keeps attributed persons and their upward path, prunes the rest', () => {
+    // attribute on p4: keep p4 + managers p3, p1; prune p2 and both orgs
+    globalThis.activeAttributes = new Set(['Team::Coach']);
+    globalThis.personAttributes = new Map([['p4', new Map([['Team::Coach', '1']])]]);
+    recomputeAttributeFocusHidden();
+    expect(focusHidden()).toEqual(['o1', 'o2', 'p2']);
+  });
+
+  it('keeps member orgs and their parent orgs of attributed persons', () => {
+    // attribute on p2: keep p2, manager p1, member org o2 and its parent o1
+    globalThis.activeAttributes = new Set(['Team::Coach']);
+    globalThis.personAttributes = new Map([['p2', new Map([['Team::Coach', '1']])]]);
+    recomputeAttributeFocusHidden();
+    expect(focusHidden()).toEqual(['p3', 'p4']);
+  });
+
+  it('hides everything when no attribute is effectively visible', () => {
+    globalThis.activeAttributes = new Set();
+    globalThis.personAttributes = new Map([['p2', new Map([['Team::Coach', '1']])]]);
+    recomputeAttributeFocusHidden();
+    expect(focusHidden()).toEqual(['o1', 'o2', 'p1', 'p2', 'p3', 'p4']);
+  });
+
+  it('ignores attributes whose category is hidden via the eye toggle', () => {
+    globalThis.activeAttributes = new Set(['Team::Coach']);
+    globalThis.hiddenCategories = new Set(['Team']);
+    globalThis.personAttributes = new Map([['p2', new Map([['Team::Coach', '1']])]]);
+    recomputeAttributeFocusHidden();
+    expect(focusHidden()).toEqual(['o1', 'o2', 'p1', 'p2', 'p3', 'p4']);
+  });
+
+  it('computeSubgraph prunes focus-hidden nodes but keeps the start node', () => {
+    globalThis.activeAttributes = new Set(['Team::Coach']);
+    globalThis.personAttributes = new Map([['p4', new Map([['Team::Coach', '1']])]]);
+    recomputeAttributeFocusHidden();
+    globalThis.attributeFocusEnabled = true;
+    const result = computeSubgraph('p1', 3, 'down');
+    expect(ids(result)).toEqual(['p1', 'p3', 'p4']); // p2 pruned, path to p4 kept
+  });
+
+  it('computeSubgraph keeps an attribute-free start node visible', () => {
+    globalThis.activeAttributes = new Set();
+    globalThis.personAttributes = new Map();
+    recomputeAttributeFocusHidden();
+    globalThis.attributeFocusEnabled = true;
+    const result = computeSubgraph('p1', 3, 'down');
+    expect(ids(result)).toEqual(['p1']);
   });
 });

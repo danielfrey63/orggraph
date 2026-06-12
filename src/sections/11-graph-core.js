@@ -156,6 +156,12 @@ export function computeSubgraph(startId, depth, mode) {
     const hiddenInThisCall = beforeCount - nodes.length;
     currentHiddenCount += hiddenInThisCall; // Addieren statt überschreiben für Multi-Root
   }
+  // Attribute focus mode: prune nodes without visible attributes in self or
+  // below; the start node always stays visible so the view never goes blank
+  if (attributeFocusEnabled && attributeFocusHiddenNodes.size > 0) {
+    const startKey = String(startId);
+    nodes = nodes.filter(n => String(n.id) === startKey || !attributeFocusHiddenNodes.has(String(n.id)));
+  }
   if (managementEnabled) {
     // Filter out basis persons (leaf nodes without direct reports)
     nodes = nodes.filter(n => !n.isBasis);
@@ -168,6 +174,8 @@ export function computeSubgraph(startId, depth, mode) {
       if (nodeSet.has(t) && !nodeSet.has(s)) {
         // Prüfe ob hidden und nicht temporär sichtbar
         if (hiddenNodes && hiddenNodes.has(String(s)) && !isNodeTemporarilyVisible(s)) continue;
+        // Respect the attribute focus mode for re-added managers as well
+        if (attributeFocusEnabled && attributeFocusHiddenNodes.has(String(s))) continue;
         // In 'down' mode, only add managers that are below or at the start node level
         // (dist > 0 means they were reached during traversal, dist === 0 is the start node)
         if (mode === 'down' && !dist.has(s)) continue;
@@ -193,6 +201,76 @@ export function recomputeHiddenNodes() {
     for (const id of s) agg.add(String(id));
   }
   hiddenNodes = agg;
+}
+
+/**
+ * Recomputes the transient set of nodes hidden by the attribute focus mode.
+ * A node stays visible if it carries an effectively visible attribute itself
+ * or lies on the upward path (managers, member orgs, parent orgs) from such a
+ * node — i.e. every maximal attribute-free subtree is pruned at its root.
+ * Effectively visible = attribute is active and its category is not hidden
+ * via the eye toggle; the global attribute eye is deliberately ignored.
+ */
+export function recomputeAttributeFocusHidden() {
+  attributeFocusHiddenNodes = new Set();
+  if (!raw || !Array.isArray(raw.nodes) || raw.nodes.length === 0) return;
+
+  const visibleKeys = new Set();
+  for (const key of activeAttributes) {
+    const cat = String(key).split('::')[0];
+    if (!hiddenCategories.has(cat)) visibleKeys.add(key);
+  }
+
+  // Seed: persons carrying at least one effectively visible attribute
+  const keep = new Set();
+  const queue = [];
+  if (visibleKeys.size > 0) {
+    for (const [pid, attrs] of personAttributes.entries()) {
+      for (const k of attrs.keys()) {
+        if (visibleKeys.has(k)) {
+          const id = String(pid);
+          keep.add(id);
+          queue.push(id);
+          break;
+        }
+      }
+    }
+  }
+
+  // Upward adjacency: report -> manager, member -> org, child org -> parent org
+  const parentsOfNode = new Map();
+  const addParent = (child, parent) => {
+    let list = parentsOfNode.get(child);
+    if (!list) { list = []; parentsOfNode.set(child, list); }
+    list.push(parent);
+  };
+  for (const l of raw.links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    const sType = byId.get(s)?.type, tType = byId.get(t)?.type;
+    if (!sType || !tType) continue;
+    if (sType === 'person' && tType === 'person') addParent(t, s);
+    else if (sType === 'org' && tType === 'org') addParent(t, s);
+    else if (sType === 'person' && tType === 'org') addParent(s, t);
+  }
+
+  // Everything reachable upwards from a seed stays visible
+  for (let qi = 0; qi < queue.length; qi++) {
+    for (const p of parentsOfNode.get(queue[qi]) || []) {
+      if (!keep.has(p)) { keep.add(p); queue.push(p); }
+    }
+  }
+
+  for (const n of raw.nodes) {
+    const nid = String(n.id);
+    if (!keep.has(nid)) attributeFocusHiddenNodes.add(nid);
+  }
+}
+
+/** Re-renders the graph after attribute visibility changes while focus mode is on. */
+export function notifyAttributeVisibilityChanged() {
+  if (!attributeFocusEnabled) return;
+  recomputeAttributeFocusHidden();
+  try { applyFromUI('attributeFocus'); } catch (_) {}
 }
 
 // Prüft ob ein Node-ID temporär sichtbar ist (trotz Hidden-Status) [SF]

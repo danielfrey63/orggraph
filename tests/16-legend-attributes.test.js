@@ -36,6 +36,7 @@ beforeEach(() => {
   globalThis.getChevronSVG = getChevronSVG;
   globalThis.updateAttributeStats = vi.fn();
   globalThis.updateAttributeCircles = vi.fn();
+  globalThis.notifyAttributeVisibilityChanged = vi.fn();
   globalThis.exportCategoryAsTSV = vi.fn();
   globalThis.exportCategoryAttributes = vi.fn();
   globalThis.attributeTypes = new Map();

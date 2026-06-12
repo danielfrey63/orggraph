@@ -31,6 +31,7 @@ beforeEach(() => {
   globalThis.buildAttributeLegend = vi.fn();
   globalThis.updateAttributeStats = vi.fn();
   globalThis.updateAttributeCircles = vi.fn();
+  globalThis.notifyAttributeVisibilityChanged = vi.fn();
   globalThis.showTemporaryNotification = vi.fn();
   vi.stubGlobal('Blob', class FakeBlob {
     constructor(parts, opts) { this.content = parts.join(''); this.type = opts?.type; }

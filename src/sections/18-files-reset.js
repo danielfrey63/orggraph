@@ -248,6 +248,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
         buildAttributeLegend();
         updateAttributeCircles();
+        notifyAttributeVisibilityChanged();
         return;
       }
 
@@ -329,6 +330,26 @@ window.addEventListener("DOMContentLoaded", async () => {
       buildAttributeLegend();
       updateAttributeCircles();
       updateAttributeStats();
+      notifyAttributeVisibilityChanged();
+    });
+  }
+
+  // Attribut-Fokus: prune nodes without visible attributes in self or below
+  const attributeFocusBtn = document.getElementById('toggleAttributeFocus');
+  if (attributeFocusBtn) {
+    attributeFocusBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      attributeFocusBtn.classList.toggle('active');
+      attributeFocusEnabled = attributeFocusBtn.classList.contains('active');
+      if (attributeFocusEnabled) {
+        recomputeAttributeFocusHidden();
+      } else {
+        attributeFocusHiddenNodes = new Set();
+      }
+      try { applyFromUI('attributeFocus'); } catch (_) {}
+      showTemporaryNotification(attributeFocusEnabled
+        ? 'Attribut-Fokus aktiviert – Knoten ohne sichtbare Attribute werden ausgeblendet'
+        : 'Attribut-Fokus deaktiviert');
     });
   }
   
