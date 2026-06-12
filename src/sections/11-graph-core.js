@@ -185,11 +185,11 @@ export function computeSubgraph(startId, depth, mode) {
     }
   }
 
-  // Attribute focus: peel branches that do not end in a visibly attributed
-  // node within THIS view. The global subtree pruning keeps every ancestor of
-  // an attributed person, but depth cut-offs, hidden subtrees and the
-  // management filter can remove that person from the view and leave
-  // unattributed dead ends behind.
+  // Attribute focus: within THIS view keep only the start node, visibly
+  // attributed nodes and the connectors on their BFS-tree paths to the start.
+  // Leaf peeling alone cannot remove unattributed nodes sitting on cycles
+  // (person-org-manager triangles are everywhere), so the path marking is the
+  // primary mechanism; a final leaf sweep double-checks the result.
   if (attributeFocusEnabled) {
     const startKey = String(startId);
     const present = new Set(nodes.map(n => String(n.id)));
@@ -202,21 +202,47 @@ export function computeSubgraph(startId, depth, mode) {
       adj.get(s).add(t);
       adj.get(t).add(s);
     }
+
+    // BFS tree from the start over the view's links (undirected)
+    const parent = new Map([[startKey, null]]);
+    const bfs = [startKey];
+    for (let qi = 0; qi < bfs.length; qi++) {
+      for (const nb of adj.get(bfs[qi]) || []) {
+        if (!parent.has(nb)) { parent.set(nb, bfs[qi]); bfs.push(nb); }
+      }
+    }
+
+    // Keep the start, every present seed and the tree path from seed to start
+    const keep = new Set([startKey]);
+    for (const id of present) {
+      if (!attributeFocusSeeds.has(id)) continue;
+      keep.add(id);
+      let cur = parent.get(id);
+      while (cur != null && !keep.has(cur)) { keep.add(cur); cur = parent.get(cur); }
+    }
+
+    // Final sweep: peel any unattributed leaf that may remain in the kept set
+    const kadj = new Map();
+    for (const id of keep) {
+      const nbs = new Set();
+      for (const nb of adj.get(id) || []) if (keep.has(nb)) nbs.add(nb);
+      kadj.set(id, nbs);
+    }
     const isRemovableLeaf = (id) =>
-      id !== startKey && !attributeFocusSeeds.has(id) && ((adj.get(id)?.size || 0) <= 1);
-    const removed = new Set();
-    const peelQueue = Array.from(present).filter(isRemovableLeaf);
+      id !== startKey && !attributeFocusSeeds.has(id) && ((kadj.get(id)?.size || 0) <= 1);
+    const peelQueue = Array.from(keep).filter(isRemovableLeaf);
     for (let qi = 0; qi < peelQueue.length; qi++) {
       const id = peelQueue[qi];
-      if (removed.has(id) || !isRemovableLeaf(id)) continue;
-      removed.add(id);
-      for (const nb of adj.get(id) || []) {
-        adj.get(nb)?.delete(id);
-        if (!removed.has(nb) && isRemovableLeaf(nb)) peelQueue.push(nb);
+      if (!keep.has(id) || !isRemovableLeaf(id)) continue;
+      keep.delete(id);
+      for (const nb of kadj.get(id) || []) {
+        kadj.get(nb)?.delete(id);
+        if (keep.has(nb) && isRemovableLeaf(nb)) peelQueue.push(nb);
       }
-      adj.delete(id);
+      kadj.delete(id);
     }
-    if (removed.size > 0) nodes = nodes.filter(n => !removed.has(String(n.id)));
+
+    nodes = nodes.filter(n => keep.has(String(n.id)));
   }
 
   // Drop orgs that are disabled

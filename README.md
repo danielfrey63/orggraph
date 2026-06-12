@@ -313,10 +313,12 @@ selbst ein sichtbares Attribut tragen noch auf dem Pfad (Manager,
 Mitglieds-OEs, übergeordnete OEs) zu einem solchen liegen — es bleibt also
 genau das Verbindungsgerüst zu den attributierten Personen stehen. «Sichtbar»
 heisst: Attribut angewählt und Kategorie nicht per Auge ausgeblendet (das
-globale Auge zählt bewusst nicht). Äste, die in der aktuellen Ansicht nicht
-bei einem attributierten Knoten enden — etwa weil die Suchtiefe, ein
-ausgeblendeter Teilbaum oder der Management-Filter den attributierten
-Nachfahren entfernt — werden ebenfalls gekappt. Jede Attribut-Änderung
+globale Auge zählt bewusst nicht). Innerhalb der aktuellen Ansicht bleiben
+exakt die attributierten Knoten plus die Verbindungspfade zum Root stehen —
+Äste ohne attributiertes Ende (etwa weil die Suchtiefe, ein ausgeblendeter
+Teilbaum oder der Management-Filter den attributierten Nachfahren entfernt)
+werden ebenso gekappt wie unattributierte Knoten auf Zyklen (z.B.
+Person-OE-Manager-Dreiecke). Jede Attribut-Änderung
 berechnet die Ausblendung sofort neu. Der Zustand ist transient: keine
 Einträge in der Hidden-Legende, nichts persistiert, Ausschalten stellt alles
 wieder her; der Root-Knoten bleibt immer sichtbar.

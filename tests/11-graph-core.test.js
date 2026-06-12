@@ -232,6 +232,26 @@ describe('recomputeAttributeFocusHidden', () => {
     expect(ids(result)).toEqual(['p1']);
   });
 
+  it('drops unattributed nodes on cycles that leaf peeling cannot remove', () => {
+    // manager m, attributed person p, org o: m->p, p->o, m->o form a triangle;
+    // o has degree 2 (never a leaf) but is a dead end and must disappear
+    processData({
+      persons: [{ id: 'm', label: 'Manager' }, { id: 'p', label: 'Person' }],
+      orgs: [{ id: 'o', label: 'Org' }],
+      links: [
+        { source: 'm', target: 'p' },
+        { source: 'p', target: 'o' },
+        { source: 'm', target: 'o' },
+      ],
+    });
+    globalThis.activeAttributes = new Set(['Team::Coach']);
+    globalThis.personAttributes = new Map([['p', new Map([['Team::Coach', '1']])]]);
+    recomputeAttributeFocusHidden();
+    globalThis.attributeFocusEnabled = true;
+    const result = computeSubgraph('m', 3, 'both');
+    expect(ids(result)).toEqual(['m', 'p']);
+  });
+
   it('peels managers whose attributed report is dropped by the management filter', () => {
     // p4 is attributed but isBasis -> management filter removes it from the view
     globalThis.activeAttributes = new Set(['Team::Coach']);
