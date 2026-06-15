@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { populateCombo, setActive, chooseItem } from '../src/sections/10-combo.js';
+import { matchesWordPrefixes, populateCombo, setActive, chooseItem } from '../src/sections/10-combo.js';
 import { getDisplayLabel } from '../src/sections/06-pseudo-labels.js';
 import {
   INPUT_COMBO_ID, LIST_COMBO_ID, MIN_SEARCH_LENGTH, MAX_DROPDOWN_ITEMS,
@@ -56,6 +56,19 @@ describe('populateCombo', () => {
     expect(texts).toEqual(['Alice — p1', 'Alpha Org — o1']);
     expect(list().children[0].getAttribute('data-id')).toBe('p1');
     expect(list().hidden).toBe(false);
+  });
+
+  it('matches word-beginning prefixes ("B Berg" → "Beat Berger")', () => {
+    globalThis.allNodesUnique = [
+      { id: 'p1', label: 'Beat Berger', type: 'person' },
+      { id: 'p2', label: 'Barbara Berg', type: 'person' },
+      { id: 'p3', label: 'Chris Müller', type: 'person' },
+    ];
+    populateCombo('B Berg');
+    const labels = globalThis.filteredItems.map(n => n.label);
+    expect(labels).toContain('Beat Berger');
+    expect(labels).toContain('Barbara Berg');
+    expect(labels).not.toContain('Chris Müller');
   });
 
   it('matches ids too and hides the list when nothing matches', () => {
@@ -130,5 +143,33 @@ describe('chooseItem', () => {
   it('ignores out-of-range indices', () => {
     chooseItem(99, false);
     expect(globalThis.setSingleRoot).not.toHaveBeenCalled();
+  });
+});
+
+describe('matchesWordPrefixes', () => {
+  it('single term falls back to substring match', () => {
+    expect(matchesWordPrefixes(['berg'], 'beat berger')).toBe(true);
+    expect(matchesWordPrefixes(['eat'], 'beat berger')).toBe(true);
+    expect(matchesWordPrefixes(['xyz'], 'beat berger')).toBe(false);
+  });
+
+  it('matches word-beginning prefixes across multiple terms', () => {
+    expect(matchesWordPrefixes(['b', 'berger'], 'beat berger')).toBe(true);
+    expect(matchesWordPrefixes(['b', 'berg'], 'beat berger')).toBe(true);
+    expect(matchesWordPrefixes(['be', 'be'], 'beat berger')).toBe(true);
+    expect(matchesWordPrefixes(['beat', 'berger'], 'beat berger')).toBe(true);
+  });
+
+  it('rejects when a term does not match any word start', () => {
+    expect(matchesWordPrefixes(['x', 'berger'], 'beat berger')).toBe(false);
+    expect(matchesWordPrefixes(['beat', 'x'], 'beat berger')).toBe(false);
+  });
+
+  it('does not reuse the same word for two terms', () => {
+    expect(matchesWordPrefixes(['b', 'b', 'b'], 'beat berger')).toBe(false);
+  });
+
+  it('returns false for empty term list', () => {
+    expect(matchesWordPrefixes([], 'beat berger')).toBe(false);
   });
 });

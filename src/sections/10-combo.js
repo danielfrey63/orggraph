@@ -1,3 +1,18 @@
+export function matchesWordPrefixes(termWords, text) {
+  if (termWords.length === 0) return false;
+  if (termWords.length === 1) return text.includes(termWords[0]);
+  const textWords = text.split(/\s+/);
+  const used = new Uint8Array(textWords.length);
+  for (const tw of termWords) {
+    let found = false;
+    for (let i = 0; i < textWords.length; i++) {
+      if (!used[i] && textWords[i].startsWith(tw)) { used[i] = 1; found = true; break; }
+    }
+    if (!found) return false;
+  }
+  return true;
+}
+
 export function populateCombo(filterText) {
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
@@ -24,20 +39,21 @@ export function populateCombo(filterText) {
   
   // Fast filtering with early termination
   // Suche nach Display-Labels (pseudonymisiert wenn aktiv) und IDs [SF]
+  const termWords = term.split(/\s+/).filter(Boolean);
   filteredItems = [];
   let count = 0;
   for (const n of allNodesUnique) {
     if (count >= MAX_DROPDOWN_ITEMS) break;
-    
+
     if (!term) {
       filteredItems.push(n);
       count++;
       continue;
     }
-    
+
     const displayLabel = getDisplayLabel(n).toLowerCase();
     const idStr = String(n.id).toLowerCase();
-    if (displayLabel.includes(term) || idStr.includes(term)) {
+    if (matchesWordPrefixes(termWords, displayLabel) || idStr.includes(term)) {
       filteredItems.push(n);
       count++;
     }

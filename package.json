@@ -1,6 +1,6 @@
 {
   "name": "orggraph",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "description": "OrgGraph Visualization — dependency-free single-file app (index.html)",
   "type": "module",
   "scripts": {
