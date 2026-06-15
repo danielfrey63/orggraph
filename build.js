@@ -8,8 +8,8 @@ const read = (path) => readFileSync(path, 'utf8');
 // Sections are ES modules for dev/tests; the deliverable inlines them as one
 // classic script. Convention: imports are single-line, export keywords sit at
 // column 0 — both are stripped here, which exactly reverses the module syntax.
-// Coverage-ignore markers (function-level boundary demarcation per AUFTRAG.md
-// principle 4) are dev/test-only and stripped from the deliverable as well.
+// Coverage-ignore markers (function-level demarcation of decision-free DOM/D3
+// applicators) are dev/test-only and stripped from the deliverable as well.
 const stripModuleSyntax = (code) =>
   code
     .replace(/^import .*\n/gm, '')

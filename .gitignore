@@ -3,6 +3,7 @@ data/SEM
 data/HRM
 data/backup
 env*.json
+!env.example.json
 attributes
 
 # Dependencies & build output
@@ -25,5 +26,5 @@ trace
 .vscode
 .claude
 
-# Pending investigation (see AUFTRAG.md)
+# Local data pipeline & tooling (kept local, not shipped)
 helpers

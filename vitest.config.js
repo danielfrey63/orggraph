@@ -1,8 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
-// Coverage measures the pure logic only. Boundary sections (decision-free
-// DOM/D3 applicators per AUFTRAG.md principle 3/4) are excluded from the
-// denominator; the exclude list grows as sections are classified.
+// Coverage measures all 19 sections (src/sections/**) — no file-level
+// exclusions. A few decision-free DOM/D3 applicators carry function-level
+// /* v8 ignore */ markers instead.
 export default defineConfig({
   test: {
     environment: 'jsdom',
