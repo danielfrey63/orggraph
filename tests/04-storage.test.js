@@ -18,12 +18,9 @@ import {
   isPathUnderDir,
   storeEntries,
   storeFiles,
-  idbGet,
-  idbPut,
-  idbDelete,
-  idbKeys,
   idbClear,
   putStored,
+  delStored,
   getStoredText,
   getStoredJson,
   getStoredAttributes,
@@ -97,16 +94,15 @@ describe('classifyFile', () => {
   });
 });
 
-describe('idb roundtrip', () => {
-  it('put/get/keys/delete/clear work', async () => {
-    await idbPut('k1', 'v1');
-    await idbPut('k2', 'v2');
-    expect(await idbGet('k1')).toBe('v1');
-    expect((await idbKeys()).sort()).toEqual(['k1', 'k2']);
-    await idbDelete('k1');
-    expect(await idbGet('k1')).toBeUndefined();
-    await idbClear();
-    expect(await idbKeys()).toEqual([]);
+describe('profile-scoped storage roundtrip', () => {
+  it('put/get/overwrite/delete work within the active profile', async () => {
+    await putStored('k1', 'v1');
+    expect(await getStoredText('k1')).toBe('v1');
+    await putStored('k1', 'v2');
+    expect(await getStoredText('k1')).toBe('v2');
+    await delStored('k1');
+    expect(await getStoredText('k1')).toBeUndefined();
+    expect(await getStoredText('missing')).toBeUndefined();
   });
 });
 

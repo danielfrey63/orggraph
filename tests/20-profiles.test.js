@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { renderProfileSwitcher, pickFilesForNewProfile } from '../src/sections/20-profiles.js';
+import { renderProfileSwitcher, openNewProfileDropZone } from '../src/sections/20-profiles.js';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -16,6 +16,7 @@ beforeEach(() => {
   globalThis.duplicateProfile = vi.fn(async () => 'hrm-kopie');
   globalThis.deleteProfile = vi.fn(async () => 'default');
   globalThis.handleDroppedFiles = vi.fn(async () => {});
+  globalThis.showDropZone = vi.fn();
   globalThis.showTemporaryNotification = vi.fn();
   vi.stubGlobal('location', { reload: vi.fn() });
   vi.stubGlobal('prompt', vi.fn(() => 'Renamed'));
@@ -95,14 +96,17 @@ describe('renderProfileSwitcher', () => {
   });
 });
 
-describe('pickFilesForNewProfile', () => {
-  it('adds a file input and removes it again on an empty selection', async () => {
-    pickFilesForNewProfile();
-    const input = document.querySelector('input[type="file"]');
-    expect(input).toBeTruthy();
-    input.dispatchEvent(new Event('change'));
+describe('openNewProfileDropZone', () => {
+  it('opens the drag-and-drop panel routed through the normal drop pipeline', () => {
+    openNewProfileDropZone();
+    expect(globalThis.showDropZone).toHaveBeenCalledWith(globalThis.handleDroppedFiles);
+  });
+
+  it('the "+" button opens the drop panel instead of a file dialog', async () => {
+    await renderProfileSwitcher();
+    document.querySelector('.profile-btn[title*="Neue Konfiguration"]').click();
     await flush();
-    expect(globalThis.handleDroppedFiles).not.toHaveBeenCalled(); // no files chosen
+    expect(globalThis.showDropZone).toHaveBeenCalledWith(globalThis.handleDroppedFiles);
     expect(document.querySelector('input[type="file"]')).toBeNull();
   });
 });

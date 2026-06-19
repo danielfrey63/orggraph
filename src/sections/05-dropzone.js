@@ -243,6 +243,16 @@ export function ensureOverlay(onFiles) {
     picker.click();
   });
 
+  // On-demand use (e.g. the profile switcher's "new" action) must be escapable:
+  // dismiss via backdrop click or Escape, but only when a dataset is already
+  // loaded. The initial no-data drop zone stays non-dismissable so the app is
+  // never left blank with no obvious way back.
+  const canDismiss = () => typeof raw !== 'undefined' && raw && Array.isArray(raw.nodes) && raw.nodes.length > 0;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay && canDismiss()) hideDropZone(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _overlay && _overlay.classList.contains('dz-visible') && canDismiss()) hideDropZone();
+  });
+
   document.body.appendChild(overlay);
   _overlay = overlay;
   return overlay;

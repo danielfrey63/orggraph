@@ -60,7 +60,7 @@ export async function renderProfileSwitcher() {
     return b;
   };
 
-  mkBtn('+', 'Neue Konfiguration aus Dateien laden …', () => pickFilesForNewProfile());
+  mkBtn('+', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
   mkBtn('✎', 'Aktuelles Profil umbenennen', async () => {
     const cur = profiles.find(p => p.id === active);
     const name = (typeof prompt === 'function') ? prompt('Profil umbenennen:', cur ? cur.name : active) : null;
@@ -82,26 +82,12 @@ export async function renderProfileSwitcher() {
   });
 }
 
-/** Open a file picker and route the selection through the normal drop pipeline,
- *  which creates (and activates) a new profile for any env/data configuration. */
-export function pickFilesForNewProfile() {
-  const picker = document.createElement('input');
-  picker.type = 'file';
-  picker.multiple = true;
-  picker.accept = 'application/json,.json,.csv,.tsv,.txt';
-  picker.style.display = 'none';
-  document.body.appendChild(picker);
-  picker.addEventListener('change', async () => {
-    try {
-      const files = Array.from(picker.files || []);
-      if (files.length) await handleDroppedFiles(files);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      picker.remove();
-    }
-  });
-  picker.click();
+/** Open the drag-and-drop panel so a whole config (folder / ZIP / files) can be
+ *  dropped at once. The global drop handler routes it through the normal pipeline,
+ *  which creates (and activates) a new profile for any env/data configuration —
+ *  no separate file dialog, and no dead-end when only env.json would be picked. */
+export function openNewProfileDropZone() {
+  showDropZone(handleDroppedFiles);
 }
 
 window.addEventListener('DOMContentLoaded', () => { renderProfileSwitcher(); });
