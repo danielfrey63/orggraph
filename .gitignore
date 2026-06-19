@@ -1,7 +1,5 @@
 # Local data & config (examples are tracked)
-data/SEM
-data/HRM
-data/backup
+data/*
 env*.json
 !env.example.json
 attributes

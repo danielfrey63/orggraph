@@ -1,7 +1,6 @@
 // Assemble the single-file deliverable index.html from template + sources.
 // Zero dependencies — runs with plain `node build.js`, no npm install needed.
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
-import { bumpVersion } from './bump-version.js';
 
 const read = (path) => readFileSync(path, 'utf8');
 
@@ -24,19 +23,14 @@ const app = readdirSync('src/sections')
   .map((f) => stripModuleSyntax(read(`src/sections/${f}`)))
   .join('');
 
-// Single source of truth for the app version: package.json. Every deliverable
-// build bumps the build counter (third segment); --no-bump skips that for
-// reproducible re-builds (verify.js, coverage remap, pre-commit hook — the
-// hook bumps the minor segment itself before building).
-const version = process.argv.includes('--no-bump')
-  ? JSON.parse(read('package.json')).version
-  : bumpVersion('build');
-
+// The build is fully independent of versioning: it only inlines CSS, D3 and the
+// app sections. The app version lives solely in index.template.html's
+// APP_VERSION constant (bumped by the AI-Toolbox hooks) and the header renders
+// it at runtime — build.js never reads or stamps a version.
 const out = read('index.template.html')
   .replace('@@CSS@@', () => read('src/styles.css'))
   .replace('@@D3@@', () => read('vendor/d3.v7.min.js'))
-  .replace('@@APP@@', () => app)
-  .replace(/@@VERSION@@/g, () => version);
+  .replace('@@APP@@', () => app);
 
 writeFileSync('index.html', out);
 console.log(`index.html written (${out.length} bytes)`);

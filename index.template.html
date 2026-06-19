@@ -12,7 +12,7 @@
 <body>
   <header class="app-header">
     <div class="app-header-main">
-      <h1>OrgGraph <span id="appVersion" class="app-version" title="App-Version">v@@VERSION@@</span></h1>
+      <h1>OrgGraph <span id="appVersion" class="app-version" title="App-Version"></span></h1>
       <div id="combo" class="combo">
         <input id="comboInput" autocomplete="off" placeholder="Suchen… (Name oder ID)" />
         <ul id="comboList" class="combo-list" hidden></ul>
@@ -220,7 +220,11 @@
   <script>@@D3@@
 </script>
   <script>
-const APP_VERSION = '@@VERSION@@';
+// App version — the single place the version lives, bumped by the AI-Toolbox
+// versioning hooks. build.js does not touch it; the header renders it here at
+// runtime (the #appVersion span sits earlier in the document, so it exists).
+const APP_VERSION = '1.17.4';
+document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 @@APP@@
 </script>
 </body>

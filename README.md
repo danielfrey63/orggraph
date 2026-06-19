@@ -27,29 +27,29 @@ npm run verify    # Re-Build + Sync-Check des committeten index.html (modulo Zei
 
 `build.js` läuft mit purem Node (nur `node:fs`): Es inlined CSS, D3 und die Sektionen
 in `index.html` und strippt dabei die Modul-Syntax (`import`-Zeilen, `export`-Präfixe)
-sowie die `/* v8 ignore */`-Coverage-Marker. Mit `--no-bump` ist der Build
-idempotent; ohne zählt er die Build-Nummer hoch (siehe Versionierung).
+sowie die `/* v8 ignore */`-Coverage-Marker. Der Build ist unabhängig von der
+Versionierung — er bumpt nie, sondern liest nur die aktuelle Version aus dem
+Template und stempelt sie in `index.html`.
 
 ### Versionierung
 
-Single Source of Truth für die App-Version ist das `version`-Feld in
-`package.json` (Schema `MAJOR.MINOR.BUILD`). Der Build stempelt sie als
-`@@VERSION@@` ins Template: sichtbar im Header neben dem Titel (`#appVersion`)
-und als globale JS-Konstante `APP_VERSION` in `index.html`.
+Single Source of Truth für die App-Version ist die `APP_VERSION`-Konstante in
+`index.template.html` (Schema `MAJOR.MINOR.BUILD`). `build.js` fasst nur CSS, D3
+und die Sektionen zusammen und fasst die Version **nicht** an; der Header
+(`#appVersion`) rendert sie zur Laufzeit aus `APP_VERSION`. Das `version`-Feld in
+`package.json` ist **nicht** mehr massgebend.
 
-Das Hochzählen passiert automatisch (`bump-version.js`):
+Das Hochzählen besorgt der AI-Toolbox-Versionierer (`bump-version.sh`):
 
-- **Build-Nummer** (drittes Segment): jeder `node build.js` zählt sie hoch.
-  Ausnahme ist `--no-bump` für reproduzierbare Re-Builds — `verify.js`,
-  `test:coverage` und der Pre-Commit-Hook nutzen das.
-- **Minor** (zweites Segment): der Hook `.githooks/pre-commit` zählt sie bei
-  jedem Commit hoch, setzt die Build-Nummer auf 0, baut `index.html` neu und
-  staged beide Dateien mit.
+- **Build-Nummer** (drittes Segment): der Per-Edit-PostToolUse-Hook (in
+  `.claude/settings.json`) zählt sie bei jedem Edit am Template hoch.
+- **Minor** (zweites Segment): der Hook `.githooks/pre-commit` zählt bei jedem
+  Commit Minor+Build hoch, baut `index.html` neu und staged beide Dateien mit.
 
 Der Hook-Pfad wird via `prepare`-Script (`git config core.hooksPath .githooks`)
 bei `npm install` gesetzt — nach einem frischen Clone einmal `npm install`
-ausführen. **Major** wird bewusst nur manuell angehoben (direkt in
-`package.json` editieren).
+ausführen. Der Versionierer wird relativ zum Repo erwartet (`../ai-toolbox`).
+**Major** wird bewusst nur manuell angehoben (direkt im Template editieren).
 
 ### Tests & Coverage (einmalig `npm install`)
 

@@ -1,8 +1,13 @@
 #!/bin/sh
-# Versioning hook: every commit bumps the minor version (build counter resets
-# to 0) and ships a freshly stamped index.html. Deliverable builds in between
-# bump the build counter via build.js (see bump-version.js).
+# Versioning + build hook.
+#
+# Versioning is owned by the AI-Toolbox bumper: it bumps APP_VERSION (the single
+# source of truth) in index.template.html — MINOR+BUILD on commit; the per-edit
+# PostToolUse hook bumps BUILD on every edit. build.js is independent of
+# versioning: it just reads the current APP_VERSION from the template and stamps
+# the single-file deliverable index.html. Bump first, then build, so index.html
+# always carries the freshly bumped version.
 set -e
-node bump-version.js minor
-node build.js --no-bump
-git add package.json index.html
+sh "$(git rev-parse --show-toplevel)/../ai-toolbox/tools/bump-version.sh" --commit index.template.html
+node build.js
+git add index.template.html index.html
