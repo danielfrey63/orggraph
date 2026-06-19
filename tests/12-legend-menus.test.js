@@ -38,6 +38,7 @@ beforeEach(() => {
   globalThis.ATTR_PREFIX = ATTR_PREFIX;
   globalThis.idbStore = new Map();
   globalThis.idbPut = vi.fn(async (k, v) => { globalThis.idbStore.set(k, v); });
+  globalThis.putStored = vi.fn(async (k, v) => { globalThis.idbStore.set(k, v); });
   vi.stubGlobal('Blob', class FakeBlob {
     constructor(parts, opts) { this.content = parts.join(''); this.type = opts?.type; }
   });
@@ -201,7 +202,7 @@ describe('exports', () => {
   });
 
   it('saveCategory keeps the modified flag when the IndexedDB write fails', async () => {
-    globalThis.idbPut = vi.fn(async () => { throw new Error('quota'); });
+    globalThis.putStored = vi.fn(async () => { throw new Error('quota'); });
     globalThis.modifiedCategories = new Set(['Team']);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(await saveCategory('Team')).toBe(false);

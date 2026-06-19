@@ -927,8 +927,8 @@ export async function saveCategory(categoryName) {
   const content = buildCategoryLines(categoryName, separator).join('\n');
 
   try {
-    await idbPut(ATTR_PREFIX + sourceInfo.filename, content);
-    await idbPut(ATTR_PREFIX + sourceInfo.filename + '::name', sourceInfo.filename);
+    await putStored(ATTR_PREFIX + sourceInfo.filename, content);
+    await putStored(ATTR_PREFIX + sourceInfo.filename + '::name', sourceInfo.filename);
     sourceInfo.originalText = content;
   } catch (e) {
     console.error('Speichern in IndexedDB fehlgeschlagen:', e);

@@ -82,6 +82,198 @@ export async function idbClear() {
   return tx('readwrite', store => reqAsPromise(store.clear()));
 }
 
+// ---- Profiles (parallel configurations) ----
+//
+// Multiple configurations live side by side in the same object store. Each
+// profile namespaces the logical keys (env/data/pseudo/attr:*/attrMatches) as
+// `p:<profileId>:<logicalKey>`. A single un-namespaced meta record tracks the
+// list and the active profile. The primitives above stay raw; namespacing is a
+// deliberate layer applied by getStored*/putStored and storeEntries.
+export const KEY_PROFILES = '__profiles__';
+export const DEFAULT_PROFILE_ID = 'default';
+export const DEFAULT_PROFILE_NAME = 'Standard';
+
+let _activeProfile = null;
+let _profilesInit = null;
+
+/** Test hook: forget the cached active profile so the next access re-resolves. */
+export function _resetProfilesCache() { _activeProfile = null; _profilesInit = null; }
+
+/** Keys already carrying a namespace (`p:`) or meta (`__`) are passed through raw. */
+function isRawKey(k) {
+  return typeof k === 'string' && (k.startsWith('p:') || k.startsWith('__'));
+}
+
+export async function getProfilesMeta() {
+  const m = await idbGet(KEY_PROFILES);
+  return (m && typeof m === 'object' && Array.isArray(m.list)) ? m : null;
+}
+
+async function putProfilesMeta(meta) { await idbPut(KEY_PROFILES, meta); return meta; }
+
+/** One-time, idempotent: wrap pre-existing global keys into a 'default' profile. */
+async function migrateLegacyToDefault() {
+  const keys = await idbKeys();
+  const legacy = keys.filter(k => typeof k === 'string' && !isRawKey(k) &&
+    (k === KEY_ENV || k === KEY_DATA || k === KEY_PSEUDO || k === KEY_ATTR_MATCHES || k.startsWith(ATTR_PREFIX)));
+  for (const k of legacy) {
+    const v = await idbGet(k);
+    await idbPut('p:' + DEFAULT_PROFILE_ID + ':' + k, v);
+    await idbDelete(k);
+  }
+  return putProfilesMeta({
+    active: DEFAULT_PROFILE_ID,
+    list: [{ id: DEFAULT_PROFILE_ID, name: DEFAULT_PROFILE_NAME, createdAt: Date.now() }],
+  });
+}
+
+/** Resolve (and lazily create/migrate) the active profile id. Runs once per load. */
+export async function ensureProfilesInitialized() {
+  if (_activeProfile) return _activeProfile;
+  if (!_profilesInit) {
+    _profilesInit = (async () => {
+      let meta = await getProfilesMeta();
+      if (!meta || !meta.active) meta = await migrateLegacyToDefault();
+      _activeProfile = meta.active;
+      // Clean up a leftover empty 'default' from older installs on load.
+      if (await pruneEmptyDefault(meta)) await putProfilesMeta(meta);
+      return _activeProfile;
+    })();
+  }
+  return _profilesInit;
+}
+
+/** Map a logical key into the active profile namespace (raw keys pass through). */
+export async function profileKey(logicalKey) {
+  if (isRawKey(logicalKey)) return logicalKey;
+  const id = await ensureProfilesInitialized();
+  return 'p:' + id + ':' + logicalKey;
+}
+
+/** Namespaced write into the active profile. */
+export async function putStored(logicalKey, value) { return idbPut(await profileKey(logicalKey), value); }
+/** Namespaced delete from the active profile. */
+export async function delStored(logicalKey) { return idbDelete(await profileKey(logicalKey)); }
+
+function slugify(s) {
+  return String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'profil';
+}
+
+async function uniqueProfileId(base, meta) {
+  const ids = new Set(meta.list.map(p => p.id));
+  let id = base, n = 2;
+  while (ids.has(id)) id = base + '-' + (n++);
+  return id;
+}
+
+export async function listProfiles() {
+  const m = await getProfilesMeta();
+  return m ? m.list.slice() : [];
+}
+
+export async function getActiveProfileId() { return ensureProfilesInitialized(); }
+
+export async function createProfile(name, { activate = true, source = null } = {}) {
+  await ensureProfilesInitialized();
+  const meta = (await getProfilesMeta()) || { active: _activeProfile, list: [] };
+  const id = await uniqueProfileId(slugify(name), meta);
+  meta.list.push({ id, name: name || id, createdAt: Date.now(), source });
+  if (activate) { meta.active = id; _activeProfile = id; }
+  await pruneEmptyDefault(meta);
+  await putProfilesMeta(meta);
+  return id;
+}
+
+export async function switchProfile(id) {
+  await ensureProfilesInitialized();
+  const meta = await getProfilesMeta();
+  if (!meta || !meta.list.some(p => p.id === id)) throw new Error('Unbekanntes Profil: ' + id);
+  meta.active = id;
+  await putProfilesMeta(meta);
+  _activeProfile = id;
+  return id;
+}
+
+export async function renameProfile(id, name) {
+  await ensureProfilesInitialized();
+  const meta = await getProfilesMeta();
+  if (!meta) return;
+  const p = meta.list.find(x => x.id === id);
+  if (p) { p.name = name; await putProfilesMeta(meta); }
+}
+
+async function copyProfileKeys(srcId, dstId) {
+  const srcPrefix = 'p:' + srcId + ':', dstPrefix = 'p:' + dstId + ':';
+  for (const k of await idbKeys()) {
+    if (typeof k === 'string' && k.startsWith(srcPrefix)) {
+      await idbPut(dstPrefix + k.slice(srcPrefix.length), await idbGet(k));
+    }
+  }
+}
+
+export async function duplicateProfile(id, name) {
+  await ensureProfilesInitialized();
+  const meta = await getProfilesMeta();
+  if (!meta) return null;
+  const newId = await uniqueProfileId(slugify(name || (id + '-kopie')), meta);
+  await copyProfileKeys(id, newId);
+  meta.list.push({ id: newId, name: name || (id + ' Kopie'), createdAt: Date.now() });
+  await pruneEmptyDefault(meta);
+  await putProfilesMeta(meta);
+  return newId;
+}
+
+async function deleteProfileKeys(id) {
+  const prefix = 'p:' + id + ':';
+  for (const k of await idbKeys()) {
+    if (typeof k === 'string' && k.startsWith(prefix)) await idbDelete(k);
+  }
+}
+
+/** True when the given profile has a stored dataset (KEY_DATA). */
+async function profileHasData(id) {
+  const v = await idbGet('p:' + id + ':' + KEY_DATA);
+  return typeof v === 'string' && v.length > 0;
+}
+
+/** Prefer a profile that actually holds data, so a switch lands on something visible. */
+async function pickActiveProfile(list) {
+  for (const p of list) if (await profileHasData(p.id)) return p.id;
+  return list[0].id;
+}
+
+/**
+ * Drop the initial 'default' profile once it has become a useless empty husk:
+ * it carries no data, is not the active profile, and at least one other profile
+ * exists. Mutates meta.list and returns true when something was pruned (caller
+ * persists meta). The active profile is never pruned, so _activeProfile stays valid.
+ */
+async function pruneEmptyDefault(meta) {
+  if (meta.active === DEFAULT_PROFILE_ID) return false;
+  if (meta.list.length <= 1) return false;
+  if (!meta.list.some(p => p.id === DEFAULT_PROFILE_ID)) return false;
+  if (await profileHasData(DEFAULT_PROFILE_ID)) return false;
+  await deleteProfileKeys(DEFAULT_PROFILE_ID);
+  meta.list = meta.list.filter(p => p.id !== DEFAULT_PROFILE_ID);
+  return true;
+}
+
+export async function deleteProfile(id) {
+  await ensureProfilesInitialized();
+  const meta = await getProfilesMeta();
+  if (!meta) return null;
+  await deleteProfileKeys(id);
+  meta.list = meta.list.filter(p => p.id !== id);
+  if (!meta.list.length) {
+    meta.list.push({ id: DEFAULT_PROFILE_ID, name: DEFAULT_PROFILE_NAME, createdAt: Date.now() });
+  }
+  if (!meta.list.some(p => p.id === meta.active)) meta.active = await pickActiveProfile(meta.list);
+  await putProfilesMeta(meta);
+  _activeProfile = meta.active;
+  return meta.active;
+}
+
 // Ask the browser to keep our data durable (avoid eviction under storage pressure).
 export async function requestPersistence() {
   try {
@@ -223,8 +415,8 @@ export async function storeEntries(entryList) {
 
   const storeAttr = async (c) => {
     // remember original filename alongside the content for category derivation
-    await idbPut(ATTR_PREFIX + c.filename, c.text);
-    await idbPut(ATTR_PREFIX + c.filename + '::name', c.filename);
+    await putStored(ATTR_PREFIX + c.filename, c.text);
+    await putStored(ATTR_PREFIX + c.filename + '::name', c.filename);
     stored.push({ kind: 'attr', filename: c.filename });
   };
 
@@ -238,7 +430,7 @@ export async function storeEntries(entryList) {
   const used = new Set();
   if (env) {
     used.add(env);
-    await idbPut(KEY_ENV, env.text);
+    await putStored(KEY_ENV, env.text);
     stored.push({ kind: 'env', filename: env.filename });
 
     // classifyFile only marks parseable JSON as env, so this cannot throw.
@@ -248,7 +440,7 @@ export async function storeEntries(entryList) {
       const hit = findEntryByRef(classified, env.path, cfg.DATA_URL);
       if (hit) {
         used.add(hit);
-        await idbPut(KEY_DATA, hit.text);
+        await putStored(KEY_DATA, hit.text);
         stored.push({ kind: 'data', filename: hit.filename });
       } else {
         missing.push(String(cfg.DATA_URL));
@@ -283,7 +475,7 @@ export async function storeEntries(entryList) {
     if (c.kind === 'unknown') { unknown.push(c.filename); continue; }
     if (env && (c.kind === 'env' || c.kind === 'data')) { ignored.push(c.filename); continue; }
     if (c.kind === 'attr') { await storeAttr(c); continue; }
-    await idbPut(c.key, c.text);
+    await putStored(c.key, c.text);
     stored.push({ kind: c.kind, filename: c.filename });
   }
 
@@ -299,7 +491,7 @@ export async function storeFiles(fileList) {
 }
 
 export async function getStoredText(key) {
-  const v = await idbGet(key);
+  const v = await idbGet(await profileKey(key));
   return typeof v === 'string' ? v : undefined;
 }
 
@@ -309,16 +501,18 @@ export async function getStoredJson(key) {
   try { return JSON.parse(t); } catch { return undefined; }
 }
 
-/** List stored attribute files as [{ key, filename, text }]. */
+/** List stored attribute files of the active profile as [{ key, filename, text }]. */
 export async function getStoredAttributes() {
+  const prefix = await profileKey(ATTR_PREFIX); // p:<active>:attr:
   const keys = await idbKeys();
   const out = [];
   for (const k of keys) {
     if (typeof k !== 'string') continue;
-    if (!k.startsWith(ATTR_PREFIX) || k.endsWith('::name')) continue;
-    const text = await getStoredText(k);
-    if (text == null) continue;
-    const filename = (await getStoredText(k + '::name')) || k.slice(ATTR_PREFIX.length);
+    if (!k.startsWith(prefix) || k.endsWith('::name')) continue;
+    const text = await idbGet(k);
+    if (typeof text !== 'string') continue;
+    const nameVal = await idbGet(k + '::name');
+    const filename = (typeof nameVal === 'string' ? nameVal : null) || k.slice(prefix.length);
     out.push({ key: k, filename, text });
   }
   return out;
@@ -339,7 +533,7 @@ export async function getStoredAttrMatches() {
 
 export async function mergeStoredAttrMatches(updates) {
   const merged = { ...(await getStoredAttrMatches()), ...updates };
-  await idbPut(KEY_ATTR_MATCHES, JSON.stringify(merged));
+  await putStored(KEY_ATTR_MATCHES, JSON.stringify(merged));
   return merged;
 }
 

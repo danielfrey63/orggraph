@@ -9,6 +9,16 @@ beforeEach(() => {
   globalThis.hideDropZone = vi.fn();
   globalThis.setStatus = vi.fn();
   globalThis.idbClear = vi.fn(async () => {});
+  globalThis.createProfile = vi.fn(async () => 'new-id');
+  globalThis.renameProfile = vi.fn(async () => {});
+  globalThis.getActiveProfileId = vi.fn(async () => 'default');
+  globalThis.hasStoredData = vi.fn(async () => true); // active profile already has data by default
+  globalThis.classifyFile = vi.fn(async (file) => {
+    const text = await file.text();
+    if (text.includes('DATA_URL')) return { kind: 'env', filename: file.name, text };
+    if (text.includes('persons')) return { kind: 'data', filename: file.name, text };
+    return { kind: 'unknown', filename: file.name, text };
+  });
   vi.stubGlobal('location', { reload: vi.fn() });
 });
 
@@ -39,6 +49,34 @@ describe('handleDroppedFiles', () => {
     globalThis.storeEntries.mockResolvedValueOnce(summaryOf({ ignored: ['data.sem.json'] }));
     await handleDroppedFiles([]);
     expect(globalThis.showTemporaryNotification.mock.calls[0][0]).toContain('data.sem.json');
+  });
+
+  it('creates and activates a new profile for a configuration drop (name from DATA_URL)', async () => {
+    const env = { name: 'env.hrm.json', text: async () => '{"DATA_URL":"./data.hrm.json"}' };
+    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({ stored: [{ kind: 'env', filename: 'env.hrm.json' }] }));
+    await handleDroppedFiles([{ path: 'env.hrm.json', file: env }]);
+    expect(globalThis.createProfile).toHaveBeenCalledTimes(1);
+    expect(globalThis.createProfile.mock.calls[0][0]).toBe('hrm');
+    expect(globalThis.createProfile.mock.calls[0][1]).toMatchObject({ activate: true });
+    expect(globalThis.location.reload).toHaveBeenCalled();
+  });
+
+  it('fills the empty active profile instead of creating a phantom one', async () => {
+    globalThis.hasStoredData.mockResolvedValueOnce(false); // active profile is empty
+    const env = { name: 'env.hrm.json', text: async () => '{"DATA_URL":"./data.hrm.json"}' };
+    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({ stored: [{ kind: 'env', filename: 'env.hrm.json' }] }));
+    await handleDroppedFiles([{ path: 'env.hrm.json', file: env }]);
+    expect(globalThis.createProfile).not.toHaveBeenCalled();
+    expect(globalThis.renameProfile).toHaveBeenCalledWith('default', 'hrm');
+    expect(globalThis.location.reload).toHaveBeenCalled();
+  });
+
+  it('does not create a profile for an attribute-only drop', async () => {
+    const tsv = { name: 'Roles.tsv', text: async () => 'a@b\tX' };
+    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({ stored: [{ kind: 'attr', filename: 'Roles.tsv' }] }));
+    await handleDroppedFiles([{ path: 'Roles.tsv', file: tsv }]);
+    expect(globalThis.createProfile).not.toHaveBeenCalled();
+    expect(globalThis.location.reload).not.toHaveBeenCalled();
   });
 
   it('reloads attribute-only drops live without restarting', async () => {

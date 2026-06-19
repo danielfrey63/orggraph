@@ -23,6 +23,7 @@ import {
   idbDelete,
   idbKeys,
   idbClear,
+  putStored,
   getStoredText,
   getStoredJson,
   getStoredAttributes,
@@ -265,14 +266,14 @@ describe('storeEntries (env-driven folder/zip drops)', () => {
 
 describe('stored accessors', () => {
   it('getStoredText returns undefined for non-string values', async () => {
-    await idbPut('obj', { not: 'a string' });
+    await putStored('obj', { not: 'a string' });
     expect(await getStoredText('obj')).toBeUndefined();
   });
 
   it('getStoredJson parses stored JSON and tolerates broken JSON', async () => {
-    await idbPut(KEY_ENV, '{"DATA_URL":"./d.json"}');
+    await putStored(KEY_ENV, '{"DATA_URL":"./d.json"}');
     expect(await getStoredJson(KEY_ENV)).toEqual({ DATA_URL: './d.json' });
-    await idbPut(KEY_PSEUDO, '{broken');
+    await putStored(KEY_PSEUDO, '{broken');
     expect(await getStoredJson(KEY_PSEUDO)).toBeUndefined();
     expect(await getStoredJson('missing')).toBeUndefined();
   });
@@ -281,13 +282,13 @@ describe('stored accessors', () => {
     await storeFiles([makeFile('A.tsv', 'a@b\tX'), makeFile('B.csv', 'c@d\tY')]);
     const attrs = await getStoredAttributes();
     expect(attrs.map((a) => a.filename).sort()).toEqual(['A.tsv', 'B.csv']);
-    expect(attrs.every((a) => a.key.startsWith(ATTR_PREFIX))).toBe(true);
+    expect(attrs.every((a) => a.key.includes(ATTR_PREFIX))).toBe(true);
     expect(attrs.every((a) => typeof a.text === 'string')).toBe(true);
   });
 
   it('hasStoredData reflects presence of the data key', async () => {
     expect(await hasStoredData()).toBe(false);
-    await idbPut(KEY_DATA, '{"persons":[]}');
+    await putStored(KEY_DATA, '{"persons":[]}');
     expect(await hasStoredData()).toBe(true);
   });
 });

@@ -128,6 +128,7 @@ beforeAll(async () => {
   globalThis.requestPersistence = vi.fn(async () => true);
   globalThis.loadAttributesFromFile = vi.fn(async () => true);
   globalThis.idbPut = vi.fn(async () => {});
+  globalThis.putStored = vi.fn(async () => {});
   globalThis.idbClear = vi.fn(async () => {});
   globalThis.setStatus = vi.fn();
   globalThis.showTemporaryNotification = vi.fn();
@@ -267,8 +268,8 @@ describe('env-driven bootstrap with loaded data', () => {
     fileInput.dispatchEvent(new Event('change'));
     await flush(); await flush();
     expect(globalThis.loadAttributesFromFile).toHaveBeenCalledWith(file);
-    expect(globalThis.idbPut).toHaveBeenCalledWith(ATTR_PREFIX + 'Team.tsv', 'a\tb');
-    expect(globalThis.idbPut).toHaveBeenCalledWith(ATTR_PREFIX + 'Team.tsv::name', 'Team.tsv');
+    expect(globalThis.putStored).toHaveBeenCalledWith(ATTR_PREFIX + 'Team.tsv', 'a\tb');
+    expect(globalThis.putStored).toHaveBeenCalledWith(ATTR_PREFIX + 'Team.tsv::name', 'Team.tsv');
   });
 
   it('creates the footer reset button which clears and reloads', async () => {

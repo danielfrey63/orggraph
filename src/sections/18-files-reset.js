@@ -1,4 +1,52 @@
+/** Derive a readable profile name from a dropped env/data file. */
+function profileNameFromDrop(env, data) {
+  let base = '';
+  if (env) {
+    try { const cfg = JSON.parse(env.text); if (cfg && cfg.DATA_URL) base = String(cfg.DATA_URL); } catch (_) {}
+    if (!base) base = env.filename || '';
+  } else if (data) {
+    base = data.filename || '';
+  }
+  base = String(base).split('/').pop().replace(/\.[^.]+$/, '');   // strip dir + extension
+  base = base.replace(/^(env|data)[.\-_]?/i, '');                 // drop env./data. prefix
+  return base || 'Profil';
+}
+
+/** Inspect a drop for a configuration (env/data). Never throws. */
+async function detectConfigDrop(entryList) {
+  let env = null, data = null;
+  for (const raw of Array.from(entryList || [])) {
+    const file = raw && raw.file ? raw.file : raw;
+    if (!file || typeof file.text !== 'function') continue;
+    let c;
+    try { c = await classifyFile(file); } catch (_) { continue; }
+    if (c.kind === 'env' && !env) env = c;
+    else if (c.kind === 'data' && !data) data = c;
+  }
+  if (!env && !data) return { hasConfig: false };
+  return { hasConfig: true, name: profileNameFromDrop(env, data), source: (env || data).filename };
+}
+
 export async function handleDroppedFiles(entryList) {
+  // A drop carrying a configuration (env/data) becomes its own profile so that
+  // multiple configurations can coexist; attribute-only drops extend the active
+  // profile. Detection is best-effort and must never block the import.
+  let cfg = { hasConfig: false };
+  try { cfg = await detectConfigDrop(entryList); } catch (e) { console.error(e); }
+  if (cfg.hasConfig) {
+    try {
+      if (await hasStoredData()) {
+        // The active profile already holds a configuration → keep it and add the
+        // dropped one as a separate, parallel profile.
+        await createProfile(cfg.name, { activate: true, source: cfg.source });
+      } else {
+        // The active profile is empty (e.g. the initial default) → fill it
+        // instead of leaving an empty phantom profile behind.
+        await renameProfile(await getActiveProfileId(), cfg.name);
+      }
+    } catch (e) { console.error(e); }
+  }
+
   const summary = await storeEntries(entryList);
   await requestPersistence();
 
@@ -74,7 +122,7 @@ window.addEventListener("DOMContentLoaded", async () => {
           populateCombo("");
           try { applyFromUI('fileLoad'); } catch(_) { updateFooterStats(null); }
           // In IndexedDB persistieren, damit beim nächsten Öffnen automatisch geladen wird.
-          try { await idbPut(KEY_DATA, text); await requestPersistence(); hideDropZone(); } catch(_) {}
+          try { await putStored(KEY_DATA, text); await requestPersistence(); hideDropZone(); } catch(_) {}
         } catch(_) {
           setStatus('Ungültige Datei');
         } finally {
@@ -796,8 +844,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         // In IndexedDB persistieren (Inhalt + Originalname für Kategorie-Ableitung).
         try {
           const text = await file.text();
-          await idbPut(ATTR_PREFIX + file.name, text);
-          await idbPut(ATTR_PREFIX + file.name + '::name', file.name);
+          await putStored(ATTR_PREFIX + file.name, text);
+          await putStored(ATTR_PREFIX + file.name + '::name', file.name);
           await requestPersistence();
         } catch (_) {}
         attrFileInput.value = ''; // Reset für wiederholtes Laden
