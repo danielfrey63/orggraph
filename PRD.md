@@ -61,14 +61,14 @@ Ein Snapshot ist eine JSON-Datei mit vier Blöcken:
 
 ```json
 {
-  "meta":   { "source": "…", "crawledAt": "2026-06-18T15:00", "snapshot": "20260618-1500", "scope": { … } },
+  "meta":   { "source": "…", "crawledAt": "2026-06-18T15:00", "snapshot": "20260618-1500", "registryVersion": "…", "scope": { … } },
   "schema": { "nodeTypes": { … }, "edgeTypes": { … } },
   "nodes":  [ … ],
   "edges":  [ … ]
 }
 ```
 
-**FR-3.1** `meta` trägt Provenienz: Quelle, Crawl-Zeitpunkt, Snapshot-Stempel `YYYYMMDD-HHMM` und den Scope (§6.2). Knoten/Kanten dürfen zusätzlich `props.source` führen.
+**FR-3.1** `meta` trägt Provenienz: Quelle, Crawl-Zeitpunkt, Snapshot-Stempel `YYYYMMDD-HHMM`, die verwendete Registry-Version (FR-6.1b) und den Scope (§6.2). Knoten/Kanten dürfen zusätzlich `props.source` führen.
 
 **FR-3.2** Knoten: `id` (eindeutig über alle Knoten, typ-übergreifender ID-Raum), `type` (in `schema.nodeTypes` deklariert), `label` (Anzeigename), optional `props` (skalare Eigenschaften).
 
@@ -153,7 +153,9 @@ Beispiel (illustrativ, E14):
 
 **FR-4.6** Relationen der Form «Person × Rolle × Firma» werden **doppelt reifiziert**: Firma-Knoten (dedupliziert) über `arbeitetBei`, Rolle-Knoten (dedupliziert) über `hatRolle`, und die Bindung liegt als **Knoten-Referenz-Property** `props.kontext` (Wert = **ID** des Firma-Knotens, nicht dessen Label) auf der `hatRolle`-Kante. Damit sind beide Richtungen abfragbar: «alle Personen mit Rolle X» (Traversal über den Rolle-Knoten, firmenübergreifend) und «wer arbeitet in welcher Rolle bei Firma Y» (Traversal über den Firma-Knoten bzw. Filter auf die Referenz).
 
-**FR-4.7 Knoten-Referenz-Properties (generischer Mechanismus).** Eine Kanten- oder Knoten-Property kann im Schema als **Referenz auf einen Knotentyp** deklariert werden, z. B. `"hatRolle": { "from": "Person", "to": "Rolle", "props": { "kontext": { "ref": "Firma" } } }` (illustrativ, E14). Der Wert ist dann eine Knoten-ID; der Import validiert Existenz und Typ des Ziels (FR-6.8). Die Engine behandelt Referenz-Properties als auflösbar: Anzeige über das Label des referenzierten Knotens (inkl. Pseudonymisierung), Filter/Suche über den Zielknoten. Abgrenzung: Eine Referenz-Property ist ein gerichteter Verweis, **keine dritte Kante** — sie hat nie Ordnungs- oder Hierarchie-Wirkung und wird im BFS nicht traversiert. Braucht eine Relation mehr (mehr als drei Stellen, eigene Versionshistorie oder eigene Kanten an der Relation selbst), wird sie stattdessen als Zwischenknoten voll reifiziert (Eskalationspfad; Entscheid am Gate).
+**FR-4.7 Knoten-Referenz-Properties (generischer Mechanismus).** Eine Kanten- oder Knoten-Property kann im Schema als **Referenz auf einen Knotentyp** deklariert werden, z. B. `"hatRolle": { "from": "Person", "to": "Rolle", "props": { "kontext": { "ref": "Firma", "implies": "arbeitetBei" } } }` (illustrativ, E14). Der Wert ist dann eine Knoten-ID; der Import validiert Existenz und Typ des Ziels (FR-6.8). Die Engine behandelt Referenz-Properties als auflösbar: Anzeige über das Label des referenzierten Knotens (inkl. Pseudonymisierung), Filter/Suche über den Zielknoten. Abgrenzung: Eine Referenz-Property ist ein gerichteter Verweis, **keine dritte Kante** — sie hat nie Ordnungs- oder Hierarchie-Wirkung und wird im BFS nicht traversiert. Braucht eine Relation mehr (mehr als drei Stellen, eigene Versionshistorie oder eigene Kanten an der Relation selbst), wird sie stattdessen als Zwischenknoten voll reifiziert (Eskalationspfad; Entscheid am Gate).
+
+**FR-4.8 Konsistenz durch Konstruktion (implizierte Kanten).** Die Doppel-Reifizierung ist redundant — die Basis-Kante (`arbeitetBei`) ist aus der Referenz-Property ableitbar. Diese Redundanz wird nicht unabhängig gepflegt, sondern **deterministisch materialisiert**: Quellen (Crawler, Migrationsskript) schreiben nur den Primärfakt (die Kante mit der Referenz-Property); deklariert das Schema `implies`, erzeugt der Import die implizierte Kante automatisch mit **identischem Validity-Intervall** (idempotent — existiert sie schon, passiert nichts). Invariante, die der Import prüft (FR-6.8): Zu jeder zu T gültigen Kante mit Referenz-Property auf Ziel F existiert eine zu T gültige implizierte Kante desselben Quellknotens zu F; Widersprüche (unabhängig gelieferte, abweichende Stände) werden gemeldet, nicht still korrigiert. Die Umkehrung ist bewusst nicht gefordert — die Basis-Kante darf allein stehen (z. B. Firmenzugehörigkeit ohne bekannte Rolle).
 
 ---
 
@@ -198,9 +200,13 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 
 **FR-6.1a Registry-Bootstrap.** Es gibt keine separate Phase 0: Der Erstaufbau der Registry ist der Grenzfall von Phase A mit leerer Registry — dann ist jeder Kandidat `untyped`, und das Gate kuratiert daraus die initiale Registry (Commit an `schema/registry.json`). Liegt eine Registry vor, überprüft und ergänzt derselbe Lauf sie. Registry-Pflege folgt damit derselben Semantik wie die Daten: erster Stand = Basis, jeder weitere Lauf = Abgleich mit kontrollierter Fortschreibung — mit dem Unterschied, dass Registry-Änderungen immer durch das Gate (Mensch/LLM) und einen Commit gehen, nie automatisch.
 
+**FR-6.1b Registry-Transport.** Der Crawl-Auftrag trägt eine Kopie des aktuellen Registry-Stands aus dem Repo in den Lauf; der Crawler kennt zu Laufbeginn also die Registry, aber bewusst **nicht** die Ergebnisse früherer Läufe (Vollstands-Semantik — das Diffen geschieht beim Import, FR-5.6). Der Snapshot vermerkt `meta.registryVersion` (Version oder Hash des verwendeten Registry-Stands); der Import warnt, wenn ein Snapshot gegen einen älteren Stand gecrawlt wurde als den im Tenant bekannten.
+
 **FR-6.2 Identität.** Stabile IDs vom Quell-PK: In strukturierten Quellen ist jede Entität verlinkt, die ID steckt im Link-Ziel/der URL (sonst E-Mail oder Quell-OE-ID); Beziehungen referenzieren das verlinkte Ziel, nie den Anzeigenamen. Fehlt jede stabile Kennung: `slug(label)` mit `props.idSource='name'`.
 
 **FR-6.3 Konsolidierung.** Der Crawl konsolidiert über alle Seiten hinweg in IndexedDB auf der Quell-Origin (Store `nodes` mit keyPath `id`, Store `edges` mit keyPath `key` = `type|source|target`): upsert-basiert, dedupliziert, resume-fähig, Re-Run derselben Seite idempotent. Auch Basisquellen (Personen-OE-Graph mit Hierarchie) werden in denselben Store gemerged.
+
+**FR-6.3a Ein Lauf = ein Snapshot; der Crawl-Store ist lauf-lokal.** Der IndexedDB-Store auf der Quell-Origin ist Akkumulator **eines einzelnen Crawl-Laufs**, kein Cache über Läufe hinweg. Er führt einen Lauf-Marker (Snapshot-Stempel, Startzeit, `registryVersion`). Ein unterbrochener Lauf wird am Marker erkannt und **fortgesetzt** (resume); ein **neuer** Lauf startet zwingend mit leerem Store — liegen unexportierte Daten eines früheren Laufs vor, fragt der Crawler explizit: fortsetzen oder verwerfen, niemals mischen (sonst würden zwischenzeitlich an der Quelle verschwundene Entitäten als vorhanden exportiert und die Vollstands-Semantik aus §5.1 verletzt). Nach bestätigtem Export wird der Store geleert; ab dann sind Quell-IndexedDB und Repository deckungsgleich — Snapshot-Dateien und Registry im Repo sind die einzige persistente Wahrheit zwischen Läufen.
 
 **FR-6.4 Verhalten.** Nur lesen (keine Klicks auf Aktionen, keine Formulare); bevorzugt interne JSON-APIs (Network-Tab) vor DOM-Scraping; Folge-Seiten gechunkt (Batches ~5, randomisierte Pausen, Backoff bei 429/5xx); Labels normalisieren (De-Gendering nur für Anzeige-Labels, nie für API-Namen; Whitespace kollabieren).
 
@@ -214,7 +220,7 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 
 **FR-6.7 Eingang.** Snapshots gelangen per Drag&Drop (bestehende Dropzone) oder Dateidialog in die App; Erkennung inhaltsbasiert (`meta.snapshot` + `schema` + `nodes`/`edges`).
 
-**FR-6.8 Validierung.** Vor dem Diff: Schema ist Teilmenge der im Tenant bekannten Registry; Kanten-Endpunkte existieren (im Snapshot oder im Bestand) und respektieren `from`/`to`; Knoten-Referenz-Properties (FR-4.7) zeigen auf existierende Knoten des deklarierten Typs; IDs eindeutig; Zyklenfreiheit über Hierarchie-Kanten (Verletzung = Warnung mit Details, kein stiller Drop).
+**FR-6.8 Validierung.** Vor dem Diff: Schema ist Teilmenge der im Tenant bekannten Registry; Kanten-Endpunkte existieren (im Snapshot oder im Bestand) und respektieren `from`/`to`; Knoten-Referenz-Properties (FR-4.7) zeigen auf existierende Knoten des deklarierten Typs; implizierte Kanten werden materialisiert und die Konsistenz-Invariante geprüft (FR-4.8); IDs eindeutig; Zyklenfreiheit über Hierarchie-Kanten (Verletzung = Warnung mit Details, kein stiller Drop).
 
 **FR-6.9 Fortschreibung.** Diff nach FR-5.6 gegen den Tenant-Store, Versionsfortschreibung, Plausibilitäts-Gate (FR-5.7), Toast-Zusammenfassung (FR-5.8). Eine Snapshots-Registry im Tenant-Store verzeichnet importierte Snapshot-Stempel; ein bereits importierter Snapshot wird erkannt und ist ein No-op (**Idempotenz**). Snapshots müssen chronologisch importiert werden; ein älterer Stempel als der jüngste importierte wird mit Hinweis abgewiesen.
 
