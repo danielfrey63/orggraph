@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/danielfrey63/orggraph/schema/registry.schema.json",
+  "title": "OrgGraph canonical type registry",
+  "description": "Curated, versioned type registry (PRD FR-4.1). Declares node and edge types with declarative capabilities; the app engine itself is type-agnostic (PRD FR-4.2, NFR-5). Dataset schemas in snapshots are subsets of this registry (PRD FR-3.4).",
+  "type": "object",
+  "required": ["version", "nodeTypes", "edgeTypes"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Registry version stamp; copied into snapshot meta.registryVersion (PRD FR-6.1b)."
+    },
+    "nodeTypes": {
+      "type": "object",
+      "description": "Node type name -> capabilities. Names are data, never referenced in engine code (PRD NFR-5).",
+      "additionalProperties": { "$ref": "#/$defs/nodeType" }
+    },
+    "edgeTypes": {
+      "type": "object",
+      "description": "Edge type name -> declaration.",
+      "additionalProperties": { "$ref": "#/$defs/edgeType" }
+    }
+  },
+  "$defs": {
+    "nodeType": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": { "type": "string" },
+        "labelProp": {
+          "type": "string",
+          "default": "label",
+          "description": "Property used as display name (PRD FR-4.2)."
+        },
+        "identifiers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Searchable/matchable identifier paths, e.g. \"id\" or \"props.email\" (search, import matching)."
+        },
+        "leafProp": {
+          "type": "string",
+          "description": "Boolean property marking leaf nodes; drives the type-agnostic leaf filter (PRD FR-8.3)."
+        },
+        "pseudonymize": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pool"],
+          "properties": {
+            "pool": {
+              "type": "string",
+              "description": "Name of the pseudonym pool in the tenant's pseudo data."
+            },
+            "byLevel": {
+              "type": "boolean",
+              "default": false,
+              "description": "Pick pool entries by BFS level (PRD FR-8.5)."
+            }
+          },
+          "description": "Types without this capability are never pseudonymized. Presentation (colors, icons) is intentionally NOT part of the registry (PRD FR-4.2a / E13)."
+        },
+        "props": { "$ref": "#/$defs/propDecls" }
+      }
+    },
+    "edgeType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "description": { "type": "string" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "hierarchy": {
+          "type": "boolean",
+          "default": false,
+          "description": "Designated hierarchy edge; spans the tree and drives BFS ordering (PRD FR-7.2)."
+        },
+        "identityProps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Props that are part of the edge identity in addition to type+source+target (PRD FR-5.2 / E15); typically reference props such as \"kontext\"."
+        },
+        "props": { "$ref": "#/$defs/propDecls" }
+      }
+    },
+    "endpoint": {
+      "description": "Allowed endpoint type(s); \"*\" = any (PRD FR-3.4).",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      ]
+    },
+    "propDecls": {
+      "type": "object",
+      "description": "Optional declarations for individual props; undeclared props are free-form scalars (PRD FR-4.5).",
+      "additionalProperties": { "$ref": "#/$defs/propDecl" }
+    },
+    "propDecl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": { "type": "string" },
+        "type": {
+          "enum": ["string", "number", "boolean", "date"],
+          "description": "Scalar type hint; import validation warns on mismatch, never silently drops."
+        },
+        "ref": {
+          "type": "string",
+          "description": "Node type this prop references; the value is a node id (PRD FR-4.7). The only exception to the scalar principle."
+        },
+        "implies": {
+          "type": "string",
+          "description": "Edge type materialized from this reference with the identical validity interval (PRD FR-4.8). Requires ref."
+        }
+      },
+      "dependentRequired": { "implies": ["ref"] }
+    }
+  }
+}
