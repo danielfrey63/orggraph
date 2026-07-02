@@ -34,6 +34,7 @@ Der SBB/SEM-Use-Case verlangt Entitäten, die heute als «Attribute» (farbige R
 | E14 | Alle konkreten Typ-, Kanten- und View-Nennungen im PRD sind **Illustrationen**, kein Implementierungsauftrag; verbindlich ist allein, was über Phase A + Gate in die Registry gelangt (FR-6.1a) | 2026-07 |
 | E15 | Kanten-Identität = `type`+`source`+`target` **plus** die im Schema deklarierten `identityProps` (z. B. `kontext`) — sonst kollidieren gleichzeitige gleiche Rollen bei verschiedenen Firmen (FR-5.2) | 2026-07 |
 | E16 | Umsetzungsweg: vollständige Neuerstellung auf separatem Branch, als Goal-Loop gegen die Akzeptanzkriterien (§13) getrieben; Tech-Stack unverändert (§1.5) | 2026-07 |
+| E17 | Kantenrichtung: Hierarchie-Kanten zeigen **vom Untergeordneten zum Übergeordneten**; BFS-abwärts traversiert gegen die Kantenrichtung; Legacy-Richtungen werden bei der Migration normalisiert (FR-7.2a) | 2026-07 |
 
 ### 1.4 Nicht-Ziele
 
@@ -84,13 +85,15 @@ Ein Snapshot ist eine JSON-Datei mit vier Blöcken:
 
 **FR-3.5** IDs sind **stabil** (Quell-PK, URL-ID, E-Mail; notfalls `slug(label)` mit `props.idSource='name'`) — Voraussetzung für Diff und Versionierung.
 
+**FR-3.6** Das Snapshot-Format ist maschinenprüfbar definiert in [`schema/snapshot.schema.json`](schema/snapshot.schema.json) (inkl. `meta.scope` und Versionsfeldern); die Import-Validierung (FR-6.8) prüft dagegen. Views sind analog in [`schema/view.schema.json`](schema/view.schema.json) definiert.
+
 ---
 
 ## 4. Typsystem
 
 ### 4.1 Kanonische Registry
 
-**FR-4.1** Die Registry lebt als kuratierte, versionierte Repo-Datei `schema/registry.json`. Crawler und Builder importieren sie und mappen hinein; neue Typen entstehen ausschliesslich über das Analyse-Gate der Akquise (§6) plus Commit. Kein Harvester erfindet eigenmächtig Typen. Das Registry-**Format** ist verbindlich definiert als JSON Schema in [`schema/registry.schema.json`](schema/registry.schema.json); ein illustratives Beispiel (E14) liegt in [`schema/registry.example.json`](schema/registry.example.json).
+**FR-4.1** Die Registry lebt als kuratierte, versionierte Repo-Datei `schema/registry.json`. Crawler und Builder importieren sie und mappen hinein; neue Typen entstehen ausschliesslich über das Analyse-Gate der Akquise (§6) plus Commit. Kein Harvester erfindet eigenmächtig Typen. Das Registry-**Format** ist verbindlich definiert als JSON Schema in [`schema/registry.schema.json`](schema/registry.schema.json); ein illustratives Beispiel (E14) liegt in [`schema/registry.example.json`](schema/registry.example.json). Die Datei `schema/registry.json` existiert von Anfang an, startet aber **leer** (Version `0`, keine Typen) und wird ausschliesslich über Gate-Commits gefüllt (Registry-Bootstrap FR-6.1a).
 
 > **Illustration, nicht normativ (E14).** Die folgenden Typenlisten zeigen, was aus den bisherigen SBB/SEM-Analysen voraussichtlich hervorgeht — sie dienen in diesem PRD durchgehend als Beispielmaterial und sind **kein Implementierungsauftrag**. Es gibt keine im Code oder im PRD fixierte Typenliste; verbindlich ist ausschliesslich der jeweilige Stand von `schema/registry.json`, der über Phase A + Gate entsteht und wächst (FR-6.1a).
 
@@ -169,7 +172,7 @@ Beispiel (illustrativ, E14):
 
 **FR-5.1** Input sind **datierte Voll-Snapshots** (§3); das interne Modell sind **Validity-Intervalle**: Der Import (§6.3) difft jeden neuen Snapshot gegen den aktuellen Stand und schreibt Versionen fort.
 
-**FR-5.2 Volle Versionierung von Knoten, Kanten und Properties.** Eine Version = ein props-Stand mit Intervall `validFrom`/`validTo` (`null` = offen). Der Graph darf pro Identität mehrere Versionen mit disjunkten Intervallen enthalten: Knoten-Identität = `id`; Kanten-Identität = `type`+`source`+`target` **plus** die im Schema des Kantentyps deklarierten `identityProps` (E15) — typischerweise Referenz-Properties wie `kontext`, damit dieselbe Person dieselbe Rolle gleichzeitig bei zwei Firmen haben kann, ohne dass die Kanten zur selben Identität verschmelzen. Ändert sich irgendein Property-Wert (auch `label`), wird die offene Version geschlossen und eine neue eröffnet. Die vollständige Property-Historie (z. B. Pensum-Verlauf) ist damit aus der Versionsfolge rekonstruierbar; der Diff-Modus weist Änderungen auf **Property-Granularität** aus.
+**FR-5.2 Volle Versionierung von Knoten, Kanten und Properties.** Eine Version = ein **Record-Stand** mit Intervall `validFrom`/`validTo` (`null` = offen). Der Record-Stand umfasst `label` **und** `props` (beides ist versioniert); `id` und `type` sind dagegen **identitätsfest** — ein Typwechsel wäre eine neue Identität, kein Versionswechsel. Der Graph darf pro Identität mehrere Versionen mit disjunkten Intervallen enthalten: Knoten-Identität = `id`; Kanten-Identität = `type`+`source`+`target` **plus** die im Schema des Kantentyps deklarierten `identityProps` (E15) — typischerweise Referenz-Properties wie `kontext`, damit dieselbe Person dieselbe Rolle gleichzeitig bei zwei Firmen haben kann, ohne dass die Kanten zur selben Identität verschmelzen. Ändert sich irgendein Property-Wert (auch `label`), wird die offene Version geschlossen und eine neue eröffnet. Die vollständige Property-Historie (z. B. Pensum-Verlauf) ist damit aus der Versionsfolge rekonstruierbar; der Diff-Modus weist Änderungen auf **Property-Granularität** aus.
 
 ```json
 { "id": "p-1", "type": "Person", "label": "Anna Müller", "props": { "pensum": 80 }, "validFrom": "2025-08-28", "validTo": "2026-02-01" }
@@ -238,7 +241,7 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 
 ## 7. Views und Projektionen
 
-Eine View projiziert aus dem Gesamtgraphen einen darstellbaren, geordneten Teilgraphen. Views sind in `env.json` vordefiniert; fehlt `VIEWS`, gilt die Personenhierarchie als impliziter Default.
+Eine View projiziert aus dem Gesamtgraphen einen darstellbaren, geordneten Teilgraphen. Views sind in `env.json` vordefiniert und maschinenprüfbar definiert in [`schema/view.schema.json`](schema/view.schema.json). Fehlt `VIEWS`, leitet die App einen **generischen Default** ab — `roots: ["__auto__"]`, `edgeTypes`/`hierarchyEdges` = alle in der Registry mit `hierarchy: true` markierten Kantentypen, `visibleNodeTypes: "*"`, `render` = Default `node` — ohne jeden Typnamen im Code (NFR-5); die ausgelieferte Start-View (FR-7.4) ist dagegen explizit definiert.
 
 Beispiel (illustrativ, mit den Beispiel-Typen aus §4.1 — E14):
 
@@ -262,11 +265,19 @@ Beispiel (illustrativ, mit den Beispiel-Typen aus §4.1 — E14):
 }
 ```
 
-**FR-7.1 View-Felder.** `roots` (Wurzel-IDs; `"__auto__"` = Knoten ohne eingehende Hierarchie-Kante), `edgeTypes` (traversierte/gezeigte Kantentypen), `hierarchyEdges` (Teilmenge, die den Baum aufspannt; überschreibt das Schema-Flag `hierarchy`), `visibleNodeTypes` (`"*"` = alle erreichbaren), `render` (pro Typ, §7.3), `depth` (optionaler Start-Tiefenwert), `time` (optional `asOf`/`diff`, §5), `filters` (optionale deklarative Einschränkungen, FR-7.8).
+**FR-7.1 View-Felder.** `roots` (Wurzel-IDs; `"__auto__"` = Knoten ohne eingehende Hierarchie-Kante), `edgeTypes` (traversierte/gezeigte Kantentypen), `hierarchyEdges` (Teilmenge, die den Baum aufspannt; überschreibt das Schema-Flag `hierarchy`), `visibleNodeTypes` (gilt nur für **eigenständig gerenderte** Knoten, Modi `node`/`cluster`; `ring`-Zieltypen erscheinen unabhängig davon über ihre Kante, FR-7.3; `"*"` = alle erreichbaren), `render` (pro Typ, §7.3), `depth` (optionaler Start-Tiefenwert), `time` (optional `asOf`/`diff`, §5), `filters` (optionale deklarative Einschränkungen, FR-7.8).
 
-**FR-7.2 Ordnung.** Order 0 = `roots`; BFS ausschliesslich entlang der `hierarchyEdges` (Richtung beachten); `order(n)` = kürzeste Distanz zur nächsten Wurzel. Mehrfach-Eltern: **eine** Knoteninstanz (Identität, Suche, Pseudonymisierung und Diff hängen an stabilen IDs), flachste Hierarchie-Kante bestimmt die Ordnung, **alle** Eltern-Kanten werden als vollwertige Verbinder gezeichnet — die gerichteten Filter erzeugen möglichst baumnahe Subgraphen, die sichtbare Mehrfach-Kante ist die legitime Ausnahme. Zyklen: Datenvertrag verbietet sie über Hierarchie-Kanten; BFS nimmt die flachste Distanz und ignoriert Rück-Kanten. Nicht über Hierarchie-Kanten Erreichbares erscheint nur als Quer-Link-Ziel. Übrige `edgeTypes` sind Quer-Verbindungen ohne Ordnungseffekt.
+**FR-7.2 Ordnung.** Order 0 = `roots`; BFS ausschliesslich entlang der `hierarchyEdges`, abwärts gemäss FR-7.2a; `order(n)` = kürzeste Distanz zur nächsten Wurzel. Mehrfach-Eltern: **eine** Knoteninstanz (Identität, Suche, Pseudonymisierung und Diff hängen an stabilen IDs), flachste Hierarchie-Kante bestimmt die Ordnung, **alle** Eltern-Kanten werden als vollwertige Verbinder gezeichnet — die gerichteten Filter erzeugen möglichst baumnahe Subgraphen, die sichtbare Mehrfach-Kante ist die legitime Ausnahme. Zyklen: Datenvertrag verbietet sie über Hierarchie-Kanten; BFS nimmt die flachste Distanz und ignoriert Rück-Kanten. Nicht über Hierarchie-Kanten Erreichbares erscheint nur als Quer-Link-Ziel. Übrige `edgeTypes` sind Quer-Verbindungen ohne Ordnungseffekt.
 
-**FR-7.3 Render-Modi pro Typ und View.** `node` = eigenständiger Graph-Knoten mit Kanten; `cluster` = konvexe Hülle um die verbundenen Knoten (heutige OE-Darstellung, jetzt generischer Render-Modus); `ring` = Ring/Badge am Quellknoten (heutige Attribut-Darstellung); `hidden` = ausgeblendet, aber für Filter/Suche verfügbar.
+**FR-7.2a Kantenrichtung (normativ, E17).** Hierarchie-Kanten zeigen **immer vom Untergeordneten zum Übergeordneten** (`source` = Kind/Mitglied, `target` = Eltern/Container) — die Kantennamen lesen sich als Satz («A berichtetAn B» = B ist Vorgesetzte:r). BFS-abwärts (Ordnung FR-7.2, Scope-Traversal FR-5.5a) traversiert Hierarchie-Kanten deshalb **gegen** die Kantenrichtung (`target` → `source`); Quer-Kanten werden entlang ihrer Richtung traversiert. Für die Beispiel-Typen (E14) und das Legacy-Mapping gilt:
+
+| Kantentyp (Beispiel) | `source` (Rolle) | `target` (Rolle) | BFS-abwärts | Legacy-Mapping (FR-10.3) |
+|---|---|---|---|---|
+| `berichtetAn` | Mitarbeiter:in (untergeordnet) | Vorgesetzte:r | `target` → `source` | Legacy Person→Person ist **Manager→Mitarbeiter** → wird beim Migrieren **umgedreht** |
+| `mitgliedIn` | Person (Mitglied) | OE (Container) | `target` → `source` | Legacy Person→OE zeigt bereits Person→OE → **unverändert** |
+| `unterstellt` | Unter-OE | Ober-OE | `target` → `source` | Legacy OE→OE ist **Parent→Child** → wird beim Migrieren **umgedreht** |
+
+**FR-7.3 Render-Modi pro Typ und View.** `node` = eigenständiger Graph-Knoten mit Kanten; `cluster` = konvexe Hülle um die verbundenen Knoten (heutige OE-Darstellung, jetzt generischer Render-Modus); `hidden` = ausgeblendet, aber für Filter/Suche verfügbar. **`ring` (formal):** Der `ring`-gerenderte **Zielknoten** einer Kante erscheint als Ring/Badge am **`source`-Knoten** dieser Kante (heutige Attribut-Darstellung); er ist kein eigenständiges Layout-Element und zählt nicht zu `visibleNodeTypes`, ist aber voll such-, filter- und legendenfähig — seine Sichtbarkeit steuert die Ring-Legende (FR-8.2), sein Farb-Hue der Typname (FR-4.2a). Default für erreichte, nicht deklarierte Typen ist `node`.
 
 **FR-7.4 Start-View.** Die erste definierte View bildet die heutige aktive Darstellung 1:1 ab: Ihre `hierarchyEdges` sind genau die im migrierten Bestand als `hierarchy` markierten Kantentypen — das ergibt exakt den heutigen Org-Baum. Die konkreten Namen («Personenhierarchie», `berichtetAn`, …) sind Illustration (E14).
 
@@ -364,7 +375,7 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 
 **FR-10.2 Input/Output.** Input: `data.json` (persons/orgs/links nach [DATA-FORMAT-SPEC.md](DATA-FORMAT-SPEC.md)), Attribut-TSVs, optional `pseudo.data.json`; Mapping-Konfiguration (das bisherige `ATTRIBUTE_TYPES`-Schema: `property` / `node` / `contextRole` pro Kategorie) liegt als Konfigblock im Skript bzw. daneben. Output: ein Snapshot (§3) pro Mandant, `meta.snapshot` aus dem Datum des Quellstands, `meta.scope` = alle migrierten Typen.
 
-**FR-10.3 Abbildung.** `persons[]` → `type:"Person"` (`email`/`isBasis` → `props`); `orgs[]` → `type:"OE"`; Links P→P/P→OE/OE→OE → `berichtetAn`/`mitgliedIn`/`unterstellt`; Attribut-Kategorien nach Mapping-Konfiguration (Heuristik als Default: numerisch oder unique pro Person → `props`; kategorisch/geteilt → Knoten + Kante; Kontext+Rolle → doppelt reifiziert nach FR-4.6). Die Ziel-Typnamen richten sich nach dem beim Migrationslauf gültigen Registry-Stand; die Nennungen hier sind Illustration (E14).
+**FR-10.3 Abbildung.** `persons[]` → `type:"Person"` (`email`/`isBasis` → `props`); `orgs[]` → `type:"OE"`; Links P→P/P→OE/OE→OE → `berichtetAn`/`mitgliedIn`/`unterstellt`, wobei die Richtungen gemäss FR-7.2a **normalisiert** werden: Legacy Person→Person (Manager→Mitarbeiter) und Legacy OE→OE (Parent→Child) werden umgedreht, Legacy Person→OE bleibt; Attribut-Kategorien nach Mapping-Konfiguration (Heuristik als Default: numerisch oder unique pro Person → `props`; kategorisch/geteilt → Knoten + Kante; Kontext+Rolle → doppelt reifiziert nach FR-4.6). Die Ziel-Typnamen richten sich nach dem beim Migrationslauf gültigen Registry-Stand; die Nennungen hier sind Illustration (E14).
 
 **FR-10.4 Identifier-Zuordnung.** Die bisher interaktive Fuzzy-Zuordnung (Attribut-Identifier → Person über ID/E-Mail/Name, Levenshtein ≤ 0.3) läuft im Skript: eindeutige Treffer automatisch, mehrdeutige und Nicht-Treffer als Report (`unmatched.csv` + Vorschlagsliste); ein manuell gepflegtes Mapping-File wird beim Re-Run berücksichtigt. Das Skript ist **idempotent** — gleicher Input + gleiches Mapping ⇒ identischer Output.
 
@@ -377,7 +388,7 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 | # | Anforderung |
 |---|-------------|
 | NFR-1 | Single-File-Auslieferung (`index.html`), offline via `file://`, keine Laufzeit-Dependencies ausser dem eingebetteten D3. |
-| NFR-2 | Skalierung: Bestand bis mindestens 60k Knoten / 150k Kanten (inkl. Versionen) in IndexedDB; Projektion und Rendering bleiben flüssig, weil nie der Gesamtgraph gerendert wird (FR-8.1). Das Wachstum der Versionsrecords über viele Snapshots wird bewusst **ohne Vorab-Massnahmen** beobachtet (Entscheid 2026-07); Grenzwerte werden erst bei realem Bedarf nachgezogen. |
+| NFR-2 | Skalierung: Bestand bis mindestens **75k Knoten / 200k Kanten inkl. Versionsrecords** in IndexedDB (Referenzbestand: 62k Knoten / 114k Kanten an Identitäten); Projektion und Rendering bleiben flüssig, weil nie der Gesamtgraph gerendert wird (FR-8.1). Das Wachstum der Versionsrecords über viele Snapshots wird bewusst **ohne Vorab-Massnahmen** beobachtet (Entscheid 2026-07); Grenzwerte werden erst bei realem Bedarf nachgezogen. |
 | NFR-3 | Import des SEM-Referenzbestands (62k Knoten / 114k Kanten) dauert unter 30 s auf der Entwickler-Maschine, erzeugt keinen einzelnen Main-Thread-Block über 200 ms und zeigt innert 500 ms nach Import-Start eine Fortschrittsanzeige (Batch-Verarbeitung wie bei der heutigen Fuzzy-Suche). |
 | NFR-4 | Idempotenz: Re-Import desselben Snapshots, Re-Run des Crawls auf derselben Seite und Re-Run des Migrationsskripts sind No-ops bzw. deterministisch. |
 | NFR-5 | Typ-Agnostik ist prüfbar: kein kanonischer Typname als String-Literal im Engine-Code (Lint-Regel/Testsuche), ausgenommen Registry, Test-Fixtures und Migrationsskript. |
@@ -406,6 +417,9 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 8. Such-Combo mit Shift-Add, Tiefen-/Richtungs-Toggles, Blatt-Filter, Pseudonymisierung, SVG/PNG-Export und Profil-Switcher funktionieren wie heute.
 9. NFR-5-Prüfung (kein Typname im Engine-Code) besteht.
 10. Die NFR-3-Grenzwerte (Importdauer < 30 s, kein Main-Thread-Block > 200 ms, Fortschritt < 500 ms) werden mit dem SEM-Referenzbestand eingehalten und gemessen protokolliert.
+11. **Schema-Validierung:** Registry, jeder erzeugte Snapshot (Crawl und Migration) und die `VIEWS`-Konfiguration validieren gegen ihre JSON Schemas (`registry.schema.json`, `snapshot.schema.json`, `view.schema.json`).
+12. **Kantenrichtungs-Migrationstest:** Ein Legacy-Bestand mit Manager→Mitarbeiter- und Parent→Child-Links ergibt nach der Migration ausschliesslich Hierarchie-Kanten vom Untergeordneten zum Übergeordneten (FR-7.2a), und die BFS-Ordnung der Start-View reproduziert den heutigen Baum.
+13. **Scope-Löschtest mit Root-Begrenzung:** Ein Snapshot mit `scope.roots` auf einen Teilbaum schliesst verschwundene Identitäten nur innerhalb dieses Teilbaums (FR-5.5a); identisch fehlende Identitäten ausserhalb bleiben offen.
 
 ---
 

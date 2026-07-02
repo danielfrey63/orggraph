@@ -1,0 +1,6 @@
+{
+  "$comment": "Canonical type registry (PRD FR-4.1). Starts empty; grows exclusively through analysis-gate commits (PRD FR-6.1a). Format: registry.schema.json.",
+  "version": "0",
+  "nodeTypes": {},
+  "edgeTypes": {}
+}

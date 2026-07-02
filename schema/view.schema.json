@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/danielfrey63/orggraph/schema/view.schema.json",
+  "title": "OrgGraph view definitions",
+  "description": "Shape of the VIEWS object in env.json: named declarative projections over the graph (PRD §7).",
+  "type": "object",
+  "minProperties": 1,
+  "additionalProperties": { "$ref": "#/$defs/view" },
+  "$defs": {
+    "view": {
+      "type": "object",
+      "required": ["roots", "edgeTypes", "hierarchyEdges", "visibleNodeTypes"],
+      "additionalProperties": false,
+      "properties": {
+        "roots": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Node ids; \"__auto__\" = nodes without an incoming hierarchy edge (PRD FR-7.1)."
+        },
+        "edgeTypes": { "type": "array", "items": { "type": "string" } },
+        "hierarchyEdges": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Subset of edgeTypes spanning the tree; overrides the registry hierarchy flag (PRD FR-7.1)."
+        },
+        "visibleNodeTypes": {
+          "description": "Applies to independently rendered nodes only (modes node/cluster); ring targets appear via their edge (PRD FR-7.3). \"*\" = all reachable.",
+          "oneOf": [
+            { "const": "*" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "render": {
+          "type": "object",
+          "additionalProperties": { "enum": ["node", "cluster", "ring", "hidden"] },
+          "description": "Render mode per node type; default for undeclared reached types is node (PRD FR-7.3)."
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Start depth; toolbar overrides at runtime (PRD FR-7.7)."
+        },
+        "time": { "$ref": "#/$defs/time" },
+        "filters": { "$ref": "#/$defs/filters" }
+      }
+    },
+    "time": {
+      "description": "Time mode (PRD FR-5.3).",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["asOf"],
+          "additionalProperties": false,
+          "properties": { "asOf": { "type": "string", "format": "date" } }
+        },
+        {
+          "type": "object",
+          "required": ["diff"],
+          "additionalProperties": false,
+          "properties": {
+            "diff": {
+              "type": "array",
+              "items": { "type": "string", "format": "date" },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        }
+      ]
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Declarative restrictions applied after traversal projection, before layout (PRD FR-7.8).",
+      "properties": {
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/filter" } },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/filter" } }
+      }
+    },
+    "filter": {
+      "type": "object",
+      "required": ["type", "prop", "op"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "description": "Node or edge type the filter applies to." },
+        "prop": { "type": "string" },
+        "op": { "enum": ["eq", "neq", "in", "exists", "gte", "lte", "refEq", "refIn"] },
+        "value": {
+          "description": "Comparison value; node id(s) for refEq/refIn; omitted for exists."
+        }
+      }
+    }
+  }
+}

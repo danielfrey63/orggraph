@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/danielfrey63/orggraph/schema/registry.schema.json",
   "title": "OrgGraph canonical type registry",
   "description": "Curated, versioned type registry (PRD FR-4.1). Declares node and edge types with declarative capabilities; the app engine itself is type-agnostic (PRD FR-4.2, NFR-5). Dataset schemas in snapshots are subsets of this registry (PRD FR-3.4).",
@@ -7,6 +7,7 @@
   "required": ["version", "nodeTypes", "edgeTypes"],
   "additionalProperties": false,
   "properties": {
+    "$comment": { "type": "string" },
     "version": {
       "type": "string",
       "description": "Registry version stamp; copied into snapshot meta.registryVersion (PRD FR-6.1b)."
@@ -113,7 +114,11 @@
           "description": "Edge type materialized from this reference with the identical validity interval (PRD FR-4.8). Requires ref."
         }
       },
-      "dependentRequired": { "implies": ["ref"] }
+      "dependentRequired": { "implies": ["ref"] },
+      "not": {
+        "required": ["ref", "type"],
+        "$comment": "A reference prop holds a node id; combining ref with a scalar type hint is contradictory."
+      }
     }
   }
 }

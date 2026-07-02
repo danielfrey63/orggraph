@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/danielfrey63/orggraph/schema/snapshot.schema.json",
+  "title": "OrgGraph graph snapshot",
+  "description": "Full-state snapshot within a declared scope (PRD §3, §5.1). Produced by harvesters and the one-time legacy migration; validated by the app importer (PRD FR-6.8).",
+  "type": "object",
+  "required": ["meta", "schema", "nodes", "edges"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["snapshot", "scope"],
+      "additionalProperties": true,
+      "properties": {
+        "source": { "type": "string", "description": "Source URL or system." },
+        "crawledAt": { "type": "string", "description": "ISO timestamp of the crawl/migration run." },
+        "snapshot": {
+          "type": "string",
+          "pattern": "^[0-9]{8}-[0-9]{4}$",
+          "description": "Snapshot stamp YYYYMMDD-HHMM (PRD FR-3.1); imports must be chronological (PRD FR-6.9)."
+        },
+        "registryVersion": {
+          "type": "string",
+          "description": "Version of the registry the run was crawled against (PRD FR-6.1b)."
+        },
+        "scope": { "$ref": "#/$defs/scope" }
+      }
+    },
+    "schema": {
+      "type": "object",
+      "required": ["nodeTypes", "edgeTypes"],
+      "additionalProperties": false,
+      "description": "Subset of the registry: only the types actually used (PRD FR-3.4).",
+      "properties": {
+        "nodeTypes": { "type": "object" },
+        "edgeTypes": { "type": "object" }
+      }
+    },
+    "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+    "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } }
+  },
+  "$defs": {
+    "scope": {
+      "type": "object",
+      "required": ["nodeTypes", "edgeTypes"],
+      "additionalProperties": false,
+      "description": "Declares what this snapshot is a full state for; membership is evaluated on the pre-import stock (PRD FR-5.5, FR-5.5a).",
+      "properties": {
+        "nodeTypes": { "type": "array", "items": { "type": "string" } },
+        "edgeTypes": { "type": "array", "items": { "type": "string" } },
+        "roots": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional subtree restriction (node ids)."
+        },
+        "excluded": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Node ids acting as excluded subtree roots, e.g. failed fetches (PRD FR-5.7)."
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "type", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "label": { "type": "string" },
+        "props": { "type": "object" },
+        "validFrom": { "$ref": "#/$defs/dateOrNull" },
+        "validTo": { "$ref": "#/$defs/dateOrNull" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["type", "source", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "source": { "$ref": "#/$defs/endpointRef" },
+        "target": { "$ref": "#/$defs/endpointRef" },
+        "props": { "type": "object" },
+        "validFrom": { "$ref": "#/$defs/dateOrNull" },
+        "validTo": { "$ref": "#/$defs/dateOrNull" }
+      }
+    },
+    "endpointRef": {
+      "description": "Node id, or an object carrying the id (PRD FR-3.3).",
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["id"],
+          "properties": { "id": { "type": "string" } }
+        }
+      ]
+    },
+    "dateOrNull": {
+      "oneOf": [
+        { "type": "string", "format": "date" },
+        { "type": "null" }
+      ]
+    }
+  }
+}
