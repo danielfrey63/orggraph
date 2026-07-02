@@ -118,6 +118,8 @@ Beispiel-Kantentypen:
 | `amStandort` | Person/OE → Standort | |
 | `imGebäude` | Person → Gebäude | |
 
+Die Spalte `hierarchy` ist das gleichnamige Flag der Registry-Deklaration (`registry.schema.json`): Es liefert den Default für View-`hierarchyEdges` (FR-7.1), speist den generischen Default-View (§7) und markiert, welche Kantentypen dem Hierarchie-Vertrag unterliegen (Richtungsnorm FR-7.2a, Zyklenfreiheit FR-6.8). Es erzwingt **nicht**, dass diese Kanten in jeder View den Baum aufspannen — das entscheidet die View.
+
 ### 4.2 Generische Knotentypen (Capabilities)
 
 **FR-4.2** Die App-Engine ist **vollständig typ-agnostisch**: Im Applikationscode kommt kein Typname (`Person`, `OE`, …) vor. Alles typ-spezifische Verhalten wird deklarativ über **Capabilities** am Registry-Eintrag konfiguriert. Ein neuer Knotentyp ist damit reine Datenpflege — kein Code.
