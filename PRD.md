@@ -24,7 +24,7 @@ Der SBB/SEM-Use-Case verlangt Entitäten, die heute als «Attribute» (farbige R
 | E4 | Zeit: datierte Voll-Snapshots als Input, intern Validity-Intervalle; Modi `asOf` und `diff` | 2026-06 |
 | E5 | Mehrfach-Eltern: eine Knoteninstanz, alle Eltern-Kanten vollwertig gezeichnet, flachste Hierarchie-Kante bestimmt die Ordnung | 2026-07 |
 | E6 | **Volle Versionierung** von Knoten, Kanten und Properties: Intervall pro props-Stand (§5) | 2026-07 |
-| E7 | Kontext+Rolle-Relationen doppelt reifiziert; Bindung der ternären Relation als Kanten-prop (§4.5) | 2026-07 |
+| E7 | Kontext+Rolle-Relationen doppelt reifiziert; Bindung der ternären Relation als **typisierte Knoten-Referenz-Property** auf der Kante (§4.5) | 2026-07 |
 | E8 | Typ-Registry = kuratierte Repo-Datei `schema/registry.json` | 2026-07 |
 | E9 | Umsetzung als **Big Bang**: Datenmodell und Rendering in einem Zug, kein Adapter-Pfad | 2026-07 |
 | E10 | Migration Alt→Neu über ein **separates Einmal-Skript**, kein Legacy-Import in der App (App war nie distribuiert) | 2026-07 |
@@ -100,7 +100,7 @@ Beispiel-Kantentypen:
 | `leitet` | Person → OE | |
 | `vertritt` | Person → OE | |
 | `gehoertZu` | Person → AufbauOrg | |
-| `hatRolle` | Person → Rolle (`props.kontext` bindet die Firma, §4.5) | |
+| `hatRolle` | Person → Rolle (`props.kontext` referenziert den Firma-Knoten, §4.5) | |
 | `arbeitetBei` | Person → Firma | |
 | `imTeam` | Person → Team | |
 | `imGremium` | Person → Gremium | |
@@ -147,11 +147,13 @@ Beispiel (illustrativ, E14):
 
 ### 4.4 Eigenschaften (`props`)
 
-**FR-4.5** Skalare Werte, nicht traversierbar, verlustfrei gespeichert, versioniert (§5). Wirkung entfalten sie nur über Capabilities (`leafProp`, `identifiers`, `labelProp`) oder Anzeige (Tooltip, Label-Modus «attributes»).
+**FR-4.5** Skalare Werte, verlustfrei gespeichert, versioniert (§5). Wirkung entfalten sie nur über Capabilities (`leafProp`, `identifiers`, `labelProp`) oder Anzeige (Tooltip, Label-Modus «attributes»). Einzige Ausnahme vom Skalar-Prinzip: im Schema deklarierte Knoten-Referenz-Properties (FR-4.7).
 
-### 4.5 Ternäre Relationen (Kontext+Rolle)
+### 4.5 Ternäre Relationen (Kontext+Rolle) und Knoten-Referenz-Properties
 
-**FR-4.6** Relationen der Form «Person × Rolle × Firma» werden **doppelt reifiziert**: Firma-Knoten (dedupliziert) über `arbeitetBei`, Rolle-Knoten (dedupliziert) über `hatRolle`, und die Bindung liegt als `props.kontext` (Firma-Label) auf der `hatRolle`-Kante. Damit sind beide Richtungen abfragbar: «alle Personen mit Rolle X» (Traversal über den Rolle-Knoten, firmenübergreifend) und «wer arbeitet in welcher Rolle bei Firma Y» (Traversal über den Firma-Knoten bzw. Filter auf `props.kontext`).
+**FR-4.6** Relationen der Form «Person × Rolle × Firma» werden **doppelt reifiziert**: Firma-Knoten (dedupliziert) über `arbeitetBei`, Rolle-Knoten (dedupliziert) über `hatRolle`, und die Bindung liegt als **Knoten-Referenz-Property** `props.kontext` (Wert = **ID** des Firma-Knotens, nicht dessen Label) auf der `hatRolle`-Kante. Damit sind beide Richtungen abfragbar: «alle Personen mit Rolle X» (Traversal über den Rolle-Knoten, firmenübergreifend) und «wer arbeitet in welcher Rolle bei Firma Y» (Traversal über den Firma-Knoten bzw. Filter auf die Referenz).
+
+**FR-4.7 Knoten-Referenz-Properties (generischer Mechanismus).** Eine Kanten- oder Knoten-Property kann im Schema als **Referenz auf einen Knotentyp** deklariert werden, z. B. `"hatRolle": { "from": "Person", "to": "Rolle", "props": { "kontext": { "ref": "Firma" } } }` (illustrativ, E14). Der Wert ist dann eine Knoten-ID; der Import validiert Existenz und Typ des Ziels (FR-6.8). Die Engine behandelt Referenz-Properties als auflösbar: Anzeige über das Label des referenzierten Knotens (inkl. Pseudonymisierung), Filter/Suche über den Zielknoten. Abgrenzung: Eine Referenz-Property ist ein gerichteter Verweis, **keine dritte Kante** — sie hat nie Ordnungs- oder Hierarchie-Wirkung und wird im BFS nicht traversiert. Braucht eine Relation mehr (mehr als drei Stellen, eigene Versionshistorie oder eigene Kanten an der Relation selbst), wird sie stattdessen als Zwischenknoten voll reifiziert (Eskalationspfad; Entscheid am Gate).
 
 ---
 
@@ -212,7 +214,7 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 
 **FR-6.7 Eingang.** Snapshots gelangen per Drag&Drop (bestehende Dropzone) oder Dateidialog in die App; Erkennung inhaltsbasiert (`meta.snapshot` + `schema` + `nodes`/`edges`).
 
-**FR-6.8 Validierung.** Vor dem Diff: Schema ist Teilmenge der im Tenant bekannten Registry; Kanten-Endpunkte existieren (im Snapshot oder im Bestand) und respektieren `from`/`to`; IDs eindeutig; Zyklenfreiheit über Hierarchie-Kanten (Verletzung = Warnung mit Details, kein stiller Drop).
+**FR-6.8 Validierung.** Vor dem Diff: Schema ist Teilmenge der im Tenant bekannten Registry; Kanten-Endpunkte existieren (im Snapshot oder im Bestand) und respektieren `from`/`to`; Knoten-Referenz-Properties (FR-4.7) zeigen auf existierende Knoten des deklarierten Typs; IDs eindeutig; Zyklenfreiheit über Hierarchie-Kanten (Verletzung = Warnung mit Details, kein stiller Drop).
 
 **FR-6.9 Fortschreibung.** Diff nach FR-5.6 gegen den Tenant-Store, Versionsfortschreibung, Plausibilitäts-Gate (FR-5.7), Toast-Zusammenfassung (FR-5.8). Eine Snapshots-Registry im Tenant-Store verzeichnet importierte Snapshot-Stempel; ein bereits importierter Snapshot wird erkannt und ist ein No-op (**Idempotenz**). Snapshots müssen chronologisch importiert werden; ein älterer Stempel als der jüngste importierte wird mit Hinweis abgewiesen.
 
