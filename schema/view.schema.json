@@ -22,7 +22,7 @@
         "hierarchyEdges": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Subset of edgeTypes spanning the tree; overrides the registry hierarchy flag (PRD FR-7.1)."
+          "description": "Subset of edgeTypes spanning the tree; the sole source of hierarchy — hierarchy is purely a view concept (PRD E18, FR-7.1)."
         },
         "visibleNodeTypes": {
           "description": "Applies to independently rendered nodes only (modes node/cluster); ring targets appear via their edge (PRD FR-7.3). \"*\" = all reachable.",

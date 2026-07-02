@@ -71,11 +71,6 @@
         "description": { "type": "string" },
         "from": { "$ref": "#/$defs/endpoint" },
         "to": { "$ref": "#/$defs/endpoint" },
-        "hierarchy": {
-          "type": "boolean",
-          "default": false,
-          "description": "Designated hierarchy edge; spans the tree and drives BFS ordering (PRD FR-7.2)."
-        },
         "identityProps": {
           "type": "array",
           "items": { "type": "string" },

@@ -34,7 +34,8 @@ Der SBB/SEM-Use-Case verlangt Entitäten, die heute als «Attribute» (farbige R
 | E14 | Alle konkreten Typ-, Kanten- und View-Nennungen im PRD sind **Illustrationen**, kein Implementierungsauftrag; verbindlich ist allein, was über Phase A + Gate in die Registry gelangt (FR-6.1a) | 2026-07 |
 | E15 | Kanten-Identität = `type`+`source`+`target` **plus** die im Schema deklarierten `identityProps` (z. B. `kontext`) — sonst kollidieren gleichzeitige gleiche Rollen bei verschiedenen Firmen (FR-5.2) | 2026-07 |
 | E16 | Umsetzungsweg: vollständige Neuerstellung auf separatem Branch, als Goal-Loop gegen die Akzeptanzkriterien (§13) getrieben; Tech-Stack unverändert (§1.5) | 2026-07 |
-| E17 | Kantenrichtung: Hierarchie-Kanten zeigen **vom Untergeordneten zum Übergeordneten**; BFS-abwärts traversiert gegen die Kantenrichtung; Legacy-Richtungen werden bei der Migration normalisiert (FR-7.2a) | 2026-07 |
+| E17 | Kantenrichtung: Kanten zeigen **vom Untergeordneten zum Übergeordneten** (Namen lesen sich als Satz); Baum-Abstieg traversiert gegen die Kantenrichtung; Legacy-Richtungen werden bei der Migration normalisiert (FR-7.2a) | 2026-07 |
+| E18 | **Hierarchie ist ausschliesslich ein View-Konzept**: kein `hierarchy`-Flag in der Registry; die `hierarchyEdges` der View sind die einzige Quelle. Fehlt `VIEWS`, werden alle Knoten ohne Ordnung dargestellt (§7) | 2026-07 |
 
 ### 1.4 Nicht-Ziele
 
@@ -81,7 +82,7 @@ Ein Snapshot ist eine JSON-Datei mit vier Blöcken:
 
 **FR-3.3** Kanten: `type` (explizit, in `schema.edgeTypes` deklariert — nie aus Endpunkten abgeleitet), `source`, `target` (Knoten-IDs), optional `props`.
 
-**FR-3.4** Das Dataset-`schema` ist eine **Teilmenge der Registry**: nur die tatsächlich verwendeten Typen. `edgeTypes` deklarieren `from`/`to` (erlaubte Endpunkt-Typen, `"*"` = beliebig) und `hierarchy: true` für Hierarchie-Kanten.
+**FR-3.4** Das Dataset-`schema` ist eine **Teilmenge der Registry**: nur die tatsächlich verwendeten Typen. `edgeTypes` deklarieren `from`/`to` (erlaubte Endpunkt-Typen, `"*"` = beliebig). Ein Hierarchie-Flag gibt es bewusst nicht — Hierarchie ist ein reines View-Konzept (E18).
 
 **FR-3.5** IDs sind **stabil** (Quell-PK, URL-ID, E-Mail; notfalls `slug(label)` mit `props.idSource='name'`) — Voraussetzung für Diff und Versionierung.
 
@@ -101,24 +102,24 @@ Beispiel-Knotentypen: `Person`, `OE`, `AufbauOrg`, `Rolle`, `Team`, `Gremium`, `
 
 Beispiel-Kantentypen:
 
-| Typ | from → to | hierarchy |
-|-----|-----------|-----------|
-| `unterstellt` | OE → OE | ✓ |
-| `mitgliedIn` | Person → OE | ✓ |
-| `berichtetAn` | Person → Person | ✓ |
-| `leitet` | Person → OE | |
-| `vertritt` | Person → OE | |
-| `gehoertZu` | Person → AufbauOrg | |
-| `hatRolle` | Person → Rolle (`props.kontext` referenziert den Firma-Knoten, §4.5) | |
-| `arbeitetBei` | Person → Firma | |
-| `imTeam` | Person → Team | |
-| `imGremium` | Person → Gremium | |
-| `besuchte` | Person → Training | |
-| `arbeitetAn` | Person → Projekt | |
-| `amStandort` | Person/OE → Standort | |
-| `imGebäude` | Person → Gebäude | |
+| Typ | from → to |
+|-----|-----------|
+| `unterstellt` | OE → OE |
+| `mitgliedIn` | Person → OE |
+| `berichtetAn` | Person → Person |
+| `leitet` | Person → OE |
+| `vertritt` | Person → OE |
+| `gehoertZu` | Person → AufbauOrg |
+| `hatRolle` | Person → Rolle (`props.kontext` referenziert den Firma-Knoten, §4.5) |
+| `arbeitetBei` | Person → Firma |
+| `imTeam` | Person → Team |
+| `imGremium` | Person → Gremium |
+| `besuchte` | Person → Training |
+| `arbeitetAn` | Person → Projekt |
+| `amStandort` | Person/OE → Standort |
+| `imGebäude` | Person → Gebäude |
 
-Die Spalte `hierarchy` ist das gleichnamige Flag der Registry-Deklaration (`registry.schema.json`): Es liefert den Default für View-`hierarchyEdges` (FR-7.1), speist den generischen Default-View (§7) und markiert, welche Kantentypen dem Hierarchie-Vertrag unterliegen (Richtungsnorm FR-7.2a, Zyklenfreiheit FR-6.8). Es erzwingt **nicht**, dass diese Kanten in jeder View den Baum aufspannen — das entscheidet die View.
+Ein Hierarchie-Flag gibt es in der Registry bewusst nicht (E18): Der Graph ist gerichtet, die Richtungs-Konvention (FR-7.2a) gilt pro Kantentyp — aber **welche** Kantentypen einen Baum aufspannen, bestimmt allein die View über `hierarchyEdges` (§7).
 
 ### 4.2 Generische Knotentypen (Capabilities)
 
@@ -193,7 +194,7 @@ Arbeitsteilung: Der **Crawler liefert immer einen Vollstand** seines Scopes und 
 
 **FR-5.5 Scope-Deklaration.** Jeder Snapshot deklariert in `meta.scope`, wofür er ein Vollstand ist: `{ "nodeTypes": […], "edgeTypes": […], "roots": […]?, "excluded": […]? }`. `roots` begrenzt optional auf Teilbäume (z. B. nur SEM-Subtree, nicht die ganze Bundesverwaltung); `excluded` listet Bereiche, die der Crawler nicht vollständig erfassen konnte.
 
-**FR-5.5a Scope-Membership (formale Definition).** «War im Scope» bestimmt der Import ausschliesslich auf dem **Bestand vor dem Import**, nach diesen Regeln: (1) **Knoten:** Ohne `roots` ist ein Bestandsknoten im Scope, wenn sein Typ in `scope.nodeTypes` liegt; mit `roots` zusätzlich nur, wenn er von einem der `roots` über Bestandskanten der in `scope.edgeTypes` deklarierten Typen erreichbar ist — Hierarchie-Kanten werden dabei abwärts traversiert (vom `target` zum `source`), Quer-Kanten entlang ihrer Richtung. (2) **Kanten:** Eine Bestandskante ist im Scope, wenn ihr Typ in `scope.edgeTypes` liegt UND ihr `source`-Knoten im Node-Scope ist — der Kanten-Scope hängt am Quellknoten, nicht am Ziel; so schliesst ein Enrichment-Crawl (z. B. nur Trainings-Zuordnungen) verschwundene Kanten seiner erfassten Personen, ohne die Zielknoten anzutasten. (3) **`excluded`:** Knoten-IDs, die als ausgeschlossene Teilbaum-Wurzeln gelten — sie selbst und alles, was nur über sie erreichbar ist, fällt aus dem Scope. (4) **Referenzierte Bestandsknoten:** Snapshot-Kanten und Referenz-Properties dürfen auf Knoten ausserhalb des Scopes zeigen (FR-6.8 validiert gegen Snapshot ∪ Bestand); solche Ziele bleiben unberührt. Lösch-Kandidaten sind genau die Bestand-Identitäten, die nach (1)–(3) im Scope liegen und im Snapshot fehlen.
+**FR-5.5a Scope-Membership (formale Definition).** «War im Scope» bestimmt der Import ausschliesslich auf dem **Bestand vor dem Import**, nach diesen Regeln: (1) **Knoten:** Ohne `roots` ist ein Bestandsknoten im Scope, wenn sein Typ in `scope.nodeTypes` liegt; mit `roots` zusätzlich nur, wenn er von einem der `roots` über Bestandskanten der in `scope.edgeTypes` deklarierten Typen erreichbar ist — traversiert wird einheitlich **gegen die Kantenrichtung** (`target` → `source`), also von der Wurzel abwärts gemäss Richtungs-Konvention FR-7.2a. (2) **Kanten:** Eine Bestandskante ist im Scope, wenn ihr Typ in `scope.edgeTypes` liegt UND ihr `source`-Knoten im Node-Scope ist — der Kanten-Scope hängt am Quellknoten, nicht am Ziel; so schliesst ein Enrichment-Crawl (z. B. nur Trainings-Zuordnungen) verschwundene Kanten seiner erfassten Personen, ohne die Zielknoten anzutasten. (3) **`excluded`:** Knoten-IDs, die als ausgeschlossene Teilbaum-Wurzeln gelten — sie selbst und alles, was nur über sie erreichbar ist, fällt aus dem Scope. (4) **Referenzierte Bestandsknoten:** Snapshot-Kanten und Referenz-Properties dürfen auf Knoten ausserhalb des Scopes zeigen (FR-6.8 validiert gegen Snapshot ∪ Bestand); solche Ziele bleiben unberührt. Lösch-Kandidaten sind genau die Bestand-Identitäten, die nach (1)–(3) im Scope liegen und im Snapshot fehlen.
 
 **FR-5.6 Diff-Regeln beim Import.** Pro Identität im Scope: (a) neu im Snapshot → neue Version mit `validFrom = datum(t)`; (b) **fehlt im Snapshot, war aber im Scope** → offene Version wird geschlossen (`validTo = datum(t)`) — das Fehlen im Vollstand IST das Signal, ein explizites Lösch-Flag braucht es nicht; (c) vorhanden, aber props abweichend (normalisierter Deep-Compare) → Version schliessen + neue eröffnen; ein in der neuen Version fehlendes Property gilt als entfernt (Teil des props-Stands). Identitäten **ausserhalb des Scopes bleiben unberührt** — über sie macht der Snapshot keine Aussage.
 
@@ -235,7 +236,7 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 
 **FR-6.7 Eingang.** Snapshots gelangen per Drag&Drop (bestehende Dropzone) oder Dateidialog in die App; Erkennung inhaltsbasiert (`meta.snapshot` + `schema` + `nodes`/`edges`).
 
-**FR-6.8 Validierung.** Vor dem Diff: Schema ist Teilmenge der im Tenant bekannten Registry; Kanten-Endpunkte existieren (im Snapshot oder im Bestand) und respektieren `from`/`to`; Knoten-Referenz-Properties (FR-4.7) zeigen auf existierende Knoten des deklarierten Typs; implizierte Kanten werden materialisiert und die Konsistenz-Invariante geprüft (FR-4.8); IDs eindeutig; Zyklenfreiheit über Hierarchie-Kanten (Verletzung = Warnung mit Details, kein stiller Drop).
+**FR-6.8 Validierung.** Vor dem Diff: Schema ist Teilmenge der im Tenant bekannten Registry; Kanten-Endpunkte existieren (im Snapshot oder im Bestand) und respektieren `from`/`to`; Knoten-Referenz-Properties (FR-4.7) zeigen auf existierende Knoten des deklarierten Typs; implizierte Kanten werden materialisiert und die Konsistenz-Invariante geprüft (FR-4.8); IDs eindeutig; Zyklen-Warnung pro definierter View: Bilden deren `hierarchyEdges` im neuen Bestand Zyklen, wird mit Details gewarnt (kein stiller Drop; die BFS bleibt robust, FR-7.2).
 
 **FR-6.9 Fortschreibung.** Diff nach FR-5.6 gegen den Tenant-Store, Versionsfortschreibung, Plausibilitäts-Gate (FR-5.7), Toast-Zusammenfassung (FR-5.8). Eine Snapshots-Registry im Tenant-Store verzeichnet importierte Snapshot-Stempel; ein bereits importierter Snapshot wird erkannt und ist ein No-op (**Idempotenz**). Snapshots müssen chronologisch importiert werden; ein älterer Stempel als der jüngste importierte wird mit Hinweis abgewiesen.
 
@@ -243,7 +244,7 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 
 ## 7. Views und Projektionen
 
-Eine View projiziert aus dem Gesamtgraphen einen darstellbaren, geordneten Teilgraphen. Views sind in `env.json` vordefiniert und maschinenprüfbar definiert in [`schema/view.schema.json`](schema/view.schema.json). Fehlt `VIEWS`, leitet die App einen **generischen Default** ab — `roots: ["__auto__"]`, `edgeTypes`/`hierarchyEdges` = alle in der Registry mit `hierarchy: true` markierten Kantentypen, `visibleNodeTypes: "*"`, `render` = Default `node` — ohne jeden Typnamen im Code (NFR-5); die ausgelieferte Start-View (FR-7.4) ist dagegen explizit definiert.
+Eine View projiziert aus dem Gesamtgraphen einen darstellbaren, geordneten Teilgraphen. Views sind in `env.json` vordefiniert und maschinenprüfbar definiert in [`schema/view.schema.json`](schema/view.schema.json). **Hierarchie ist ausschliesslich ein View-Konzept (E18)**: Der Graph selbst ist nur gerichtet; erst `hierarchyEdges` einer View machen bestimmte Kantentypen zum Baum. Fehlt `VIEWS`, gibt es folglich keine Hierarchie — die App stellt dann **alle Knoten** dar (alle Typen, keine Ordnung, alle Order 0, reines Force-Layout) und weist auf die fehlende View-Konfiguration hin; die ausgelieferte Start-View (FR-7.4) ist dagegen explizit definiert.
 
 Beispiel (illustrativ, mit den Beispiel-Typen aus §4.1 — E14):
 
@@ -267,11 +268,11 @@ Beispiel (illustrativ, mit den Beispiel-Typen aus §4.1 — E14):
 }
 ```
 
-**FR-7.1 View-Felder.** `roots` (Wurzel-IDs; `"__auto__"` = Knoten ohne eingehende Hierarchie-Kante), `edgeTypes` (traversierte/gezeigte Kantentypen), `hierarchyEdges` (Teilmenge, die den Baum aufspannt; überschreibt das Schema-Flag `hierarchy`), `visibleNodeTypes` (gilt nur für **eigenständig gerenderte** Knoten, Modi `node`/`cluster`; `ring`-Zieltypen erscheinen unabhängig davon über ihre Kante, FR-7.3; `"*"` = alle erreichbaren), `render` (pro Typ, §7.3), `depth` (optionaler Start-Tiefenwert), `time` (optional `asOf`/`diff`, §5), `filters` (optionale deklarative Einschränkungen, FR-7.8).
+**FR-7.1 View-Felder.** `roots` (Wurzel-IDs; `"__auto__"` = Knoten ohne eingehende Kante eines `hierarchyEdges`-Typs dieser View), `edgeTypes` (traversierte/gezeigte Kantentypen), `hierarchyEdges` (Pflichtfeld; Teilmenge der `edgeTypes`, die den Baum aufspannt — die **einzige** Quelle der Hierarchie, E18), `visibleNodeTypes` (gilt nur für **eigenständig gerenderte** Knoten, Modi `node`/`cluster`; `ring`-Zieltypen erscheinen unabhängig davon über ihre Kante, FR-7.3; `"*"` = alle erreichbaren), `render` (pro Typ, §7.3), `depth` (optionaler Start-Tiefenwert), `time` (optional `asOf`/`diff`, §5), `filters` (optionale deklarative Einschränkungen, FR-7.8).
 
-**FR-7.2 Ordnung.** Order 0 = `roots`; BFS ausschliesslich entlang der `hierarchyEdges`, abwärts gemäss FR-7.2a; `order(n)` = kürzeste Distanz zur nächsten Wurzel. Mehrfach-Eltern: **eine** Knoteninstanz (Identität, Suche, Pseudonymisierung und Diff hängen an stabilen IDs), flachste Hierarchie-Kante bestimmt die Ordnung, **alle** Eltern-Kanten werden als vollwertige Verbinder gezeichnet — die gerichteten Filter erzeugen möglichst baumnahe Subgraphen, die sichtbare Mehrfach-Kante ist die legitime Ausnahme. Zyklen: Datenvertrag verbietet sie über Hierarchie-Kanten; BFS nimmt die flachste Distanz und ignoriert Rück-Kanten. Nicht über Hierarchie-Kanten Erreichbares erscheint nur als Quer-Link-Ziel. Übrige `edgeTypes` sind Quer-Verbindungen ohne Ordnungseffekt.
+**FR-7.2 Ordnung.** Order 0 = `roots`; BFS ausschliesslich entlang der `hierarchyEdges`, abwärts gemäss FR-7.2a; `order(n)` = kürzeste Distanz zur nächsten Wurzel. Mehrfach-Eltern: **eine** Knoteninstanz (Identität, Suche, Pseudonymisierung und Diff hängen an stabilen IDs), flachste Hierarchie-Kante bestimmt die Ordnung, **alle** Eltern-Kanten werden als vollwertige Verbinder gezeichnet — die gerichteten Filter erzeugen möglichst baumnahe Subgraphen, die sichtbare Mehrfach-Kante ist die legitime Ausnahme. Zyklen: Über die `hierarchyEdges` einer View sollen laut Datenvertrag keine auftreten (der Import warnt, FR-6.8); die BFS nimmt die flachste Distanz und ignoriert Rück-Kanten. Nicht über `hierarchyEdges` Erreichbares erscheint nur als Quer-Link-Ziel. Übrige `edgeTypes` sind Quer-Verbindungen ohne Ordnungseffekt.
 
-**FR-7.2a Kantenrichtung (normativ, E17).** Hierarchie-Kanten zeigen **immer vom Untergeordneten zum Übergeordneten** (`source` = Kind/Mitglied, `target` = Eltern/Container) — die Kantennamen lesen sich als Satz («A berichtetAn B» = B ist Vorgesetzte:r). BFS-abwärts (Ordnung FR-7.2, Scope-Traversal FR-5.5a) traversiert Hierarchie-Kanten deshalb **gegen** die Kantenrichtung (`target` → `source`); Quer-Kanten werden entlang ihrer Richtung traversiert. Für die Beispiel-Typen (E14) und das Legacy-Mapping gilt:
+**FR-7.2a Kantenrichtung (normative Konvention, E17).** Kanten zeigen **vom Untergeordneten zum Übergeordneten** (`source` = Kind/Mitglied/Beteiligte:r, `target` = Eltern/Container/Bezugsobjekt) — die Kantennamen lesen sich als Satz («A berichtetAn B» = B ist Vorgesetzte:r). Diese Konvention gilt für **alle** Kantentypen; sie ist es, die es jeder View erlaubt, einen beliebigen Kantentyp als `hierarchyEdges` zu designieren: Der Baum-Abstieg von den `roots` (Ordnung FR-7.2, Scope-Traversal FR-5.5a) traversiert dann einheitlich **gegen** die Kantenrichtung (`target` → `source`). Für die Beispiel-Typen (E14) und das Legacy-Mapping gilt:
 
 | Kantentyp (Beispiel) | `source` (Rolle) | `target` (Rolle) | BFS-abwärts | Legacy-Mapping (FR-10.3) |
 |---|---|---|---|---|
@@ -281,7 +282,7 @@ Beispiel (illustrativ, mit den Beispiel-Typen aus §4.1 — E14):
 
 **FR-7.3 Render-Modi pro Typ und View.** `node` = eigenständiger Graph-Knoten mit Kanten; `cluster` = konvexe Hülle um die verbundenen Knoten (heutige OE-Darstellung, jetzt generischer Render-Modus); `hidden` = ausgeblendet, aber für Filter/Suche verfügbar. **`ring` (formal):** Der `ring`-gerenderte **Zielknoten** einer Kante erscheint als Ring/Badge am **`source`-Knoten** dieser Kante (heutige Attribut-Darstellung); er ist kein eigenständiges Layout-Element und zählt nicht zu `visibleNodeTypes`, ist aber voll such-, filter- und legendenfähig — seine Sichtbarkeit steuert die Ring-Legende (FR-8.2), sein Farb-Hue der Typname (FR-4.2a). Default für erreichte, nicht deklarierte Typen ist `node`.
 
-**FR-7.4 Start-View.** Die erste definierte View bildet die heutige aktive Darstellung 1:1 ab: Ihre `hierarchyEdges` sind genau die im migrierten Bestand als `hierarchy` markierten Kantentypen — das ergibt exakt den heutigen Org-Baum. Die konkreten Namen («Personenhierarchie», `berichtetAn`, …) sind Illustration (E14).
+**FR-7.4 Start-View.** Die erste definierte View bildet die heutige aktive Darstellung 1:1 ab: Ihre `hierarchyEdges` zählen explizit die Kantentypen auf, die den heutigen Org-Baum bilden (aus der Migration: die drei Legacy-Beziehungsarten). Die konkreten Namen («Personenhierarchie», `berichtetAn`, …) sind Illustration (E14).
 
 **FR-7.5 View-Wechsel.** Footer-Switcher analog zum bestehenden Profil-Switcher; View-Wechsel setzt Laufzeit-Übersteuerungen (FR-7.6/7.7) zurück.
 

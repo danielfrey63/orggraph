@@ -20,9 +20,9 @@
     "Firma": {}
   },
   "edgeTypes": {
-    "unterstellt": { "from": "OE", "to": "OE", "hierarchy": true },
-    "mitgliedIn": { "from": "Person", "to": "OE", "hierarchy": true },
-    "berichtetAn": { "from": "Person", "to": "Person", "hierarchy": true },
+    "unterstellt": { "from": "OE", "to": "OE" },
+    "mitgliedIn": { "from": "Person", "to": "OE" },
+    "berichtetAn": { "from": "Person", "to": "Person" },
     "arbeitetBei": { "from": "Person", "to": "Firma" },
     "hatRolle": {
       "from": "Person",
