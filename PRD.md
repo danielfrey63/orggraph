@@ -30,6 +30,8 @@ Der SBB/SEM-Use-Case verlangt Entitäten, die heute als «Attribute» (farbige R
 | E10 | Migration Alt→Neu über ein **separates Einmal-Skript**, kein Legacy-Import in der App (App war nie distribuiert) | 2026-07 |
 | E11 | **Knotentypen sind generisch**: Engine typ-agnostisch, Typ-Verhalten deklarativ über Registry-Capabilities (§4.2) | 2026-07 |
 | E12 | Bestehende UI-Elemente, Algorithmen und Konfigurationen werden übernommen; Layout-Algorithmen bleiben identisch (§9) | 2026-07 |
+| E13 | Darstellung (Farben, Icons) ist keine Typ-Konfiguration: nicht in der Registry, nicht in env.json — die Farbstrategie folgt deterministisch dem Render-Modus der View (§4.2, FR-4.2a) | 2026-07 |
+| E14 | Alle konkreten Typ-, Kanten- und View-Nennungen im PRD sind **Illustrationen**, kein Implementierungsauftrag; verbindlich ist allein, was über Phase A + Gate in die Registry gelangt (FR-6.1a) | 2026-07 |
 
 ### 1.4 Nicht-Ziele
 
@@ -84,9 +86,11 @@ Ein Snapshot ist eine JSON-Datei mit vier Blöcken:
 
 **FR-4.1** Die Registry lebt als kuratierte, versionierte Repo-Datei `schema/registry.json`. Crawler und Builder importieren sie und mappen hinein; neue Typen entstehen ausschliesslich über das Analyse-Gate der Akquise (§6) plus Commit. Kein Harvester erfindet eigenmächtig Typen.
 
-Kanonische Knotentypen (aus realen SBB/SEM-Daten abgeleitet): `Person`, `OE`, `AufbauOrg`, `Rolle`, `Team`, `Gremium`, `Training`, `Projekt`, `Firma`, `Standort`, `Gebäude`.
+> **Illustration, nicht normativ (E14).** Die folgenden Typenlisten zeigen, was aus den bisherigen SBB/SEM-Analysen voraussichtlich hervorgeht — sie dienen in diesem PRD durchgehend als Beispielmaterial und sind **kein Implementierungsauftrag**. Es gibt keine im Code oder im PRD fixierte Typenliste; verbindlich ist ausschliesslich der jeweilige Stand von `schema/registry.json`, der über Phase A + Gate entsteht und wächst (FR-6.1a).
 
-Kanonische Kantentypen:
+Beispiel-Knotentypen: `Person`, `OE`, `AufbauOrg`, `Rolle`, `Team`, `Gremium`, `Training`, `Projekt`, `Firma`, `Standort`, `Gebäude`.
+
+Beispiel-Kantentypen:
 
 | Typ | from → to | hierarchy |
 |-----|-----------|-----------|
@@ -109,22 +113,20 @@ Kanonische Kantentypen:
 
 **FR-4.2** Die App-Engine ist **vollständig typ-agnostisch**: Im Applikationscode kommt kein Typname (`Person`, `OE`, …) vor. Alles typ-spezifische Verhalten wird deklarativ über **Capabilities** am Registry-Eintrag konfiguriert. Ein neuer Knotentyp ist damit reine Datenpflege — kein Code.
 
+Beispiel (illustrativ, E14):
+
 ```json
 "nodeTypes": {
   "Person": {
     "labelProp": "label",
     "identifiers": ["id", "props.email"],
     "leafProp": "isBasis",
-    "pseudonymize": { "pool": "names" },
-    "color": { "strategy": "byLevel" },
-    "icon": "person"
+    "pseudonymize": { "pool": "names" }
   },
   "OE": {
-    "pseudonymize": { "pool": "orgUnits", "byLevel": true },
-    "color": { "strategy": "hash" }
+    "pseudonymize": { "pool": "orgUnits", "byLevel": true }
   },
-  "Rolle":  { "color": { "strategy": "categoryHue", "category": "Rolle" } },
-  "Firma":  { "color": { "strategy": "categoryHue", "category": "Firma" } }
+  "Rolle": {}
 }
 ```
 
@@ -134,10 +136,10 @@ Kanonische Kantentypen:
 | `identifiers` | Fuzzy-Suche über `id`/`email`/`label` fix auf Personen | Suchbare/matchbare Identifikatoren des Typs (Suche, Import-Abgleich). |
 | `leafProp` | Management-Filter über `isBasis` fix auf Personen | Boolesche Eigenschaft, die Blatt-Knoten markiert; der Blatt-Filter der Toolbar blendet sie typunabhängig aus. |
 | `pseudonymize` | `names[]` (Person) / `organizationalUnits{level}[]` (OE) fix | Pseudonym-Pool pro Typ, optional level-abhängig; Typen ohne Capability werden nicht pseudonymisiert. |
-| `color` | `getNodeFillByLevel` nur für Personen, `colorForOrg` nur für OEs | Farbstrategie pro Typ: `byLevel` (3-Stufen nach BFS-Level), `hash` (deterministisch aus ID), `categoryHue` (quantisierter Basis-Hue + Shift, heutige Attribut-Farben). |
-| `icon` | Emojis 👤/🏢/📊 im Tooltip fix | Icon aus der bestehenden SVG-Registry für Tooltip/Legende. |
 
-**FR-4.3** Render-Modi sind View-Sache (§7), nicht Typ-Sache: derselbe Typ kann in einer View `node`, in einer anderen `ring` sein. Die Capability liefert nur Darstellungs-Parameter (Farbe, Icon, Label).
+**FR-4.2a Darstellung ist keine Typ-Konfiguration (E13).** Farben und Icons gehören weder in die Registry (sie ist der providerübergreifende Datenvertrag, keine Präsentationsschicht) noch in `env.json`. Die Farbstrategie folgt deterministisch dem **Render-Modus der View**: `node` → Level-Verlauf nach BFS-Ordnung (heutiges `getNodeFillByLevel`), `cluster` → Hash-Farbe aus der ID (heutiges `colorForOrg`), `ring` → quantisierter Kategorie-Hue aus dem Typnamen mit Shift pro Knoten (heutige Attribut-Farben). Die bestehenden Farb-Algorithmen bleiben unverändert; es gibt nichts zu konfigurieren. Tooltips und Legenden verwenden den Typnamen aus der Registry statt fester Emojis oder Icons.
+
+**FR-4.3** Render-Modi sind View-Sache (§7), nicht Typ-Sache: derselbe Typ kann in einer View `node`, in einer anderen `ring` sein.
 
 ### 4.3 Reifizierungsregel
 
@@ -219,6 +221,8 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 ## 7. Views und Projektionen
 
 Eine View projiziert aus dem Gesamtgraphen einen darstellbaren, geordneten Teilgraphen. Views sind in `env.json` vordefiniert; fehlt `VIEWS`, gilt die Personenhierarchie als impliziter Default.
+
+Beispiel (illustrativ, mit den Beispiel-Typen aus §4.1 — E14):
 
 ```json
 "VIEWS": {
@@ -316,9 +320,9 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 | Ring-Fokus (`recomputeAttributeFocusHidden`) | Aufwärtskanten fix | View-Kanten (FR-8.3) |
 | Pseudonymisierung (`getPseudoName`/`getPseudoOrgLabel`) | Person/OE-Verzweigung | `pseudonymize`-Capability (FR-8.5) |
 | Fuzzy-Suche (Domäne) | `raw.persons`, id/email/label | `identifiers`-Capability über sichtbare Typen |
-| Farbstrategien (`getNodeFillByLevel`, `colorForOrg`) | Personen bzw. OEs fix | `color`-Capability: `byLevel` / `hash` / `categoryHue` |
+| Farbstrategien (`getNodeFillByLevel`, `colorForOrg`, Kategorie-Hue) | Personen bzw. OEs bzw. Attribut-Kategorien fix | Strategie folgt dem Render-Modus der View: `node` → byLevel, `cluster` → hash, `ring` → categoryHue (FR-4.2a) |
 | Legenden (OE-/Attribut-/Hidden) | Begriffe und Datenpfade fix | typgetrieben nach Render-Modus (FR-8.2) |
-| Tooltips (Emojis, «OEs», «Attribute») | fix | `icon`-Capability + Typ-Labels aus der Registry |
+| Tooltips (Emojis, «OEs», «Attribute») | fix | Typnamen aus der Registry (FR-4.2a) |
 | Knoten-Kontextmenü | Personen-spezifisch | typunabhängig (FR-8.7) |
 | Toolbar-Toggles (Tiefe, Richtung, Hierarchie, Labels, Fit, Simulation, Pseudo, Debug) | Verhalten generisch, Defaults env | unverändert, plus Zeit-UI (FR-8.6) |
 
