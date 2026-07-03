@@ -68,6 +68,11 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Visited source node ids of an enrichment crawl: the snapshot is a full state of their outgoing edges of the declared edgeTypes, without their node type being subject to closure (PRD FR-5.5, E30)."
+        },
+        "traversalEdgeTypes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Edge types used ONLY to determine roots reachability (boundary traversal); they never become closure candidates. Defaults to edgeTypes when absent (PRD FR-5.5, E34)."
         }
       }
     },
