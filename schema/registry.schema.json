@@ -99,7 +99,7 @@
     },
     "propDecls": {
       "type": "object",
-      "description": "Optional declarations for individual props; undeclared props are free-form scalars (PRD FR-4.5).",
+      "description": "Optional declarations for individual props; a prop without a registry propDecl is allowed only when the delivering snapshot declares it in its dataset schema — import rejects keys declared in neither (PRD FR-4.5, FR-6.8).",
       "additionalProperties": { "$ref": "#/$defs/propDecl" }
     },
     "propDecl": {
