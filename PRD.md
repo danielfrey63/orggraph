@@ -42,6 +42,7 @@ Der SBB/SEM-Use-Case verlangt Entitäten, die heute als «Attribute» (farbige R
 | E22 | Der **Richtungs-Toggle entfällt** (`TOOLBAR_DIRECTION_DEFAULT` inklusive): Die Richtungs-Semantik ist vollständig im View-Pfad kodiert — ein Laufzeit-Richtungs-Parameter hat im Pfadmodell keine Funktion mehr (FR-8.10, §9.4) | 2026-07 |
 | E23 | **Rendering ist reaktiv**: Jede Parameter-Änderung (View, Roots, Tiefe, Zeitstand, Filter) löst das Rendering direkt aus; der «Anzeigen»-Button entfällt, der permanente «Animation fortsetzen»-Button bleibt (FR-8.11) | 2026-07 |
 | E24 | **Ein einheitliches Kontextmenü** für Graph-Knoten und Legenden-Rows: dieselbe typunabhängige Aktionsliste, kontextabhängig deaktivierte Einträge — ersetzt die zwei getrennten Menüs der heutigen App (FR-8.7) | 2026-07 |
+| E25 | Import-Eingang **ausschliesslich** über Dropzone und Dateidialog; der versteckte Footer-Status-Klick zum Datei-Laden entfällt. Akzeptierte Dateiklassen: Snapshot, `env.json`, Pseudo-Daten, ZIP daraus — Legacy-Formate werden mit Migrationshinweis abgewiesen (FR-6.7) | 2026-07 |
 
 ### 1.4 Nicht-Ziele
 
@@ -54,7 +55,7 @@ Der SBB/SEM-Use-Case verlangt Entitäten, die heute als «Attribute» (farbige R
 
 Big Bang (E9) ist die **Release-Strategie** — es gibt keinen Adapter-Pfad und keinen Parallelbetrieb in `main`. Der Weg dorthin ist eine **vollständige Neuerstellung auf einem separaten Branch** (E16): gleicher Tech-Stack wie heute (dependency-freies Vanilla JS + D3, Sections-Single-File-Build, IndexedDB), getrieben als **Goal-Loop** — implementieren, gegen die Akzeptanzkriterien (§13) und das Übernahme-Inventar (§9) prüfen, nachbessern — bis alle Kriterien erfüllt sind; erst dann wird der Branch nach `main` übernommen.
 
-Aus den Akzeptanzkriterien ergibt sich die **Implementierungsreihenfolge** des Goal-Loops: **(1)** JSON Schemas, Pfad-Parser (FR-7.1a) und Import/Diff-Kern (§5, §6.3) — das Fundament aller weiteren Kriterien (AK 11, 4–6, 13); **(2)** Einmalmigration (§10), damit der SEM-Referenzbestand als Testdatensatz bereitsteht (AK 12); **(3)** View-Projektion (§7); **(4)** Rendering, Legenden und Interaktion (§8, §9; AK 1–2, 7–9); **(5)** Zeit-/Diff-UI (FR-8.6; AK 4, 10). Jede Stufe wird gegen die zugehörigen Akzeptanzkriterien geprüft, bevor die nächste beginnt.
+Aus den Akzeptanzkriterien ergibt sich die **Implementierungsreihenfolge** des Goal-Loops: **(1)** JSON Schemas, Pfad-Parser (FR-7.1a) und Import/Diff-Kern (§5, §6.3) — das Fundament aller weiteren Kriterien (AK 11, 4–6, 13); **(2)** Einmalmigration (§10), damit der SEM-Referenzbestand als Testdatensatz bereitsteht (AK 12); **(3)** View-Projektion (§7); **(4)** Rendering, Legenden und Interaktion (§8, §9; AK 1–2, 7–9, 14); **(5)** Zeit-/Diff-UI (FR-8.6; AK 4, 10). Jede Stufe wird gegen die zugehörigen Akzeptanzkriterien geprüft, bevor die nächste beginnt.
 
 ### 1.6 Normativität und Konfliktauflösung
 
@@ -251,7 +252,7 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 
 ### 6.3 Import in die App
 
-**FR-6.7 Eingang.** Snapshots gelangen per Drag&Drop (bestehende Dropzone) oder Dateidialog in die App; Erkennung inhaltsbasiert (`meta.snapshot` + `schema` + `nodes`/`edges`).
+**FR-6.7 Eingang.** Snapshots gelangen per Drag&Drop (bestehende Dropzone, inkl. globalem dragenter/dragover/drop) oder Dateidialog in die App; Erkennung inhaltsbasiert (`meta.snapshot` + `schema` + `nodes`/`edges`). Akzeptierte Dateiklassen (E25): Snapshot, `env.json`, Pseudo-Daten sowie ZIP-Bündel daraus; Legacy-Formate (altes `data.json`, Attribut-TSV) werden mit Hinweis auf das Migrationsskript (§10) abgewiesen. Der heutige versteckte Footer-Status-Klick zum Datei-Laden entfällt — Import läuft ausschliesslich über Dropzone und Dateidialog.
 
 **FR-6.8 Validierung.** Vor dem Diff: Schema ist Teilmenge der im Tenant bekannten Registry; Kanten-Endpunkte existieren (im Snapshot oder im Bestand) und respektieren `from`/`to`; Knoten-Referenz-Properties (FR-4.7) zeigen auf existierende Knoten des deklarierten Typs; implizierte Kanten werden materialisiert und die Konsistenz-Invariante geprüft (FR-4.8); IDs eindeutig; Zyklen-Warnung pro definierter View: Bilden die transitiven Selbst-Hops ihres Pfads im neuen Bestand Zyklen, wird mit Details gewarnt (kein stiller Drop; die BFS bleibt robust, FR-7.2).
 
@@ -348,7 +349,7 @@ Semantik:
 
 **FR-8.2 Legenden, typgetrieben.** Die heutigen drei Legenden verallgemeinern sich: (a) Cluster-Legende = Baum aller `cluster`-gerenderten Knoten der View (heutige OE-Legende) inkl. Filterfeld, Toggle-All, Auge und dem einheitlichen Kontextmenü (FR-8.7, E24); (b) Ring-Legende = Gruppen der `ring`-gerenderten Typen mit Trefferzahlen und Farbchips (heutige Attribut-Legende) inkl. Fokus-Trichter; (c) Ausgeblendet-Legende unverändert. Legend-Row-Factories werden wiederverwendet.
 
-**FR-8.3 Filter.** Blatt-Filter (heute «Management») über `leafProp`-Capability typunabhängig; Sichtbarkeits-Toggles pro Knotentyp (verallgemeinert den OE-Sichtbarkeits-Toggle); Ring-Fokus-Pruning (heute Attribut-Fokus) läuft über die View-Kanten statt über hardcodierte Aufwärtskanten.
+**FR-8.3 Filter.** Blatt-Filter (heute «Management») über `leafProp`-Capability typunabhängig — die UI-Beschriftung wird generisch («Blätter ausblenden» statt des Personen-Begriffs «Management»); Sichtbarkeits-Toggles pro Knotentyp (verallgemeinert den OE-Sichtbarkeits-Toggle); Ring-Fokus-Pruning (heute Attribut-Fokus) läuft über die View-Kanten statt über hardcodierte Aufwärtskanten.
 
 **FR-8.4 Suche.** Wort-Präfix-Matching und Dropdown unverändert; Suchraum = sichtbare Knotentypen der View, Felder aus `identifiers`.
 
@@ -362,11 +363,13 @@ Semantik:
 
 **FR-8.9 Persistenz.** IndexedDB-Profilarchitektur (ein Object-Store pro Tenant, `__meta__`-Store) unverändert; pro Tenant zusätzlich: Graph (Versionen), Snapshots-Registry, env/Views, Pseudo-Daten.
 
-**FR-8.10 Konfiguration.** `env.json` bleibt der Konfigurationsträger: `VIEWS` (neu), bestehende `TOOLBAR_*`- und `LEGEND_*`-Schlüssel behalten ihre Funktion (Blatt-Filter-Default, Tiefe, Labels, Zoom, Pseudo, Debug, Simulation, Collapse-Zustände, Hidden-Roots, Start-IDs). `TOOLBAR_DIRECTION_DEFAULT` und der Richtungs-Toggle **entfallen** (E22): Die Richtungs-Semantik ist vollständig im View-Pfad kodiert; ein Laufzeit-Richtungs-Parameter hätte im Pfadmodell keine Funktion mehr. `ATTRIBUTE_TYPES`, `DATA_ATTRIBUTES_URL` und `DATA_ATTRIBUTES_DIR` entfallen (Legacy, §10); `DATA_URL` zeigt auf einen Graph-Snapshot.
+**FR-8.10 Konfiguration.** `env.json` bleibt der Konfigurationsträger: `VIEWS` (neu), bestehende `TOOLBAR_*`- und `LEGEND_*`-Schlüssel behalten ihre Funktion (Blatt-Filter-Default, Tiefe, Labels, Zoom, Pseudo, Debug, Simulation, Collapse-Zustände, Hidden-Roots, Start-IDs). `TOOLBAR_DIRECTION_DEFAULT` und der Richtungs-Toggle **entfallen** (E22): Die Richtungs-Semantik ist vollständig im View-Pfad kodiert; ein Laufzeit-Richtungs-Parameter hätte im Pfadmodell keine Funktion mehr. `ATTRIBUTE_TYPES`, `DATA_ATTRIBUTES_URL` und `DATA_ATTRIBUTES_DIR` entfallen (Legacy, §10); `DATA_URL` zeigt auf einen Graph-Snapshot. Zwei Toggle-Klärungen: Der **Label-Toggle** generalisiert die heutigen Modi `all`/`attributes`/`none` zu **alle Labels / nur `ring`-Badges / keine**. Der **Hierarchie-Toggle** bleibt als reiner **Layout-Modus** (hierarchische Anordnung der projizierten View-Ordnung vs. freies Force-Layout) — er macht keine Daten- oder Registry-Aussage; Hierarchie bleibt ein View-Konzept (E18).
 
 **FR-8.11 Render-Auslösung (reaktiv, E23).** Es gibt keinen «Anzeigen»-Button mehr: Jede Parameter-Änderung — View-Wechsel, Root-Änderung (Combo, Kontextmenü), Tiefe, Zeitstand, Filter- und Sichtbarkeits-Toggles — löst das Rendering direkt aus. Der permanente «Animation fortsetzen»-Button bleibt unverändert erhalten.
 
-**FR-8.12 Footer-Stats (typgetrieben).** Der Footer zeigt: den **Bestand** des Tenants (Knoten- und Kanten-Identitäten), die **sichtbare Projektion** (Knoten/Kanten), Zähler **pro Render-Modus der aktiven View** (Anzahl Cluster-Knoten, Anzahl Ring-Gruppen — ersetzt die fixen «OEs»- und «Attribute»-Zähler) und den Ausgeblendet-Zähler; sobald der Tenant mehr als einen Snapshot-Stand enthält, zusätzlich den aktiven Zeitstand (asOf-Datum bzw. Diff T1→T2). Begriffsebenen nach §2.
+**FR-8.12 Footer-Stats (typgetrieben).** Der Footer zeigt: den **Bestand** des Tenants (Knoten- und Kanten-Identitäten), die **sichtbare Projektion** (Knoten/Kanten), Zähler **pro Render-Modus der aktiven View** (Anzahl Cluster-Knoten, Anzahl Ring-Gruppen — ersetzt die fixen «OEs»- und «Attribute»-Zähler) und den Ausgeblendet-Zähler; sobald der Tenant mehr als einen Snapshot-Stand enthält, zusätzlich den aktiven Zeitstand (asOf-Datum bzw. Diff T1→T2); im `diff`-Modus zusätzlich die Zähler **neu / weggefallen / geändert** der sichtbaren Projektion. Begriffsebenen nach §2.
+
+**FR-8.13 Knoten-Interaktionen (explizit).** Die heutigen Interaktionen am SVG-Knoten bleiben typgeneralisiert erhalten: **Drag** (Knoten ziehen; Verhalten mit laufender/pausierter Simulation wie heute), **Click** (auswählen/zentrieren; Root-Verhalten über Kontextmenü und Combo, FR-7.6/8.7), **Hover-Tooltip** typgetrieben: Typname aus der Registry, Label (pseudonymisiert, wo aktiv), `props` sowie aufgelöste Referenz-Properties (Label des Zielknotens, FR-4.7); im `diff`-Modus zeigt der Tooltip den Property-Diff (FR-5.3).
 
 ---
 
@@ -443,6 +446,44 @@ Explizites Feature-Mapping aller bedienrelevanten UI-Elemente (ergänzt §9.1–
 | Footer-Stats («Knoten/Kanten/OEs/Attribute») | **Generalisiert** | typgetrieben: Bestand-Identitäten, sichtbare Projektion, Zähler pro Render-Modus, Ausgeblendet, Zeitstand | FR-8.12 |
 | Such-Combo mit Shift-Add, Tiefen-Regler, Blatt-Filter, Pseudo-Toggle, Export-Dialog, Profil-Switcher | **Bleibt** | wie heute, typgetrieben über Capabilities | FR-7.6/7.7, FR-8.3–8.5, FR-8.8, AK 8 |
 
+### 9.5 UI-Interaktionsmigration (Event-Inventar)
+
+Ergänzend zu §9.4 auf Event-Ebene: Jede bestehende Interaktion ist entweder übernommen, typgeneralisiert, durch Snapshot/Crawl ersetzt oder bewusst entfernt — nichts fällt still weg. Diese Tabelle ist die Grundlage der Smoke-Suite in Akzeptanzkriterium 14.
+
+| Event / Interaktion (heute) | v2-Entscheid | PRD-Referenz |
+|-----------------------------|--------------|---------------|
+| Globales dragenter/dragover/dragleave/drop (Datei/Ordner/ZIP) | Übernehmen; akzeptiert nur noch Snapshot/`env.json`/Pseudo/ZIP, Legacy-Formate abgewiesen mit Migrationshinweis | FR-6.7 (E25) |
+| Dropzone-Button öffnet Dateiauswahl | Übernehmen (gleiche Dateiklassen) | FR-6.7 |
+| Footer-Status-Klick lädt Datei | **Entfällt** — versteckte Aktion; Import nur Dropzone/Dateidialog | FR-6.7 (E25) |
+| Profil-Switcher `change` | Übernehmen als Tenant-Switcher | FR-8.9 |
+| Profil-«+» öffnet Dropzone für neues Profil | Übernehmen | FR-8.9 |
+| Reset-Button | Übernehmen | §9.1 |
+| Suchfeld `input` (Debounce), `focus`/`blur`/`change`, `keydown` (Enter, Shift+Enter, Pfeile), Resultat-`mousedown` (Auswahl/Shift-Add) | Übernehmen; Dropdown-UX identisch, Suchdomäne = sichtbare Typen × `identifiers` | FR-7.6, FR-8.4 |
+| Tiefen-Stepper `click` / Hidden-Input `change`/`input` | Übernehmen; rendert reaktiv | FR-7.7, FR-8.11 |
+| Richtungs-Toggle `click` | **Entfällt** | E22 |
+| «Anzeigen»/Apply `click` | **Entfällt** — Rendering reaktiv | E23, FR-8.11 |
+| «Animation fortsetzen» `click` | Übernehmen | FR-8.11 |
+| Fit-to-Viewport `click` | Übernehmen | §9.2 |
+| Simulation-Toggle `click` | Übernehmen | FR-8.10 |
+| Hierarchie-Toggle `click` | Übernehmen als reiner Layout-Modus | FR-8.10 |
+| Label-Toggle `click` (all/attributes/none) | Übernehmen, generalisiert: alle / nur `ring`-Badges / keine | FR-8.10 |
+| Management-Toggle `click` | Übernehmen als Blatt-Filter (`leafProp`), Beschriftung generisch | FR-8.3 |
+| Pseudonym-Toggle `click` + Passwortdialog (Enter/Cancel) | Übernehmen, typgeneralisiert | FR-8.5 |
+| Debug-Toggle `click` | Übernehmen | FR-8.10 |
+| Export-Dialog: öffnen/schliessen, ESC, Overlay-Klick, Format, Presets, Custom-Inputs, Download | Übernehmen | FR-8.8 |
+| SVG-Knoten `drag` | Übernehmen (explizit) | FR-8.13 |
+| SVG-Knoten `mousemove` Tooltip | Übernehmen, typ-/props-/diff-fähig | FR-8.13, FR-5.3 |
+| SVG-Knoten `click` (auswählen/zentrieren) | Übernehmen, typgeneralisiert | FR-8.13 |
+| SVG-Knoten `contextmenu` | Übernehmen ins einheitliche Menü | FR-8.7 (E24) |
+| Globales `contextmenu.preventDefault` | Übernehmen, explizit | FR-8.7 |
+| Legenden-Section-Header `click` expand/collapse | Übernehmen | FR-8.2, FR-8.10 |
+| Hidden-Legende: Eintrag-Klick einblenden, Root-Visibility toggeln, Hover temporär sichtbar | Übernehmen | FR-8.2, FR-8.7 |
+| Cluster-/OE-Legende: Row-Klick, Toggle-All, Auge, Filterfeld `input`, Row-Kontextmenü | Übernehmen als generische Cluster-Legende; Row-Menü konsolidiert | FR-8.2, FR-8.7 (E24) |
+| Ring-/Attribut-Legende: Kategorie-Zeilen, Toggle-All, Auge, Shift-Klick-Fokus | Übernehmen ohne TSV-Speichern/Download | FR-8.2, FR-8.3, §9.4 |
+| Attribut-Upload-Button, TSV-Live-Import per Drop, Kategorie-Speichern/Download/File-Handles, Attribut-Editier-Submenü, Fuzzy-Match-Dialog | **Entfällt** — Datenzufuhr via Snapshot/Crawl, Zuordnung im Migrationsskript | §9.3, §10 (FR-10.4) |
+| View-Switcher im Footer | **Neu** | FR-7.5 |
+| Zeit-Slider / Diff-Auswahl | **Neu** | FR-8.6 |
+
 ---
 
 ## 10. Einmalmigration Alt → Neu
@@ -500,6 +541,7 @@ Konkrete Typ- und Personennennungen in den Kriterien sind Fixture- und Dateneben
 11. **Schema-Validierung:** Registry, jeder erzeugte Snapshot (Crawl und Migration) und die `VIEWS`-Konfiguration validieren gegen ihre JSON Schemas (`registry.schema.json`, `snapshot.schema.json`, `view.schema.json`).
 12. **Kantenrichtungs-Migrationstest:** Ein Legacy-Bestand mit Manager→Mitarbeiter- und Parent→Child-Links ergibt nach der Migration ausschliesslich Hierarchie-Kanten vom Untergeordneten zum Übergeordneten (FR-7.2a), und die BFS-Ordnung der Start-View reproduziert den heutigen Baum.
 13. **Scope-Löschtest mit Root-Begrenzung:** Ein Snapshot mit `scope.roots` auf einen Teilbaum schliesst verschwundene Identitäten nur innerhalb dieses Teilbaums (FR-5.5a); identisch fehlende Identitäten ausserhalb bleiben offen.
+14. **UI-Interaktionsinventar:** Eine Playwright-Smoke-Suite weist §9.5 nach — alle mit «Übernehmen»/«Neu» markierten Interaktionen sind vorhanden und reagieren; alle mit «Entfällt» markierten UI-Elemente existieren nicht mehr.
 
 ---
 
