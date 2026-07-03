@@ -12,7 +12,12 @@
       "required": ["source", "crawledAt", "snapshot", "registryVersion", "scope"],
       "additionalProperties": true,
       "properties": {
-        "source": { "type": "string", "description": "Source URL or system (PRD FR-3.1)." },
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Canonical source identifier (PRD E62): stable per provider, identical to the harvest-spec provider; key for provenance, partition, snapshot identity, chronology, and precedence. Free-form spellings/URLs are rejected — put the URL into sourceUrl."
+        },
+        "sourceUrl": { "type": "string", "description": "Source URL or display name (metadata only, PRD E62)." },
         "crawledAt": {
           "type": "string",
           "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})$",

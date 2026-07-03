@@ -62,7 +62,16 @@
           },
           "description": "Selects the nicer, type-specific pseudonym pool. Types WITHOUT this capability still get the deterministic fail-closed fallback \"<Typname> N\" when pseudonymization is active (PRD E48, FR-8.5). Presentation (colors, icons) is intentionally NOT part of the registry (PRD FR-4.2a / E13)."
         },
-        "props": { "$ref": "#/$defs/propDecls" }
+        "props": {
+          "type": "object",
+          "description": "Optional declarations for node-type props; implies is edge-only (PRD E63).",
+          "additionalProperties": {
+            "allOf": [
+              { "$ref": "#/$defs/propDecl" },
+              { "not": { "required": ["implies"] } }
+            ]
+          }
+        }
       }
     },
     "edgeType": {
