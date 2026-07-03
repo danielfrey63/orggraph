@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/danielfrey63/orggraph/schema/analysis.schema.json",
+  "title": "OrgGraph source analysis report (source contract)",
+  "description": "Output of the deterministic, LLM-free phase A (PRD FR-6.1d, E27): technical evidence and candidates only — endpoints, selectors, JSON paths, id rules, value statistics, examples. Contains no binding registry decisions; semantic typing happens at the gate (PRD FR-6.1).",
+  "type": "object",
+  "required": ["meta", "known", "untyped", "harvestSpecDraft", "warnings"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["kind", "provider", "runId", "startedAt", "finishedAt", "registryVersion"],
+      "additionalProperties": true,
+      "properties": {
+        "kind": { "const": "analysis" },
+        "provider": { "type": "string" },
+        "runId": { "type": "string" },
+        "startedAt": { "type": "string", "description": "ISO timestamp." },
+        "finishedAt": { "type": "string", "description": "ISO timestamp." },
+        "registryVersion": {
+          "type": "string",
+          "description": "Registry copy the mechanical matching ran against (PRD FR-6.1b)."
+        },
+        "scopeHint": {
+          "type": "object",
+          "description": "Non-binding scope observation (entry root, coverage); the binding scope is declared by phase B (PRD FR-6.6)."
+        }
+      }
+    },
+    "known": {
+      "type": "object",
+      "required": ["nodeTypes", "edgeTypes", "props"],
+      "additionalProperties": false,
+      "description": "Mechanically matched against the registry copy (name/structure comparison only, never semantic — PRD FR-6.1d).",
+      "properties": {
+        "nodeTypes": { "type": "array", "items": { "type": "string" } },
+        "edgeTypes": { "type": "array", "items": { "type": "string" } },
+        "props": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Matched property paths, e.g. \"Person.props.email\"."
+        }
+      }
+    },
+    "untyped": {
+      "type": "object",
+      "required": ["nodeCandidates", "edgeCandidates", "propCandidates"],
+      "additionalProperties": false,
+      "properties": {
+        "nodeCandidates": { "type": "array", "items": { "$ref": "#/$defs/candidate" } },
+        "edgeCandidates": { "type": "array", "items": { "$ref": "#/$defs/candidate" } },
+        "propCandidates": { "type": "array", "items": { "$ref": "#/$defs/candidate" } }
+      }
+    },
+    "harvestSpecDraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Draft for the gate; finalized into the normative harvest-spec.json (PRD FR-6.1c, E28).",
+      "properties": {
+        "entrypoints": { "type": "array", "items": { "type": "string" } },
+        "apiEndpoints": { "type": "array", "items": { "$ref": "#/$defs/apiEndpoint" } },
+        "selectors": { "type": "array", "items": { "$ref": "#/$defs/selector" } },
+        "idRules": { "type": "array", "items": { "$ref": "#/$defs/idRule" } },
+        "navigationRules": { "type": "array", "items": { "type": "string" } },
+        "mappingDraft": {
+          "type": "object",
+          "description": "Heuristic source-field-to-registry mapping proposals; decided at the gate."
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "required": ["message"],
+            "properties": {
+              "message": { "type": "string" },
+              "context": { "type": "string" }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "required": ["name", "source"],
+      "additionalProperties": false,
+      "description": "Observed candidate with evidence; no binding type decision (PRD FR-6.1d).",
+      "properties": {
+        "name": { "type": "string", "description": "Field, heading, or link label as observed in the source." },
+        "source": { "$ref": "#/$defs/evidence" },
+        "stats": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rowsSeen": { "type": "integer" },
+            "nonEmpty": { "type": "integer" },
+            "uniqueValues": { "type": "integer" },
+            "sharedValues": { "type": "boolean", "description": "True if values are shared across entities (reification hint, PRD §4.3)." },
+            "numericShare": { "type": "number", "minimum": 0, "maximum": 1 },
+            "uniquePerEntity": { "type": "boolean" }
+          }
+        },
+        "examples": { "type": "array", "items": { "type": ["string", "number", "boolean", "null"] } },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "type": "string", "description": "Heuristic classification, e.g. \"sharedCategoricalValue\"." },
+            "possibleTreatment": {
+              "type": "array",
+              "items": { "enum": ["node", "edge", "property", "ignore"] }
+            }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["api", "dom"] },
+        "urlPattern": { "type": "string" },
+        "method": { "type": "string" },
+        "selector": { "type": "string", "description": "DOM selector (kind: dom)." },
+        "jsonPath": { "type": "string", "description": "Path within the API response (kind: api)." }
+      }
+    },
+    "apiEndpoint": {
+      "type": "object",
+      "required": ["urlPattern"],
+      "additionalProperties": false,
+      "properties": {
+        "urlPattern": { "type": "string" },
+        "method": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "selector": {
+      "type": "object",
+      "required": ["selector"],
+      "additionalProperties": false,
+      "properties": {
+        "selector": { "type": "string" },
+        "urlPattern": { "type": "string" },
+        "purpose": { "type": "string" }
+      }
+    },
+    "idRule": {
+      "type": "object",
+      "required": ["rule"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "type": "string", "description": "How stable ids are derived, e.g. \"person id from /api/person/{id} url\"." },
+        "appliesTo": { "type": "string" }
+      }
+    }
+  }
+}
