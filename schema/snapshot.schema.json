@@ -26,7 +26,7 @@
         "snapshot": {
           "type": "string",
           "pattern": "^[0-9]{8}-[0-9]{4}$",
-          "description": "Snapshot stamp YYYYMMDD-HHMM in UTC — the UTC minute of crawledAt, validated by the importer (PRD FR-3.1, E50); imports must be chronological per (source, scope) (PRD FR-6.9)."
+          "description": "Snapshot stamp YYYYMMDD-HHMM in UTC — the UTC minute of crawledAt, validated by the importer (PRD FR-3.1, E50). Hard chronological import order applies only to root-free full states per (source, scope fingerprint); rooted/enrichment snapshots may import out of order and are ordered per visited edgeSource via instant monotonicity (PRD FR-6.9, E65)."
         },
         "registryVersion": {
           "type": "string",

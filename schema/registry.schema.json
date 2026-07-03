@@ -117,7 +117,7 @@
         },
         "implies": {
           "type": "string",
-          "description": "Edge type materialized from this reference with the identical validity interval (PRD FR-4.8). Requires ref."
+          "description": "Edge type derived from this reference as a PROJECTION contribution (PRD FR-4.8, E33, E52): the base edge's validity is the union of the intervals of ALL primary facts implying the same identity (plus any directly delivered contribution) — never a one-to-one interval copy, never an independent closure candidate; it ends only when no valid primary fact implies it anymore. Requires ref."
         },
         "nonSensitive": {
           "type": "boolean",
