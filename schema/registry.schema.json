@@ -109,6 +109,11 @@
         "implies": {
           "type": "string",
           "description": "Edge type materialized from this reference with the identical validity interval (PRD FR-4.8). Requires ref."
+        },
+        "nonSensitive": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whitelist flag for pseudo mode (PRD E60): only props marked nonSensitive stay visible in tooltips, search results, legends, reference labels, and exports while pseudonymization is active."
         }
       },
       "dependentRequired": { "implies": ["ref"] },

@@ -23,6 +23,7 @@ Kompakte Referenz für das wiederverwendbare Snapshot-Format von OrgGraph 2.0. N
       "nodeTypes": ["Person", "OE"],
       "edgeTypes": ["berichtetAn", "mitgliedIn", "unterstellt"],
       "roots": ["oe-sem"],
+      "edgeSources": ["p-1", "oe-sem"],
       "excluded": []
     }
   },

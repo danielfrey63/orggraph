@@ -27,7 +27,15 @@
           "type": "string",
           "description": "Version of the registry the run was crawled against (PRD FR-6.1b)."
         },
-        "scope": { "$ref": "#/$defs/scope" }
+        "scope": {
+          "allOf": [
+            { "$ref": "#/$defs/scope" },
+            {
+              "dependentRequired": { "roots": ["edgeSources"] },
+              "$comment": "Rooted snapshots must declare the actually visited source nodes as edgeSources (PRD E59); the harvest spec reuses the scope def without this constraint because edgeSources is filled at run time."
+            }
+          ]
+        }
       }
     },
     "schema": {
