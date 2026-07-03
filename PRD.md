@@ -39,6 +39,9 @@ Der SBB/SEM-Use-Case verlangt Entitäten, die heute als «Attribute» (farbige R
 | E19 | View-Definition als **Pfad-Ausdruck** (FR-7.1a): ersetzt `edgeTypes`/`hierarchyEdges`/`visibleNodeTypes`/`render`; Hierarchie aus der Pfad-Reihenfolge; Pfeile = gespeicherte Kantenrichtung; runde Klammern = Verzweigungen, eckige = Render-Modus; Selbst-Hops implizit transitiv; `[hidden]` kontrahiert zu abgeleiteten Kanten | 2026-07 |
 | E20 | Snapshot-Input ist **roh und unversioniert**: keine `validFrom`/`validTo` in Snapshot-Dateien; Validity-Intervalle sind ausschliesslich interne Store-Darstellung und entstehen beim Import (FR-3.6, FR-5.1) | 2026-07 |
 | E21 | Ring-Attachment explizit: `ring:prev`/`ring:next` bestimmen die sichtbare `node`-Station, an welcher der Badge hängt; `[ring]` = Alias für `[ring:prev]`; `[hidden]`-Stationen sind nie Attachment-Ziel (FR-7.1a, FR-7.3) | 2026-07 |
+| E22 | Der **Richtungs-Toggle entfällt** (`TOOLBAR_DIRECTION_DEFAULT` inklusive): Die Richtungs-Semantik ist vollständig im View-Pfad kodiert — ein Laufzeit-Richtungs-Parameter hat im Pfadmodell keine Funktion mehr (FR-8.10, §9.4) | 2026-07 |
+| E23 | **Rendering ist reaktiv**: Jede Parameter-Änderung (View, Roots, Tiefe, Zeitstand, Filter) löst das Rendering direkt aus; der «Anzeigen»-Button entfällt, der permanente «Animation fortsetzen»-Button bleibt (FR-8.11) | 2026-07 |
+| E24 | **Ein einheitliches Kontextmenü** für Graph-Knoten und Legenden-Rows: dieselbe typunabhängige Aktionsliste, kontextabhängig deaktivierte Einträge — ersetzt die zwei getrennten Menüs der heutigen App (FR-8.7) | 2026-07 |
 
 ### 1.4 Nicht-Ziele
 
@@ -343,7 +346,7 @@ Semantik:
 
 **FR-8.1 Rendering-Pipeline.** Nie der ganze Graph: View-Projektion (roots + Tiefe + Typen + Zeitschnitt) → Teilgraph → Layout → Render. Force-Layout läuft nur auf dem projizierten Teilgraphen (SEM-Referenzbestand: 62k Knoten- / 114k Kanten-**Identitäten** im Bestand sind unkritisch, solange die sichtbare Projektion begrenzt bleibt; Begriffsebenen §2).
 
-**FR-8.2 Legenden, typgetrieben.** Die heutigen drei Legenden verallgemeinern sich: (a) Cluster-Legende = Baum aller `cluster`-gerenderten Knoten der View (heutige OE-Legende) inkl. Filterfeld, Toggle-All, Auge, Kontextmenü; (b) Ring-Legende = Gruppen der `ring`-gerenderten Typen mit Trefferzahlen und Farbchips (heutige Attribut-Legende) inkl. Fokus-Trichter; (c) Ausgeblendet-Legende unverändert. Legend-Row-Factories werden wiederverwendet.
+**FR-8.2 Legenden, typgetrieben.** Die heutigen drei Legenden verallgemeinern sich: (a) Cluster-Legende = Baum aller `cluster`-gerenderten Knoten der View (heutige OE-Legende) inkl. Filterfeld, Toggle-All, Auge und dem einheitlichen Kontextmenü (FR-8.7, E24); (b) Ring-Legende = Gruppen der `ring`-gerenderten Typen mit Trefferzahlen und Farbchips (heutige Attribut-Legende) inkl. Fokus-Trichter; (c) Ausgeblendet-Legende unverändert. Legend-Row-Factories werden wiederverwendet.
 
 **FR-8.3 Filter.** Blatt-Filter (heute «Management») über `leafProp`-Capability typunabhängig; Sichtbarkeits-Toggles pro Knotentyp (verallgemeinert den OE-Sichtbarkeits-Toggle); Ring-Fokus-Pruning (heute Attribut-Fokus) läuft über die View-Kanten statt über hardcodierte Aufwärtskanten.
 
@@ -353,13 +356,17 @@ Semantik:
 
 **FR-8.6 Zeit-UI.** Neuer Zeit-Slider (asOf) und Diff-Auswahl (T1/T2) in der Toolbar oder im Footer, nur aktiv, wenn der Tenant mehr als einen Snapshot-Stand enthält.
 
-**FR-8.7 Kontextmenü.** Rechtsklick auf Knoten: Ausblenden (Subtree über die Abstiegs-Hops des View-Pfads), Als Root definieren / entfernen — typunabhängig. Das Attribut-Editier-Submenü entfällt (Datenpflege geschieht an der Quelle bzw. im Crawl, nicht im Viewer).
+**FR-8.7 Kontextmenü (einheitlich, E24).** Rechtsklick auf einen Knoten im Graph **oder** auf seine Legenden-Row öffnet dasselbe typunabhängige Kontextmenü — Legende und Graph zeigen dieselben Entitäten, es gibt eine Aktionsliste statt der heutigen zwei getrennten Menüs: **Ausblenden** (Subtree über die Abstiegs-Hops des View-Pfads), **Einblenden**, **Nur direkte Kinder anzeigen**, **Als Root definieren**, **Als Root entfernen**. Nicht anwendbare Einträge sind deaktiviert, nie versteckt. «Als Root entfernen» ist nur aktiv, wenn der Knoten Root ist **und** mehr als ein Root gesetzt ist — der letzte Root ist nicht entfernbar (eine leere Projektion ist ausgeschlossen). Ausgeblendete Subtrees werden über die Ausgeblendet-Legende wiederhergestellt (Klick auf den Eintrag; die bestehende temporäre Sichtbarkeit beim Hover bleibt). Der globale Browser-Kontextmenü-Override der heutigen App bleibt: Die App unterdrückt das native Menü und zeigt ausschliesslich eigene. Das Attribut-Editier-Submenü entfällt (Datenpflege geschieht an der Quelle bzw. im Crawl, nicht im Viewer).
 
 **FR-8.8 Export.** SVG/PNG-Export-Dialog unverändert.
 
 **FR-8.9 Persistenz.** IndexedDB-Profilarchitektur (ein Object-Store pro Tenant, `__meta__`-Store) unverändert; pro Tenant zusätzlich: Graph (Versionen), Snapshots-Registry, env/Views, Pseudo-Daten.
 
-**FR-8.10 Konfiguration.** `env.json` bleibt der Konfigurationsträger: `VIEWS` (neu), bestehende `TOOLBAR_*`- und `LEGEND_*`-Schlüssel behalten ihre Funktion (Blatt-Filter-Default, Richtung, Tiefe, Labels, Zoom, Pseudo, Debug, Simulation, Collapse-Zustände, Hidden-Roots, Start-IDs). Der Richtungs-Toggle (`TOOLBAR_DIRECTION_DEFAULT`) operiert dabei auf der **View-Hierarchie**: Er wählt die BFS-Richtung (up/down/both) entlang der Abstiegs-Hops der Projektion (FR-7.2) und übersteuert nie die im Pfad kodierten, gespeicherten Kantenrichtungen — er bleibt unter der Pfad-Semantik unverändert konsistent. `ATTRIBUTE_TYPES`, `DATA_ATTRIBUTES_URL` und `DATA_ATTRIBUTES_DIR` entfallen (Legacy, §10); `DATA_URL` zeigt auf einen Graph-Snapshot.
+**FR-8.10 Konfiguration.** `env.json` bleibt der Konfigurationsträger: `VIEWS` (neu), bestehende `TOOLBAR_*`- und `LEGEND_*`-Schlüssel behalten ihre Funktion (Blatt-Filter-Default, Tiefe, Labels, Zoom, Pseudo, Debug, Simulation, Collapse-Zustände, Hidden-Roots, Start-IDs). `TOOLBAR_DIRECTION_DEFAULT` und der Richtungs-Toggle **entfallen** (E22): Die Richtungs-Semantik ist vollständig im View-Pfad kodiert; ein Laufzeit-Richtungs-Parameter hätte im Pfadmodell keine Funktion mehr. `ATTRIBUTE_TYPES`, `DATA_ATTRIBUTES_URL` und `DATA_ATTRIBUTES_DIR` entfallen (Legacy, §10); `DATA_URL` zeigt auf einen Graph-Snapshot.
+
+**FR-8.11 Render-Auslösung (reaktiv, E23).** Es gibt keinen «Anzeigen»-Button mehr: Jede Parameter-Änderung — View-Wechsel, Root-Änderung (Combo, Kontextmenü), Tiefe, Zeitstand, Filter- und Sichtbarkeits-Toggles — löst das Rendering direkt aus. Der permanente «Animation fortsetzen»-Button bleibt unverändert erhalten.
+
+**FR-8.12 Footer-Stats (typgetrieben).** Der Footer zeigt: den **Bestand** des Tenants (Knoten- und Kanten-Identitäten), die **sichtbare Projektion** (Knoten/Kanten), Zähler **pro Render-Modus der aktiven View** (Anzahl Cluster-Knoten, Anzahl Ring-Gruppen — ersetzt die fixen «OEs»- und «Attribute»-Zähler) und den Ausgeblendet-Zähler; sobald der Tenant mehr als einen Snapshot-Stand enthält, zusätzlich den aktiven Zeitstand (asOf-Datum bzw. Diff T1→T2). Begriffsebenen nach §2.
 
 ---
 
@@ -392,7 +399,7 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 | **Radiales Initial-Layout + BFS-Expansion** (`initializeRadialLayout`, `radialLayoutExpansion`, Hüllen-Platzierung sekundärer Roots) | nur Personen-Knoten, Parent-Map aus Person-Person-Links | **Algorithmus identisch**; arbeitet auf den `node`-gerenderten Knoten des projizierten Teilgraphen, Parent-Map aus den Abstiegs-Hops des View-Pfads |
 | **Force-Simulation** (D3-Forces, Parameter aus CSS-Vars, Kollisionsradius inkl. Ringe) | Kanten-/Cluster-Logik Person/OE | **Kräfte und Parameter identisch**; Ringe = `ring`-gerenderte Nachbarn, Cluster = `cluster`-gerenderte Knoten |
 | **Hierarchie-Layout** (`computeHierarchyLevels`, forceX/forceY-Gruppierung) | Manager→Mitarbeiter-Kanten, OE-Cluster-Zentren | Levels über die Pfad-Ordnung (FR-7.2); Gruppierung um Zentren der `cluster`-Knoten |
-| BFS-Subgraph `computeSubgraph` (Tiefe, Richtung up/down/both) | typgesteuerte Kantenfilter (Person→Org-Unterdrückung etc.) | Traversal über die Hops des View-Pfads; Richtungs-Semantik pro Hop explizit statt aus Typpaaren |
+| BFS-Subgraph `computeSubgraph` (Tiefe, Richtung up/down/both) | typgesteuerte Kantenfilter (Person→Org-Unterdrückung etc.) | Traversal über die Hops des View-Pfads; Richtungs-Semantik pro Hop explizit statt aus Typpaaren; der Laufzeit-Richtungs-Parameter entfällt (E22) |
 | Cluster-Hüllen (`refreshClusters`, `computeClusterPolygon`, Punkt-in-Polygon) | OE-Hierarchie fix | Render-Modus `cluster` für beliebige Typen; Hüllen-Hierarchie über die Kanten zwischen Cluster-Knoten |
 | Blatt-Filter («Management») | `isBasis` an Personen | `leafProp`-Capability (FR-8.3) |
 | Subtree-Ausblenden (`collectReportSubtree`) | nur Person→Person | Abstiegs-Hops des View-Pfads |
@@ -403,7 +410,7 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 | Legenden (OE-/Attribut-/Hidden) | Begriffe und Datenpfade fix | typgetrieben nach Render-Modus (FR-8.2) |
 | Tooltips (Emojis, «OEs», «Attribute») | fix | Typnamen aus der Registry (FR-4.2a) |
 | Knoten-Kontextmenü | Personen-spezifisch | typunabhängig (FR-8.7) |
-| Toolbar-Toggles (Tiefe, Richtung, Hierarchie, Labels, Fit, Simulation, Pseudo, Debug) | Verhalten generisch, Defaults env | unverändert, plus Zeit-UI (FR-8.6) |
+| Toolbar-Toggles (Tiefe, Hierarchie, Labels, Fit, Simulation, Pseudo, Debug) | Verhalten generisch, Defaults env | unverändert, plus Zeit-UI (FR-8.6); der Richtungs-Toggle entfällt (E22), der «Anzeigen»-Button entfällt zugunsten reaktiven Renderings (E23, FR-8.11) |
 
 ### 9.3 Entfällt in der App (wandert ins Einmal-Migrationsskript, §10)
 
@@ -414,6 +421,27 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 | Attribut-Editier-Submenü im Kontextmenü | Datenpflege an der Quelle, nicht im Viewer |
 | `looksLikeData`-Erkennung des Alt-Formats, `processData` (persons/orgs/links) | App versteht nur noch Snapshots (§3) |
 | `ATTRIBUTE_TYPES`, `DATA_ATTRIBUTES_URL`, `DATA_ATTRIBUTES_DIR` in env.json | Mapping-Konfiguration lebt im Migrationsskript |
+
+### 9.4 UI-Feature-Migration
+
+Explizites Feature-Mapping aller bedienrelevanten UI-Elemente (ergänzt §9.1–§9.3 um die Entscheidungs-Sicht):
+
+| Bestehendes Feature | Entscheidung | Neue Semantik | Akzeptanz/Notiz |
+|---------------------|--------------|----------------|-----------------|
+| Richtungs-Toggle (`TOOLBAR_DIRECTION_DEFAULT`) | **Entfällt** (E22) | Richtungs-Semantik vollständig im View-Pfad kodiert | AK 8; FR-8.10 |
+| «Anzeigen»-Button (`applyFromUI`) | **Entfällt** (E23) | Rendering reaktiv bei jeder Parameter-Änderung (View, Roots, Tiefe, Zeitstand, Filter) | FR-8.11 |
+| «Animation fortsetzen»-Button (permanent) | **Bleibt** | unverändert | FR-8.11 |
+| Knoten-Kontextmenü (Ausblenden, Als Root definieren/entfernen) | **Konsolidiert** (E24) | ein einheitliches typunabhängiges Menü für Graph-Knoten und Legenden-Rows; «Als Root entfernen» nur bei Multi-Root | FR-8.7 |
+| OE-Legenden-Row-Kontextmenü (Alle einblenden, Alle ausblenden, Nur direkte Kinder anzeigen) | **Konsolidiert** (E24) | Aktionen wandern in das einheitliche Kontextmenü; nicht anwendbare Einträge deaktiviert | FR-8.7 |
+| Attribut-Editier-Submenü im Kontextmenü | **Entfällt** | Datenpflege an der Quelle bzw. im Crawl | FR-8.7, §9.3 |
+| Globaler Browser-Kontextmenü-Override | **Bleibt** | App unterdrückt das native Menü und zeigt ausschliesslich eigene | FR-8.7 |
+| Cluster-Legende: Filterfeld, Chevron-Collapse, Auge, Toggle-All | **Bleibt** (generalisiert) | wirkt auf alle `cluster`-gerenderten Knoten der View | FR-8.2 |
+| Attribut-/Ring-Legende: Kategorie-Expand/Collapse, Auge, Shift-Klick-Fokus, Trefferzahlen, Farbchips | **Bleibt** (generalisiert) | wirkt auf die `ring`-gerenderten Typen der View; Fokus-Trichter über View-Kanten | FR-8.2, FR-8.3 |
+| Attribut-Legende: Download- (TSV) und Speichern-Buttons | **Entfällt** | kein Attribut-Roundtrip mehr — Attribute sind Knoten/props im Snapshot | §9.3 |
+| File-System-Handles für Attribut-Dateien | **Entfällt** | Nutzer-Konsequenz: Attribut-Änderungen im Viewer gibt es nicht mehr, damit auch kein lokales Speichern; IndexedDB ist die einzige lokale Persistenz (NFR-8) | §9.3 |
+| Ausgeblendet-Legende | **Bleibt** | Wiederherstellung ausgeblendeter Subtrees per Klick; temporäre Sichtbarkeit beim Hover | FR-8.2, FR-8.7 |
+| Footer-Stats («Knoten/Kanten/OEs/Attribute») | **Generalisiert** | typgetrieben: Bestand-Identitäten, sichtbare Projektion, Zähler pro Render-Modus, Ausgeblendet, Zeitstand | FR-8.12 |
+| Such-Combo mit Shift-Add, Tiefen-Regler, Blatt-Filter, Pseudo-Toggle, Export-Dialog, Profil-Switcher | **Bleibt** | wie heute, typgetrieben über Capabilities | FR-7.6/7.7, FR-8.3–8.5, FR-8.8, AK 8 |
 
 ---
 
@@ -460,13 +488,13 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 Konkrete Typ- und Personennennungen in den Kriterien sind Fixture- und Datenebene (E14, NFR-5-Ausnahme), kein Engine-Code-Auftrag; Mengenangaben folgen den Begriffsebenen aus §2 (Identitäten / Versionsrecords / sichtbare Projektion).
 
 1. **Zahlenmässige Äquivalenz (hart, automatisiert):** Die Start-View rendert den migrierten SEM-Referenzbestand mit exakt denselben Brutto-Zahlen wie die heutige App in der Referenz `PRD-Reference-Screenshot.png` (v1.27.14; geladen 62 144 Knoten- / 113 874 Kanten-Identitäten / 9 045 OEs; Wurzel «Vincenzo Mascioli», Tiefe 3: **487 sichtbare Knoten, 793 sichtbare Kanten**, 69/69 Ring-Gruppen, 7/2778 ausgeblendet). Geprüft per Playwright: Elementzählung pro SVG-Ebene (Knoten, Kanten, Cluster-Hüllen, Ringe) und Legenden-Einträge — exakter Match.
-2. **Visuelle Äquivalenz (dokumentierte Sichtprüfung):** Playwright-Screenshot derselben Szene (gleicher Datenstand, gleiche Wurzel/Tiefe/Richtung, Viewport wie Referenz) wird neben `PRD-Reference-Screenshot.png` abgelegt und verglichen; da das Force-Layout nicht deterministisch ist, gilt Kriterium 1 als harte Prüfung, der Screenshot-Vergleich dokumentiert Layout-Charakter, Farben, Ringe, Legenden und Footer.
+2. **Visuelle Äquivalenz (dokumentierte Sichtprüfung):** Playwright-Screenshot derselben Szene (gleicher Datenstand, gleiche Wurzel/Tiefe — die Abstiegsrichtung ist im View-Pfad kodiert, E22 —, Viewport wie Referenz) wird neben `PRD-Reference-Screenshot.png` abgelegt und verglichen; da das Force-Layout nicht deterministisch ist, gilt Kriterium 1 als harte Prüfung, der Screenshot-Vergleich dokumentiert Layout-Charakter, Farben, Ringe, Legenden und Footer.
 3. Ein AdminDir-Crawl (Phase A → Gate → Phase B) liefert einen validen Snapshot mit `meta.scope`, der ohne Handarbeit importierbar ist.
 4. Zwei Snapshots desselben Scopes mit einer entfernten Identität, einer geänderten skalaren Property und einem neuen Knoten ergeben nach Import: geschlossene Version, zwei Versionen mit Property-Diff, neue Identität — und der `diff`-Modus zeigt alle drei Fälle an.
 5. Ein Snapshot mit engem Scope (einzelner Knoten- und Kantentyp) lässt den restlichen Bestand unangetastet.
 6. Ein Re-Import desselben Snapshots ändert nichts (Toast: «bereits importiert»).
 7. Ein neuer Knotentyp, nur in Registry und View deklariert, erscheint mit Farbe, Legende, Suche und Rendering ohne jede Codeänderung.
-8. Such-Combo mit Shift-Add, Tiefen-/Richtungs-Toggles, Blatt-Filter, Pseudonymisierung, SVG/PNG-Export und Profil-Switcher funktionieren wie heute.
+8. Such-Combo mit Shift-Add, Tiefen-Toggle, Blatt-Filter, Pseudonymisierung, SVG/PNG-Export und Profil-Switcher funktionieren wie heute; der Richtungs-Toggle und der «Anzeigen»-Button existieren nicht mehr (E22/E23), Rendering reagiert direkt auf Parameter-Änderungen (FR-8.11).
 9. NFR-5-Prüfung (kein Typname im Engine-Code) besteht.
 10. Die NFR-3-Grenzwerte (Importdauer < 30 s, kein Main-Thread-Block > 200 ms, Fortschritt < 500 ms) werden mit dem SEM-Referenzbestand eingehalten und gemessen protokolliert.
 11. **Schema-Validierung:** Registry, jeder erzeugte Snapshot (Crawl und Migration) und die `VIEWS`-Konfiguration validieren gegen ihre JSON Schemas (`registry.schema.json`, `snapshot.schema.json`, `view.schema.json`).
