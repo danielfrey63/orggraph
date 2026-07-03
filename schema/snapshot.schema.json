@@ -116,9 +116,10 @@
           "description": "Visited source node ids: the snapshot is a full state of their outgoing edges of the declared edgeTypes, without their node type being subject to closure (PRD FR-5.5, E30, E59)."
         },
         "edgeTargets": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Fully observed target container ids: their INCOMING edges of the declared edgeTypes were completely observed — counter-evidence enabling move-out closure in rooted snapshots (PRD FR-5.5, FR-5.5a); absent = no move-out closure (conservative)."
+          "type": "object",
+          "propertyNames": { "pattern": "^\\p{L}[\\p{L}\\p{N}_]*$" },
+          "additionalProperties": { "type": "array", "items": { "type": "string" } },
+          "description": "TYPED proof of fully observed target containers, keyed by edge type: edgeTargets[edgeType] lists target ids whose INCOMING edges of exactly that type were completely observed — counter-evidence enabling move-out closure per (edgeType, target) in rooted snapshots (PRD FR-5.5, FR-5.5a). A flat id list is rejected; observing one relationship type never authorizes closure of another. Absent = no move-out closure (conservative)."
         },
         "traversalEdgeTypes": {
           "type": "array",
