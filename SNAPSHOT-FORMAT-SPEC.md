@@ -55,4 +55,4 @@ Kompakte Referenz für das wiederverwendbare Snapshot-Format von OrgGraph 2.0. N
 
 ## Dateikonvention
 
-Export als `crawl-<quelle>-<YYYYMMDD-HHMM>.json`; historisierte Ablage unter `data/<tenant>/sources/` (PRD FR-6.5).
+Export als `crawl-<quelle>-<YYYYMMDD-HHMM>-<id8>.json` (`<id8>` = Identitäts-Kurzhash über Scope- plus Beobachtungs-Fingerprint — disjunkte gleich-minutige Läufe kollidieren so nie im Dateinamen); historisierte, kollisionsfreie Ablage unter `data/<tenant>/sources/` (PRD FR-6.5). Der Dateiname ist Konvention; massgeblich für die Import-Identität ist allein `meta`.
