@@ -1,4 +1,6 @@
-# Datenformat-Spezifikation für OrgGraph
+# Datenformat-Spezifikation für OrgGraph (Legacy v1)
+
+> **Legacy bis Big Bang (PRD §1.6, E10).** Dieses Dokument beschreibt das **Alt-Format v1** (persons/orgs/links + Attribut-TSV). Es hat für OrgGraph 2.0 keine normative Kraft und dient ausschliesslich als Referenz für das Einmal-Migrationsskript (PRD §10). Das aktuelle Snapshot-Format ist in [SNAPSHOT-FORMAT-SPEC.md](SNAPSHOT-FORMAT-SPEC.md) und [PRD.md §3](PRD.md) definiert.
 
 Ziel: Ein Skript soll zwei Arten von Artefakten generieren:
 

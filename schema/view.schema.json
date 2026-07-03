@@ -15,7 +15,7 @@
         "path": {
           "type": "string",
           "minLength": 1,
-          "description": "Path expression, e.g. \"Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster], --hatRolle--> Rolle[ring])\". Grammar and semantics in PRD FR-7.1a: arrows encode the stored edge direction; round parentheses branch; square brackets set the render mode (node|cluster|ring|hidden, default node); self-typed hops are implicitly transitive; [hidden] nodes are contracted into derived edges."
+          "description": "Path expression, e.g. \"Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster], --hatRolle--> Rolle[ring])\". Grammar and semantics in PRD FR-7.1a: arrows encode the stored edge direction; round parentheses branch; square brackets set the render mode (node|cluster|hidden|ring[:prev|:next], default node; [ring] = [ring:prev], badges attach to the nearest preceding/following visible node station, PRD E21); self-typed hops are implicitly transitive; [hidden] nodes are contracted into derived edges and never serve as ring attachment targets."
         },
         "roots": {
           "type": "array",

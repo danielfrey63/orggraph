@@ -1,0 +1,56 @@
+# SNAPSHOT-FORMAT-SPEC — OrgGraph 2.0 Snapshot-Format
+
+Kompakte Referenz für das wiederverwendbare Snapshot-Format von OrgGraph 2.0. Normativ sind [PRD.md §3](PRD.md) und [`schema/snapshot.schema.json`](schema/snapshot.schema.json) (Rangfolge: PRD §1.6); dieses Dokument ist die Kurzfassung für Crawler-Autoren und Tooling. Das Alt-Format (persons/orgs/links + Attribut-TSV) ist in [DATA-FORMAT-SPEC.md](DATA-FORMAT-SPEC.md) dokumentiert und nur noch Input des Einmal-Migrationsskripts.
+
+## Grundprinzipien
+
+- Ein Snapshot ist ein **datierter Vollstand** eines deklarierten Scopes — nie ein Delta. Das Diffen (Create/Update/Delete, Versionierung) macht ausschliesslich der Import in der App (PRD §5.1).
+- Snapshots sind **roh und unversioniert** (PRD E20): keine `validFrom`/`validTo` — Validity-Intervalle sind interne Store-Darstellung.
+- Kanten zeigen **vom Untergeordneten zum Übergeordneten** (PRD E17/FR-7.2a): «A berichtetAn B» heisst B ist Vorgesetzte:r; der Baum-Abstieg traversiert gegen die Kantenrichtung.
+- IDs sind **stabil** (Quell-PK, URL-ID, E-Mail; notfalls `slug(label)` mit `props.idSource='name'`) — Voraussetzung für Diff und Versionierung (PRD FR-3.5).
+- Alle verwendeten Typen müssen in der kuratierten Registry (`schema/registry.json`) existieren; das eingebettete `schema` ist deren Teilmenge (PRD FR-3.4).
+
+## Struktur
+
+```json
+{
+  "meta": {
+    "source": "https://admindir.example",
+    "crawledAt": "2026-06-18T15:00:00Z",
+    "snapshot": "20260618-1500",
+    "registryVersion": "2026-06-01.3",
+    "scope": {
+      "nodeTypes": ["Person", "OE"],
+      "edgeTypes": ["berichtetAn", "mitgliedIn", "unterstellt"],
+      "roots": ["oe-sem"],
+      "excluded": []
+    }
+  },
+  "schema": {
+    "nodeTypes": { "Person": { "labelProp": "label" }, "OE": {} },
+    "edgeTypes": {
+      "berichtetAn": { "from": "Person", "to": "Person" },
+      "mitgliedIn": { "from": "Person", "to": "OE" },
+      "unterstellt": { "from": "OE", "to": "OE" }
+    }
+  },
+  "nodes": [
+    { "id": "p-1", "type": "Person", "label": "Anna Müller", "props": { "email": "anna@example.ch" } }
+  ],
+  "edges": [
+    { "type": "mitgliedIn", "source": "p-1", "target": "oe-sem", "props": {} }
+  ]
+}
+```
+
+## Feld-Referenz
+
+- **`meta`** (alle fünf Felder Pflicht): `source` (Quell-URL/-System), `crawledAt` (ISO-Zeitstempel des Laufs), `snapshot` (Stempel `YYYYMMDD-HHMM`; Importe müssen chronologisch erfolgen), `registryVersion` (Registry-Stand des Laufs, PRD FR-6.1b), `scope` (wofür dieser Snapshot ein Vollstand ist, PRD FR-5.5).
+- **`meta.scope`**: `nodeTypes`/`edgeTypes` (Pflicht; erfasste Typen), optional `roots` (Teilbaum-Begrenzung) und `excluded` (ausgeschlossene Teilbaum-Wurzeln, z. B. gescheiterte Fetches — Ausfälle dürfen nie als Löschungen fehlinterpretiert werden, PRD FR-5.7).
+- **`schema`**: verwendete Registry-Teilmenge mit vollständigen Deklarationen (`from`/`to`, `identityProps`, `props` inkl. Referenz-Properties).
+- **`nodes`**: `id`, `type`, `label` (Pflicht), optional `props` (skalare Werte; Referenz-Properties tragen Knoten-IDs).
+- **`edges`**: `type`, `source`, `target` (Pflicht; `source`/`target` sind Knoten-ID-Strings), optional `props`. Nur den Primärfakt liefern — implizierte Kanten (`implies`) materialisiert der Import (PRD FR-4.8).
+
+## Dateikonvention
+
+Export als `crawl-<quelle>-<YYYYMMDD-HHMM>.json`; historisierte Ablage unter `data/<tenant>/sources/` (PRD FR-6.5).

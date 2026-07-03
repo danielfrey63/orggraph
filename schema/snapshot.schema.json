@@ -2,17 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/danielfrey63/orggraph/schema/snapshot.schema.json",
   "title": "OrgGraph graph snapshot",
-  "description": "Full-state snapshot within a declared scope (PRD §3, §5.1). Produced by harvesters and the one-time legacy migration; validated by the app importer (PRD FR-6.8).",
+  "description": "Raw, unversioned full-state snapshot within a declared scope (PRD §3, §5.1, E20). Produced by harvesters and the one-time legacy migration; validated by the app importer (PRD FR-6.8). Snapshots never carry validity fields — validity intervals are internal store representation created by the import (PRD FR-3.6).",
   "type": "object",
   "required": ["meta", "schema", "nodes", "edges"],
   "additionalProperties": false,
   "properties": {
     "meta": {
       "type": "object",
-      "required": ["snapshot", "scope"],
+      "required": ["source", "crawledAt", "snapshot", "registryVersion", "scope"],
       "additionalProperties": true,
       "properties": {
-        "source": { "type": "string", "description": "Source URL or system." },
+        "source": { "type": "string", "description": "Source URL or system (PRD FR-3.1)." },
         "crawledAt": { "type": "string", "description": "ISO timestamp of the crawl/migration run." },
         "snapshot": {
           "type": "string",
@@ -30,10 +30,16 @@
       "type": "object",
       "required": ["nodeTypes", "edgeTypes"],
       "additionalProperties": false,
-      "description": "Subset of the registry: only the types actually used (PRD FR-3.4).",
+      "description": "Subset of the registry: only the types actually used, with full registry declarations (PRD FR-3.4). Structural conformance is validated here; that the entries actually match the curated registry is checked by the importer (PRD FR-6.8).",
       "properties": {
-        "nodeTypes": { "type": "object" },
-        "edgeTypes": { "type": "object" }
+        "nodeTypes": {
+          "type": "object",
+          "additionalProperties": { "$ref": "registry.schema.json#/$defs/nodeType" }
+        },
+        "edgeTypes": {
+          "type": "object",
+          "additionalProperties": { "$ref": "registry.schema.json#/$defs/edgeType" }
+        }
       }
     },
     "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
@@ -68,9 +74,7 @@
         "id": { "type": "string" },
         "type": { "type": "string" },
         "label": { "type": "string" },
-        "props": { "type": "object" },
-        "validFrom": { "$ref": "#/$defs/dateOrNull" },
-        "validTo": { "$ref": "#/$defs/dateOrNull" }
+        "props": { "type": "object" }
       }
     },
     "edge": {
@@ -79,29 +83,10 @@
       "additionalProperties": false,
       "properties": {
         "type": { "type": "string" },
-        "source": { "$ref": "#/$defs/endpointRef" },
-        "target": { "$ref": "#/$defs/endpointRef" },
-        "props": { "type": "object" },
-        "validFrom": { "$ref": "#/$defs/dateOrNull" },
-        "validTo": { "$ref": "#/$defs/dateOrNull" }
+        "source": { "type": "string", "description": "Node id (PRD FR-3.3)." },
+        "target": { "type": "string", "description": "Node id (PRD FR-3.3)." },
+        "props": { "type": "object" }
       }
-    },
-    "endpointRef": {
-      "description": "Node id, or an object carrying the id (PRD FR-3.3).",
-      "oneOf": [
-        { "type": "string" },
-        {
-          "type": "object",
-          "required": ["id"],
-          "properties": { "id": { "type": "string" } }
-        }
-      ]
-    },
-    "dateOrNull": {
-      "oneOf": [
-        { "type": "string", "format": "date" },
-        { "type": "null" }
-      ]
     }
   }
 }

@@ -35,8 +35,10 @@ Der SBB/SEM-Use-Case verlangt Entitäten, die heute als «Attribute» (farbige R
 | E15 | Kanten-Identität = `type`+`source`+`target` **plus** die im Schema deklarierten `identityProps` (z. B. `kontext`) — sonst kollidieren gleichzeitige gleiche Rollen bei verschiedenen Firmen (FR-5.2) | 2026-07 |
 | E16 | Umsetzungsweg: vollständige Neuerstellung auf separatem Branch, als Goal-Loop gegen die Akzeptanzkriterien (§13) getrieben; Tech-Stack unverändert (§1.5) | 2026-07 |
 | E17 | Kantenrichtung: Kanten zeigen **vom Untergeordneten zum Übergeordneten** (Namen lesen sich als Satz); Baum-Abstieg traversiert gegen die Kantenrichtung; Legacy-Richtungen werden bei der Migration normalisiert (FR-7.2a) | 2026-07 |
-| E18 | **Hierarchie ist ausschliesslich ein View-Konzept**: kein `hierarchy`-Flag in der Registry; die View definiert allein, was den Baum aufspannt. Fehlt `VIEWS`, werden alle Knoten ohne Ordnung dargestellt (§7) | 2026-07 |
+| E18 | **Hierarchie ist ausschliesslich ein View-Konzept**: kein `hierarchy`-Flag in der Registry; die View definiert allein, was den Baum aufspannt. Fehlt `VIEWS`, gibt es keine Hierarchie — und **nie** einen Full-Graph-Render, nur eine root-begrenzte Diagnose-Projektion (§7) | 2026-07 |
 | E19 | View-Definition als **Pfad-Ausdruck** (FR-7.1a): ersetzt `edgeTypes`/`hierarchyEdges`/`visibleNodeTypes`/`render`; Hierarchie aus der Pfad-Reihenfolge; Pfeile = gespeicherte Kantenrichtung; runde Klammern = Verzweigungen, eckige = Render-Modus; Selbst-Hops implizit transitiv; `[hidden]` kontrahiert zu abgeleiteten Kanten | 2026-07 |
+| E20 | Snapshot-Input ist **roh und unversioniert**: keine `validFrom`/`validTo` in Snapshot-Dateien; Validity-Intervalle sind ausschliesslich interne Store-Darstellung und entstehen beim Import (FR-3.6, FR-5.1) | 2026-07 |
+| E21 | Ring-Attachment explizit: `ring:prev`/`ring:next` bestimmen die sichtbare `node`-Station, an welcher der Badge hängt; `[ring]` = Alias für `[ring:prev]`; `[hidden]`-Stationen sind nie Attachment-Ziel (FR-7.1a, FR-7.3) | 2026-07 |
 
 ### 1.4 Nicht-Ziele
 
@@ -48,6 +50,12 @@ Der SBB/SEM-Use-Case verlangt Entitäten, die heute als «Attribute» (farbige R
 ### 1.5 Umsetzungsweg
 
 Big Bang (E9) ist die **Release-Strategie** — es gibt keinen Adapter-Pfad und keinen Parallelbetrieb in `main`. Der Weg dorthin ist eine **vollständige Neuerstellung auf einem separaten Branch** (E16): gleicher Tech-Stack wie heute (dependency-freies Vanilla JS + D3, Sections-Single-File-Build, IndexedDB), getrieben als **Goal-Loop** — implementieren, gegen die Akzeptanzkriterien (§13) und das Übernahme-Inventar (§9) prüfen, nachbessern — bis alle Kriterien erfüllt sind; erst dann wird der Branch nach `main` übernommen.
+
+Aus den Akzeptanzkriterien ergibt sich die **Implementierungsreihenfolge** des Goal-Loops: **(1)** JSON Schemas, Pfad-Parser (FR-7.1a) und Import/Diff-Kern (§5, §6.3) — das Fundament aller weiteren Kriterien (AK 11, 4–6, 13); **(2)** Einmalmigration (§10), damit der SEM-Referenzbestand als Testdatensatz bereitsteht (AK 12); **(3)** View-Projektion (§7); **(4)** Rendering, Legenden und Interaktion (§8, §9; AK 1–2, 7–9); **(5)** Zeit-/Diff-UI (FR-8.6; AK 4, 10). Jede Stufe wird gegen die zugehörigen Akzeptanzkriterien geprüft, bevor die nächste beginnt.
+
+### 1.6 Normativität und Konfliktauflösung
+
+Bei Widersprüchen zwischen den Artefakten gilt die Rangfolge: **PRD** (dieses Dokument) **> JSON Schemas** (`schema/*.schema.json`) **> Beispiele** (`schema/registry.example.json` und alle als Illustration markierten Nennungen, E14). Ein Widerspruch ist immer ein Fehler und wird am niederrangigen Artefakt korrigiert; Schemas dürfen strenger prüfen, als das PRD beschreibt, aber nichts erlauben, was das PRD ausschliesst. [DATA-FORMAT-SPEC.md](DATA-FORMAT-SPEC.md) ist klar markierte **Legacy-v1-Referenz** ausschliesslich für das Migrationsskript (§10) und hat für OrgGraph 2.0 keine normative Kraft; das wiederverwendbare Snapshot-Format ist kompakt in [SNAPSHOT-FORMAT-SPEC.md](SNAPSHOT-FORMAT-SPEC.md) beschrieben — massgeblich bleiben §3 und `schema/snapshot.schema.json`.
 
 ---
 
@@ -61,6 +69,11 @@ Big Bang (E9) ist die **Release-Strategie** — es gibt keinen Adapter-Pfad und 
 | Version | Datensatz eines Knotens/einer Kante mit einem props-Stand und einem Validity-Intervall. |
 | View | Deklarativer Selektor, der aus dem Gesamtgraphen einen darstellbaren, geordneten Teilgraphen projiziert. |
 | Tenant / Profil | Mandant mit eigenem IndexedDB-Object-Store; enthält Graph, Snapshots-Registry und Konfiguration. |
+| Identität | Eindeutiger Knoten (`id`) bzw. eindeutige Kante (`type`+`source`+`target`+`identityProps`) — zeitlos, über alle Versionen hinweg dieselbe. |
+| Versionsrecord | Ein Record-Stand einer Identität mit Validity-Intervall (FR-5.2); eine Identität hat einen oder mehrere Versionsrecords. |
+| Sichtbare Projektion | Der von einer View aus dem Bestand projizierte, gerenderte Teilgraph (roots, Tiefe, Typen, Zeitschnitt). |
+
+Alle Mengenangaben in diesem PRD verwenden diese drei Ebenen: Bestandsgrössen zählen **Identitäten**, Speichergrenzen zählen **Versionsrecords**, Render-Grenzen zählen die **sichtbare Projektion**.
 
 ---
 
@@ -87,7 +100,7 @@ Ein Snapshot ist eine JSON-Datei mit vier Blöcken:
 
 **FR-3.5** IDs sind **stabil** (Quell-PK, URL-ID, E-Mail; notfalls `slug(label)` mit `props.idSource='name'`) — Voraussetzung für Diff und Versionierung.
 
-**FR-3.6** Das Snapshot-Format ist maschinenprüfbar definiert in [`schema/snapshot.schema.json`](schema/snapshot.schema.json) (inkl. `meta.scope` und Versionsfeldern); die Import-Validierung (FR-6.8) prüft dagegen. Views sind analog in [`schema/view.schema.json`](schema/view.schema.json) definiert.
+**FR-3.6** Snapshots sind **roh und unversioniert** (E20): Sie enthalten keine `validFrom`/`validTo` — Validity-Intervalle sind interne Store-Darstellung und entstehen ausschliesslich beim Import (FR-5.1); auch das Migrationsskript (§10) liefert pro Quellstand einen rohen, datierten Snapshot. Das Snapshot-Format ist maschinenprüfbar definiert in [`schema/snapshot.schema.json`](schema/snapshot.schema.json) (inkl. `meta.scope`) und kompakt beschrieben in [SNAPSHOT-FORMAT-SPEC.md](SNAPSHOT-FORMAT-SPEC.md); die Import-Validierung (FR-6.8) prüft dagegen. Views sind analog in [`schema/view.schema.json`](schema/view.schema.json) definiert.
 
 ---
 
@@ -120,7 +133,7 @@ Beispiel-Kantentypen:
 | `amStandort` | Person/OE → Standort |
 | `imGebäude` | Person → Gebäude |
 
-Ein Hierarchie-Flag gibt es in der Registry bewusst nicht (E18): Der Graph ist gerichtet, die Richtungs-Konvention (FR-7.2a) gilt pro Kantentyp — aber **welche** Kantentypen einen Baum aufspannen, bestimmt allein die View über `hierarchyEdges` (§7).
+Ein Hierarchie-Flag gibt es in der Registry bewusst nicht (E18): Der Graph ist gerichtet, die Richtungs-Konvention (FR-7.2a) gilt pro Kantentyp — aber **welche** Kantentypen einen Baum aufspannen, bestimmt allein der Pfad-Ausdruck der View (FR-7.1a).
 
 ### 4.2 Generische Knotentypen (Capabilities)
 
@@ -245,7 +258,7 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 
 ## 7. Views und Projektionen
 
-Eine View projiziert aus dem Gesamtgraphen einen darstellbaren, geordneten Teilgraphen. Views sind in `env.json` vordefiniert und maschinenprüfbar definiert in [`schema/view.schema.json`](schema/view.schema.json). **Hierarchie ist ausschliesslich ein View-Konzept (E18)**: Der Graph selbst ist nur gerichtet; erst der **Pfad-Ausdruck** einer View (E19, FR-7.1a) macht bestimmte Kantentypen zum Baum — die Hierarchie ergibt sich aus der Reihenfolge im Pfad. Fehlt `VIEWS`, gibt es folglich keine Hierarchie — die App stellt dann **alle Knoten** dar (alle Typen, keine Ordnung, alle Order 0, reines Force-Layout) und weist auf die fehlende View-Konfiguration hin; die ausgelieferte Start-View (FR-7.4) ist dagegen explizit definiert.
+Eine View projiziert aus dem Gesamtgraphen einen darstellbaren, geordneten Teilgraphen. Views sind in `env.json` vordefiniert und maschinenprüfbar definiert in [`schema/view.schema.json`](schema/view.schema.json). **Hierarchie ist ausschliesslich ein View-Konzept (E18)**: Der Graph selbst ist nur gerichtet; erst der **Pfad-Ausdruck** einer View (E19, FR-7.1a) macht bestimmte Kantentypen zum Baum — die Hierarchie ergibt sich aus der Reihenfolge im Pfad. Fehlt `VIEWS`, gibt es folglich keine Hierarchie — aber **nie einen Full-Graph-Render** (das Prinzip «nie der ganze Graph», FR-8.1, gilt immer): Die App weist auf die fehlende View-Konfiguration hin und bietet nur eine begrenzte **Diagnose-Projektion** — alle Typen ohne Ordnung (reines Force-Layout), aber ausgehend von per Suche gesetzten Roots und begrenzt durch den Tiefen-Regler (Nachbarschafts-BFS über alle Kantentypen, beide Richtungen); ohne gesetzten Root wird nichts gerendert. Die ausgelieferte Start-View (FR-7.4) ist dagegen explizit definiert.
 
 Beispiel (illustrativ, mit den Beispiel-Typen aus §4.1 — E14):
 
@@ -277,7 +290,7 @@ node-expr := Typ [ "[" render "]" ] [ zweige ]
 zweige    := hop | "(" hop { "," hop } ")"
 hop       := "<--" Kantentyp "--" node-expr     // gespeicherte Kante zeigt zum LINKEN Knoten
            | "--" Kantentyp "-->" node-expr     // gespeicherte Kante zeigt zum RECHTEN Knoten
-render    := "node" | "cluster" | "ring" | "hidden"    // Default: node
+render    := "node" | "cluster" | "hidden" | "ring" [ ":" ("prev" | "next") ]   // Default: node; [ring] = [ring:prev]
 ```
 
 Semantik:
@@ -287,7 +300,20 @@ Semantik:
 - **Selbst-Hops sind implizit transitiv:** Ein Hop, dessen Zieltyp gleich dem Starttyp ist, wendet den **gesamten umgebenden node-expr** auf das Ziel erneut an (Geschwister-Zweige gelten also auf jeder Stufe — jede Person im Org-Baum bekommt OE-Zone und Rollen-Ring), begrenzt durch die Tiefe (FR-7.7). Alle übrigen Hops werden genau einmal angewandt.
 - **Verzweigungen:** Runde Klammern, kommagetrennt; alle Zweige starten am selben Knoten.
 - **`[render]`** setzt den Render-Modus des Typs an dieser Pfadposition (FR-7.3); Default `node`.
+- **Ring-Attachment (E21):** `ring:prev` heftet den Badge an die nächstliegende **vorhergehende** sichtbare `node`-Station des Pfads, `ring:next` an die nächstliegende **nachfolgende**; `[hidden]`-Stationen zählen nicht als Attachment-Ziel; `[ring]` ist Alias für `[ring:prev]`.
 - **`[hidden]` = Kontraktion:** Der Knoten wird nicht gezeichnet; seine sichtbaren Pfad-Nachbarn werden durch eine **abgeleitete Kante** direkt verbunden (stilistisch als abgeleitet erkennbar), und die Ordnung zählt nur sichtbare Stationen — «Kolleg:innen derselben OE» wird so zur direkten Person–Person-Verbindung.
+
+**FR-7.1b Normative Pfad-Beispiele.** Die Typnamen sind Illustration (E14); **normativ ist die jeweils beschriebene Projektions-Semantik** — sie definiert das erwartete Verhalten von Parser und Projektion:
+
+| # | Pfad | Erwartete Projektion |
+|---|------|----------------------|
+| 1 | `Person <--berichtetAn-- Person` | Transitiver Selbst-Hop: Org-Baum abwärts ab den `roots`; jede sichtbare Stufe +1 Ordnung, begrenzt durch die Tiefe (FR-7.7). Nur Personen sichtbar. |
+| 2 | `Person --mitgliedIn--> OE[cluster]` | Reverse-Hop ohne Selbst-Hop: genau **ein** Hop pro Root-Person; deren OEs als Cluster-Hüllen mit Ordnung 1. Keine Rekursion. |
+| 3 | `Person (<--berichtetAn-- Person, --hatRolle--> Rolle[ring])` | Die Selbst-Hop-Transitivität wendet den **ganzen** node-expr rekursiv an: jede Person im Baum erhält ihre Rollen-Badges (`[ring]` = `[ring:prev]` → Badge an der Person selbst). |
+| 4 | `Projekt <--arbeitetAn-- Person --mitgliedIn--> OE[cluster]` | Anker = Projekt (`roots` sind Projekt-IDs); Ordnung: Projekt 0, Person 1, OE 2; kein Selbst-Hop, keine Rekursion. |
+| 5 | `Person --mitgliedIn--> OE[hidden] <--mitgliedIn-- Person` | Hidden-Kontraktion: OE wird nicht gezeichnet; Personen derselben OE sind durch **abgeleitete** Kanten direkt verbunden; Ordnung der Kolleg:innen = 1 (`[hidden]` zählt nicht); die OE bleibt filter- und suchbar. |
+| 6 | `Firma <--arbeitetBei-- Person[hidden] --hatRolle--> Rolle[ring]` | Attachment überspringt `[hidden]`: Die Rollen-Badges hängen an der **Firma** — der Person-Knoten ist unsichtbar und zählt nicht als Attachment-Ziel (E21). |
+| 7 | `OE <--unterstellt-- OE` bei einer Unter-OE mit zwei Ober-OEs im Bestand | Mehrfach-Eltern (E5): **eine** Knoteninstanz, beide `unterstellt`-Kanten werden vollwertig gezeichnet, die flachste Ordnung gewinnt. |
 
 **FR-7.2 Ordnung.** Order 0 = `roots` (Anker); BFS entlang der vom Pfad definierten Hops; jede **sichtbare** Station erhöht die Ordnung um 1 (transitive Selbst-Hops pro Anwendung +1; `[hidden]`-Stationen zählen nicht, FR-7.1a); `order(n)` = kürzeste Distanz zur nächsten Wurzel. Mehrfach-Eltern: **eine** Knoteninstanz (Identität, Suche, Pseudonymisierung und Diff hängen an stabilen IDs), die flachste Ordnung gewinnt, **alle** Kanten werden als vollwertige Verbinder gezeichnet — die gerichteten Filter erzeugen möglichst baumnahe Subgraphen, die sichtbare Mehrfach-Kante ist die legitime Ausnahme (E5); Quer-Verbindungen ohne eigene Syntax: Erreichen mehrere Pfadstellen denselben Knoten, sind die Zusatz-Kanten automatisch Quer-Links ohne Ordnungseffekt. Zyklen: Über transitive Selbst-Hops sollen laut Datenvertrag keine auftreten (der Import warnt, FR-6.8); die BFS nimmt die flachste Distanz und ignoriert Rück-Kanten.
 
@@ -299,7 +325,7 @@ Semantik:
 | `mitgliedIn` | Person (Mitglied) | OE (Container) | `target` → `source` | Legacy Person→OE zeigt bereits Person→OE → **unverändert** |
 | `unterstellt` | Unter-OE | Ober-OE | `target` → `source` | Legacy OE→OE ist **Parent→Child** → wird beim Migrieren **umgedreht** |
 
-**FR-7.3 Render-Modi (pro Pfadposition, FR-7.1a).** `node` = eigenständiger Graph-Knoten mit Kanten (Default); `cluster` = konvexe Hülle um die verbundenen Knoten (heutige OE-Darstellung, jetzt generischer Render-Modus); `hidden` = kontrahiert (FR-7.1a), aber für Filter/Suche verfügbar. **`ring` (formal):** Der `ring`-gerenderte **Zielknoten** eines Hops erscheint als Ring/Badge am anderen Ende des Hops (heutige Attribut-Darstellung); er ist kein eigenständiges Layout-Element, aber voll such-, filter- und legendenfähig — seine Sichtbarkeit steuert die Ring-Legende (FR-8.2), sein Farb-Hue der Typname (FR-4.2a).
+**FR-7.3 Render-Modi (pro Pfadposition, FR-7.1a).** `node` = eigenständiger Graph-Knoten mit Kanten (Default); `cluster` = konvexe Hülle um die verbundenen Knoten (heutige OE-Darstellung, jetzt generischer Render-Modus); `hidden` = kontrahiert (FR-7.1a), aber für Filter/Suche verfügbar. **`ring` (formal, E21):** Ein `ring`-gerenderter Knoten erscheint als Ring/Badge an einer sichtbaren `node`-Station des Pfads (heutige Attribut-Darstellung): `ring:prev` an der nächstliegenden **vorhergehenden**, `ring:next` an der nächstliegenden **nachfolgenden** Station; `[hidden]`-Stationen sind nie Attachment-Ziel, `[ring]` ist Alias für `[ring:prev]`. Der Ring-Knoten ist kein eigenständiges Layout-Element, aber voll such-, filter- und legendenfähig — seine Sichtbarkeit steuert die Ring-Legende (FR-8.2), sein Farb-Hue der Typname (FR-4.2a).
 
 **FR-7.4 Start-View.** Die erste definierte View bildet die heutige aktive Darstellung 1:1 ab — als Pfad: «Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster], --hatRolle--> Rolle[ring])» (die drei migrierten Legacy-Beziehungsarten als Hops; Namen sind Illustration, E14).
 
@@ -315,7 +341,7 @@ Semantik:
 
 ## 8. Funktionale Anforderungen an die App
 
-**FR-8.1 Rendering-Pipeline.** Nie der ganze Graph: View-Projektion (roots + Tiefe + Typen + Zeitschnitt) → Teilgraph → Layout → Render. Force-Layout läuft nur auf dem projizierten Teilgraphen (SEM: 53k Knoten / 114k Kanten im Bestand sind unkritisch, solange die Projektion begrenzt).
+**FR-8.1 Rendering-Pipeline.** Nie der ganze Graph: View-Projektion (roots + Tiefe + Typen + Zeitschnitt) → Teilgraph → Layout → Render. Force-Layout läuft nur auf dem projizierten Teilgraphen (SEM-Referenzbestand: 62k Knoten- / 114k Kanten-**Identitäten** im Bestand sind unkritisch, solange die sichtbare Projektion begrenzt bleibt; Begriffsebenen §2).
 
 **FR-8.2 Legenden, typgetrieben.** Die heutigen drei Legenden verallgemeinern sich: (a) Cluster-Legende = Baum aller `cluster`-gerenderten Knoten der View (heutige OE-Legende) inkl. Filterfeld, Toggle-All, Auge, Kontextmenü; (b) Ring-Legende = Gruppen der `ring`-gerenderten Typen mit Trefferzahlen und Farbchips (heutige Attribut-Legende) inkl. Fokus-Trichter; (c) Ausgeblendet-Legende unverändert. Legend-Row-Factories werden wiederverwendet.
 
@@ -333,7 +359,7 @@ Semantik:
 
 **FR-8.9 Persistenz.** IndexedDB-Profilarchitektur (ein Object-Store pro Tenant, `__meta__`-Store) unverändert; pro Tenant zusätzlich: Graph (Versionen), Snapshots-Registry, env/Views, Pseudo-Daten.
 
-**FR-8.10 Konfiguration.** `env.json` bleibt der Konfigurationsträger: `VIEWS` (neu), bestehende `TOOLBAR_*`- und `LEGEND_*`-Schlüssel behalten ihre Funktion (Blatt-Filter-Default, Richtung, Tiefe, Labels, Zoom, Pseudo, Debug, Simulation, Collapse-Zustände, Hidden-Roots, Start-IDs). `ATTRIBUTE_TYPES`, `DATA_ATTRIBUTES_URL` und `DATA_ATTRIBUTES_DIR` entfallen (Legacy, §10); `DATA_URL` zeigt auf einen Graph-Snapshot.
+**FR-8.10 Konfiguration.** `env.json` bleibt der Konfigurationsträger: `VIEWS` (neu), bestehende `TOOLBAR_*`- und `LEGEND_*`-Schlüssel behalten ihre Funktion (Blatt-Filter-Default, Richtung, Tiefe, Labels, Zoom, Pseudo, Debug, Simulation, Collapse-Zustände, Hidden-Roots, Start-IDs). Der Richtungs-Toggle (`TOOLBAR_DIRECTION_DEFAULT`) operiert dabei auf der **View-Hierarchie**: Er wählt die BFS-Richtung (up/down/both) entlang der Abstiegs-Hops der Projektion (FR-7.2) und übersteuert nie die im Pfad kodierten, gespeicherten Kantenrichtungen — er bleibt unter der Pfad-Semantik unverändert konsistent. `ATTRIBUTE_TYPES`, `DATA_ATTRIBUTES_URL` und `DATA_ATTRIBUTES_DIR` entfallen (Legacy, §10); `DATA_URL` zeigt auf einen Graph-Snapshot.
 
 ---
 
@@ -411,10 +437,12 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 |---|-------------|
 | NFR-1 | Single-File-Auslieferung (`index.html`), offline via `file://`, keine Laufzeit-Dependencies ausser dem eingebetteten D3. |
 | NFR-2 | Skalierung: Bestand bis mindestens **75k Knoten / 200k Kanten inkl. Versionsrecords** in IndexedDB (Referenzbestand: 62k Knoten / 114k Kanten an Identitäten); Projektion und Rendering bleiben flüssig, weil nie der Gesamtgraph gerendert wird (FR-8.1). Das Wachstum der Versionsrecords über viele Snapshots wird bewusst **ohne Vorab-Massnahmen** beobachtet (Entscheid 2026-07); Grenzwerte werden erst bei realem Bedarf nachgezogen. |
-| NFR-3 | Import des SEM-Referenzbestands (62k Knoten / 114k Kanten) dauert unter 30 s auf der Entwickler-Maschine, erzeugt keinen einzelnen Main-Thread-Block über 200 ms und zeigt innert 500 ms nach Import-Start eine Fortschrittsanzeige (Batch-Verarbeitung wie bei der heutigen Fuzzy-Suche). |
+| NFR-3 | Import des SEM-Referenzbestands (62k Knoten- / 114k Kanten-Identitäten) dauert unter 30 s auf der Entwickler-Maschine, erzeugt keinen einzelnen Main-Thread-Block über 200 ms und zeigt innert 500 ms nach Import-Start eine Fortschrittsanzeige (Batch-Verarbeitung wie bei der heutigen Fuzzy-Suche). |
 | NFR-4 | Idempotenz: Re-Import desselben Snapshots, Re-Run des Crawls auf derselben Seite und Re-Run des Migrationsskripts sind No-ops bzw. deterministisch. |
-| NFR-5 | Typ-Agnostik ist prüfbar: kein kanonischer Typname als String-Literal im Engine-Code (Lint-Regel/Testsuche), ausgenommen Registry, Test-Fixtures und Migrationsskript. |
+| NFR-5 | Typ-Agnostik ist prüfbar: kein kanonischer Typname als String-Literal im **Engine-Code** (Lint-Regel/Testsuche). Engine-Code = `src/sections/*.js` und die daraus gebaute `index.html`. **Nicht** Engine-Code und damit ausgenommen: Registry und Snapshots (Daten), `env.json`/`VIEWS` inkl. Start-View (Konfiguration), Test-Fixtures und Playwright-Szenarien, Migrationsskript sowie die Akzeptanzkriterien dieses PRD. |
 | NFR-6 | Pseudonymisierung wirkt überall, wo Labels erscheinen (Graph, Legenden, Tooltips, Suche, Export). |
+| NFR-7 | Die bestehende hohe Testabdeckung bleibt verbindliche Engineering-Leitplanke: neue Parser-, Import-, Diff-, View-Projektions- und Migrationslogik wird automatisiert getestet; die bestehende Coverage-Grenze wird nicht abgesenkt. |
+| NFR-8 | Build-Prinzipien: OrgGraph bleibt eine dependency-arme Vanilla-JS/D3-App. Entwicklung erfolgt modular in `src/sections/*.js`; der Build erzeugt eine einzelne offline lauffähige `index.html`. Keine Frameworks, kein Server, keine Runtime-Bundles, keine Backend-Services; IndexedDB ist die einzige lokale Persistenz. Build und Tests laufen lokal über Node/NPM, die ausgelieferte App benötigt nur Browser + eingebettetes D3. |
 
 ---
 
@@ -429,7 +457,9 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 
 ## 13. Akzeptanzkriterien
 
-1. **Zahlenmässige Äquivalenz (hart, automatisiert):** Die Start-View rendert den migrierten SEM-Referenzbestand mit exakt denselben Brutto-Zahlen wie die heutige App in der Referenz `PRD-Reference-Screenshot.png` (v1.27.14; geladen 62 144 Knoten / 113 874 Kanten / 9 045 OEs; Wurzel «Vincenzo Mascioli», Tiefe 3: **487 sichtbare Knoten, 793 sichtbare Kanten**, 69/69 Ring-Gruppen, 7/2778 ausgeblendet). Geprüft per Playwright: Elementzählung pro SVG-Ebene (Knoten, Kanten, Cluster-Hüllen, Ringe) und Legenden-Einträge — exakter Match.
+Konkrete Typ- und Personennennungen in den Kriterien sind Fixture- und Datenebene (E14, NFR-5-Ausnahme), kein Engine-Code-Auftrag; Mengenangaben folgen den Begriffsebenen aus §2 (Identitäten / Versionsrecords / sichtbare Projektion).
+
+1. **Zahlenmässige Äquivalenz (hart, automatisiert):** Die Start-View rendert den migrierten SEM-Referenzbestand mit exakt denselben Brutto-Zahlen wie die heutige App in der Referenz `PRD-Reference-Screenshot.png` (v1.27.14; geladen 62 144 Knoten- / 113 874 Kanten-Identitäten / 9 045 OEs; Wurzel «Vincenzo Mascioli», Tiefe 3: **487 sichtbare Knoten, 793 sichtbare Kanten**, 69/69 Ring-Gruppen, 7/2778 ausgeblendet). Geprüft per Playwright: Elementzählung pro SVG-Ebene (Knoten, Kanten, Cluster-Hüllen, Ringe) und Legenden-Einträge — exakter Match.
 2. **Visuelle Äquivalenz (dokumentierte Sichtprüfung):** Playwright-Screenshot derselben Szene (gleicher Datenstand, gleiche Wurzel/Tiefe/Richtung, Viewport wie Referenz) wird neben `PRD-Reference-Screenshot.png` abgelegt und verglichen; da das Force-Layout nicht deterministisch ist, gilt Kriterium 1 als harte Prüfung, der Screenshot-Vergleich dokumentiert Layout-Charakter, Farben, Ringe, Legenden und Footer.
 3. Ein AdminDir-Crawl (Phase A → Gate → Phase B) liefert einen validen Snapshot mit `meta.scope`, der ohne Handarbeit importierbar ist.
 4. Zwei Snapshots desselben Scopes mit einer entfernten Identität, einer geänderten skalaren Property und einem neuen Knoten ergeben nach Import: geschlossene Version, zwei Versionen mit Property-Diff, neue Identität — und der `diff`-Modus zeigt alle drei Fälle an.

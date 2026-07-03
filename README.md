@@ -149,6 +149,8 @@ Die App wird über eine Env-Datei im JSON-Format konfiguriert (Vorlage:
 
 ## Datenformat
 
+> **Legacy bis Big Bang:** Das folgende Format ist das **Alt-Format v1** und gilt bis zur Umstellung auf den typisierten Property-Graphen (PRD.md). Das künftige Snapshot-Format ist in SNAPSHOT-FORMAT-SPEC.md definiert; das Alt-Format bleibt als Migrationsquelle in DATA-FORMAT-SPEC.md dokumentiert.
+
 Die App erwartet eine Datei `data.json` oder `data.generated.json` im `orggraph/` Verzeichnis mit folgendem Format:
 
 - **`persons`**: Array von Personen-Objekten
