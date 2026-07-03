@@ -38,6 +38,20 @@
             {
               "dependentRequired": { "roots": ["edgeSources"] },
               "$comment": "Rooted snapshots must declare the actually visited source nodes as edgeSources (PRD E59); the harvest spec reuses the scope def without this constraint because edgeSources is filled at run time."
+            },
+            {
+              "if": {
+                "properties": {
+                  "nodeTypes": { "maxItems": 0 },
+                  "edgeTypes": { "minItems": 1 }
+                },
+                "required": ["nodeTypes", "edgeTypes"]
+              },
+              "then": {
+                "required": ["edgeSources"],
+                "properties": { "edgeSources": { "minItems": 1 } }
+              },
+              "$comment": "Enrichment snapshots (empty nodeTypes, non-empty edgeTypes) must declare non-empty edgeSources — without visited sources there is no edge closure (PRD E59, FR-6.8)."
             }
           ]
         }
