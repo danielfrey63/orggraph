@@ -13,7 +13,11 @@
       "additionalProperties": true,
       "properties": {
         "source": { "type": "string", "description": "Source URL or system (PRD FR-3.1)." },
-        "crawledAt": { "type": "string", "description": "ISO timestamp of the crawl/migration run." },
+        "crawledAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})$",
+          "description": "RFC3339 timestamp of the crawl/migration run WITH explicit offset or Z — offsetless values are rejected (PRD E50); meta.snapshot must equal its UTC minute."
+        },
         "snapshot": {
           "type": "string",
           "pattern": "^[0-9]{8}-[0-9]{4}$",
