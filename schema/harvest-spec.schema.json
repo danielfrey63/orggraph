@@ -12,7 +12,11 @@
       "required": ["provider", "specVersion", "registryVersion"],
       "additionalProperties": true,
       "properties": {
-        "provider": { "type": "string" },
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Canonical provider/source identifier (PRD E62): must equal the meta.source of every snapshot phase B emits; the phase B preflight verifies this."
+        },
         "specVersion": {
           "type": "string",
           "description": "Version stamp referenced by phase-b-harvest.js (PRD E31)."
