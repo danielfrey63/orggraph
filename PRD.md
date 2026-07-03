@@ -35,7 +35,8 @@ Der SBB/SEM-Use-Case verlangt Entitäten, die heute als «Attribute» (farbige R
 | E15 | Kanten-Identität = `type`+`source`+`target` **plus** die im Schema deklarierten `identityProps` (z. B. `kontext`) — sonst kollidieren gleichzeitige gleiche Rollen bei verschiedenen Firmen (FR-5.2) | 2026-07 |
 | E16 | Umsetzungsweg: vollständige Neuerstellung auf separatem Branch, als Goal-Loop gegen die Akzeptanzkriterien (§13) getrieben; Tech-Stack unverändert (§1.5) | 2026-07 |
 | E17 | Kantenrichtung: Kanten zeigen **vom Untergeordneten zum Übergeordneten** (Namen lesen sich als Satz); Baum-Abstieg traversiert gegen die Kantenrichtung; Legacy-Richtungen werden bei der Migration normalisiert (FR-7.2a) | 2026-07 |
-| E18 | **Hierarchie ist ausschliesslich ein View-Konzept**: kein `hierarchy`-Flag in der Registry; die `hierarchyEdges` der View sind die einzige Quelle. Fehlt `VIEWS`, werden alle Knoten ohne Ordnung dargestellt (§7) | 2026-07 |
+| E18 | **Hierarchie ist ausschliesslich ein View-Konzept**: kein `hierarchy`-Flag in der Registry; die View definiert allein, was den Baum aufspannt. Fehlt `VIEWS`, werden alle Knoten ohne Ordnung dargestellt (§7) | 2026-07 |
+| E19 | View-Definition als **Pfad-Ausdruck** (FR-7.1a): ersetzt `edgeTypes`/`hierarchyEdges`/`visibleNodeTypes`/`render`; Hierarchie aus der Pfad-Reihenfolge; Pfeile = gespeicherte Kantenrichtung; runde Klammern = Verzweigungen, eckige = Render-Modus; Selbst-Hops implizit transitiv; `[hidden]` kontrahiert zu abgeleiteten Kanten | 2026-07 |
 
 ### 1.4 Nicht-Ziele
 
@@ -236,7 +237,7 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 
 **FR-6.7 Eingang.** Snapshots gelangen per Drag&Drop (bestehende Dropzone) oder Dateidialog in die App; Erkennung inhaltsbasiert (`meta.snapshot` + `schema` + `nodes`/`edges`).
 
-**FR-6.8 Validierung.** Vor dem Diff: Schema ist Teilmenge der im Tenant bekannten Registry; Kanten-Endpunkte existieren (im Snapshot oder im Bestand) und respektieren `from`/`to`; Knoten-Referenz-Properties (FR-4.7) zeigen auf existierende Knoten des deklarierten Typs; implizierte Kanten werden materialisiert und die Konsistenz-Invariante geprüft (FR-4.8); IDs eindeutig; Zyklen-Warnung pro definierter View: Bilden deren `hierarchyEdges` im neuen Bestand Zyklen, wird mit Details gewarnt (kein stiller Drop; die BFS bleibt robust, FR-7.2).
+**FR-6.8 Validierung.** Vor dem Diff: Schema ist Teilmenge der im Tenant bekannten Registry; Kanten-Endpunkte existieren (im Snapshot oder im Bestand) und respektieren `from`/`to`; Knoten-Referenz-Properties (FR-4.7) zeigen auf existierende Knoten des deklarierten Typs; implizierte Kanten werden materialisiert und die Konsistenz-Invariante geprüft (FR-4.8); IDs eindeutig; Zyklen-Warnung pro definierter View: Bilden die transitiven Selbst-Hops ihres Pfads im neuen Bestand Zyklen, wird mit Details gewarnt (kein stiller Drop; die BFS bleibt robust, FR-7.2).
 
 **FR-6.9 Fortschreibung.** Diff nach FR-5.6 gegen den Tenant-Store, Versionsfortschreibung, Plausibilitäts-Gate (FR-5.7), Toast-Zusammenfassung (FR-5.8). Eine Snapshots-Registry im Tenant-Store verzeichnet importierte Snapshot-Stempel; ein bereits importierter Snapshot wird erkannt und ist ein No-op (**Idempotenz**). Snapshots müssen chronologisch importiert werden; ein älterer Stempel als der jüngste importierte wird mit Hinweis abgewiesen.
 
@@ -244,35 +245,53 @@ Die Gewinnung ist bewusst **einstufig**: Jeder Provider-Crawler erzeugt **direkt
 
 ## 7. Views und Projektionen
 
-Eine View projiziert aus dem Gesamtgraphen einen darstellbaren, geordneten Teilgraphen. Views sind in `env.json` vordefiniert und maschinenprüfbar definiert in [`schema/view.schema.json`](schema/view.schema.json). **Hierarchie ist ausschliesslich ein View-Konzept (E18)**: Der Graph selbst ist nur gerichtet; erst `hierarchyEdges` einer View machen bestimmte Kantentypen zum Baum. Fehlt `VIEWS`, gibt es folglich keine Hierarchie — die App stellt dann **alle Knoten** dar (alle Typen, keine Ordnung, alle Order 0, reines Force-Layout) und weist auf die fehlende View-Konfiguration hin; die ausgelieferte Start-View (FR-7.4) ist dagegen explizit definiert.
+Eine View projiziert aus dem Gesamtgraphen einen darstellbaren, geordneten Teilgraphen. Views sind in `env.json` vordefiniert und maschinenprüfbar definiert in [`schema/view.schema.json`](schema/view.schema.json). **Hierarchie ist ausschliesslich ein View-Konzept (E18)**: Der Graph selbst ist nur gerichtet; erst der **Pfad-Ausdruck** einer View (E19, FR-7.1a) macht bestimmte Kantentypen zum Baum — die Hierarchie ergibt sich aus der Reihenfolge im Pfad. Fehlt `VIEWS`, gibt es folglich keine Hierarchie — die App stellt dann **alle Knoten** dar (alle Typen, keine Ordnung, alle Order 0, reines Force-Layout) und weist auf die fehlende View-Konfiguration hin; die ausgelieferte Start-View (FR-7.4) ist dagegen explizit definiert.
 
 Beispiel (illustrativ, mit den Beispiel-Typen aus §4.1 — E14):
 
 ```json
 "VIEWS": {
   "Personenhierarchie": {
+    "path": "Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster], --hatRolle--> Rolle[ring])",
     "roots": ["__auto__"],
-    "edgeTypes": ["berichtetAn", "mitgliedIn", "unterstellt", "hatRolle"],
-    "hierarchyEdges": ["berichtetAn", "mitgliedIn", "unterstellt"],
-    "visibleNodeTypes": ["Person", "OE"],
-    "render": { "OE": "cluster", "Rolle": "ring", "Team": "ring", "Training": "ring", "Projekt": "ring" },
     "depth": 3
   },
   "Projekt-Sicht": {
-    "roots": ["proj-zi"],
-    "edgeTypes": ["arbeitetAn", "hatRolle", "mitgliedIn"],
-    "hierarchyEdges": ["arbeitetAn"],
-    "visibleNodeTypes": ["Projekt", "Person", "OE"],
-    "render": { "Rolle": "ring" }
+    "path": "Projekt <--arbeitetAn-- Person (--hatRolle--> Rolle[ring], --mitgliedIn--> OE)",
+    "roots": ["proj-zi"]
+  },
+  "Kolleg:innen-Sicht": {
+    "path": "Person --mitgliedIn--> OE[hidden] <--mitgliedIn-- Person",
+    "roots": ["__auto__"]
   }
 }
 ```
 
-**FR-7.1 View-Felder.** `roots` (Wurzel-IDs; `"__auto__"` = Knoten ohne eingehende Kante eines `hierarchyEdges`-Typs dieser View), `edgeTypes` (traversierte/gezeigte Kantentypen), `hierarchyEdges` (Pflichtfeld; Teilmenge der `edgeTypes`, die den Baum aufspannt — die **einzige** Quelle der Hierarchie, E18), `visibleNodeTypes` (gilt nur für **eigenständig gerenderte** Knoten, Modi `node`/`cluster`; `ring`-Zieltypen erscheinen unabhängig davon über ihre Kante, FR-7.3; `"*"` = alle erreichbaren), `render` (pro Typ, §7.3), `depth` (optionaler Start-Tiefenwert), `time` (optional `asOf`/`diff`, §5), `filters` (optionale deklarative Einschränkungen, FR-7.8).
+**FR-7.1 View-Felder.** `path` (Pflichtfeld; der Pfad-Ausdruck, FR-7.1a), `roots` (Wurzel-IDs, Instanzen des Anker-Typs; `"__auto__"` = Knoten des Anker-Typs ohne **ausgehende** Kante eines am Anker beginnenden transitiven Selbst-Hops — bei «Person <--berichtetAn-- Person» also die obersten Vorgesetzten; ohne Selbst-Hop am Anker: alle Knoten des Anker-Typs), `depth` (optionaler Start-Tiefenwert), `time` (optional `asOf`/`diff`, §5), `filters` (optionale deklarative Einschränkungen, FR-7.8).
 
-**FR-7.2 Ordnung.** Order 0 = `roots`; BFS ausschliesslich entlang der `hierarchyEdges`, abwärts gemäss FR-7.2a; `order(n)` = kürzeste Distanz zur nächsten Wurzel. Mehrfach-Eltern: **eine** Knoteninstanz (Identität, Suche, Pseudonymisierung und Diff hängen an stabilen IDs), flachste Hierarchie-Kante bestimmt die Ordnung, **alle** Eltern-Kanten werden als vollwertige Verbinder gezeichnet — die gerichteten Filter erzeugen möglichst baumnahe Subgraphen, die sichtbare Mehrfach-Kante ist die legitime Ausnahme. Zyklen: Über die `hierarchyEdges` einer View sollen laut Datenvertrag keine auftreten (der Import warnt, FR-6.8); die BFS nimmt die flachste Distanz und ignoriert Rück-Kanten. Nicht über `hierarchyEdges` Erreichbares erscheint nur als Quer-Link-Ziel. Übrige `edgeTypes` sind Quer-Verbindungen ohne Ordnungseffekt.
+**FR-7.1a Pfad-Ausdruck (E19).** Der Pfad definiert vollständig, welche Knoten- und Kantentypen die View zeigt, wie sie gerendert werden und was den Baum aufspannt — er ersetzt die früheren Felder `edgeTypes`/`hierarchyEdges`/`visibleNodeTypes`/`render`. Grammatik:
 
-**FR-7.2a Kantenrichtung (normative Konvention, E17).** Kanten zeigen **vom Untergeordneten zum Übergeordneten** (`source` = Kind/Mitglied/Beteiligte:r, `target` = Eltern/Container/Bezugsobjekt) — die Kantennamen lesen sich als Satz («A berichtetAn B» = B ist Vorgesetzte:r). Diese Konvention gilt für **alle** Kantentypen; sie ist es, die es jeder View erlaubt, einen beliebigen Kantentyp als `hierarchyEdges` zu designieren: Der Baum-Abstieg von den `roots` (Ordnung FR-7.2, Scope-Traversal FR-5.5a) traversiert dann einheitlich **gegen** die Kantenrichtung (`target` → `source`). Für die Beispiel-Typen (E14) und das Legacy-Mapping gilt:
+```
+view      := node-expr
+node-expr := Typ [ "[" render "]" ] [ zweige ]
+zweige    := hop | "(" hop { "," hop } ")"
+hop       := "<--" Kantentyp "--" node-expr     // gespeicherte Kante zeigt zum LINKEN Knoten
+           | "--" Kantentyp "-->" node-expr     // gespeicherte Kante zeigt zum RECHTEN Knoten
+render    := "node" | "cluster" | "ring" | "hidden"    // Default: node
+```
+
+Semantik:
+
+- **Anker:** Der linkeste Typ ist der Anker; dort greifen `roots` und die Laufzeit-Roots (FR-7.6).
+- **Pfeile = gespeicherte Kantenrichtung.** Mit der Richtungs-Konvention (FR-7.2a) lesen sich Abstiege als `<--` (Untergebene einsammeln) und Zuordnungen als `-->` (Container/Objekte anhängen).
+- **Selbst-Hops sind implizit transitiv:** Ein Hop, dessen Zieltyp gleich dem Starttyp ist, wendet den **gesamten umgebenden node-expr** auf das Ziel erneut an (Geschwister-Zweige gelten also auf jeder Stufe — jede Person im Org-Baum bekommt OE-Zone und Rollen-Ring), begrenzt durch die Tiefe (FR-7.7). Alle übrigen Hops werden genau einmal angewandt.
+- **Verzweigungen:** Runde Klammern, kommagetrennt; alle Zweige starten am selben Knoten.
+- **`[render]`** setzt den Render-Modus des Typs an dieser Pfadposition (FR-7.3); Default `node`.
+- **`[hidden]` = Kontraktion:** Der Knoten wird nicht gezeichnet; seine sichtbaren Pfad-Nachbarn werden durch eine **abgeleitete Kante** direkt verbunden (stilistisch als abgeleitet erkennbar), und die Ordnung zählt nur sichtbare Stationen — «Kolleg:innen derselben OE» wird so zur direkten Person–Person-Verbindung.
+
+**FR-7.2 Ordnung.** Order 0 = `roots` (Anker); BFS entlang der vom Pfad definierten Hops; jede **sichtbare** Station erhöht die Ordnung um 1 (transitive Selbst-Hops pro Anwendung +1; `[hidden]`-Stationen zählen nicht, FR-7.1a); `order(n)` = kürzeste Distanz zur nächsten Wurzel. Mehrfach-Eltern: **eine** Knoteninstanz (Identität, Suche, Pseudonymisierung und Diff hängen an stabilen IDs), die flachste Ordnung gewinnt, **alle** Kanten werden als vollwertige Verbinder gezeichnet — die gerichteten Filter erzeugen möglichst baumnahe Subgraphen, die sichtbare Mehrfach-Kante ist die legitime Ausnahme (E5); Quer-Verbindungen ohne eigene Syntax: Erreichen mehrere Pfadstellen denselben Knoten, sind die Zusatz-Kanten automatisch Quer-Links ohne Ordnungseffekt. Zyklen: Über transitive Selbst-Hops sollen laut Datenvertrag keine auftreten (der Import warnt, FR-6.8); die BFS nimmt die flachste Distanz und ignoriert Rück-Kanten.
+
+**FR-7.2a Kantenrichtung (normative Konvention, E17).** Kanten zeigen **vom Untergeordneten zum Übergeordneten** (`source` = Kind/Mitglied/Beteiligte:r, `target` = Eltern/Container/Bezugsobjekt) — die Kantennamen lesen sich als Satz («A berichtetAn B» = B ist Vorgesetzte:r). Diese Konvention gilt für **alle** Kantentypen; sie ist es, die Pfad-Ausdrücke lesbar macht (Abstiege `<--`, Zuordnungen `-->`, FR-7.1a) und dem Scope-Traversal (FR-5.5a) seine einheitliche Abstiegs-Richtung **gegen** die Kantenrichtung (`target` → `source`) gibt. Für die Beispiel-Typen (E14) und das Legacy-Mapping gilt:
 
 | Kantentyp (Beispiel) | `source` (Rolle) | `target` (Rolle) | BFS-abwärts | Legacy-Mapping (FR-10.3) |
 |---|---|---|---|---|
@@ -280,13 +299,13 @@ Beispiel (illustrativ, mit den Beispiel-Typen aus §4.1 — E14):
 | `mitgliedIn` | Person (Mitglied) | OE (Container) | `target` → `source` | Legacy Person→OE zeigt bereits Person→OE → **unverändert** |
 | `unterstellt` | Unter-OE | Ober-OE | `target` → `source` | Legacy OE→OE ist **Parent→Child** → wird beim Migrieren **umgedreht** |
 
-**FR-7.3 Render-Modi pro Typ und View.** `node` = eigenständiger Graph-Knoten mit Kanten; `cluster` = konvexe Hülle um die verbundenen Knoten (heutige OE-Darstellung, jetzt generischer Render-Modus); `hidden` = ausgeblendet, aber für Filter/Suche verfügbar. **`ring` (formal):** Der `ring`-gerenderte **Zielknoten** einer Kante erscheint als Ring/Badge am **`source`-Knoten** dieser Kante (heutige Attribut-Darstellung); er ist kein eigenständiges Layout-Element und zählt nicht zu `visibleNodeTypes`, ist aber voll such-, filter- und legendenfähig — seine Sichtbarkeit steuert die Ring-Legende (FR-8.2), sein Farb-Hue der Typname (FR-4.2a). Default für erreichte, nicht deklarierte Typen ist `node`.
+**FR-7.3 Render-Modi (pro Pfadposition, FR-7.1a).** `node` = eigenständiger Graph-Knoten mit Kanten (Default); `cluster` = konvexe Hülle um die verbundenen Knoten (heutige OE-Darstellung, jetzt generischer Render-Modus); `hidden` = kontrahiert (FR-7.1a), aber für Filter/Suche verfügbar. **`ring` (formal):** Der `ring`-gerenderte **Zielknoten** eines Hops erscheint als Ring/Badge am anderen Ende des Hops (heutige Attribut-Darstellung); er ist kein eigenständiges Layout-Element, aber voll such-, filter- und legendenfähig — seine Sichtbarkeit steuert die Ring-Legende (FR-8.2), sein Farb-Hue der Typname (FR-4.2a).
 
-**FR-7.4 Start-View.** Die erste definierte View bildet die heutige aktive Darstellung 1:1 ab: Ihre `hierarchyEdges` zählen explizit die Kantentypen auf, die den heutigen Org-Baum bilden (aus der Migration: die drei Legacy-Beziehungsarten). Die konkreten Namen («Personenhierarchie», `berichtetAn`, …) sind Illustration (E14).
+**FR-7.4 Start-View.** Die erste definierte View bildet die heutige aktive Darstellung 1:1 ab — als Pfad: «Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster], --hatRolle--> Rolle[ring])» (die drei migrierten Legacy-Beziehungsarten als Hops; Namen sind Illustration, E14).
 
 **FR-7.5 View-Wechsel.** Footer-Switcher analog zum bestehenden Profil-Switcher; View-Wechsel setzt Laufzeit-Übersteuerungen (FR-7.6/7.7) zurück.
 
-**FR-7.6 Laufzeit-roots.** Die bestehende Such-Combo bleibt: Auswahl ersetzt die View-`roots` (`setSingleRoot`), Shift-Klick/Shift-Enter fügt den Treffer als weiteren Root hinzu (`addRoot`, max. 5). Die Suche läuft über alle `visibleNodeTypes` der aktiven View mit deren `identifiers`-Capability. Die View-Definition bleibt unverändert (temporäre Übersteuerung).
+**FR-7.6 Laufzeit-roots.** Die bestehende Such-Combo bleibt: Auswahl ersetzt die View-`roots` (`setSingleRoot`), Shift-Klick/Shift-Enter fügt den Treffer als weiteren Root hinzu (`addRoot`, max. 5). Die Suche läuft über alle **sichtbaren Typen des Pfads** (nicht-`hidden`) mit deren `identifiers`-Capability; als Root gesetzt werden Knoten des **Anker-Typs**, Treffer anderer Typen zentrieren die Ansicht auf den Knoten. Die View-Definition bleibt unverändert (temporäre Übersteuerung).
 
 **FR-7.7 Laufzeit-Tiefe.** Der View-`depth` ist der Startwert; der bestehende Toolbar-Regler (0–6) übersteuert zur Laufzeit.
 
@@ -308,7 +327,7 @@ Beispiel (illustrativ, mit den Beispiel-Typen aus §4.1 — E14):
 
 **FR-8.6 Zeit-UI.** Neuer Zeit-Slider (asOf) und Diff-Auswahl (T1/T2) in der Toolbar oder im Footer, nur aktiv, wenn der Tenant mehr als einen Snapshot-Stand enthält.
 
-**FR-8.7 Kontextmenü.** Rechtsklick auf Knoten: Ausblenden (Subtree über Hierarchie-Kanten der View), Als Root definieren / entfernen — typunabhängig. Das Attribut-Editier-Submenü entfällt (Datenpflege geschieht an der Quelle bzw. im Crawl, nicht im Viewer).
+**FR-8.7 Kontextmenü.** Rechtsklick auf Knoten: Ausblenden (Subtree über die Abstiegs-Hops des View-Pfads), Als Root definieren / entfernen — typunabhängig. Das Attribut-Editier-Submenü entfällt (Datenpflege geschieht an der Quelle bzw. im Crawl, nicht im Viewer).
 
 **FR-8.8 Export.** SVG/PNG-Export-Dialog unverändert.
 
@@ -344,13 +363,13 @@ Grundsatz (E12): Alle passenden UI-Elemente, Algorithmen und Eigenschaften werde
 
 | Baustein | Heute hardcoded | Neu |
 |----------|-----------------|-----|
-| **Radiales Initial-Layout + BFS-Expansion** (`initializeRadialLayout`, `radialLayoutExpansion`, Hüllen-Platzierung sekundärer Roots) | nur Personen-Knoten, Parent-Map aus Person-Person-Links | **Algorithmus identisch**; arbeitet auf den `node`-gerenderten Knoten des projizierten Teilgraphen, Parent-Map aus `hierarchyEdges` |
+| **Radiales Initial-Layout + BFS-Expansion** (`initializeRadialLayout`, `radialLayoutExpansion`, Hüllen-Platzierung sekundärer Roots) | nur Personen-Knoten, Parent-Map aus Person-Person-Links | **Algorithmus identisch**; arbeitet auf den `node`-gerenderten Knoten des projizierten Teilgraphen, Parent-Map aus den Abstiegs-Hops des View-Pfads |
 | **Force-Simulation** (D3-Forces, Parameter aus CSS-Vars, Kollisionsradius inkl. Ringe) | Kanten-/Cluster-Logik Person/OE | **Kräfte und Parameter identisch**; Ringe = `ring`-gerenderte Nachbarn, Cluster = `cluster`-gerenderte Knoten |
-| **Hierarchie-Layout** (`computeHierarchyLevels`, forceX/forceY-Gruppierung) | Manager→Mitarbeiter-Kanten, OE-Cluster-Zentren | Levels über `hierarchyEdges` der View; Gruppierung um Zentren der `cluster`-Knoten |
-| BFS-Subgraph `computeSubgraph` (Tiefe, Richtung up/down/both) | typgesteuerte Kantenfilter (Person→Org-Unterdrückung etc.) | Traversal über `edgeTypes`/`hierarchyEdges` der View; Richtungs-Semantik aus Kantenrichtung statt Typpaaren |
+| **Hierarchie-Layout** (`computeHierarchyLevels`, forceX/forceY-Gruppierung) | Manager→Mitarbeiter-Kanten, OE-Cluster-Zentren | Levels über die Pfad-Ordnung (FR-7.2); Gruppierung um Zentren der `cluster`-Knoten |
+| BFS-Subgraph `computeSubgraph` (Tiefe, Richtung up/down/both) | typgesteuerte Kantenfilter (Person→Org-Unterdrückung etc.) | Traversal über die Hops des View-Pfads; Richtungs-Semantik pro Hop explizit statt aus Typpaaren |
 | Cluster-Hüllen (`refreshClusters`, `computeClusterPolygon`, Punkt-in-Polygon) | OE-Hierarchie fix | Render-Modus `cluster` für beliebige Typen; Hüllen-Hierarchie über die Kanten zwischen Cluster-Knoten |
 | Blatt-Filter («Management») | `isBasis` an Personen | `leafProp`-Capability (FR-8.3) |
-| Subtree-Ausblenden (`collectReportSubtree`) | nur Person→Person | Hierarchie-Kanten der View |
+| Subtree-Ausblenden (`collectReportSubtree`) | nur Person→Person | Abstiegs-Hops des View-Pfads |
 | Ring-Fokus (`recomputeAttributeFocusHidden`) | Aufwärtskanten fix | View-Kanten (FR-8.3) |
 | Pseudonymisierung (`getPseudoName`/`getPseudoOrgLabel`) | Person/OE-Verzweigung | `pseudonymize`-Capability (FR-8.5) |
 | Fuzzy-Suche (Domäne) | `raw.persons`, id/email/label | `identifiers`-Capability über sichtbare Typen |

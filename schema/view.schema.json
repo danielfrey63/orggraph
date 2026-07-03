@@ -2,39 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/danielfrey63/orggraph/schema/view.schema.json",
   "title": "OrgGraph view definitions",
-  "description": "Shape of the VIEWS object in env.json: named declarative projections over the graph (PRD §7).",
+  "description": "Shape of the VIEWS object in env.json: named declarative projections over the graph (PRD §7). Each view is defined by a path expression (PRD FR-7.1a / E19) that fully determines shown types, render modes, and the tree-spanning hops; hierarchy is purely a view concept (PRD E18).",
   "type": "object",
   "minProperties": 1,
   "additionalProperties": { "$ref": "#/$defs/view" },
   "$defs": {
     "view": {
       "type": "object",
-      "required": ["roots", "edgeTypes", "hierarchyEdges", "visibleNodeTypes"],
+      "required": ["path", "roots"],
       "additionalProperties": false,
       "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path expression, e.g. \"Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster], --hatRolle--> Rolle[ring])\". Grammar and semantics in PRD FR-7.1a: arrows encode the stored edge direction; round parentheses branch; square brackets set the render mode (node|cluster|ring|hidden, default node); self-typed hops are implicitly transitive; [hidden] nodes are contracted into derived edges."
+        },
         "roots": {
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Node ids; \"__auto__\" = nodes without an incoming hierarchy edge (PRD FR-7.1)."
-        },
-        "edgeTypes": { "type": "array", "items": { "type": "string" } },
-        "hierarchyEdges": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Subset of edgeTypes spanning the tree; the sole source of hierarchy — hierarchy is purely a view concept (PRD E18, FR-7.1)."
-        },
-        "visibleNodeTypes": {
-          "description": "Applies to independently rendered nodes only (modes node/cluster); ring targets appear via their edge (PRD FR-7.3). \"*\" = all reachable.",
-          "oneOf": [
-            { "const": "*" },
-            { "type": "array", "items": { "type": "string" } }
-          ]
-        },
-        "render": {
-          "type": "object",
-          "additionalProperties": { "enum": ["node", "cluster", "ring", "hidden"] },
-          "description": "Render mode per node type; default for undeclared reached types is node (PRD FR-7.3)."
+          "description": "Node ids of the anchor type; \"__auto__\" = anchor nodes without an outgoing edge of a transitive self-hop starting at the anchor (PRD FR-7.1)."
         },
         "depth": {
           "type": "integer",
