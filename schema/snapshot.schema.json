@@ -36,8 +36,12 @@
           "allOf": [
             { "$ref": "#/$defs/scope" },
             {
-              "dependentRequired": { "roots": ["edgeSources"] },
-              "$comment": "Rooted snapshots must declare the actually visited source nodes as edgeSources (PRD E59); the harvest spec reuses the scope def without this constraint because edgeSources is filled at run time."
+              "if": { "required": ["roots"] },
+              "then": {
+                "required": ["edgeSources"],
+                "properties": { "edgeSources": { "minItems": 1 } }
+              },
+              "$comment": "Rooted snapshots must declare the actually visited source nodes as NON-EMPTY edgeSources (PRD E59, FR-6.8); the harvest spec reuses the scope def without this constraint because edgeSources is filled at run time."
             },
             {
               "if": {

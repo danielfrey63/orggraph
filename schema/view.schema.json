@@ -21,7 +21,7 @@
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Node ids of the anchor type; \"__auto__\" = anchor nodes without an outgoing edge of a transitive self-hop starting at the anchor (PRD FR-7.1)."
+          "description": "Node ids of the anchor type; \"__auto__\" = the roots of the tree spanned by the anchor self-hop, relative to hop traversal direction (PRD FR-7.1, E45): for <--Typ-- (descent against stored direction) nodes WITHOUT an outgoing edge of that type, for --Typ--> (traversal along stored direction) nodes WITHOUT an incoming edge. Only allowed when exactly one transitive self-hop starts at the anchor."
         },
         "depth": {
           "type": "integer",
