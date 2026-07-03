@@ -41,10 +41,14 @@
       }
     },
     "mapping": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/mappingRule" },
-      "description": "Gate-confirmed mapping source field -> registry type/edge/property; nothing outside this mapping is exported (PRD FR-6.1 phase B)."
+      "type": "object",
+      "required": ["nodes", "edges"],
+      "additionalProperties": false,
+      "description": "Gate-confirmed mapping; carries ALL semantics (PRD FR-6.1c, E42) — nothing outside this mapping is exported, phase B adds only mechanics. Extraction rules are JSON paths, selectors, or templates as identified in the source contract.",
+      "properties": {
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/nodeMapping" } },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/edgeMapping" } }
+      }
     },
     "scope": {
       "$ref": "snapshot.schema.json#/$defs/scope",
@@ -71,30 +75,36 @@
     }
   },
   "$defs": {
-    "mappingRule": {
+    "nodeMapping": {
       "type": "object",
-      "required": ["source", "target"],
+      "required": ["type", "idFrom", "labelFrom"],
       "additionalProperties": false,
+      "description": "One registry node type: how id, label, and props are derived from the source (PRD E42).",
       "properties": {
-        "source": {
-          "type": "string",
-          "description": "Source field: selector, JSON path, or field name as identified in the source contract."
-        },
-        "target": {
+        "type": { "type": "string", "description": "Registry node type." },
+        "idFrom": { "type": "string", "description": "Stable-id extraction rule (PRD FR-6.2); fallback ids must be namespaced <source>:<Typ>:<slug(label)> (PRD E41)." },
+        "labelFrom": { "type": "string", "description": "Label extraction rule (canonical display name, PRD FR-4.2b)." },
+        "props": {
           "type": "object",
-          "required": ["kind"],
-          "additionalProperties": false,
-          "properties": {
-            "kind": { "enum": ["node", "edge", "prop", "label", "id"] },
-            "type": { "type": "string", "description": "Registry node/edge type (required for kind node/edge; prop owner type for kind prop)." },
-            "prop": { "type": "string", "description": "Target property name (kind: prop)." }
-          },
-          "allOf": [
-            {
-              "if": { "properties": { "kind": { "enum": ["node", "edge", "prop"] } } },
-              "then": { "required": ["kind", "type"] }
-            }
-          ]
+          "additionalProperties": { "type": "string" },
+          "description": "Target prop name -> extraction rule; scalar values only (PRD FR-4.5)."
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "edgeMapping": {
+      "type": "object",
+      "required": ["type", "sourceFrom", "targetFrom"],
+      "additionalProperties": false,
+      "description": "One registry edge type: endpoint and prop extraction. Must cover every identityProp and reference prop (ref/implies) the registry declares for this type — the gate rejects specs with missing identityProps (PRD FR-6.1c, E42).",
+      "properties": {
+        "type": { "type": "string", "description": "Registry edge type." },
+        "sourceFrom": { "type": "string", "description": "Extraction rule for the source node id (subordinate side, PRD FR-7.2a)." },
+        "targetFrom": { "type": "string", "description": "Extraction rule for the target node id (superior/container side)." },
+        "props": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Target prop name -> extraction rule; includes identityProps and reference props (values are node ids)."
         },
         "notes": { "type": "string" }
       }
