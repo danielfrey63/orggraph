@@ -7,7 +7,7 @@ Kompakte Referenz für das wiederverwendbare Snapshot-Format von OrgGraph 2.0. N
 - Ein Snapshot ist ein **datierter Vollstand** eines deklarierten Scopes — nie ein Delta. Das Diffen (Create/Update/Delete, Versionierung) macht ausschliesslich der Import in der App (PRD §5.1).
 - Snapshots sind **roh und unversioniert** (PRD E20): keine `validFrom`/`validTo` — Validity-Intervalle sind interne Store-Darstellung.
 - Kanten zeigen **vom Untergeordneten zum Übergeordneten** (PRD E17/FR-7.2a): «A berichtetAn B» heisst B ist Vorgesetzte:r; der Baum-Abstieg traversiert gegen die Kantenrichtung.
-- IDs sind **stabil** (Quell-PK, URL-ID, E-Mail; notfalls namespaced Fallback `<source>:<Typ>:<slug(label)>` mit `props.idSource='name'` — nie nackter `slug(label)`, PRD E41) — Voraussetzung für Diff und Versionierung (PRD FR-3.5).
+- IDs sind **stabil** und **global eindeutig interpretierbar** (PRD E66/FR-3.5): global eindeutige natürliche Kennung (E-Mail, vollständige URL-ID — der gewollte Multi-Source-Join-Schlüssel) oder source-namespaced; rohe quell-lokale Schlüssel (nackte PKs) sind unzulässig. Notfalls namespaced Fallback `<source>:<Typ>:<slug(label)>` mit `props.idSource='name'` — nie nackter `slug(label)` (PRD E41). Stabile IDs sind Voraussetzung für Diff und Versionierung.
 - Alle verwendeten Typen müssen in der kuratierten Registry (`schema/registry.json`) existieren; das eingebettete `schema` ist deren Teilmenge (PRD FR-3.4).
 
 ## Struktur

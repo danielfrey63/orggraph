@@ -157,7 +157,7 @@
       "required": ["rule"],
       "additionalProperties": false,
       "properties": {
-        "rule": { "type": "string", "description": "How stable ids are derived, e.g. \"person id from /api/person/{id} url\"." },
+        "rule": { "type": "string", "description": "How stable ids are derived, e.g. \"person id from /api/person/{id} url\". Resulting ids must be globally unique in interpretation (PRD E66): a globally unique natural key (email, full URL id) or a source-namespaced form — the gate rejects rules yielding raw source-local keys." },
         "appliesTo": { "type": "string" }
       }
     }
