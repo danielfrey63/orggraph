@@ -113,7 +113,12 @@
         "edgeSources": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Visited source node ids of an enrichment crawl: the snapshot is a full state of their outgoing edges of the declared edgeTypes, without their node type being subject to closure (PRD FR-5.5, E30)."
+          "description": "Visited source node ids: the snapshot is a full state of their outgoing edges of the declared edgeTypes, without their node type being subject to closure (PRD FR-5.5, E30, E59)."
+        },
+        "edgeTargets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fully observed target container ids: their INCOMING edges of the declared edgeTypes were completely observed — counter-evidence enabling move-out closure in rooted snapshots (PRD FR-5.5, FR-5.5a); absent = no move-out closure (conservative)."
         },
         "traversalEdgeTypes": {
           "type": "array",
