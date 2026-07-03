@@ -73,6 +73,11 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Edge types used ONLY to determine roots reachability (boundary traversal); they never become closure candidates. Defaults to edgeTypes when absent (PRD FR-5.5, E34)."
+        },
+        "authoritativeForSources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Sources this snapshot may close facts for, or [\"*\"] for all — lifts the source-partitioned closure (PRD E37); absent = only meta.source."
         }
       }
     },
