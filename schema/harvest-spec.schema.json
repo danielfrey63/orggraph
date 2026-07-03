@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/danielfrey63/orggraph/schema/harvest-spec.schema.json",
+  "title": "OrgGraph harvest specification",
+  "description": "Normative gate artifact per provider (PRD FR-6.1c, E28, E31): source access, source-field-to-registry mapping, and crawl strategy, finalized from the source contract's harvestSpecDraft. phase-b-harvest.js is derived from this spec and references specVersion; phase B refuses to run if the referenced spec is missing, invalid, or version-mismatched.",
+  "type": "object",
+  "required": ["meta", "access", "mapping", "scope"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["provider", "specVersion", "registryVersion"],
+      "additionalProperties": true,
+      "properties": {
+        "provider": { "type": "string" },
+        "specVersion": {
+          "type": "string",
+          "description": "Version stamp referenced by phase-b-harvest.js (PRD E31)."
+        },
+        "registryVersion": {
+          "type": "string",
+          "description": "Registry version the gate decisions were made against (PRD FR-6.1b)."
+        },
+        "basedOnAnalysis": {
+          "type": "string",
+          "description": "runId of the source contract this spec was finalized from."
+        }
+      }
+    },
+    "access": {
+      "type": "object",
+      "required": ["entrypoints", "idRules"],
+      "additionalProperties": false,
+      "description": "Source access: endpoints/selectors, navigation, and stable-id derivation (PRD FR-6.1c, FR-6.2).",
+      "properties": {
+        "entrypoints": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "apiEndpoints": { "type": "array", "items": { "$ref": "analysis.schema.json#/$defs/apiEndpoint" } },
+        "selectors": { "type": "array", "items": { "$ref": "analysis.schema.json#/$defs/selector" } },
+        "navigationRules": { "type": "array", "items": { "type": "string" } },
+        "idRules": { "type": "array", "items": { "$ref": "analysis.schema.json#/$defs/idRule" }, "minItems": 1 }
+      }
+    },
+    "mapping": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/mappingRule" },
+      "description": "Gate-confirmed mapping source field -> registry type/edge/property; nothing outside this mapping is exported (PRD FR-6.1 phase B)."
+    },
+    "scope": {
+      "$ref": "snapshot.schema.json#/$defs/scope",
+      "description": "Scope the crawl declares (PRD FR-5.5, FR-6.6); edgeSources is filled at run time with the actually visited source ids."
+    },
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Crawl strategy (PRD FR-6.1c, FR-6.4).",
+      "properties": {
+        "traversal": { "type": "string", "description": "Traversal order, e.g. \"bfs from roots via children\"." },
+        "batchSize": { "type": "integer", "minimum": 1 },
+        "pauseMsMin": { "type": "integer", "minimum": 0 },
+        "pauseMsMax": { "type": "integer", "minimum": 0 },
+        "retry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxAttempts": { "type": "integer", "minimum": 1 },
+            "backoff": { "type": "string", "description": "e.g. \"exponential\" (PRD FR-6.4: backoff on 429/5xx)." }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "mappingRule": {
+      "type": "object",
+      "required": ["source", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Source field: selector, JSON path, or field name as identified in the source contract."
+        },
+        "target": {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "enum": ["node", "edge", "prop", "label", "id"] },
+            "type": { "type": "string", "description": "Registry node/edge type (required for kind node/edge; prop owner type for kind prop)." },
+            "prop": { "type": "string", "description": "Target property name (kind: prop)." }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "kind": { "enum": ["node", "edge", "prop"] } } },
+              "then": { "required": ["kind", "type"] }
+            }
+          ]
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}
