@@ -32,7 +32,7 @@
         "labelProp": {
           "type": "string",
           "default": "label",
-          "description": "Property used as display name (PRD FR-4.2)."
+          "description": "Path resolved as display name: \"label\" or a scalar props path like \"props.displayName\" (PRD FR-4.2b). If absent, \"label\" applies; if it resolves to a missing or non-scalar value, display falls back to \"label\" and the import warns."
         },
         "identifiers": {
           "type": "array",

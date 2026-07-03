@@ -73,8 +73,8 @@
       "properties": {
         "id": { "type": "string" },
         "type": { "type": "string" },
-        "label": { "type": "string" },
-        "props": { "type": "object" }
+        "label": { "type": "string", "description": "Canonical, versioned default display name (PRD FR-3.2, FR-4.2b)." },
+        "props": { "$ref": "#/$defs/props" }
       }
     },
     "edge": {
@@ -85,8 +85,13 @@
         "type": { "type": "string" },
         "source": { "type": "string", "description": "Node id (PRD FR-3.3)." },
         "target": { "type": "string", "description": "Node id (PRD FR-3.3)." },
-        "props": { "type": "object" }
+        "props": { "$ref": "#/$defs/props" }
       }
+    },
+    "props": {
+      "type": "object",
+      "description": "Scalar values only (PRD FR-4.5): string, number, boolean, or null; reference props carry a node id as string. Arrays and nested objects are not allowed in v1 — multi-valued information is reified as nodes/edges.",
+      "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
     }
   }
 }

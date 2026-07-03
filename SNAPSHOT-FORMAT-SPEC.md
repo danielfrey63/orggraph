@@ -48,7 +48,7 @@ Kompakte Referenz für das wiederverwendbare Snapshot-Format von OrgGraph 2.0. N
 - **`meta`** (alle fünf Felder Pflicht): `source` (Quell-URL/-System), `crawledAt` (ISO-Zeitstempel des Laufs), `snapshot` (Stempel `YYYYMMDD-HHMM`; Importe müssen chronologisch erfolgen), `registryVersion` (Registry-Stand des Laufs, PRD FR-6.1b), `scope` (wofür dieser Snapshot ein Vollstand ist, PRD FR-5.5).
 - **`meta.scope`**: `nodeTypes`/`edgeTypes` (Pflicht; erfasste Typen), optional `roots` (Teilbaum-Begrenzung) und `excluded` (ausgeschlossene Teilbaum-Wurzeln, z. B. gescheiterte Fetches — Ausfälle dürfen nie als Löschungen fehlinterpretiert werden, PRD FR-5.7).
 - **`schema`**: verwendete Registry-Teilmenge mit vollständigen Deklarationen (`from`/`to`, `identityProps`, `props` inkl. Referenz-Properties).
-- **`nodes`**: `id`, `type`, `label` (Pflicht), optional `props` (skalare Werte; Referenz-Properties tragen Knoten-IDs).
+- **`nodes`**: `id`, `type`, `label` (Pflicht; `label` ist der kanonische Default-Anzeigename, PRD FR-4.2b), optional `props` — nur JSON-Skalare (`string`/`number`/`boolean`/`null`); Arrays und verschachtelte Objekte sind unzulässig (PRD FR-4.5), Referenz-Properties tragen Knoten-IDs als Strings.
 - **`edges`**: `type`, `source`, `target` (Pflicht; `source`/`target` sind Knoten-ID-Strings), optional `props`. Nur den Primärfakt liefern — implizierte Kanten (`implies`) materialisiert der Import (PRD FR-4.8).
 
 ## Dateikonvention

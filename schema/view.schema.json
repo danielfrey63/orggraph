@@ -33,13 +33,13 @@
       }
     },
     "time": {
-      "description": "Time mode (PRD FR-5.3).",
+      "description": "Time mode (PRD FR-5.3). Internal time truth is the snapshot instant (PRD FR-5.2a, E29).",
       "oneOf": [
         {
           "type": "object",
           "required": ["asOf"],
           "additionalProperties": false,
-          "properties": { "asOf": { "type": "string", "format": "date" } }
+          "properties": { "asOf": { "$ref": "#/$defs/instant" } }
         },
         {
           "type": "object",
@@ -48,12 +48,21 @@
           "properties": {
             "diff": {
               "type": "array",
-              "items": { "type": "string", "format": "date" },
+              "items": { "$ref": "#/$defs/instant" },
               "minItems": 2,
               "maxItems": 2
             }
           }
         }
+      ]
+    },
+    "instant": {
+      "type": "string",
+      "description": "Snapshot stamp YYYYMMDD-HHMM, ISO date-time, or ISO date (interpreted as start of day) — PRD FR-5.2a.",
+      "anyOf": [
+        { "pattern": "^[0-9]{8}-[0-9]{4}$" },
+        { "format": "date-time" },
+        { "format": "date" }
       ]
     },
     "filters": {
