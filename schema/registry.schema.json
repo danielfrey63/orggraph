@@ -99,7 +99,7 @@
     },
     "propDecls": {
       "type": "object",
-      "description": "Optional declarations for individual props; a prop without a registry propDecl is allowed only when the delivering snapshot declares it in its dataset schema — import rejects keys declared in neither (PRD FR-4.5, FR-6.8).",
+      "description": "Declarations for individual props. Every props key used by snapshots MUST be declared here (minimal decl: {}); the import rejects used keys unknown to the tenant registry — the registry is the single source of truth down to field level (PRD FR-4.5, FR-3.4, FR-6.8).",
       "additionalProperties": { "$ref": "#/$defs/propDecl" }
     },
     "propDecl": {
