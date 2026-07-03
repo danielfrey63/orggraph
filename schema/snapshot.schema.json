@@ -52,6 +52,14 @@
                 "properties": { "edgeSources": { "minItems": 1 } }
               },
               "$comment": "Enrichment snapshots (empty nodeTypes, non-empty edgeTypes) must declare non-empty edgeSources — without visited sources there is no edge closure (PRD E59, FR-6.8)."
+            },
+            {
+              "if": {
+                "properties": { "excluded": { "minItems": 1 } },
+                "required": ["excluded"]
+              },
+              "then": { "required": ["traversalEdgeTypes"] },
+              "$comment": "Non-empty excluded requires explicit traversalEdgeTypes — a narrow edgeTypes default could fail to expand the excluded subtree and falsely close its descendants (PRD FR-5.5, FR-5.7)."
             }
           ]
         }
