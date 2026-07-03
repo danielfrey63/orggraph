@@ -77,7 +77,7 @@
         "authoritativeForSources": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Sources this snapshot may close facts for, or [\"*\"] for all — lifts the source-partitioned closure (PRD E37); absent = only meta.source."
+          "description": "REQUEST to close facts for other sources, or [\"*\"] for all (PRD E37). Never effective from the file alone: the import activates it only after an explicit confirmation dialog naming the affected sources (PRD E46); absent or unconfirmed = only meta.source."
         }
       }
     },
