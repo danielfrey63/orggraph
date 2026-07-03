@@ -14,12 +14,14 @@
     },
     "nodeTypes": {
       "type": "object",
-      "description": "Node type name -> capabilities. Names are data, never referenced in engine code (PRD NFR-5).",
+      "description": "Node type name -> capabilities. Names are data, never referenced in engine code (PRD NFR-5); they must be path-safe identifiers so every type is addressable in view path expressions (PRD E58).",
+      "propertyNames": { "pattern": "^\\p{L}[\\p{L}\\p{N}_]*$" },
       "additionalProperties": { "$ref": "#/$defs/nodeType" }
     },
     "edgeTypes": {
       "type": "object",
-      "description": "Edge type name -> declaration.",
+      "description": "Edge type name -> declaration. Names must be path-safe identifiers (PRD E58).",
+      "propertyNames": { "pattern": "^\\p{L}[\\p{L}\\p{N}_]*$" },
       "additionalProperties": { "$ref": "#/$defs/edgeType" }
     }
   },
