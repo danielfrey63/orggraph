@@ -1,0 +1,101 @@
+{
+  "$comment": "HIL-1 DRAFT (PRD FR-10.1, E71): proposed first non-empty registry commit, derived from the legacy structures (persons/orgs/links of HRM, SBB-GD, SEM v1) and their attribute categories. Becomes schema/registry.json ONLY after human approval at the bootstrap gate — until then registry.json stays empty (version 0).",
+  "version": "2026-07-04.1",
+  "nodeTypes": {
+    "Person": {
+      "description": "Individual person. Legacy: persons[] (id, label, email, isBasis).",
+      "labelProp": "label",
+      "identifiers": ["id", "props.email"],
+      "leafProp": "isBasis",
+      "pseudonymize": { "pool": "names" },
+      "props": {
+        "email": { "type": "string", "description": "Global natural key (E66 join key); sensitive by default (E60)." },
+        "isBasis": { "type": "boolean", "description": "Leaf marker driving the leaf filter (FR-8.3). Legacy: persons[].isBasis." },
+        "pensum": { "type": "number", "description": "Employment percentage. Legacy: SBB-GD Beschaeftigungsgrad.tsv (numeric, unique per person)." },
+        "mobil": { "type": "string", "description": "Mobile number. Legacy: SBB-GD Mobilnummer.tsv (unique per person)." },
+        "kontakt": { "type": "string", "description": "Personal contact note. Legacy: SEM 'Persönliche Kontakt.tsv' (unique per person)." }
+      }
+    },
+    "OE": {
+      "description": "Organisational unit. Legacy: orgs[].",
+      "pseudonymize": { "pool": "orgUnits", "byLevel": true }
+    },
+    "AufbauOrg": {
+      "description": "Structural organisation code, shared across persons. Legacy: SBB-GD AufbauOrg.tsv."
+    },
+    "Rolle": {
+      "description": "Role, shared and traversable. Legacy: SEM ERZ Rollen Rom/Paris, AKROS values, HRM Funktion."
+    },
+    "Team": {
+      "description": "Team membership target. Legacy: SEM ERZ Teams Rom/Paris."
+    },
+    "Training": {
+      "description": "Training/course. Legacy: SEM SAFe Trainings."
+    },
+    "Gremium": {
+      "description": "Board/committee/working group. Legacy: SEM QRM-Board, GL-Workshop, Change Team, ISC LACE, SEM_PM, SEM-ISC-Themen, ERZ PA, HRM 12W Retros."
+    },
+    "Projekt": {
+      "description": "Project. Legacy: SEM Projekt Sicherheit."
+    },
+    "Firma": {
+      "description": "External company (context of a role). Legacy: SEM AKROS.tsv — the canonical Kontext+Rolle case (FR-4.6)."
+    }
+  },
+  "edgeTypes": {
+    "berichtetAn": {
+      "description": "Reports to (subordinate -> superior, FR-7.2a). Legacy person->person links are manager->report and get INVERTED by the migration (FR-10.3).",
+      "from": "Person",
+      "to": "Person"
+    },
+    "mitgliedIn": {
+      "description": "Member of an OE (person -> container). Legacy person->org links keep their direction (FR-10.3).",
+      "from": "Person",
+      "to": "OE"
+    },
+    "unterstellt": {
+      "description": "Sub-OE of (child OE -> parent OE). Legacy org->org links are parent->child and get INVERTED by the migration (FR-10.3).",
+      "from": "OE",
+      "to": "OE"
+    },
+    "gehoertZu": {
+      "description": "Belongs to a structural org code.",
+      "from": "Person",
+      "to": "AufbauOrg"
+    },
+    "hatRolle": {
+      "description": "Has role; props.kontext optionally binds the role to a company (double reification, FR-4.6). kontext is an identityProp (E15): the same role at two companies keeps two edge identities; context-free roles carry kontext: null.",
+      "from": "Person",
+      "to": "Rolle",
+      "identityProps": ["kontext"],
+      "props": {
+        "kontext": { "ref": "Firma", "implies": "arbeitetBei", "description": "Node reference to the company context (FR-4.7); null when the role has no company context." }
+      }
+    },
+    "arbeitetBei": {
+      "description": "Works at a company. Base edge materialized as projection of hatRolle primary facts (FR-4.8, E33); may also stand alone.",
+      "from": "Person",
+      "to": "Firma"
+    },
+    "imTeam": {
+      "description": "Team membership.",
+      "from": "Person",
+      "to": "Team"
+    },
+    "besuchte": {
+      "description": "Attended a training; the value (e.g. cohort) stays on the target node label.",
+      "from": "Person",
+      "to": "Training"
+    },
+    "imGremium": {
+      "description": "Member of a board/committee.",
+      "from": "Person",
+      "to": "Gremium"
+    },
+    "arbeitetAn": {
+      "description": "Works on a project.",
+      "from": "Person",
+      "to": "Projekt"
+    }
+  }
+}
