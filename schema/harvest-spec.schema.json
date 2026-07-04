@@ -110,6 +110,11 @@
           "additionalProperties": { "type": "string" },
           "description": "Target prop name -> extraction rule; includes identityProps and reference props (values are node ids)."
         },
+        "observesTargetCompleteness": {
+          "type": "boolean",
+          "default": false,
+          "description": "Gate-confirmed capability: this crawl fully observes the INCOMING edges of this type at visited target containers, so runtime edgeTargets entries for this edge type are a valid move-out proof (PRD FR-5.5a, E70). Without this flag the importer ignores edgeTargets entries of this type (warning, no closure)."
+        },
         "notes": { "type": "string" }
       }
     }
