@@ -2301,7 +2301,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.124.111';
+const APP_VERSION = '1.125.112';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -11111,6 +11111,1650 @@ function openNewProfileDropZone() {
 }
 
 window.addEventListener('DOMContentLoaded', () => { renderProfileSwitcher(); });
+// OrgGraph 2.0 engine — shared utilities (PRD §5, §6.3).
+// Type-agnostic (NFR-5): no canonical type name appears in this file.
+
+// Canonical JSON: deterministic serialization with sorted object keys.
+// Used for edge keys (FR-6.3), scope fingerprints (E49) and content hashes (FR-6.9).
+function canonicalJson(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
+}
+
+// FNV-1a 64-bit over a string, hex-encoded. Dependency-free stand-in for the
+// canonical content hash (FR-6.9) — the PRD fixes the hashed payload, not the
+// algorithm; collisions only risk a false no-op, acceptable for v1 local use.
+function fnv1a64(str) {
+  let h = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  for (let i = 0; i < str.length; i++) {
+    h ^= BigInt(str.charCodeAt(i));
+    h = (h * prime) & 0xffffffffffffffffn;
+  }
+  return h.toString(16).padStart(16, '0');
+}
+
+// Snapshot instants are YYYYMMDD-HHMM stamps (FR-5.2a); lexicographic order
+// equals chronological order, so plain string comparison is the comparator.
+function instantCompare(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+const INSTANT_RE = /^\d{8}-\d{4}$/;
+function isValidInstant(stamp) {
+  return typeof stamp === 'string' && INSTANT_RE.test(stamp);
+}
+
+// UTC minute of an RFC3339 timestamp as a snapshot stamp, or null when the
+// timestamp is offsetless/invalid (E50: offsetless values are rejected).
+function utcMinuteOf(rfc3339) {
+  if (typeof rfc3339 !== 'string') return null;
+  if (!/(Z|[+-]\d{2}:\d{2})$/.test(rfc3339)) return null;
+  const ms = Date.parse(rfc3339);
+  if (Number.isNaN(ms)) return null;
+  const d = new Date(ms);
+  const p = (n, w) => String(n).padStart(w, '0');
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1, 2)}${p(d.getUTCDate(), 2)}-${p(d.getUTCHours(), 2)}${p(d.getUTCMinutes(), 2)}`;
+}
+
+// Normalized deep compare for props stands (FR-5.6c): key order is irrelevant,
+// scalar values compare strictly.
+function deepEqual(a, b) {
+  return canonicalJson(a) === canonicalJson(b);
+}
+
+function sortedUnique(arr) {
+  return [...new Set(arr)].sort();
+}
+
+// Structured clone for plain JSON-ish data plus Map/Set (store snapshots for
+// atomic apply, FR-6.9a).
+function deepClone(value) {
+  if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Map) {
+    const m = new Map();
+    for (const [k, v] of value) m.set(k, deepClone(v));
+    return m;
+  }
+  if (value instanceof Set) return new Set(value);
+  if (Array.isArray(value)) return value.map(deepClone);
+  const out = {};
+  for (const k of Object.keys(value)) out[k] = deepClone(value[k]);
+  return out;
+}
+
+// Scalar check for props values (FR-4.5): string, number, boolean or null.
+function isScalar(v) {
+  return v === null || ['string', 'number', 'boolean'].includes(typeof v);
+}
+// OrgGraph 2.0 engine — registry access and self-consistency gate (FR-4.1).
+// The registry is data; this module never names a concrete type (NFR-5).
+
+const TYPE_NAME_RE = /^\p{L}[\p{L}\p{N}_]*$/u;
+
+function isPathSafeTypeName(name) {
+  return typeof name === 'string' && TYPE_NAME_RE.test(name);
+}
+
+// Endpoint declaration ("*", type name, or array of type names) as a matcher.
+function endpointAllows(endpoint, typeName) {
+  if (endpoint === '*') return true;
+  if (Array.isArray(endpoint)) return endpoint.includes('*') || endpoint.includes(typeName);
+  return endpoint === typeName;
+}
+
+function endpointTypes(endpoint) {
+  if (endpoint === '*') return ['*'];
+  return Array.isArray(endpoint) ? endpoint : [endpoint];
+}
+
+// endpoint A is a subset of endpoint B (for implies compatibility, FR-4.1).
+function endpointSubset(a, b) {
+  const bt = endpointTypes(b);
+  if (bt.includes('*')) return true;
+  const at = endpointTypes(a);
+  if (at.includes('*')) return false;
+  return at.every((t) => bt.includes(t));
+}
+
+// A label/identifier path is well-formed when it is "id", "label" or a
+// single-level "props.<key>" path (FR-4.1, FR-4.2b).
+function isWellFormedFieldPath(path) {
+  return path === 'id' || path === 'label' || /^props\.[^.]+$/.test(String(path));
+}
+
+function propDeclsOf(typeDecl) {
+  return (typeDecl && typeDecl.props) || {};
+}
+
+// identityProps in registry declaration order — the order is normative for
+// the canonical edge key (FR-6.3, PRD round 7 item 8).
+function identityPropsOf(edgeDecl) {
+  return (edgeDecl && edgeDecl.identityProps) || [];
+}
+
+// Self-consistency gate over a registry object (FR-4.1). Returns a list of
+// human-readable problems; an empty list means the registry is commit-valid.
+// This runs IN ADDITION to JSON-Schema validation, which cannot express
+// cross-references.
+function registryConsistencyProblems(registry) {
+  const problems = [];
+  if (!registry || typeof registry !== 'object') return ['registry is not an object'];
+  const nodeTypes = registry.nodeTypes || {};
+  const edgeTypes = registry.edgeTypes || {};
+  if (typeof registry.version !== 'string') problems.push('missing version');
+
+  const nodeTypeExists = (t) => t === '*' || Object.prototype.hasOwnProperty.call(nodeTypes, t);
+
+  for (const [name, decl] of Object.entries(nodeTypes)) {
+    if (!isPathSafeTypeName(name)) problems.push(`node type "${name}" is not a path-safe identifier (E58)`);
+    checkFieldPaths(name, decl, problems);
+    for (const [propName, propDecl] of Object.entries(propDeclsOf(decl))) {
+      if (propDecl.ref && !nodeTypeExists(propDecl.ref)) {
+        problems.push(`node type "${name}" prop "${propName}": ref target "${propDecl.ref}" is not a declared node type`);
+      }
+      if (propDecl.implies) {
+        problems.push(`node type "${name}" prop "${propName}": implies is edge-only (E63)`);
+      }
+    }
+  }
+
+  for (const [name, decl] of Object.entries(edgeTypes)) {
+    if (!isPathSafeTypeName(name)) problems.push(`edge type "${name}" is not a path-safe identifier (E58)`);
+    for (const side of ['from', 'to']) {
+      for (const t of endpointTypes(decl[side] ?? '*')) {
+        if (!nodeTypeExists(t)) problems.push(`edge type "${name}" ${side}: "${t}" is not a declared node type`);
+      }
+    }
+    const decls = propDeclsOf(decl);
+    for (const ip of identityPropsOf(decl)) {
+      if (!Object.prototype.hasOwnProperty.call(decls, ip)) {
+        problems.push(`edge type "${name}": identityProp "${ip}" is not a declared prop of this edge type`);
+      }
+    }
+    for (const [propName, propDecl] of Object.entries(decls)) {
+      if (propDecl.ref && !nodeTypeExists(propDecl.ref)) {
+        problems.push(`edge type "${name}" prop "${propName}": ref target "${propDecl.ref}" is not a declared node type`);
+      }
+      if (propDecl.implies) {
+        const implied = edgeTypes[propDecl.implies];
+        if (!implied) {
+          problems.push(`edge type "${name}" prop "${propName}": implies target "${propDecl.implies}" is not a declared edge type`);
+        } else {
+          // from of the carrier edge must fit the implied edge's from; the
+          // ref target type must fit the implied edge's to (FR-4.1).
+          if (!endpointSubset(decl.from, implied.from)) {
+            problems.push(`edge type "${name}" prop "${propName}": carrier from is not a subset of implied "${propDecl.implies}" from`);
+          }
+          if (propDecl.ref && !endpointAllows(implied.to, propDecl.ref)) {
+            problems.push(`edge type "${name}" prop "${propName}": ref type "${propDecl.ref}" is not allowed as to of implied "${propDecl.implies}"`);
+          }
+        }
+      }
+    }
+  }
+  return problems;
+}
+
+function checkFieldPaths(name, decl, problems) {
+  if (decl.labelProp !== undefined && !isWellFormedFieldPath(decl.labelProp)) {
+    problems.push(`node type "${name}": labelProp "${decl.labelProp}" is not a well-formed field path`);
+  }
+  for (const idPath of decl.identifiers || []) {
+    if (!isWellFormedFieldPath(idPath)) {
+      problems.push(`node type "${name}": identifier path "${idPath}" is not a well-formed field path`);
+    }
+  }
+}
+
+// Identity-relevant deviation between the snapshot's embedded schema and the
+// tenant registry (E38, FR-6.1b): identityProps, from/to endpoints, ref and
+// implies of USED types must match exactly; anything else is at most a warning.
+function identityRelevantMismatches(snapshotSchema, registry) {
+  const out = [];
+  for (const [name, decl] of Object.entries(snapshotSchema.edgeTypes || {})) {
+    const reg = (registry.edgeTypes || {})[name];
+    if (!reg) continue; // unknown used types are handled by subset validation
+    if (JSON.stringify(identityPropsOf(decl)) !== JSON.stringify(identityPropsOf(reg))) {
+      out.push(`edge type "${name}": identityProps deviate from tenant registry`);
+    }
+    for (const side of ['from', 'to']) {
+      if (JSON.stringify(endpointTypes(decl[side])) !== JSON.stringify(endpointTypes(reg[side]))) {
+        out.push(`edge type "${name}": ${side} endpoints deviate from tenant registry`);
+      }
+    }
+    out.push(...refImpliesMismatches(name, decl, reg));
+  }
+  for (const [name, decl] of Object.entries(snapshotSchema.nodeTypes || {})) {
+    const reg = (registry.nodeTypes || {})[name];
+    if (!reg) continue;
+    out.push(...refImpliesMismatches(`node type ${name}`, decl, reg));
+  }
+  return out;
+}
+
+function refImpliesMismatches(name, decl, reg) {
+  const out = [];
+  const declProps = propDeclsOf(decl);
+  const regProps = propDeclsOf(reg);
+  for (const [propName, p] of Object.entries(declProps)) {
+    const r = regProps[propName];
+    if (!r) continue;
+    if ((p.ref || null) !== (r.ref || null)) out.push(`"${name}" prop "${propName}": ref deviates from tenant registry`);
+    if ((p.implies || null) !== (r.implies || null)) out.push(`"${name}" prop "${propName}": implies deviates from tenant registry`);
+  }
+  return out;
+}
+
+function assertValidStamp(stamp) {
+  if (!isValidInstant(stamp)) throw new Error(`invalid snapshot stamp: ${stamp}`);
+  return stamp;
+}
+// OrgGraph 2.0 engine — tenant store model and property timelines (FR-5.2b).
+// In-memory, serializable model; the physical IndexedDB layout stays a free
+// implementation decision (PRD §14) and is layered on top later.
+
+// Canonical edge key (FR-6.3, E15): canonical JSON of the array
+// [type, source, target, ...identityProp values in registry declaration order].
+function edgeKeyOf(edge, edgeDecl) {
+  const idProps = identityPropsOf(edgeDecl).map((p) => (edge.props || {})[p] ?? null);
+  return canonicalJson([edge.type, edge.source, edge.target, ...idProps]);
+}
+
+function createTenantStore() {
+  return {
+    // id -> node identity { id, type, timelines, provenance }
+    nodes: new Map(),
+    // canonical edge key -> edge identity { key, type, source, target,
+    //   identityProps: {name: value}, timelines, provenance, projected: Interval[] }
+    edges: new Map(),
+    // import key (canonical JSON) -> snapshots-registry entry (FR-6.9)
+    snapshots: new Map(),
+    // source -> { registeredAt, harvestSpecVersion, moveOutEdgeTypes: Set, specless }
+    sourceBook: new Map(),
+    // join grant keys `${newSource} ${nodeType} ${idRulesStamp}` (E69)
+    joinGrants: new Set(),
+    // persisted open tie-breaker conflicts (FR-5.6)
+    conflicts: [],
+    // SOURCE_PRECEDENCE: array of source ids, earlier = higher precedence
+    precedence: [],
+    // cumulative gate baselines per `${source} ${scopeFp}` (FR-5.7)
+    baselines: new Map(),
+    options: { IMPORT_CONFIRM_DESTRUCTIVE: false },
+  };
+}
+
+function cloneTenantStore(store) {
+  return deepClone(store);
+}
+
+// --- Property timelines (E51) -------------------------------------------
+// A timeline is an ordered array of intervals
+//   { from, to, value, source, instant }
+// with from/to as snapshot stamps (to === null = open) and provenance of the
+// delivering source + instant. 'existence' is the timeline of identity
+// validity; its intervals additionally carry a provenance map
+// source -> lastConfirmingInstant (FR-5.2, E37).
+
+function openInterval(timeline) {
+  const last = timeline[timeline.length - 1];
+  return last && last.to === null ? last : null;
+}
+
+function valueAt(timeline, instant) {
+  for (const iv of timeline) {
+    if (instantCompare(iv.from, instant) <= 0 && (iv.to === null || instantCompare(instant, iv.to) < 0)) return iv;
+  }
+  return null;
+}
+
+// Insert a historical value (E51/FR-5.2b): fill only time ranges from
+// `from` on that are not already occupied; the inserted interval ends where
+// the next occupied range begins. Never touches existing intervals.
+function insertHistorical(timeline, from, value, source, instant) {
+  let end = null;
+  for (const iv of timeline) {
+    if (instantCompare(iv.from, from) > 0 && (end === null || instantCompare(iv.from, end) < 0)) end = iv.from;
+    // occupied at `from` itself -> nothing to insert
+    if (instantCompare(iv.from, from) <= 0 && (iv.to === null || instantCompare(from, iv.to) < 0)) return false;
+  }
+  timeline.push({ from, to: end, value, source, instant });
+  timeline.sort((a, b) => instantCompare(a.from, b.from));
+  return true;
+}
+
+// Close the open interval at `instant` (no-op when nothing is open or the
+// open interval starts at/after the instant).
+function closeOpen(timeline, instant) {
+  const open = openInterval(timeline);
+  if (!open) return false;
+  if (instantCompare(open.from, instant) >= 0) return false;
+  open.to = instant;
+  return true;
+}
+
+function startInterval(timeline, instant, value, source) {
+  timeline.push({ from: instant, to: null, value, source, instant });
+  timeline.sort((a, b) => instantCompare(a.from, b.from));
+}
+
+// --- Identities -----------------------------------------------------------
+
+function createNodeIdentity(id, type) {
+  return { id, type, timelines: new Map(), existence: [], };
+}
+
+function createEdgeIdentity(key, type, source, target, identityPropValues) {
+  return {
+    key, type, source, target,
+    identityProps: identityPropValues,
+    timelines: new Map(),
+    existence: [],       // direct contribution (delivered by sources, E52a)
+    projected: [],       // projection contribution (E33/E52b), value-less intervals
+  };
+}
+
+function openExistence(identity) {
+  const last = identity.existence[identity.existence.length - 1];
+  return last && last.to === null ? last : null;
+}
+
+// An edge identity is valid at T when either contribution carries it (E52).
+function edgeValidAt(identity, instant) {
+  const direct = identity.existence.some(
+    (iv) => instantCompare(iv.from, instant) <= 0 && (iv.to === null || instantCompare(instant, iv.to) < 0)
+  );
+  if (direct) return true;
+  return (identity.projected || []).some(
+    (iv) => instantCompare(iv.from, instant) <= 0 && (iv.to === null || instantCompare(instant, iv.to) < 0)
+  );
+}
+
+function edgeOpenNow(identity) {
+  return identity.existence.some((iv) => iv.to === null) || (identity.projected || []).some((iv) => iv.to === null);
+}
+
+function nodeOpenNow(identity) {
+  return openExistence(identity) !== null;
+}
+
+function nodeValidAt(identity, instant) {
+  return identity.existence.some(
+    (iv) => instantCompare(iv.from, instant) <= 0 && (iv.to === null || instantCompare(instant, iv.to) < 0)
+  );
+}
+
+// --- Record-version derivation (FR-5.2/FR-5.2b) ---------------------------
+// Record versions are the deterministic derivation of the property timelines:
+// a new record stand begins at every interval boundary of any property.
+function deriveVersions(identity) {
+  const boundaries = new Set();
+  const collect = (ivs) => {
+    for (const iv of ivs) { boundaries.add(iv.from); if (iv.to !== null) boundaries.add(iv.to); }
+  };
+  collect(identity.existence);
+  for (const tl of identity.timelines.values()) collect(tl);
+  const sorted = [...boundaries].sort(instantCompare);
+  const versions = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const from = sorted[i];
+    const to = i + 1 < sorted.length ? sorted[i + 1] : null;
+    if (!existsAt(identity, from)) continue;
+    const stand = { validFrom: from, validTo: to, label: undefined, props: {} };
+    for (const [prop, tl] of identity.timelines) {
+      const iv = valueAt(tl, from);
+      if (iv === null) continue;
+      if (prop === 'label') stand.label = iv.value;
+      else if (iv.value !== undefined) stand.props[prop.replace(/^props\./, '')] = iv.value;
+    }
+    versions.push(stand);
+  }
+  // merge adjacent stands with identical content (boundaries that changed nothing)
+  const merged = [];
+  for (const v of versions) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.validTo === v.validFrom && prev.label === v.label && canonicalJson(prev.props) === canonicalJson(v.props)) {
+      prev.validTo = v.validTo;
+    } else merged.push(v);
+  }
+  return merged;
+}
+
+function existsAt(identity, instant) {
+  const inExistence = identity.existence.some(
+    (iv) => instantCompare(iv.from, instant) <= 0 && (iv.to === null || instantCompare(instant, iv.to) < 0)
+  );
+  if (inExistence) return true;
+  return (identity.projected || []).some(
+    (iv) => instantCompare(iv.from, instant) <= 0 && (iv.to === null || instantCompare(instant, iv.to) < 0)
+  );
+}
+
+function recordStandAt(identity, instant) {
+  if (!existsAt(identity, instant)) return null;
+  const stand = { label: undefined, props: {} };
+  for (const [prop, tl] of identity.timelines) {
+    const iv = valueAt(tl, instant);
+    if (iv === null || iv.value === undefined) continue;
+    if (prop === 'label') stand.label = iv.value;
+    else stand.props[prop.replace(/^props\./, '')] = iv.value;
+  }
+  return stand;
+}
+// OrgGraph 2.0 engine — scope canonicalization, fingerprints (E36/E49/E65)
+// and scope membership on the pre-import stock (FR-5.5a).
+
+function crawlKindOf(scope) {
+  if (Array.isArray(scope.roots) && scope.roots.length > 0) return 'rooted';
+  if ((scope.nodeTypes || []).length === 0 && (scope.edgeTypes || []).length > 0) return 'enrichment';
+  return 'full';
+}
+
+// Declarative scope fingerprint (E49): defaults applied, set arrays sorted
+// and deduplicated, observation fields (edgeSources/edgeTargets/excluded) and
+// the pure trust request (authoritativeForSources) left OUT.
+function scopeFingerprint(scope) {
+  const canonical = {
+    nodeTypes: sortedUnique(scope.nodeTypes || []),
+    edgeTypes: sortedUnique(scope.edgeTypes || []),
+    roots: sortedUnique(scope.roots || []),
+    traversalEdgeTypes: sortedUnique(
+      scope.traversalEdgeTypes && scope.traversalEdgeTypes.length ? scope.traversalEdgeTypes : scope.edgeTypes || []
+    ),
+  };
+  return fnv1a64(canonicalJson(canonical));
+}
+
+// Observation fingerprint (E36/E65): sorted, deduplicated edgeSources and
+// excluded; edgeTargets as a typed map with sorted keys and per-type sorted,
+// deduplicated id lists. Crawl-kind aware: edgeTargets only counts for rooted
+// snapshots — where it is ineffective it is normalized to empty before
+// fingerprinting (an ineffective field must not change the import identity).
+function observationFingerprint(scope) {
+  const rooted = crawlKindOf(scope) === 'rooted';
+  const targets = {};
+  if (rooted && scope.edgeTargets) {
+    for (const k of Object.keys(scope.edgeTargets).sort()) targets[k] = sortedUnique(scope.edgeTargets[k]);
+  }
+  const canonical = {
+    edgeSources: sortedUnique(scope.edgeSources || []),
+    excluded: sortedUnique(scope.excluded || []),
+    edgeTargets: targets,
+  };
+  return fnv1a64(canonicalJson(canonical));
+}
+
+// Full import identity (FR-6.9): (source, stamp, scope fp, observation fp).
+function importKeyOf(meta) {
+  return canonicalJson([meta.source, meta.snapshot, scopeFingerprint(meta.scope), observationFingerprint(meta.scope)]);
+}
+
+function traversalTypesOf(scope) {
+  return scope.traversalEdgeTypes && scope.traversalEdgeTypes.length ? scope.traversalEdgeTypes : scope.edgeTypes || [];
+}
+
+// Downward reachability over OPEN stock edges of the given types, against the
+// stored edge direction (target -> source, FR-7.2a/FR-5.5a). Returns the set
+// of reached node ids including the start ids themselves.
+function reachDownward(store, startIds, edgeTypeList) {
+  const types = new Set(edgeTypeList);
+  const childrenOf = new Map(); // target id -> [source ids] over open edges
+  for (const edge of store.edges.values()) {
+    if (!types.has(edge.type)) continue;
+    if (!edgeOpenNow(edge)) continue;
+    if (!childrenOf.has(edge.target)) childrenOf.set(edge.target, []);
+    childrenOf.get(edge.target).push(edge.source);
+  }
+  const seen = new Set();
+  const queue = [...startIds];
+  while (queue.length) {
+    const id = queue.shift();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    for (const child of childrenOf.get(id) || []) if (!seen.has(child)) queue.push(child);
+  }
+  return seen;
+}
+
+// Excluded area (FR-5.5a(3), E43): excluded roots plus everything reachable
+// downward from them over stock edges of the traversal types. Deliberately
+// conservative — multi-parent nodes stay excluded even when reachable via an
+// intact parent.
+function excludedArea(store, scope) {
+  const roots = scope.excluded || [];
+  if (!roots.length) return new Set();
+  return reachDownward(store, roots, traversalTypesOf(scope));
+}
+
+// Scope membership on the pre-import stock (FR-5.5a). Returns
+// { kind, nodeScope, excludedSet, nodeDeletionCandidatesAllowed }.
+function computeScopeMembership(store, scope) {
+  const kind = crawlKindOf(scope);
+  const excludedSet = excludedArea(store, scope);
+  const nodeTypeSet = new Set(scope.nodeTypes || []);
+  const nodeScope = new Set();
+  if (kind === 'rooted') {
+    const reach = reachDownward(store, scope.roots, traversalTypesOf(scope));
+    for (const id of reach) {
+      const node = store.nodes.get(id);
+      if (node && nodeOpenNow(node) && nodeTypeSet.has(node.type) && !excludedSet.has(id)) nodeScope.add(id);
+    }
+  } else {
+    for (const node of store.nodes.values()) {
+      if (nodeOpenNow(node) && nodeTypeSet.has(node.type) && !excludedSet.has(node.id)) nodeScope.add(node.id);
+    }
+  }
+  return {
+    kind,
+    nodeScope,
+    excludedSet,
+    // Move protection (E39): with roots, nodes are never deletion candidates.
+    nodeDeletionCandidatesAllowed: kind === 'full',
+  };
+}
+
+// Edge deletion candidates on the pre-import stock (FR-5.5a(2)).
+// moveOutCapable: (edgeType) => boolean from the source book (E70); entries
+// for non-capable types are ignored (handled by the caller via warnings).
+function edgeDeletionCandidates(store, scope, membership, moveOutCapable) {
+  const edgeTypeSet = new Set(scope.edgeTypes || []);
+  const edgeSources = new Set(scope.edgeSources || []);
+  const targets = scope.edgeTargets || {};
+  const out = new Map(); // key -> edge identity
+  for (const [key, edge] of store.edges) {
+    if (!edgeTypeSet.has(edge.type)) continue;
+    if (!edge.existence.some((iv) => iv.to === null)) continue; // only open DIRECT contributions are closure candidates (E52)
+    if (membership.excludedSet.has(edge.source)) continue;
+    if (membership.kind === 'full') {
+      if (membership.nodeScope.has(edge.source)) out.set(key, edge);
+      continue;
+    }
+    // rooted and enrichment: (a) visited source
+    if (edgeSources.has(edge.source)) { out.set(key, edge); continue; }
+    if (membership.kind !== 'rooted') continue;
+    // rooted: (b) source in pre-import node scope AND target listed under this
+    // edge type in edgeTargets AND the type is registered move-out capable.
+    const listed = Array.isArray(targets[edge.type]) && targets[edge.type].includes(edge.target);
+    if (listed && membership.nodeScope.has(edge.source) && moveOutCapable(edge.type)) out.set(key, edge);
+  }
+  return out;
+}
+// OrgGraph 2.0 engine — import preflight validation (FR-6.8).
+// Runs completely BEFORE any mutation (FR-6.9a). Structural JSON-Schema
+// validation happens at dev/test time (ajv, AK 11); this module enforces the
+// semantic rules the schema cannot express, against tenant registry + stock.
+
+// Validate one snapshot against tenant registry and pre-import stock.
+// Returns { errors, warnings, degraded, nodesById, edgesByKey, membership }.
+function validateSnapshot(snapshot, registry, store) {
+  const errors = [];
+  const warnings = [];
+  const meta = snapshot.meta || {};
+  const scope = meta.scope || {};
+  const kind = crawlKindOf(scope);
+
+  // --- meta / stamp consistency (E50, E62) ---
+  if (!/^[a-z][a-z0-9-]*$/.test(String(meta.source))) errors.push(`meta.source "${meta.source}" is not a canonical source identifier (E62)`);
+  const utcMinute = utcMinuteOf(meta.crawledAt);
+  if (utcMinute === null) errors.push(`meta.crawledAt "${meta.crawledAt}" is not RFC3339 with explicit offset (E50)`);
+  else if (utcMinute !== meta.snapshot) errors.push(`meta.snapshot "${meta.snapshot}" does not match the UTC minute of crawledAt (${utcMinute}) (E50)`);
+
+  // --- scope structural rules (FR-5.5, E59) ---
+  const edgeSources = scope.edgeSources || [];
+  if ((kind === 'rooted' || kind === 'enrichment') && edgeSources.length === 0) {
+    errors.push(`${kind} snapshot without non-empty scope.edgeSources (E59)`);
+  }
+  if ((scope.excluded || []).length > 0 && !(scope.traversalEdgeTypes || []).length) {
+    errors.push('non-empty scope.excluded requires explicit non-empty traversalEdgeTypes (FR-5.5)');
+  }
+  let degraded = false;
+  if (kind === 'rooted' && !scope.edgeTargets) {
+    degraded = true;
+    warnings.push('rooted full state without edgeTargets: no move-out detection (degraded import, FR-5.5)');
+  }
+  if (kind !== 'rooted' && scope.edgeTargets) {
+    warnings.push('edgeTargets is ineffective outside rooted snapshots and is ignored (FR-5.5, E65)');
+  }
+
+  // --- registry subset: used types and props (FR-3.4, FR-6.8) ---
+  const dataset = snapshot.schema || { nodeTypes: {}, edgeTypes: {} };
+  const usedNodeTypes = new Set((snapshot.nodes || []).map((n) => n.type));
+  const usedEdgeTypes = new Set((snapshot.edges || []).map((e) => e.type));
+  for (const t of usedNodeTypes) {
+    if (!(registry.nodeTypes || {})[t]) errors.push(`used node type "${t}" is unknown to the tenant registry (FR-6.8)`);
+  }
+  for (const t of usedEdgeTypes) {
+    if (!(registry.edgeTypes || {})[t]) errors.push(`used edge type "${t}" is unknown to the tenant registry (FR-6.8)`);
+  }
+  for (const t of Object.keys(dataset.nodeTypes || {})) {
+    if (!usedNodeTypes.has(t)) warnings.push(`dataset schema declares unused node type "${t}" (ignored, FR-3.4)`);
+  }
+  for (const t of Object.keys(dataset.edgeTypes || {})) {
+    if (!usedEdgeTypes.has(t)) warnings.push(`dataset schema declares unused edge type "${t}" (ignored, FR-3.4)`);
+  }
+
+  // Identity-relevant registry skew (E38) — checked before any no-op decision.
+  if (meta.registryVersion !== registry.version) {
+    const mismatches = identityRelevantMismatches(dataset, registry).filter(
+      (m) => [...usedEdgeTypes, ...usedNodeTypes].some((t) => m.includes(`"${t}"`))
+    );
+    if (mismatches.length) errors.push(...mismatches.map((m) => `registry skew (E38): ${m}`));
+    else warnings.push(`snapshot registryVersion "${meta.registryVersion}" differs from tenant "${registry.version}" (non-identity-relevant, imported with warning)`);
+  }
+
+  // --- nodes: duplicates, id/type conflicts, props contract ---
+  const nodesById = new Map();
+  for (const node of snapshot.nodes || []) {
+    const prev = nodesById.get(node.id);
+    if (prev) {
+      if (deepEqual(prev, node)) continue; // identical duplicate -> dedupe
+      errors.push(`conflicting duplicate node records for id "${node.id}" (FR-6.8)`);
+      continue;
+    }
+    const stock = store.nodes.get(node.id);
+    if (stock && stock.type !== node.type) {
+      errors.push(`id "${node.id}" already exists with type "${stock.type}", snapshot delivers "${node.type}" (E66/FR-5.2)`);
+    }
+    validateProps(node, (registry.nodeTypes || {})[node.type], `node "${node.id}"`, errors);
+    nodesById.set(node.id, node);
+  }
+  // same id, different type WITHIN the snapshot is caught by the duplicate check above
+  // (two records with equal id and different type are conflicting duplicates).
+
+  // --- edges: identity, duplicates, endpoints, refs ---
+  const nodeScopeTypes = new Set(scope.nodeTypes || []);
+  const edgesByKey = new Map();
+  const instant = meta.snapshot;
+  for (const edge of snapshot.edges || []) {
+    const decl = (registry.edgeTypes || {})[edge.type];
+    if (!decl) continue; // unknown type already reported
+    for (const ip of identityPropsOf(decl)) {
+      if ((edge.props || {})[ip] === undefined) {
+        errors.push(`edge ${edge.type} ${edge.source}->${edge.target}: missing identityProp "${ip}" (E15/FR-6.8)`);
+      }
+    }
+    const key = edgeKeyOf(edge, decl);
+    const prev = edgesByKey.get(key);
+    if (prev) {
+      if (deepEqual(prev, edge)) continue;
+      errors.push(`conflicting duplicate edge records for identity ${key} (FR-6.8)`);
+      continue;
+    }
+    edgesByKey.set(key, edge);
+    validateProps(edge, decl, `edge ${key}`, errors);
+    for (const [side, endpointDecl] of [['source', decl.from], ['target', decl.to]]) {
+      const id = edge[side];
+      const endpointErr = endpointValidity(id, endpointDecl, side, edge, nodesById, nodeScopeTypes, store, instant);
+      if (endpointErr) errors.push(endpointErr);
+    }
+    // declared reference props point to existing nodes of the declared type
+    const decls = propDeclsOf(decl);
+    for (const [propName, pd] of Object.entries(decls)) {
+      const v = (edge.props || {})[propName];
+      if (pd.ref && v !== undefined && v !== null) {
+        const refErr = endpointValidity(v, pd.ref, `ref "${propName}"`, edge, nodesById, nodeScopeTypes, store, instant);
+        if (refErr) errors.push(refErr);
+      }
+    }
+  }
+
+  // --- membership + observation proofs (FR-6.8) ---
+  const membership = computeScopeMembership(store, scope);
+  const deliveredReach = reachViaDeliveredEdges(scope.roots || [], edgesByKey);
+  for (const id of edgeSources) {
+    const rec = nodesById.get(id);
+    if (!rec) { errors.push(`edgeSources id "${id}" has no delivered node record (visited proof, FR-6.8)`); continue; }
+    const fromCompatible = (scope.edgeTypes || []).some((t) => {
+      const d = (registry.edgeTypes || {})[t];
+      return d && endpointAllows(d.from, rec.type);
+    });
+    if (!fromCompatible) { errors.push(`edgeSources id "${id}": type "${rec.type}" is no valid from-type of any declared edgeType (FR-6.8)`); continue; }
+    if (kind === 'rooted') {
+      const isRoot = (scope.roots || []).includes(id);
+      const reachable = deliveredReach.has(id);
+      const moveIn = [...edgesByKey.values()].some((e) => e.source === id && (deliveredReach.has(e.target) || membership.nodeScope.has(e.target)));
+      const preImport = membership.nodeScope.has(id);
+      if (!isRoot && !reachable && !moveIn && !preImport) {
+        errors.push(`edgeSources id "${id}" fails every visited proof (root/reachable/move-in/pre-import scope, FR-6.8)`);
+      }
+    }
+  }
+  if (kind === 'rooted' && scope.edgeTargets) {
+    for (const [edgeType, ids] of Object.entries(scope.edgeTargets)) {
+      if (!(scope.edgeTypes || []).includes(edgeType)) {
+        errors.push(`edgeTargets key "${edgeType}" is not in scope.edgeTypes (FR-6.8)`);
+        continue;
+      }
+      const decl = (registry.edgeTypes || {})[edgeType];
+      for (const id of ids) {
+        const rec = nodesById.get(id);
+        if (!rec) { errors.push(`edgeTargets["${edgeType}"] id "${id}" has no delivered node record (FR-6.8)`); continue; }
+        if (decl && !endpointAllows(decl.to, rec.type)) {
+          errors.push(`edgeTargets["${edgeType}"] id "${id}": type "${rec.type}" is not allowed as to-endpoint of "${edgeType}" (FR-6.8)`);
+          continue;
+        }
+        const proven = (scope.roots || []).includes(id) || deliveredReach.has(id) || membership.nodeScope.has(id);
+        if (!proven) errors.push(`edgeTargets["${edgeType}"] id "${id}" fails every observation proof (FR-6.8)`);
+      }
+    }
+  }
+
+  return { errors, warnings, degraded, nodesById, edgesByKey, membership, kind };
+}
+
+function validateProps(record, typeDecl, label, errors) {
+  const decls = propDeclsOf(typeDecl);
+  for (const [k, v] of Object.entries(record.props || {})) {
+    if (!isScalar(v)) errors.push(`${label}: props.${k} is not a scalar (FR-4.5)`);
+    if (typeDecl && !Object.prototype.hasOwnProperty.call(decls, k)) {
+      errors.push(`${label}: props key "${k}" is not declared in the tenant registry (propDecl required, FR-4.5/FR-6.8)`);
+    }
+  }
+}
+
+// Endpoint/reference validity at the snapshot instant (E35): the target is
+// either a record in the snapshot or exists in the stock with an open version;
+// reactivation of a closed identity is scope-bound (node-scope records only) —
+// a closed identity delivered merely as out-of-scope stub never reactivates.
+function endpointValidity(id, endpointDecl, side, edge, nodesById, nodeScopeTypes, store, instant) {
+  const delivered = nodesById.get(id);
+  const stock = store.nodes.get(id);
+  const describe = `edge ${edge.type} ${edge.source}->${edge.target} ${side} "${id}"`;
+  if (delivered) {
+    if (!endpointAllows(endpointDecl, delivered.type)) return `${describe}: type "${delivered.type}" violates the endpoint declaration (FR-6.8)`;
+    if (stock && !nodeOpenNow(stock) && !nodeValidAt(stock, instant) && !nodeScopeTypes.has(delivered.type)) {
+      return `${describe}: closed identity delivered only as out-of-scope stub — reactivation is scope-bound (E61/FR-6.8)`;
+    }
+    return null;
+  }
+  if (!stock) return `${describe}: endpoint exists neither in snapshot nor in stock (E35/FR-6.8)`;
+  if (!endpointAllows(endpointDecl, stock.type)) return `${describe}: stock type "${stock.type}" violates the endpoint declaration (FR-6.8)`;
+  if (!nodeOpenNow(stock) && !nodeValidAt(stock, instant)) return `${describe}: endpoint is not valid at the snapshot instant (E35/FR-6.8)`;
+  return null;
+}
+
+// Reachability from roots over DELIVERED snapshot edges, against the stored
+// direction (target -> source), for the visited/observation proofs (FR-6.8).
+function reachViaDeliveredEdges(roots, edgesByKey) {
+  const childrenOf = new Map();
+  for (const e of edgesByKey.values()) {
+    if (!childrenOf.has(e.target)) childrenOf.set(e.target, []);
+    childrenOf.get(e.target).push(e.source);
+  }
+  const seen = new Set();
+  const queue = [...roots];
+  while (queue.length) {
+    const id = queue.shift();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    for (const child of childrenOf.get(id) || []) if (!seen.has(child)) queue.push(child);
+  }
+  return seen;
+}
+
+function contentHashOf(snapshot) {
+  // Canonical content hash (FR-6.9): factual payload only — schema, nodes,
+  // edges, canonically sorted/serialized. Observation fields and trust
+  // requests live in the identity key, metadata stays out entirely.
+  const nodes = [...(snapshot.nodes || [])].sort((a, b) => (a.id < b.id ? -1 : 1));
+  const edges = [...(snapshot.edges || [])].sort((a, b) =>
+    canonicalJson([a.type, a.source, a.target, a.props]) < canonicalJson([b.type, b.source, b.target, b.props]) ? -1 : 1
+  );
+  return fnv1a64(canonicalJson({ schema: snapshot.schema, nodes, edges }));
+}
+// OrgGraph 2.0 engine — import orchestration (§6.3): diff per FR-5.6,
+// gates per FR-5.7/E46/E69/E70, atomic apply per FR-6.9a, delta journal
+// per FR-6.9b/E68. All mutations happen on a clone; the real store is only
+// swapped after every check passed — abort or runtime failure leaves it
+// untouched (E47).
+
+// Fail-closed default hooks (E71: product HIL dialogs are features; tests and
+// the app shell inject real deciders).
+const FAIL_CLOSED_HOOKS = Object.freeze({
+  confirmSourceRegistration: () => false,
+  confirmJoin: () => false,
+  confirmGate: () => false,
+  confirmDestructive: () => false,
+  confirmAuthority: () => false,
+});
+
+function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
+  const h = { ...FAIL_CLOSED_HOOKS, ...hooks };
+  const meta = snapshot.meta || {};
+  const scope = meta.scope || {};
+  const t = meta.snapshot;
+  const source = meta.source;
+  const report = { warnings: [], conflicts: [], counters: null, journal: null };
+
+  // ---- 1) preflight validation (FR-6.8), no mutation ----
+  const val = validateSnapshot(snapshot, registry, store);
+  report.warnings.push(...val.warnings);
+  if (val.errors.length) return { status: 'rejected', reason: 'validation', errors: val.errors, report };
+
+  // ---- 2) snapshot identity: no-op / conflict / chronology (FR-6.9, E36/E65) ----
+  const importKey = importKeyOf(meta);
+  const hash = contentHashOf(snapshot);
+  const existing = store.snapshots.get(importKey);
+  if (existing && existing.revisionStatus !== 'revidiert') {
+    if (existing.contentHash === hash) {
+      return { status: 'noop', reason: 'already imported', priorEntry: summarizeEntry(existing), report };
+    }
+    return { status: 'rejected', reason: 'identity conflict: same full import identity with different content (E36)', report };
+  }
+  const scopeFp = scopeFingerprint(scope);
+  if (val.kind === 'full') {
+    for (const entry of store.snapshots.values()) {
+      if (entry.source === source && entry.scopeFingerprint === scopeFp && entry.kind === 'full'
+        && entry.revisionStatus !== 'revidiert' && instantCompare(entry.stamp, t) > 0) {
+        return { status: 'rejected', reason: `older stamp than newest imported full state of (source, scope) — hard chronology (E65): ${entry.stamp} > ${t}`, report };
+      }
+    }
+  }
+  // Same-instant overlap of the same source (E65): overlapping visited sources
+  // must contribute identically; revised imports do not count.
+  for (const entry of store.snapshots.values()) {
+    if (entry.source !== source || entry.stamp !== t || entry.revisionStatus === 'revidiert') continue;
+    for (const id of scope.edgeSources || []) {
+      const prior = (entry.contributions || {})[id];
+      if (prior === undefined) continue;
+      const now = contributionHash(id, val, scope);
+      if (prior !== now) {
+        return { status: 'rejected', reason: `same-instant overlap with differing contribution for visited node "${id}" (E65) — revise the faulty import (FR-6.9b) or use a new instant`, report };
+      }
+    }
+  }
+
+  // ---- 3) source book (E70) ----
+  // Cloned immediately: the book may be updated on confirmation, and no
+  // mutation may reach the real store before the commit swap (FR-6.9a).
+  let book = store.sourceBook.has(source) ? deepClone(store.sourceBook.get(source)) : null;
+  if (!book) {
+    const dec = h.confirmSourceRegistration({ source, sourceUrl: meta.sourceUrl, harvestSpecVersion: meta.harvestSpecVersion ?? null });
+    if (!dec || dec.ok === false) return { status: 'aborted', reason: 'source registration not confirmed (E70)', report };
+    book = {
+      registeredAt: t,
+      harvestSpecVersion: meta.harvestSpecVersion ?? null,
+      specless: meta.harvestSpecVersion == null,
+      moveOutEdgeTypes: new Set((dec && dec.moveOutEdgeTypes) || []),
+    };
+  }
+  const specMismatch = (book.harvestSpecVersion ?? null) !== (meta.harvestSpecVersion ?? null);
+  const moveOutCapable = (edgeType) => book.moveOutEdgeTypes.has(edgeType);
+  if (val.kind === 'rooted' && scope.edgeTargets) {
+    for (const edgeType of Object.keys(scope.edgeTargets)) {
+      if (!moveOutCapable(edgeType)) {
+        report.warnings.push(`edgeTargets["${edgeType}"] ignored: edge type has no registered move-out capability for source "${source}" (E70)`);
+      }
+    }
+  }
+
+  // ---- 4) join gate (E66/E69): first contribution to foreign identities ----
+  const idRulesStamp = meta.harvestSpecVersion ?? 'none';
+  const joins = new Map(); // `${otherSource}|${nodeType}` -> examples
+  for (const [id] of val.nodesById) {
+    const stock = store.nodes.get(id);
+    if (!stock || !nodeOpenNow(stock)) continue;
+    const prov = openExistence(stock).provenance || {};
+    if (prov[source] !== undefined) continue;
+    for (const other of Object.keys(prov)) {
+      const grantKey = canonicalJson([source, other, stock.type, idRulesStamp]);
+      if (store.joinGrants.has(grantKey)) continue;
+      const k = `${other}|${stock.type}`;
+      if (!joins.has(k)) joins.set(k, { newSource: source, priorSource: other, nodeType: stock.type, grantKey, count: 0, examples: [] });
+      const j = joins.get(k);
+      j.count++;
+      if (j.examples.length < 3) j.examples.push(id);
+    }
+  }
+  if (joins.size) {
+    const ok = h.confirmJoin({ source, joins: [...joins.values()] });
+    if (!ok) return { status: 'aborted', reason: 'cross-source join not confirmed (E69) — nothing mutated (FR-6.9a)', report };
+  }
+
+  // ---- 5) authority request (E46): request only, never from the file ----
+  let authoritySources = null; // null = standard partition (only meta.source)
+  let authorityStatus = null;
+  if (scope.authoritativeForSources && scope.authoritativeForSources.length) {
+    const affected = scope.authoritativeForSources.includes('*') ? '*' : scope.authoritativeForSources;
+    const ok = h.confirmAuthority({ source, requested: affected });
+    if (ok) { authoritySources = affected; authorityStatus = { requested: affected, confirmed: true, at: t }; }
+    else { authorityStatus = { requested: affected, confirmed: false, open: true }; report.warnings.push('authority request left OPEN — imported with standard source partition (E46)'); }
+  }
+  const partitionAllows = (prov) => {
+    if (prov[source] !== undefined) return true;
+    if (authoritySources === '*') return Object.keys(prov).length > 0;
+    if (Array.isArray(authoritySources)) return Object.keys(prov).some((s) => authoritySources.includes(s));
+    return false;
+  };
+
+  // ---- 6) build the new stand on a CLONE (atomicity, FR-6.9a) ----
+  const work = deepClone(store);
+  const journal = [];
+  let posCounter = 0;
+  const counters = { a: 0, b: 0, c: 0, d: 0, e: 0, f: 0 };
+  const jot = (deltaKind, identityKey, before, after, groupId = null) => {
+    journal.push({
+      posId: `p${++posCounter}`, identityKey, deltaKind,
+      before: before === undefined ? null : before, after: after === undefined ? null : after,
+      preconditions: { instant: t }, groupId, status: 'offen',
+      audit: { operation: 'import', at: t },
+    });
+  };
+  const mergeCtx = { work, registry, source, t, counters, report, jot };
+
+  // -- delivered nodes --
+  // membership is the pre-import stock view (computed in validateSnapshot
+  // against the untouched store, FR-5.5a).
+  const membership = val.membership;
+  const nodeScopeTypes = new Set(scope.nodeTypes || []);
+  const candidates = edgeDeletionCandidates(store, scope, membership, moveOutCapable);
+  try {
+  for (const [id, rec] of val.nodesById) {
+    const inNodeScope = nodeScopeTypes.has(rec.type);
+    let identity = work.nodes.get(id);
+    if (!identity) {
+      identity = createNodeIdentity(id, rec.type);
+      identity.existence.push({ from: t, to: null, provenance: { [source]: t } });
+      setInitialTimelines(identity, rec, mergeCtx);
+      work.nodes.set(id, identity);
+      counters.e++;
+      jot('created', id, null, { label: rec.label, props: rec.props || {} });
+      continue;
+    }
+    const open = openExistence(identity);
+    if (open) {
+      const before = { ...open.provenance };
+      open.provenance[source] = latestInstant(open.provenance[source], t);
+      if (before[source] === undefined) jot('provenance-confirm', id, before, { ...open.provenance });
+    } else if (inNodeScope) {
+      identity.existence.push({ from: t, to: null, provenance: { [source]: t } });
+      identity.existence.sort((a, b) => instantCompare(a.from, b.from));
+      jot('reactivated', id, null, { at: t });
+    } else {
+      report.warnings.push(`closed identity "${id}" delivered as out-of-scope stub — not reactivated (E61)`);
+      continue;
+    }
+    mergeRecordProps(identity, rec, inNodeScope, mergeCtx);
+  }
+
+  // -- node deletion candidates (only root-free full states, E39) --
+  if (membership.nodeDeletionCandidatesAllowed) {
+    for (const id of membership.nodeScope) {
+      if (val.nodesById.has(id)) continue;
+      const identity = work.nodes.get(id);
+      const open = identity && openExistence(identity);
+      if (!open) continue;
+      if (!partitionAllows(open.provenance)) continue;
+      const lastConfirm = open.provenance[source];
+      if (lastConfirm !== undefined && instantCompare(t, lastConfirm) <= 0) continue; // instant monotonicity (E54)
+      withdrawAndMaybeClose(identity, open, authoritySources, mergeCtx);
+    }
+  }
+
+  // -- delivered edges --
+  for (const [key, rec] of val.edgesByKey) {
+    const decl = (registry.edgeTypes || {})[rec.type];
+    let identity = work.edges.get(key);
+    if (!identity) {
+      const ipVals = {};
+      for (const ip of identityPropsOf(decl)) ipVals[ip] = (rec.props || {})[ip];
+      identity = createEdgeIdentity(key, rec.type, rec.source, rec.target, ipVals);
+      identity.existence.push({ from: t, to: null, provenance: { [source]: t } });
+      setInitialTimelines(identity, rec, mergeCtx, decl);
+      work.edges.set(key, identity);
+      counters.e++;
+      jot('created', key, null, { props: rec.props || {} });
+      continue;
+    }
+    const open = identity.existence.find((iv) => iv.to === null);
+    if (open) {
+      const before = { ...open.provenance };
+      open.provenance[source] = latestInstant(open.provenance[source], t);
+      if (before[source] === undefined) jot('provenance-confirm', key, before, { ...open.provenance });
+    } else {
+      identity.existence.push({ from: t, to: null, provenance: { [source]: t } });
+      identity.existence.sort((a, b) => instantCompare(a.from, b.from));
+      jot('reactivated', key, null, { at: t });
+    }
+    mergeRecordProps(identity, rec, true, mergeCtx, decl);
+  }
+
+  // -- edge deletion candidates (FR-5.5a(2)) --
+  for (const [key] of candidates) {
+    if (val.edgesByKey.has(key)) continue;
+    const identity = work.edges.get(key);
+    const open = identity && identity.existence.find((iv) => iv.to === null);
+    if (!open) continue;
+    if (!partitionAllows(open.provenance)) continue;
+    const lastConfirm = open.provenance[source];
+    if (lastConfirm !== undefined && instantCompare(t, lastConfirm) <= 0) continue; // E54 per visited source node
+    withdrawEdge(identity, open, authoritySources, mergeCtx);
+  }
+
+  // -- implied projection (E33/E52): recompute deterministically --
+  recomputeProjections(work, registry);
+  } catch (err) {
+    if (err instanceof BundleValidationError) {
+      return { status: 'rejected', reason: err.message, report };
+    }
+    throw err;
+  }
+
+  // ---- 7) plausibility gate (FR-5.7) with null-denominator rule ----
+  const denominators = gateDenominators(store, scope, membership, candidates, source);
+  const gate = evaluateGate(counters, denominators);
+  const baselineKey = canonicalJson([source, scopeFp]);
+  const baseline = store.baselines.get(baselineKey) || { cum: { a: 0, b: 0, c: 0, d: 0 }, denominators };
+  const cumulative = {};
+  let cumulativeExceeded = false;
+  for (const k of ['a', 'b', 'c', 'd']) {
+    cumulative[k] = baseline.cum[k] + counters[k];
+    const den = baseline.denominators[k] ?? denominators[k];
+    if (den > 0 && cumulative[k] / den > 0.2) cumulativeExceeded = true;
+  }
+  let gateAudit = null;
+  if (gate.exceeded.length || cumulativeExceeded) {
+    const ok = h.confirmGate({ counters, denominators, exceeded: gate.exceeded, cumulative, cumulativeExceeded });
+    if (!ok) return { status: 'aborted', reason: `plausibility gate not confirmed (FR-5.7): ${gate.exceeded.join(', ') || 'cumulative'}`, report };
+    gateAudit = { counters: { ...counters }, denominators, exceeded: gate.exceeded, cumulativeExceeded, confirmedAt: t };
+  }
+
+  // ---- 8) destructive confirmation (E70 spec mismatch / opt-in fail-safe) ----
+  const destructiveCount = counters.a + counters.b + counters.c + counters.d;
+  if (destructiveCount > 0 && (specMismatch || store.options.IMPORT_CONFIRM_DESTRUCTIVE)) {
+    const ok = h.confirmDestructive({ source, specMismatch, counters: { ...counters } });
+    if (!ok) return { status: 'aborted', reason: specMismatch ? 'destructive effects with harvest-spec mismatch not confirmed (E70)' : 'destructive effects not confirmed (IMPORT_CONFIRM_DESTRUCTIVE)', report };
+    if (specMismatch) book.harvestSpecVersion = meta.harvestSpecVersion ?? null;
+  }
+
+  // ---- 9) commit: registry entry + swap (atomic, FR-6.9a) ----
+  const contributions = {};
+  for (const id of scope.edgeSources || []) contributions[id] = contributionHash(id, val, scope);
+  const entry = {
+    importKey, source, stamp: t, scopeFingerprint: scopeFp,
+    observationFingerprint: observationFingerprint(scope), kind: val.kind,
+    registryVersion: meta.registryVersion, contentHash: hash,
+    degraded: val.degraded, journal, gateAudit, authorityStatus,
+    precedenceUsed: [...store.precedence], contributions,
+    revisionStatus: null,
+    canonicalObservations: {
+      edgeSources: [...(scope.edgeSources || [])].sort(),
+      excluded: [...(scope.excluded || [])].sort(),
+      edgeTargets: scope.edgeTargets || {},
+    },
+  };
+  work.snapshots.set(importKey, entry);
+  work.sourceBook.set(source, book);
+  for (const j of joins.values()) work.joinGrants.add(j.grantKey);
+  if (gateAudit) work.baselines.set(baselineKey, { cum: { a: 0, b: 0, c: 0, d: 0 }, denominators });
+  else work.baselines.set(baselineKey, { cum: cumulative, denominators: baseline.denominators ?? denominators });
+
+  swapStore(store, work);
+  report.counters = { ...counters };
+  report.journal = journal;
+  return { status: 'imported', report, entry: summarizeEntry(entry) };
+}
+
+// ZIP bundles are ONE transaction unit (E55/FR-6.9a): deterministic total
+// order, dependency-aware pre-stage within equal instants, dry-run before
+// commit, full rollback on any runtime failure.
+function importBundle(store, registry, snapshots, hooks = FAIL_CLOSED_HOOKS, onApplied = null) {
+  const ordered = orderBundle(snapshots);
+  if (ordered.error) return { status: 'rejected', reason: ordered.error, results: [] };
+  const work = deepClone(store);
+  const results = [];
+  try {
+    for (const snap of ordered.list) {
+      const res = importSnapshot(work, registry, snap, hooks);
+      results.push(res);
+      if (res.status === 'rejected' || res.status === 'aborted') {
+        return { status: 'rejected', reason: `bundle member failed: ${res.reason}`, results };
+      }
+      if (onApplied) onApplied(snap, res); // test hook for injected runtime failures (AK 34)
+    }
+  } catch (err) {
+    return { status: 'rejected', reason: `runtime failure during bundle commit — rolled back (E55): ${err.message}`, results };
+  }
+  swapStore(store, work);
+  return { status: 'imported', results };
+}
+
+function orderBundle(snapshots) {
+  const sorted = [...snapshots].sort((a, b) => {
+    const ka = [a.meta.snapshot, a.meta.source, scopeFingerprint(a.meta.scope), observationFingerprint(a.meta.scope), contentHashOf(a)];
+    const kb = [b.meta.snapshot, b.meta.source, scopeFingerprint(b.meta.scope), observationFingerprint(b.meta.scope), contentHashOf(b)];
+    return canonicalJson(ka) < canonicalJson(kb) ? -1 : 1;
+  });
+  // dependency-aware pre-stage within equal instants: producers of nodes that
+  // another same-instant snapshot needs as endpoints come first.
+  const list = [];
+  let i = 0;
+  while (i < sorted.length) {
+    let j = i;
+    while (j < sorted.length && sorted[j].meta.snapshot === sorted[i].meta.snapshot) j++;
+    const group = sorted.slice(i, j);
+    const topo = topoSortGroup(group);
+    if (topo.error) return { error: topo.error };
+    list.push(...topo.list);
+    i = j;
+  }
+  return { list };
+}
+
+function topoSortGroup(group) {
+  const provides = group.map((s) => new Set((s.nodes || []).map((n) => n.id)));
+  const needs = group.map((s) => {
+    const own = new Set((s.nodes || []).map((n) => n.id));
+    const need = new Set();
+    for (const e of s.edges || []) { if (!own.has(e.source)) need.add(e.source); if (!own.has(e.target)) need.add(e.target); }
+    return need;
+  });
+  const deps = group.map((_, gi) => {
+    const d = new Set();
+    for (const id of needs[gi]) {
+      group.forEach((_, gj) => { if (gi !== gj && provides[gj].has(id)) d.add(gj); });
+    }
+    return d;
+  });
+  const list = [];
+  const state = new Array(group.length).fill(0); // 0 new, 1 visiting, 2 done
+  const visit = (idx) => {
+    if (state[idx] === 2) return true;
+    if (state[idx] === 1) return false; // cycle
+    state[idx] = 1;
+    for (const d of deps[idx]) if (!visit(d)) return false;
+    state[idx] = 2;
+    list.push(group[idx]);
+    return true;
+  };
+  for (let idx = 0; idx < group.length; idx++) {
+    if (!visit(idx)) return { error: 'cyclic same-instant dependencies in bundle (E55) — bundle rejected' };
+  }
+  return { list };
+}
+
+// --- merge helpers ---------------------------------------------------------
+
+function setInitialTimelines(identity, rec, ctx, edgeDecl = null) {
+  const skip = edgeDecl ? new Set(identityPropsOf(edgeDecl)) : new Set();
+  if (rec.label !== undefined) identity.timelines.set('label', [{ from: ctx.t, to: null, value: rec.label, source: ctx.source, instant: ctx.t }]);
+  for (const [k, v] of Object.entries(rec.props || {})) {
+    if (skip.has(k)) continue; // identityProps are identity-fixed, not versioned (E53)
+    identity.timelines.set(`props.${k}`, [{ from: ctx.t, to: null, value: v, source: ctx.source, instant: ctx.t }]);
+  }
+}
+
+function mergeRecordProps(identity, rec, fullStand, ctx, edgeDecl = null) {
+  const skip = edgeDecl ? new Set(identityPropsOf(edgeDecl)) : new Set();
+  const deliveredKeys = new Set();
+  if (rec.label !== undefined && (fullStand || edgeDecl)) { deliveredKeys.add('label'); mergeProp(identity, 'label', rec.label, ctx); }
+  for (const [k, v] of Object.entries(rec.props || {})) {
+    if (skip.has(k)) continue;
+    deliveredKeys.add(`props.${k}`);
+    mergeProp(identity, `props.${k}`, v, ctx);
+  }
+  if (!fullStand) return; // out-of-scope: additive only — missing means nothing (E61)
+  // in scope: delivered record = complete record stand — a missing prop owned
+  // by THIS source ends (FR-5.6c); foreign-owned props are untouched (E40).
+  for (const [prop, tl] of identity.timelines) {
+    if (deliveredKeys.has(prop) || prop === 'label') continue;
+    const open = openInterval(tl);
+    if (open && open.source === ctx.source && instantCompare(ctx.t, open.instant) > 0) {
+      closeOpen(tl, ctx.t);
+      ctx.counters.b++;
+      ctx.jot('prop-end', propKeyOf(identity, prop), { value: open.value, source: open.source }, null);
+    }
+  }
+}
+
+function mergeProp(identity, prop, value, ctx) {
+  const { work, source, t, counters, report, jot } = ctx;
+  if (!identity.timelines.has(prop)) identity.timelines.set(prop, []);
+  const tl = identity.timelines.get(prop);
+  const open = openInterval(tl);
+  if (!open) {
+    const last = tl[tl.length - 1];
+    if (!last || instantCompare(t, last.to) >= 0) startInterval(tl, t, value, source);
+    else insertHistorical(tl, t, value, source, t);
+    return;
+  }
+  if (open.value === value) {
+    if (open.source === source && instantCompare(t, open.instant) > 0) open.instant = t; // confirmation
+    return;
+  }
+  // differing value
+  if (open.source === source) {
+    if (instantCompare(t, open.instant) > 0) {
+      closeOpen(tl, t); startInterval(tl, t, value, source);
+      counters.f++;
+      jot('value-change', propKeyOf(identity, prop), { value: open.value }, { value });
+    } else if (instantCompare(t, open.instant) === 0) {
+      // same source, same instant, differing value: validation error (E65) —
+      // surfaced as hard error; caller treats a thrown error as rejection.
+      throw new BundleValidationError(`same-instant differing contribution of source "${source}" for ${propKeyOf(identity, prop)} (E65)`);
+    } else {
+      insertHistorical(tl, t, value, source, t);
+    }
+    return;
+  }
+  // cross-source: precedence first (FR-5.6)
+  const prec = work.precedence;
+  if (prec.length && prec.includes(open.source) && prec.includes(source)) {
+    if (prec.indexOf(source) > prec.indexOf(open.source)) {
+      report.conflicts.push({ kind: 'precedence-discarded', identity: propKeyOf(identity, prop), kept: open.source, discarded: source, instant: t });
+      return;
+    }
+    closeOpen(tl, t) || (tl.splice(tl.indexOf(open), 1)); startInterval(tl, t, value, source);
+    counters.f++;
+    jot('value-change', propKeyOf(identity, prop), { value: open.value, source: open.source }, { value, source });
+    report.conflicts.push({ kind: 'precedence-won', identity: propKeyOf(identity, prop), kept: source, overridden: open.source, instant: t });
+    return;
+  }
+  const cmp = instantCompare(t, open.instant);
+  if (cmp > 0) {
+    closeOpen(tl, t); startInterval(tl, t, value, source);
+    counters.f++;
+    jot('value-change', propKeyOf(identity, prop), { value: open.value, source: open.source }, { value, source });
+  } else if (cmp === 0) {
+    // deterministic tie-breaker: lexicographically smallest source (FR-5.6);
+    // always persisted as an OPEN source conflict.
+    const winner = source < open.source ? source : open.source;
+    work.conflicts.push({ identity: propKeyOf(identity, prop), prop, instant: t, a: { source: open.source, value: open.value }, b: { source, value }, winner });
+    report.conflicts.push({ kind: 'tie-breaker', identity: propKeyOf(identity, prop), winner, instant: t });
+    if (winner === source) { open.value = value; open.source = source; open.instant = t; }
+  } else {
+    insertHistorical(tl, t, value, source, t);
+  }
+}
+
+function propKeyOf(identity, prop) {
+  return `${identity.key || identity.id}#${prop}`;
+}
+
+function withdrawAndMaybeClose(identity, open, authoritySources, ctx) {
+  const { work, source, t, counters, jot } = ctx;
+  const groupId = `g-${identity.id}`;
+  withdrawProvenance(identity.id, open, authoritySources, ctx, groupId);
+  if (Object.keys(open.provenance).length === 0) {
+    open.to = t;
+    counters.d++;
+    jot('node-close', identity.id, { openSince: open.from }, { closedAt: t }, groupId);
+    for (const tl of identity.timelines.values()) closeOpen(tl, t);
+    // cascade (E35): close all open edges with this node as endpoint
+    for (const edge of work.edges.values()) {
+      if (edge.source !== identity.id && edge.target !== identity.id) continue;
+      const eOpen = edge.existence.find((iv) => iv.to === null);
+      if (!eOpen) continue;
+      eOpen.to = t;
+      counters.c++;
+      jot('cascade-close', edge.key, { openSince: eOpen.from }, { closedAt: t }, groupId);
+      for (const tl of edge.timelines.values()) closeOpen(tl, t);
+    }
+  }
+}
+
+function withdrawEdge(identity, open, authoritySources, ctx) {
+  const { source, t, counters, jot } = ctx;
+  const groupId = `g-${identity.key}`;
+  withdrawProvenance(identity.key, open, authoritySources, ctx, groupId);
+  if (Object.keys(open.provenance).length === 0) {
+    open.to = t;
+    counters.c++;
+    jot('edge-close', identity.key, { openSince: open.from }, { closedAt: t }, groupId);
+    for (const tl of identity.timelines.values()) closeOpen(tl, t);
+  }
+}
+
+function withdrawProvenance(identityKey, open, authoritySources, ctx, groupId) {
+  const { source, t, counters, jot } = ctx;
+  const toWithdraw = [source];
+  if (authoritySources === '*') toWithdraw.push(...Object.keys(open.provenance));
+  else if (Array.isArray(authoritySources)) toWithdraw.push(...authoritySources.filter((s) => open.provenance[s] !== undefined));
+  for (const s of new Set(toWithdraw)) {
+    if (open.provenance[s] === undefined) continue;
+    delete open.provenance[s];
+    counters.a++;
+    jot('provenance-withdrawal', identityKey, { source: s }, null, groupId);
+  }
+}
+
+// Deterministic re-projection of implied edges (E33/E52): the projected
+// contribution of a base edge is the merged union of the validity intervals of
+// ALL primary facts implying it; never a closure candidate itself.
+function recomputeProjections(work, registry) {
+  for (const edge of work.edges.values()) edge.projected = [];
+  const projectedIntervals = new Map(); // implied key -> intervals[]
+  for (const edge of work.edges.values()) {
+    const decl = (registry.edgeTypes || {})[edge.type];
+    if (!decl) continue;
+    for (const [propName, pd] of Object.entries(propDeclsOf(decl))) {
+      if (!pd.implies || !pd.ref) continue;
+      const refValue = edge.identityProps && edge.identityProps[propName] !== undefined
+        ? edge.identityProps[propName]
+        : openIntervalValue(edge, `props.${propName}`);
+      if (refValue == null) continue;
+      const impliedDecl = (registry.edgeTypes || {})[pd.implies];
+      const impliedKey = edgeKeyOf({ type: pd.implies, source: edge.source, target: refValue, props: {} }, impliedDecl);
+      if (!projectedIntervals.has(impliedKey)) projectedIntervals.set(impliedKey, { type: pd.implies, source: edge.source, target: refValue, intervals: [] });
+      for (const iv of edge.existence) projectedIntervals.get(impliedKey).intervals.push({ from: iv.from, to: iv.to });
+    }
+  }
+  for (const [key, info] of projectedIntervals) {
+    let identity = work.edges.get(key);
+    if (!identity) {
+      identity = createEdgeIdentity(key, info.type, info.source, info.target, {});
+      work.edges.set(key, identity);
+    }
+    identity.projected = mergeIntervalUnion(info.intervals);
+  }
+}
+
+function openIntervalValue(edge, prop) {
+  const tl = edge.timelines.get(prop);
+  const open = tl && openInterval(tl);
+  return open ? open.value : null;
+}
+
+function mergeIntervalUnion(intervals) {
+  const sorted = [...intervals].sort((x, y) => instantCompare(x.from, y.from));
+  const out = [];
+  for (const iv of sorted) {
+    const prev = out[out.length - 1];
+    if (prev && (prev.to === null || instantCompare(iv.from, prev.to) <= 0)) {
+      if (prev.to !== null && (iv.to === null || instantCompare(iv.to, prev.to) > 0)) prev.to = iv.to;
+    } else out.push({ from: iv.from, to: iv.to });
+  }
+  return out;
+}
+
+// --- gate -------------------------------------------------------------------
+
+function gateDenominators(store, scope, membership, edgeCandidates, source) {
+  const nodeDen = membership.nodeScope.size;
+  const edgeDen = edgeCandidates.size;
+  let propDen = 0;
+  for (const id of membership.nodeScope) {
+    const n = store.nodes.get(id);
+    if (!n) continue;
+    for (const tl of n.timelines.values()) {
+      const open = openInterval(tl);
+      if (open && open.source === source) propDen++;
+    }
+  }
+  let allPropDen = 0;
+  let tenantNodeDen = 0;
+  for (const n of store.nodes.values()) {
+    if (nodeOpenNow(n)) tenantNodeDen++;
+    for (const tl of n.timelines.values()) if (openInterval(tl)) allPropDen++;
+  }
+  // Null-denominator rule (FR-5.7): empty scope denominator in a non-empty
+  // tenant counts against the tenant-wide stock instead.
+  return {
+    a: nodeDen || tenantNodeDen, b: propDen || allPropDen, c: edgeDen,
+    d: nodeDen || tenantNodeDen, e: nodeDen || tenantNodeDen, f: allPropDen,
+  };
+}
+
+function evaluateGate(counters, denominators) {
+  const exceeded = [];
+  for (const k of ['a', 'b', 'c', 'd', 'e', 'f']) {
+    const den = denominators[k];
+    if (den > 0 && counters[k] / den > 0.2) exceeded.push(k);
+  }
+  return { exceeded };
+}
+
+// --- misc -------------------------------------------------------------------
+
+class BundleValidationError extends Error {}
+
+function latestInstant(a, b) {
+  if (a === undefined) return b;
+  return instantCompare(a, b) >= 0 ? a : b;
+}
+
+function contributionHash(id, val, scope) {
+  const rec = val.nodesById.get(id) ?? null;
+  const edgeTypes = new Set(scope.edgeTypes || []);
+  const outgoing = [...val.edgesByKey.values()].filter((e) => e.source === id && edgeTypes.has(e.type));
+  outgoing.sort((a, b) => (canonicalJson(a) < canonicalJson(b) ? -1 : 1));
+  return canonicalJson({ rec, outgoing });
+}
+
+function summarizeEntry(entry) {
+  const { journal, ...rest } = entry;
+  return { ...rest, journalPositions: journal ? journal.length : 0 };
+}
+
+function swapStore(store, work) {
+  for (const k of Object.keys(work)) store[k] = work[k];
+}
+// OrgGraph 2.0 engine — view path expression parser and registry-aware view
+// validation (FR-7.1a, E19). Grammar:
+//   view      := node-expr
+//   node-expr := Typ [ "[" render "]" ] [ zweige ]
+//   zweige    := hop | "(" hop { "," hop } ")"
+//   hop       := "<--" Kantentyp "--" node-expr | "--" Kantentyp "-->" node-expr
+//   render    := "node" | "cluster" | "hidden" | "ring" [":" ("prev"|"next")]
+// Type names are path-safe identifiers (E58); a hop whose target type equals
+// its start type is implicitly transitive (the WHOLE surrounding node-expr
+// re-applies at the target).
+
+const RENDER_MODES = ['node', 'cluster', 'hidden', 'ring', 'ring:prev', 'ring:next'];
+
+class PathSyntaxError extends Error {}
+
+// Parse a path expression into { type, render, hops:[{dir:'<--'|'-->', edgeType, target:nodeExpr, selfHop:boolean}] }.
+function parsePathExpression(path) {
+  const tokens = tokenize(String(path));
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const next = () => tokens[pos++];
+  const expect = (kind) => {
+    const tk = next();
+    if (!tk || tk.kind !== kind) throw new PathSyntaxError(`expected ${kind} at position ${tk ? tk.at : 'end'} in path`);
+    return tk;
+  };
+
+  function parseNodeExpr() {
+    const typeTk = expect('name');
+    const node = { type: typeTk.value, render: 'node', hops: [] };
+    if (peek() && peek().kind === '[') {
+      next();
+      const renderTk = expect('name');
+      let render = renderTk.value;
+      if (peek() && peek().kind === ':') { next(); render += ':' + expect('name').value; }
+      if (!RENDER_MODES.includes(render)) throw new PathSyntaxError(`unknown render mode "${render}"`);
+      node.render = render === 'ring' ? 'ring:prev' : render; // [ring] = [ring:prev] (E21)
+      expect(']');
+    }
+    if (peek() && (peek().kind === '(' || peek().kind === '<--' || peek().kind === '--')) {
+      if (peek().kind === '(') {
+        next();
+        node.hops.push(parseHop());
+        while (peek() && peek().kind === ',') { next(); node.hops.push(parseHop()); }
+        expect(')');
+      } else {
+        node.hops.push(parseHop());
+      }
+    }
+    for (const hop of node.hops) hop.selfHop = hop.target.type === node.type;
+    return node;
+  }
+
+  function parseHop() {
+    const tk = next();
+    if (tk && tk.kind === '<--') {
+      const edge = expect('name');
+      expect('--');
+      return { dir: '<--', edgeType: edge.value, target: parseNodeExpr() };
+    }
+    if (tk && tk.kind === '--') {
+      const edge = expect('name');
+      expect('-->');
+      return { dir: '-->', edgeType: edge.value, target: parseNodeExpr() };
+    }
+    throw new PathSyntaxError(`expected hop at position ${tk ? tk.at : 'end'}`);
+  }
+
+  const root = parseNodeExpr();
+  if (pos !== tokens.length) throw new PathSyntaxError(`unexpected trailing input at position ${tokens[pos].at}`);
+  return root;
+}
+
+function tokenize(src) {
+  const tokens = [];
+  let i = 0;
+  const NAME_RE = /^\p{L}[\p{L}\p{N}_]*/u;
+  while (i < src.length) {
+    const rest = src.slice(i);
+    if (/^\s/.test(rest)) { i++; continue; }
+    if (rest.startsWith('<--')) { tokens.push({ kind: '<--', at: i }); i += 3; continue; }
+    if (rest.startsWith('-->')) { tokens.push({ kind: '-->', at: i }); i += 3; continue; }
+    if (rest.startsWith('--')) { tokens.push({ kind: '--', at: i }); i += 2; continue; }
+    const one = rest[0];
+    if (['(', ')', '[', ']', ',', ':'].includes(one)) { tokens.push({ kind: one, at: i }); i++; continue; }
+    const m = NAME_RE.exec(rest);
+    if (m) { tokens.push({ kind: 'name', value: m[0], at: i }); i += m[0].length; continue; }
+    throw new PathSyntaxError(`unexpected character "${one}" at position ${i}`);
+  }
+  return tokens;
+}
+
+// Flatten the parsed tree into stations for attachment/validation walks:
+// pre-order [{ type, render, viaHop }].
+function pathStations(root) {
+  const out = [];
+  const walk = (node, viaHop) => {
+    out.push({ type: node.type, render: node.render, viaHop });
+    for (const hop of node.hops) {
+      if (hop.selfHop) continue; // transitive re-application, not a new station type chain
+      walk(hop.target, hop);
+    }
+  };
+  walk(root, null);
+  return out;
+}
+
+function visibleTypesOf(root) {
+  const types = new Set();
+  const walk = (node) => {
+    if (node.render !== 'hidden') types.add(node.type);
+    for (const hop of node.hops) walk(hop.target);
+  };
+  walk(root);
+  return types;
+}
+
+function allTypesOf(root) {
+  const types = new Set();
+  const walk = (node) => { types.add(node.type); for (const hop of node.hops) walk(hop.target); };
+  walk(root);
+  return types;
+}
+
+// Registry-aware validation of one view (FR-7.1a): grammar, type existence,
+// from/to hop compatibility, __auto__ guard (E45), resolvable ring attachment
+// (E21) and filter references (FR-7.8). Returns { ok, errors, parsed }.
+function validateView(view, registry) {
+  const errors = [];
+  let parsed = null;
+  try {
+    parsed = parsePathExpression(view.path);
+  } catch (err) {
+    return { ok: false, errors: [`path grammar: ${err.message}`], parsed: null };
+  }
+
+  const nodeTypes = registry.nodeTypes || {};
+  const edgeTypes = registry.edgeTypes || {};
+
+  const checkNode = (node, prevVisible) => {
+    if (!isPathSafeTypeName(node.type) || !nodeTypes[node.type]) {
+      errors.push(`unknown node type "${node.type}" (not in tenant registry)`);
+    }
+    for (const hop of node.hops) {
+      const decl = edgeTypes[hop.edgeType];
+      if (!decl) {
+        errors.push(`unknown edge type "${hop.edgeType}" (not in tenant registry)`);
+      } else {
+        // <--E-- B : stored edge points from B (source) to the LEFT node
+        // (target); --E--> B : stored edge points from the left node to B.
+        const [fromType, toType] = hop.dir === '<--' ? [hop.target.type, node.type] : [node.type, hop.target.type];
+        if (nodeTypes[fromType] && !endpointAllows(decl.from, fromType)) {
+          errors.push(`hop ${node.type} ${hop.dir}${hop.edgeType}: "${fromType}" is no valid from-type of "${hop.edgeType}"`);
+        }
+        if (nodeTypes[toType] && !endpointAllows(decl.to, toType)) {
+          errors.push(`hop ${node.type} ${hop.dir}${hop.edgeType}: "${toType}" is no valid to-type of "${hop.edgeType}"`);
+        }
+      }
+      // only node/cluster stations count as ring attachment targets (E21)
+      checkNode(hop.target, node.render === 'node' || node.render === 'cluster' ? true : prevVisible);
+    }
+    // ring attachment resolvability (E21): ring:prev needs a preceding
+    // visible node station, ring:next a following one. In this tree shape a
+    // ring station always follows its parent; ring:prev resolves when any
+    // ancestor station is visible ('node'/'cluster'), ring:next when a
+    // following visible station exists inside this subtree.
+    if (node.render === 'ring:prev' && !prevVisible) {
+      errors.push(`ring:prev at "${node.type}" has no preceding visible node station (E21)`);
+    }
+    if (node.render === 'ring:next') {
+      const hasFollowingVisible = node.hops.some(function findVisible(hop) {
+        const tNode = hop.target;
+        if (tNode.render === 'node' || tNode.render === 'cluster') return true;
+        return tNode.hops.some(findVisible);
+      });
+      if (!hasFollowingVisible) errors.push(`ring:next at "${node.type}" has no following visible node station (E21)`);
+    }
+  };
+  checkNode(parsed, false);
+
+  // __auto__ guard (E45): only allowed with EXACTLY ONE transitive self-hop
+  // at the anchor.
+  if ((view.roots || []).includes('__auto__')) {
+    const selfHops = parsed.hops.filter((hop) => hop.selfHop);
+    if (selfHops.length !== 1) {
+      errors.push(`"__auto__" requires exactly one transitive self-hop at the anchor, found ${selfHops.length} (E45)`);
+    }
+  }
+
+  // filter references (FR-7.8): type exists in the path, prop declared in the
+  // registry (or "label"); ref operators only on declared reference props.
+  const pathTypes = allTypesOf(parsed);
+  const filters = view.filters || {};
+  for (const [kindKey, typeMap] of [['nodes', nodeTypes], ['edges', edgeTypes]]) {
+    for (const f of filters[kindKey] || []) {
+      const declHolder = typeMap[f.type];
+      if (!declHolder) { errors.push(`filter references unknown ${kindKey.slice(0, -1)} type "${f.type}"`); continue; }
+      if (kindKey === 'nodes' && !pathTypes.has(f.type)) errors.push(`node filter type "${f.type}" does not occur in the path`);
+      const decls = propDeclsOf(declHolder);
+      const declared = f.prop === 'label' || Object.prototype.hasOwnProperty.call(decls, f.prop);
+      if (!declared) errors.push(`filter prop "${f.prop}" is not declared for type "${f.type}"`);
+      const isRefOp = f.op === 'refEq' || f.op === 'refIn';
+      const isRefProp = decls[f.prop] && decls[f.prop].ref;
+      if (isRefOp && !isRefProp) errors.push(`filter op "${f.op}" requires a declared reference prop, "${f.prop}" is scalar`);
+      if (!isRefOp && isRefProp && f.op !== 'exists') errors.push(`scalar filter op "${f.op}" on reference prop "${f.prop}" — use refEq/refIn`);
+    }
+  }
+
+  return { ok: errors.length === 0, errors, parsed };
+}
+
+// Validate a whole VIEWS object (FR-7.1a): invalid views are rejected with a
+// config error and hidden from the switcher; zero valid views => the app
+// behaves as without VIEWS (diagnosis projection) plus a config error report.
+function validateViews(views, registry) {
+  const valid = {};
+  const rejected = {};
+  for (const [name, view] of Object.entries(views || {})) {
+    const res = validateView(view, registry);
+    if (res.ok) valid[name] = { ...view, parsed: res.parsed };
+    else rejected[name] = res.errors;
+  }
+  return { valid, rejected, anyValid: Object.keys(valid).length > 0 };
+}
 
 </script>
 </body>
