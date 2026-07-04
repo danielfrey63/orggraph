@@ -32,6 +32,10 @@
           "type": "string",
           "description": "Version of the registry the run was crawled against (PRD FR-6.1b)."
         },
+        "harvestSpecVersion": {
+          "type": "string",
+          "description": "Version of the gated harvest spec the Phase-B script ran against (PRD E70); written by Phase B into every exported snapshot. Absent on migration snapshots. The tenant's source book compares it against the registered expectation — mismatch or absence makes destructive effects confirmation-gated (PRD FR-6.8)."
+        },
         "scope": {
           "allOf": [
             { "$ref": "#/$defs/scope" },
