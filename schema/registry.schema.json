@@ -43,7 +43,7 @@
         },
         "leafProp": {
           "type": "string",
-          "description": "Boolean property marking leaf nodes; drives the type-agnostic leaf filter (PRD FR-8.3)."
+          "description": "Path to the boolean property marking leaf nodes, in the same path notation as identifiers (e.g. \"props.isBasis\"); drives the type-agnostic leaf filter (PRD FR-8.3)."
         },
         "pseudonymize": {
           "type": "object",

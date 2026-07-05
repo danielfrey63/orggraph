@@ -2301,7 +2301,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.126.113';
+const APP_VERSION = '1.127.114';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -11306,6 +11306,9 @@ function checkFieldPaths(name, decl, problems) {
     if (!isWellFormedFieldPath(idPath)) {
       problems.push(`node type "${name}": identifier path "${idPath}" is not a well-formed field path`);
     }
+  }
+  if (decl.leafProp !== undefined && !/^props\.[^.]+$/.test(String(decl.leafProp))) {
+    problems.push(`node type "${name}": leafProp "${decl.leafProp}" must be a props path like "props.isBasis"`);
   }
 }
 

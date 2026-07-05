@@ -118,6 +118,9 @@ function checkFieldPaths(name, decl, problems) {
       problems.push(`node type "${name}": identifier path "${idPath}" is not a well-formed field path`);
     }
   }
+  if (decl.leafProp !== undefined && !/^props\.[^.]+$/.test(String(decl.leafProp))) {
+    problems.push(`node type "${name}": leafProp "${decl.leafProp}" must be a props path like "props.isBasis"`);
+  }
 }
 /* v8 ignore stop */
 

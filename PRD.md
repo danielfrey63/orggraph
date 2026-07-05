@@ -209,7 +209,7 @@ Beispiel (illustrativ, E14):
   "Person": {
     "labelProp": "label",
     "identifiers": ["id", "props.email"],
-    "leafProp": "isBasis",
+    "leafProp": "props.isBasis",
     "pseudonymize": { "pool": "names" }
   },
   "OE": {
@@ -223,7 +223,7 @@ Beispiel (illustrativ, E14):
 |------------|------------------------------|---------|
 | `labelProp` | `label`-Feld fix | Welche Eigenschaft als Anzeigename dient (`label` oder skalarer `props.*`-Pfad; Auflösungsregel FR-4.2b). |
 | `identifiers` | Fuzzy-Suche über `id`/`email`/`label` fix auf Personen | Suchbare Identifikator-Pfade des Typs (Suche, FR-8.4) und Zuordnungshilfe **vor dem Export** (Builder-Toolkit/Migrations-Fuzzy-Zuordnung, FR-10.4). Beim **Import** findet nie ein Identifier-Matching statt: Knoten-Identität ist ausschliesslich `id` (FR-5.2), und Cross-Source-Zusammenführungen laufen nur über die identische globale Kennung plus das Join-Gate (E66/E69) — `identifiers` können nie still Identitäten verschmelzen. |
-| `leafProp` | Management-Filter über `isBasis` fix auf Personen | Boolesche Eigenschaft, die Blatt-Knoten markiert; der Blatt-Filter der Toolbar blendet sie typunabhängig aus. |
+| `leafProp` | Management-Filter über `isBasis` fix auf Personen | Pfad auf die boolesche Eigenschaft, die Blatt-Knoten markiert — gleiche Pfad-Notation wie `identifiers` (z. B. `props.isBasis`); der Blatt-Filter der Toolbar blendet sie typunabhängig aus. |
 | `pseudonymize` | `names[]` (Person) / `organizationalUnits{level}[]` (OE) fix | Pseudonym-Pool pro Typ, optional level-abhängig. Die Capability wählt nur den **schöneren Pool** — Typen ohne Capability erhalten bei aktivem Pseudo-Modus den fail-closed-Fallback `<Typname> N` (E48, FR-8.5), nie das echte Label. |
 | `props.<name>.nonSensitive` | — (neu mit Pseudo-Whitelist) | **Privacy-Whitelist des Pseudo-Modus (E60):** Property-Deklaration am Knoten- oder Kantentyp (`"props": { "standort": { "nonSensitive": true } }`, Default `false` — schema-definiert in `registry.schema.json`/`propDecl`). Nur so markierte Werte bleiben im Pseudo-Modus sichtbar und suchbar (FR-8.4/FR-8.5); `identifiers`-Pfade sind **nie implizit** unsensibel — zeigt ein Identifier-Pfad auf eine Property ohne `nonSensitive: true`, wird er im Pseudo-Modus unterdrückt. |
 

@@ -1,19 +1,18 @@
 {
-  "$comment": "HIL-1 DRAFT (PRD FR-10.1, E71): proposed first non-empty registry commit, derived from the legacy structures (persons/orgs/links of HRM, SBB-GD, SEM v1) and their attribute categories. Becomes schema/registry.json ONLY after human approval at the bootstrap gate — until then registry.json stays empty (version 0).",
-  "version": "2026-07-04.1",
+  "$comment": "HIL-1 DRAFT rev 2 (PRD FR-10.1, E71): proposed first non-empty registry commit, derived from the legacy structures (persons/orgs/links of HRM, SBB-GD, SEM v1) and their attribute categories; revised per HIL-1 feedback 2026-07-05 (Kontaktart node type, Gremium kategorie prop, Team/Gremium distinction, explicit kontext:null contract, props.isBasis path notation). Becomes schema/registry.json ONLY after human approval at the bootstrap gate — until then registry.json stays empty (version 0).",
+  "version": "2026-07-05.1",
   "nodeTypes": {
     "Person": {
       "description": "Individual person. Legacy: persons[] (id, label, email, isBasis).",
       "labelProp": "label",
       "identifiers": ["id", "props.email"],
-      "leafProp": "isBasis",
+      "leafProp": "props.isBasis",
       "pseudonymize": { "pool": "names" },
       "props": {
         "email": { "type": "string", "description": "Global natural key (E66 join key); sensitive by default (E60)." },
         "isBasis": { "type": "boolean", "description": "Leaf marker driving the leaf filter (FR-8.3). Legacy: persons[].isBasis." },
         "pensum": { "type": "number", "description": "Employment percentage. Legacy: SBB-GD Beschaeftigungsgrad.tsv (numeric, unique per person)." },
-        "mobil": { "type": "string", "description": "Mobile number. Legacy: SBB-GD Mobilnummer.tsv (unique per person)." },
-        "kontakt": { "type": "string", "description": "Personal contact note. Legacy: SEM 'Persönliche Kontakt.tsv' (unique per person)." }
+        "mobil": { "type": "string", "description": "Mobile number. Legacy: SBB-GD Mobilnummer.tsv (unique per person)." }
       }
     },
     "OE": {
@@ -27,19 +26,25 @@
       "description": "Role, shared and traversable. Legacy: SEM ERZ Rollen Rom/Paris, AKROS values, HRM Funktion."
     },
     "Team": {
-      "description": "Team membership target. Legacy: SEM ERZ Teams Rom/Paris."
+      "description": "Operative delivery/work group (does the work). Distinction: Gremium is a governance/alignment format. Legacy: SEM ERZ Teams Rom/Paris, SEM Change Team."
     },
     "Training": {
-      "description": "Training/course. Legacy: SEM SAFe Trainings."
+      "description": "Training or training cohort/session. Legacy: SEM SAFe Trainings. If cohort vs. course ever matters, split later; one node type suffices for bootstrap."
     },
     "Gremium": {
-      "description": "Board/committee/working group. Legacy: SEM QRM-Board, GL-Workshop, Change Team, ISC LACE, SEM_PM, SEM-ISC-Themen, ERZ PA, HRM 12W Retros."
+      "description": "Governance/alignment format: board, workshop, committee, voting body (governs/aligns; a Team delivers). Source categories stay distinguishable via props.kategorie without type inflation. Legacy: SEM QRM-Board, GL-Workshop, ISC LACE, SEM_PM, SEM-ISC-Themen, ERZ PA, HRM 12W Retros.",
+      "props": {
+        "kategorie": { "type": "string", "description": "Source category of the format, e.g. 'QRM-Board', 'GL-Workshop', 'ISC LACE', 'SEM_PM', 'SEM-ISC-Themen', 'ERZ PA', '12W Retros'. Set by the migration from the TSV category (FR-10.2)." }
+      }
     },
     "Projekt": {
       "description": "Project. Legacy: SEM Projekt Sicherheit."
     },
     "Firma": {
       "description": "External company (context of a role). Legacy: SEM AKROS.tsv — the canonical Kontext+Rolle case (FR-4.6)."
+    },
+    "Kontaktart": {
+      "description": "Personal contact kind/channel, shared across persons. Reified as a node because the legacy data is multi-valued per person (FR-4.4). Legacy: SEM 'Persönliche Kontakt.tsv'."
     }
   },
   "edgeTypes": {
@@ -64,12 +69,12 @@
       "to": "AufbauOrg"
     },
     "hatRolle": {
-      "description": "Has role; props.kontext optionally binds the role to a company (double reification, FR-4.6). kontext is an identityProp (E15): the same role at two companies keeps two edge identities; context-free roles carry kontext: null.",
+      "description": "Has role; props.kontext optionally binds the role to a company (double reification, FR-4.6). kontext is an identityProp (E15): the same role at two companies keeps two edge identities. BINDING for producers/migration: context-free roles MUST deliver kontext: null explicitly — omitting an identityProp violates the edge identity contract and is rejected by the import preflight (FR-6.8).",
       "from": "Person",
       "to": "Rolle",
       "identityProps": ["kontext"],
       "props": {
-        "kontext": { "ref": "Firma", "implies": "arbeitetBei", "description": "Node reference to the company context (FR-4.7); null when the role has no company context." }
+        "kontext": { "ref": "Firma", "implies": "arbeitetBei", "description": "Node reference to the company context (FR-4.7); null (never absent) when the role has no company context." }
       }
     },
     "arbeitetBei": {
@@ -96,6 +101,11 @@
       "description": "Works on a project.",
       "from": "Person",
       "to": "Projekt"
+    },
+    "hatKontakt": {
+      "description": "Has personal contact kind/channel (multi-valued per person). Legacy: SEM 'Persönliche Kontakt.tsv'.",
+      "from": "Person",
+      "to": "Kontaktart"
     }
   }
 }

@@ -5,7 +5,7 @@
     "Person": {
       "labelProp": "label",
       "identifiers": ["id", "props.email"],
-      "leafProp": "isBasis",
+      "leafProp": "props.isBasis",
       "pseudonymize": { "pool": "names" },
       "props": {
         "email": { "type": "string" },
