@@ -1,0 +1,48 @@
+{
+  "$comment": "Mapping configuration for scripts/migrate-legacy.mjs (PRD FR-10.2). Category treatments per tenant: property (scalar on Person), node (container node + edge, E72 identity = category + value), role (Rolle node + hatRolle with kontext:null), contextRole (double reification FR-4.6: Firma from category, Rolle from value, hatRolle with kontext=Firma id). sourceDate = latest mtime of the tenant's legacy inputs at migration time (E57 provenance; the stamp is derived as <date>T00:00:00Z / YYYYMMDD-0000).",
+  "registryVersion": "2026-07-05.1",
+  "tenants": {
+    "legacy-sem": {
+      "dir": "data/SEM",
+      "dataFile": "data.json",
+      "attributesDir": "attributes",
+      "sourceDate": "2026-06-12",
+      "categories": {
+        "ERZ Rollen Rom": { "treatment": "role" },
+        "ERZ Rollen Paris": { "treatment": "role" },
+        "AKROS": { "treatment": "contextRole" },
+        "ERZ Teams Rom": { "treatment": "node", "type": "Team", "edge": "imTeam" },
+        "ERZ Teams Paris": { "treatment": "node", "type": "Team", "edge": "imTeam" },
+        "SEM Change Team": { "treatment": "node", "type": "Team", "edge": "imTeam" },
+        "SEM SAFe Trainings": { "treatment": "node", "type": "Training", "edge": "besuchte" },
+        "SEM Projekt Sicherheit": { "treatment": "node", "type": "Projekt", "edge": "arbeitetAn" },
+        "Persönliche Kontakt": { "treatment": "node", "type": "Kontaktart", "edge": "hatKontakt" },
+        "ERZ QRM-Board": { "treatment": "node", "type": "Gremium", "edge": "imGremium", "categoryProp": "kategorie" },
+        "SEM GL-Workshop": { "treatment": "node", "type": "Gremium", "edge": "imGremium", "categoryProp": "kategorie" },
+        "ERZ PA": { "treatment": "node", "type": "Gremium", "edge": "imGremium", "categoryProp": "kategorie" },
+        "ISC LACE": { "treatment": "node", "type": "Gremium", "edge": "imGremium", "categoryProp": "kategorie" },
+        "SEM_PM": { "treatment": "node", "type": "Gremium", "edge": "imGremium", "categoryProp": "kategorie" },
+        "SEM-ISC-Themen": { "treatment": "node", "type": "Gremium", "edge": "imGremium", "categoryProp": "kategorie" }
+      }
+    },
+    "legacy-sbb-gd": {
+      "dir": "data/SBB-GD",
+      "dataFile": "data.json",
+      "attributesDir": "attributes",
+      "sourceDate": "2026-06-19",
+      "categories": {
+        "Beschaeftigungsgrad": { "treatment": "property", "prop": "pensum", "valueType": "number" },
+        "AufbauOrg": { "treatment": "node", "type": "AufbauOrg", "edge": "gehoertZu" },
+        "Mobilnummer": { "treatment": "property", "prop": "mobil" }
+      }
+    },
+    "legacy-hrm": {
+      "dir": "data/HRM",
+      "dataFile": "data.hrm.json",
+      "attributesDir": null,
+      "sourceDate": "2026-06-18",
+      "personRoleField": { "field": "role", "category": "Funktion" },
+      "categories": {}
+    }
+  }
+}
