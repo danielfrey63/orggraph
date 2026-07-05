@@ -1,6 +1,111 @@
 {
-  "$comment": "Canonical type registry (PRD FR-4.1). Starts empty; grows exclusively through analysis-gate commits (PRD FR-6.1a). Format: registry.schema.json.",
-  "version": "0",
-  "nodeTypes": {},
-  "edgeTypes": {}
+  "$comment": "Canonical type registry (PRD FR-4.1). Grows exclusively through analysis-gate commits (PRD FR-6.1a). Format: registry.schema.json. Version 2026-07-05.1 = registry bootstrap, human-approved at the HIL-1 gate on 2026-07-05 (FR-10.1, E71); derived from the legacy structures (persons/orgs/links of HRM, SBB-GD, SEM v1) and their attribute categories.",
+  "version": "2026-07-05.1",
+  "nodeTypes": {
+    "Person": {
+      "description": "Individual person. Legacy: persons[] (id, label, email, isBasis).",
+      "labelProp": "label",
+      "identifiers": ["id", "props.email"],
+      "leafProp": "props.isBasis",
+      "pseudonymize": { "pool": "names" },
+      "props": {
+        "email": { "type": "string", "description": "Global natural key (E66 join key); sensitive by default (E60)." },
+        "isBasis": { "type": "boolean", "description": "Leaf marker driving the leaf filter (FR-8.3). Legacy: persons[].isBasis." },
+        "pensum": { "type": "number", "description": "Employment percentage. Legacy: SBB-GD Beschaeftigungsgrad.tsv (numeric, unique per person)." },
+        "mobil": { "type": "string", "description": "Mobile number. Legacy: SBB-GD Mobilnummer.tsv (unique per person)." }
+      }
+    },
+    "OE": {
+      "description": "Organisational unit. Legacy: orgs[].",
+      "pseudonymize": { "pool": "orgUnits", "byLevel": true }
+    },
+    "AufbauOrg": {
+      "description": "Structural organisation code, shared across persons. Legacy: SBB-GD AufbauOrg.tsv."
+    },
+    "Rolle": {
+      "description": "Role, shared and traversable. Legacy: SEM ERZ Rollen Rom/Paris, AKROS values, HRM Funktion."
+    },
+    "Team": {
+      "description": "Operative delivery/work group (does the work). Distinction: Gremium is a governance/alignment format. Legacy: SEM ERZ Teams Rom/Paris, SEM Change Team."
+    },
+    "Training": {
+      "description": "Training or training cohort/session. Legacy: SEM SAFe Trainings. If cohort vs. course ever matters, split later; one node type suffices for bootstrap."
+    },
+    "Gremium": {
+      "description": "Governance/alignment format: board, workshop, committee, voting body (governs/aligns; a Team delivers). Source categories stay distinguishable via props.kategorie without type inflation. Legacy: SEM QRM-Board, GL-Workshop, ISC LACE, SEM_PM, SEM-ISC-Themen, ERZ PA, HRM 12W Retros.",
+      "props": {
+        "kategorie": { "type": "string", "description": "Source category of the format, e.g. 'QRM-Board', 'GL-Workshop', 'ISC LACE', 'SEM_PM', 'SEM-ISC-Themen', 'ERZ PA', '12W Retros'. Set by the migration from the TSV category (FR-10.2)." }
+      }
+    },
+    "Projekt": {
+      "description": "Project. Legacy: SEM Projekt Sicherheit."
+    },
+    "Firma": {
+      "description": "External company (context of a role). Legacy: SEM AKROS.tsv — the canonical Kontext+Rolle case (FR-4.6)."
+    },
+    "Kontaktart": {
+      "description": "Personal contact kind/channel, shared across persons. Reified as a node because the legacy data is multi-valued per person (FR-4.4). Legacy: SEM 'Persönliche Kontakt.tsv'."
+    }
+  },
+  "edgeTypes": {
+    "berichtetAn": {
+      "description": "Reports to (subordinate -> superior, FR-7.2a). Legacy person->person links are manager->report and get INVERTED by the migration (FR-10.3).",
+      "from": "Person",
+      "to": "Person"
+    },
+    "mitgliedIn": {
+      "description": "Member of an OE (person -> container). Legacy person->org links keep their direction (FR-10.3).",
+      "from": "Person",
+      "to": "OE"
+    },
+    "unterstellt": {
+      "description": "Sub-OE of (child OE -> parent OE). Legacy org->org links are parent->child and get INVERTED by the migration (FR-10.3).",
+      "from": "OE",
+      "to": "OE"
+    },
+    "gehoertZu": {
+      "description": "Belongs to a structural org code.",
+      "from": "Person",
+      "to": "AufbauOrg"
+    },
+    "hatRolle": {
+      "description": "Has role; props.kontext optionally binds the role to a company (double reification, FR-4.6). kontext is an identityProp (E15): the same role at two companies keeps two edge identities. BINDING for producers/migration: context-free roles MUST deliver kontext: null explicitly — omitting an identityProp violates the edge identity contract and is rejected by the import preflight (FR-6.8).",
+      "from": "Person",
+      "to": "Rolle",
+      "identityProps": ["kontext"],
+      "props": {
+        "kontext": { "ref": "Firma", "implies": "arbeitetBei", "description": "Node reference to the company context (FR-4.7); null (never absent) when the role has no company context." }
+      }
+    },
+    "arbeitetBei": {
+      "description": "Works at a company. Base edge materialized as projection of hatRolle primary facts (FR-4.8, E33); may also stand alone.",
+      "from": "Person",
+      "to": "Firma"
+    },
+    "imTeam": {
+      "description": "Team membership.",
+      "from": "Person",
+      "to": "Team"
+    },
+    "besuchte": {
+      "description": "Attended a training; the value (e.g. cohort) stays on the target node label.",
+      "from": "Person",
+      "to": "Training"
+    },
+    "imGremium": {
+      "description": "Member of a board/committee.",
+      "from": "Person",
+      "to": "Gremium"
+    },
+    "arbeitetAn": {
+      "description": "Works on a project.",
+      "from": "Person",
+      "to": "Projekt"
+    },
+    "hatKontakt": {
+      "description": "Has personal contact kind/channel (multi-valued per person). Legacy: SEM 'Persönliche Kontakt.tsv'.",
+      "from": "Person",
+      "to": "Kontaktart"
+    }
+  }
 }
