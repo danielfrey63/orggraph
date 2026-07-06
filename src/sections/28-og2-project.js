@@ -258,9 +258,12 @@ export function projectView(options) {
         }
 
         // Visible target (node/cluster): order +1, bounded by depth (FR-7.7).
+        // A target already in the scene stays reachable as a cross-link even
+        // past the depth budget — the edge is drawn, order never changes
+        // (FR-7.2: cross-links have no order effect).
         const newOrder = state.order + 1;
-        if (depth !== null && newOrder > depth) continue;
-        const entry = admitVisible(other, render, newOrder);
+        if (depth !== null && newOrder > depth && !visible.has(otherId)) continue;
+        const entry = visible.get(otherId) || admitVisible(other, render, newOrder);
         if (!entry) continue; // capped — never traverse past the cap (E67)
 
         if (state.segment && state.segment.edges.length) {
