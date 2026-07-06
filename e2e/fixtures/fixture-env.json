@@ -2,17 +2,22 @@
   "VIEWS": {
     "Start": {
       "path": "Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster], --hatRolle--> Rolle[ring], --imTeam--> Team[ring])",
-      "roots": ["__auto__"],
+      "roots": [
+        "__auto__"
+      ],
       "depth": 3
     },
     "Nur Hierarchie": {
       "path": "Person <--berichtetAn-- Person",
-      "roots": ["__auto__"],
+      "roots": [
+        "__auto__"
+      ],
       "depth": 6
     }
   },
   "REGISTRY_URL": "./registry.json",
   "DATA_URL": "./snapshot.json",
   "TOOLBAR_DEPTH_DEFAULT": 3,
-  "TOOLBAR_MANAGEMENT_ACTIVE": false
+  "TOOLBAR_MANAGEMENT_ACTIVE": false,
+  "TOOLBAR_PSEUDO_ACTIVE": false
 }

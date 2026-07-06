@@ -42,7 +42,7 @@ function semEnv() {
   const envPath = join(root, 'data/migration/legacy-sem.env.json');
   if (!existsSync(envPath)) return null;
   const env = JSON.parse(readFileSync(envPath, 'utf8'));
-  delete env.TOOLBAR_PSEUDO_ACTIVE;
+  env.TOOLBAR_PSEUDO_ACTIVE = false; // app default is ON (fail-safe); AK-1/2 measure the clear reference scene
   delete env.TOOLBAR_PSEUDO_PASSWORD;
   env.REGISTRY_URL = './registry.json';
   env.DATA_URL = './snapshot.json';

@@ -93,3 +93,16 @@ test('native context menu is suppressed globally (FR-8.7)', async ({ page }) => 
   });
   expect(prevented).toBe(true);
 });
+
+test('pseudo mode is fail-closed in the browser (FR-8.5, E48 — AK 27 basis)', async ({ page }) => {
+  // fixture tenant ships no pseudo pools: toggling pseudo on must replace
+  // EVERY label with the generic '<Typname> N' fallback, never a real name
+  await page.locator('#togglePseudonymization').click();
+  await page.waitForTimeout(500);
+  const labels = await page.locator('g.nodes text.label').allTextContents();
+  expect(labels.length).toBeGreaterThan(0);
+  for (const label of labels) {
+    expect(label).not.toMatch(/Vera|Max|Nina|Ben|Lea/);
+    expect(label).toMatch(/^Person \d+$/);
+  }
+});
