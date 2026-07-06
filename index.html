@@ -2233,13 +2233,16 @@ body.dz-dragging::after {
     <div class="footer-stats">
       <span id="status">Bereit</span>
       <span class="stat-separator">|</span>
-      <span id="stats-loaded">Geladen: <strong id="stats-nodes-total">0</strong> Knoten, <strong id="stats-links-total">0</strong> Kanten, <strong id="stats-orgs-total">0</strong> OEs</span>
+      <span id="stats-loaded">Geladen: <strong id="stats-nodes-total">0</strong> Knoten, <strong id="stats-links-total">0</strong> Kanten</span>
       <span class="stat-separator">|</span>
       <span id="stats-visible">Sichtbar: <strong id="stats-nodes-visible">0</strong> Knoten, <strong id="stats-links-visible">0</strong> Kanten</span>
       <span class="stat-separator">|</span>
-      <span id="stats-orgs-display">Aktive OEs: <strong id="stats-orgs-count">0</strong></span>
+      <span id="stats-orgs-display">Cluster: <strong id="stats-orgs-count">0</strong></span>
       <span class="stat-separator">|</span>
-      <span id="stats-attributes">Attribute: <strong id="stats-attributes-count">0</strong></span>
+      <span id="stats-attributes">Ring-Gruppen: <strong id="stats-attributes-count">0</strong></span>
+      <span class="stat-separator">|</span>
+      <span id="stats-hidden">Ausgeblendet: <strong id="stats-hidden-count">0</strong></span>
+      <span id="stats-capped" hidden><span class="stat-separator">|</span> gekappt — mindestens <strong id="stats-capped-count">0</strong> weitere</span>
     </div>
   </footer>
   <!-- Export Dialog -->
@@ -2292,7 +2295,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.140.128';
+const APP_VERSION = '1.141.130';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -4814,42 +4817,47 @@ function updateAttributeCircles() {
   applyRootStyling();
 }
 
+// Footer stats, type-driven (FR-8.12): tenant STOCK identities, visible
+// projection, per-render-mode counters (cluster nodes, ring groups —
+// replacing the fixed OE/attribute counters), hidden counter, and the
+// lower-bound cap counter when the projection is truncated (E67).
 function updateFooterStats(subgraph) {
-  // Update total loaded stats
-  const nodesTotal = raw.nodes.length;
-  const linksTotal = raw.links.length;
-  const orgsTotal = raw.orgs.length;
-  
-  document.getElementById('stats-nodes-total').textContent = nodesTotal;
-  document.getElementById('stats-links-total').textContent = linksTotal;
-  document.getElementById('stats-orgs-total').textContent = orgsTotal;
-  
-  // Stelle sicher, dass die Attributstatistik aktualisiert wird, wenn noch nicht geschehen
-  if (document.getElementById('stats-attributes-count').textContent === '0') {
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+
+  // Stock: v2 counts store identities; the legacy tenant counts raw records.
+  const og2 = (typeof og2Active === 'function' && og2Active()) ? og2State() : null;
+  if (og2) {
+    setText('stats-nodes-total', og2.store.nodes.size);
+    setText('stats-links-total', og2.store.edges.size);
+  } else {
+    setText('stats-nodes-total', raw.nodes.length);
+    setText('stats-links-total', raw.links.length);
+  }
+
+  // Stelle sicher, dass die Ring-Gruppen-Statistik aktualisiert wird
+  const attrCountEl = document.getElementById('stats-attributes-count');
+  if (attrCountEl && attrCountEl.textContent === '0') {
     updateAttributeStats();
   }
-  
-  // Update visible stats (from subgraph if provided)
-  if (subgraph) {
-    document.getElementById('stats-nodes-visible').textContent = subgraph.nodes.length;
-    document.getElementById('stats-links-visible').textContent = subgraph.links.length;
-  } else {
-    document.getElementById('stats-nodes-visible').textContent = 0;
-    document.getElementById('stats-links-visible').textContent = 0;
-  }
-  
-  // Update OE stats: show only active OEs, unless cluster count differs
-  const clusterCount = clusterPolygons.size;
-  const activeOrgsCount = allowedOrgs.size;
-  const orgsDisplayEl = document.getElementById('stats-orgs-display');
-  const orgsCountEl = document.getElementById('stats-orgs-count');
-  
-  if (clusterCount > 0 && clusterCount !== activeOrgsCount) {
-    // Show both values when they differ
-    orgsDisplayEl.innerHTML = `Aktive OEs: <strong>${activeOrgsCount}</strong> (Cluster: <strong>${clusterCount}</strong>)`;
-  } else {
-    // Show only active OEs
-    orgsCountEl.textContent = activeOrgsCount;
+
+  setText('stats-nodes-visible', subgraph ? subgraph.nodes.length : 0);
+  setText('stats-links-visible', subgraph ? subgraph.links.length : 0);
+  setText('stats-orgs-count', allowedOrgs.size);
+  setText('stats-hidden-count', typeof currentHiddenCount === 'number' ? currentHiddenCount : 0);
+
+  // Cap counter (E67/FR-8.1): lower bound from the discovered frontier.
+  const capped = document.getElementById('stats-capped');
+  if (capped) {
+    const projection = og2 && og2.lastProjection;
+    if (projection && projection.truncated) {
+      setText('stats-capped-count', projection.skipped);
+      capped.hidden = false;
+    } else {
+      capped.hidden = true;
+    }
   }
 }
 
@@ -13758,6 +13766,7 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
     setStatus('Keine View-Konfiguration — Diagnoseansicht: bitte Root über die Suche wählen.');
   }
 
+  og2.lastProjection = { truncated: projection.truncated, skipped: projection.skipped, counters: projection.counters };
   const roots = (og2.runtimeRoots && og2.runtimeRoots.length ? og2.runtimeRoots : projection.resolvedRoots) || [];
   const oldSubgraph = currentSubgraph;
   currentSubgraph = sub;

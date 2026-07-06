@@ -156,13 +156,16 @@
     <div class="footer-stats">
       <span id="status">Bereit</span>
       <span class="stat-separator">|</span>
-      <span id="stats-loaded">Geladen: <strong id="stats-nodes-total">0</strong> Knoten, <strong id="stats-links-total">0</strong> Kanten, <strong id="stats-orgs-total">0</strong> OEs</span>
+      <span id="stats-loaded">Geladen: <strong id="stats-nodes-total">0</strong> Knoten, <strong id="stats-links-total">0</strong> Kanten</span>
       <span class="stat-separator">|</span>
       <span id="stats-visible">Sichtbar: <strong id="stats-nodes-visible">0</strong> Knoten, <strong id="stats-links-visible">0</strong> Kanten</span>
       <span class="stat-separator">|</span>
-      <span id="stats-orgs-display">Aktive OEs: <strong id="stats-orgs-count">0</strong></span>
+      <span id="stats-orgs-display">Cluster: <strong id="stats-orgs-count">0</strong></span>
       <span class="stat-separator">|</span>
-      <span id="stats-attributes">Attribute: <strong id="stats-attributes-count">0</strong></span>
+      <span id="stats-attributes">Ring-Gruppen: <strong id="stats-attributes-count">0</strong></span>
+      <span class="stat-separator">|</span>
+      <span id="stats-hidden">Ausgeblendet: <strong id="stats-hidden-count">0</strong></span>
+      <span id="stats-capped" hidden><span class="stat-separator">|</span> gekappt — mindestens <strong id="stats-capped-count">0</strong> weitere</span>
     </div>
   </footer>
   <!-- Export Dialog -->
@@ -214,7 +217,7 @@
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.140.128';
+const APP_VERSION = '1.141.130';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 @@APP@@
 </script>

@@ -282,6 +282,7 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
     setStatus('Keine View-Konfiguration — Diagnoseansicht: bitte Root über die Suche wählen.');
   }
 
+  og2.lastProjection = { truncated: projection.truncated, skipped: projection.skipped, counters: projection.counters };
   const roots = (og2.runtimeRoots && og2.runtimeRoots.length ? og2.runtimeRoots : projection.resolvedRoots) || [];
   const oldSubgraph = currentSubgraph;
   currentSubgraph = sub;

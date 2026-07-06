@@ -580,42 +580,47 @@ export function updateAttributeCircles() {
   applyRootStyling();
 }
 
+// Footer stats, type-driven (FR-8.12): tenant STOCK identities, visible
+// projection, per-render-mode counters (cluster nodes, ring groups —
+// replacing the fixed OE/attribute counters), hidden counter, and the
+// lower-bound cap counter when the projection is truncated (E67).
 export function updateFooterStats(subgraph) {
-  // Update total loaded stats
-  const nodesTotal = raw.nodes.length;
-  const linksTotal = raw.links.length;
-  const orgsTotal = raw.orgs.length;
-  
-  document.getElementById('stats-nodes-total').textContent = nodesTotal;
-  document.getElementById('stats-links-total').textContent = linksTotal;
-  document.getElementById('stats-orgs-total').textContent = orgsTotal;
-  
-  // Stelle sicher, dass die Attributstatistik aktualisiert wird, wenn noch nicht geschehen
-  if (document.getElementById('stats-attributes-count').textContent === '0') {
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+
+  // Stock: v2 counts store identities; the legacy tenant counts raw records.
+  const og2 = (typeof og2Active === 'function' && og2Active()) ? og2State() : null;
+  if (og2) {
+    setText('stats-nodes-total', og2.store.nodes.size);
+    setText('stats-links-total', og2.store.edges.size);
+  } else {
+    setText('stats-nodes-total', raw.nodes.length);
+    setText('stats-links-total', raw.links.length);
+  }
+
+  // Stelle sicher, dass die Ring-Gruppen-Statistik aktualisiert wird
+  const attrCountEl = document.getElementById('stats-attributes-count');
+  if (attrCountEl && attrCountEl.textContent === '0') {
     updateAttributeStats();
   }
-  
-  // Update visible stats (from subgraph if provided)
-  if (subgraph) {
-    document.getElementById('stats-nodes-visible').textContent = subgraph.nodes.length;
-    document.getElementById('stats-links-visible').textContent = subgraph.links.length;
-  } else {
-    document.getElementById('stats-nodes-visible').textContent = 0;
-    document.getElementById('stats-links-visible').textContent = 0;
-  }
-  
-  // Update OE stats: show only active OEs, unless cluster count differs
-  const clusterCount = clusterPolygons.size;
-  const activeOrgsCount = allowedOrgs.size;
-  const orgsDisplayEl = document.getElementById('stats-orgs-display');
-  const orgsCountEl = document.getElementById('stats-orgs-count');
-  
-  if (clusterCount > 0 && clusterCount !== activeOrgsCount) {
-    // Show both values when they differ
-    orgsDisplayEl.innerHTML = `Aktive OEs: <strong>${activeOrgsCount}</strong> (Cluster: <strong>${clusterCount}</strong>)`;
-  } else {
-    // Show only active OEs
-    orgsCountEl.textContent = activeOrgsCount;
+
+  setText('stats-nodes-visible', subgraph ? subgraph.nodes.length : 0);
+  setText('stats-links-visible', subgraph ? subgraph.links.length : 0);
+  setText('stats-orgs-count', allowedOrgs.size);
+  setText('stats-hidden-count', typeof currentHiddenCount === 'number' ? currentHiddenCount : 0);
+
+  // Cap counter (E67/FR-8.1): lower bound from the discovered frontier.
+  const capped = document.getElementById('stats-capped');
+  if (capped) {
+    const projection = og2 && og2.lastProjection;
+    if (projection && projection.truncated) {
+      setText('stats-capped-count', projection.skipped);
+      capped.hidden = false;
+    } else {
+      capped.hidden = true;
+    }
   }
 }
 

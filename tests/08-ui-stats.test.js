@@ -77,7 +77,6 @@ describe('updateFooterStats', () => {
     updateFooterStats(null);
     expect(text('stats-nodes-total')).toBe('3');
     expect(text('stats-links-total')).toBe('2'); // two raw links in fixture
-    expect(text('stats-orgs-total')).toBe('1');
     expect(text('stats-nodes-visible')).toBe('0');
     expect(text('stats-links-visible')).toBe('0');
   });
@@ -90,11 +89,11 @@ describe('updateFooterStats', () => {
     expect(text('stats-orgs-count')).toBe('2');
   });
 
-  it('shows cluster count separately when it differs from active orgs', () => {
+  it('shows the generic cluster counter (FR-8.12) instead of OE wording', () => {
     globalThis.allowedOrgs = new Set(['o1']);
-    globalThis.clusterPolygons = new Map([['o1', []], ['o2', []]]);
     updateFooterStats(null);
-    expect(document.getElementById('stats-orgs-display').textContent).toBe('Aktive OEs: 1 (Cluster: 2)');
+    expect(text('stats-orgs-count')).toBe('1');
+    expect(document.getElementById('stats-orgs-display').textContent).not.toContain('OE');
   });
 });
 
