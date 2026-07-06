@@ -2,7 +2,7 @@
 // tenant store, snapshot import with its confirmation dialogs (product HILs,
 // §1.5), translation of stock + projection into the globals the layout/render
 // machinery consumes (§9.2), and the reactive apply path (FR-8.11).
-import { KEY_STORE, KEY_REGISTRY, getStoredText, getStoredJson, getPendingSnapshots, putStored, delStored } from './04-storage.js';
+import { KEY_STORE, KEY_REGISTRY, getStoredText, getStoredJson, getPendingSnapshots, putStored, delStored, looksLikeRegistry, looksLikeSnapshot } from './04-storage.js';
 import { serializeTenantStore, deserializeTenantStore, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData } from './29-og2-app.js';
 import { createTenantStore } from './23-og2-store.js';
 import { importSnapshot } from './26-og2-import.js';
@@ -37,9 +37,19 @@ function og2UiHooks() {
 
 // Boot the v2 tenant: registry + persisted store + pending dropped snapshots.
 // Returns true when the v2 path owns this tenant (a registry is present).
+// Dev fallback (FR-8.10): with a VIEWS-carrying env, the registry may come
+// from REGISTRY_URL (default ./schema/registry.json) and an empty store is
+// seeded from DATA_URL, which points at a graph SNAPSHOT in v2.
 export async function og2TryBoot() {
-  const registry = await getStoredJson(KEY_REGISTRY);
-  if (!registry) return false;
+  let registry = await getStoredJson(KEY_REGISTRY);
+  if (!registry && envConfig && (envConfig.REGISTRY_URL || envConfig.VIEWS)) {
+    try {
+      const res = await fetch(envConfig.REGISTRY_URL || './schema/registry.json', { cache: 'no-store' });
+      if (res.ok) registry = await res.json();
+    } catch { /* dev fallback only */ }
+  }
+  // An empty bootstrap registry (version 0) never activates the v2 path.
+  if (!registry || !looksLikeRegistry(registry) || Object.keys(registry.nodeTypes).length === 0) return false;
 
   let store;
   const storedStore = await getStoredText(KEY_STORE);
@@ -75,6 +85,35 @@ export async function og2TryBoot() {
       }
     }
     await delStored(p.key);
+  }
+  // Dev fallback: seed an empty store from the env's snapshot URL (FR-8.10).
+  if (store.nodes.size === 0 && envConfig && envConfig.DATA_URL) {
+    try {
+      const res = await fetch(envConfig.DATA_URL, { cache: 'no-store' });
+      if (res.ok) {
+        const snapshot = await res.json();
+        if (looksLikeSnapshot(snapshot)) {
+          // The env-configured reference snapshot is operator-shipped tenant
+          // configuration: its source registration counts as confirmed by
+          // the operator (E70 audit notes the env seed); interactive drops
+          // keep their dialogs.
+          const seedHooks = {
+            confirmSourceRegistration: () => ({ ok: true, moveOutEdgeTypes: [], audit: 'env-seed (DATA_URL)' }),
+            confirmJoin: () => true,
+            confirmGate: () => true,
+            confirmDestructive: () => true,
+            confirmAuthority: () => true,
+          };
+          const imp = importSnapshot(store, registry, snapshot, seedHooks);
+          if (imp.status === 'imported') {
+            store = imp.store || store;
+            imported++;
+          } else {
+            showTemporaryNotification(`Snapshot (DATA_URL): ${imp.status}${imp.reason ? ' — ' + imp.reason : ''}`, 8000);
+          }
+        }
+      }
+    } catch (e) { console.warn('DATA_URL-Snapshot nicht ladbar:', e); }
   }
   if (imported > 0) await putStored(KEY_STORE, serializeTenantStore(store));
 
