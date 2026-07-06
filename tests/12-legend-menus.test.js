@@ -89,7 +89,7 @@ describe('node context menu', () => {
     expect(ensureNodeMenu()).toBe(menu); // singleton
   });
 
-  it('builds the action menu with root handling and an attributes submenu entry', () => {
+  it('builds the unified E24 menu: five fixed entries, inapplicable ones disabled', () => {
     globalThis.selectedRootIds = ['p1', 'p2'];
     const actions = {
       onHideSubtree: vi.fn(),
@@ -100,44 +100,25 @@ describe('node context menu', () => {
     };
     showNodeMenu(0, 0, actions);
     const labels = Array.from(globalThis.nodeMenuEl.querySelectorAll('.menu-item-label')).map((l) => l.textContent);
-    expect(labels).toEqual(['Ausblenden', 'Als Root definieren', 'Als Root entfernen', 'Attribute']);
+    expect(labels).toEqual(['Ausblenden', 'Einblenden', 'Nur direkte Kinder anzeigen', 'Als Root definieren', 'Als Root entfernen']);
     const items = globalThis.nodeMenuEl.querySelectorAll('.menu-item');
-    expect(items[1].classList.contains('disabled')).toBe(true); // already root
-    expect(items[3].querySelector('.menu-item-arrow')).not.toBeNull();
+    expect(items[1].classList.contains('disabled')).toBe(true); // no unhide handler -> disabled, never hidden
+    expect(items[2].classList.contains('disabled')).toBe(true); // no direct-children handler
+    expect(items[3].classList.contains('disabled')).toBe(true); // already root
+    expect(items[4].classList.contains('disabled')).toBe(false); // multi-root: removable
+    // attribute submenu is gone (E24/§9.3)
+    expect(labels).not.toContain('Attribute');
   });
 
-  it('opens the attribute submenu with sorted categories and a new-category entry', () => {
-    globalThis.attributeTypes = new Map([['Team::Coach', 'red'], ['Rolle::Dev', 'blue']]);
-    showNodeMenu(0, 0, { nodeId: 'p1' });
-    const attrItem = globalThis.nodeMenuEl.querySelector('.menu-item');
-    attrItem.click();
-    const submenu = document.querySelector('.node-context-menu[data-level="2"]');
-    const labels = Array.from(submenu.querySelectorAll('.menu-item-label')).map((l) => l.textContent);
-    expect(labels).toEqual(['Rolle', 'Team', '+ neue Kategorie ...']);
+  it('last root is not removable: entry disabled with a single root', () => {
+    globalThis.selectedRootIds = ['p1'];
+    showNodeMenu(0, 0, { onHideSubtree: vi.fn(), onRemoveRoot: vi.fn(), isRoot: true });
+    const items = globalThis.nodeMenuEl.querySelectorAll('.menu-item');
+    expect(items[4].classList.contains('disabled')).toBe(true);
   });
 
-  it('offers only the new-category entry when nothing is registered', () => {
-    showNodeMenu(0, 0, { nodeId: 'p1' });
-    globalThis.nodeMenuEl.querySelector('.menu-item').click();
-    const submenu = document.querySelector('.node-context-menu[data-level="2"]');
-    expect(submenu.querySelectorAll('.menu-item')).toHaveLength(1);
-    expect(submenu.textContent).toContain('+ neue Kategorie ...');
-  });
 
-  it('adds an attribute via the category sub-submenu and closes all menus', () => {
-    globalThis.attributeTypes = new Map([['Team::Coach', 'red']]);
-    showNodeMenu(0, 0, { nodeId: 'p1' });
-    globalThis.nodeMenuEl.querySelector('.menu-item').click();
-    const catItem = document.querySelector('.node-context-menu[data-level="2"] .menu-item');
-    catItem.dispatchEvent(new MouseEvent('mouseenter'));
-    const level3 = document.querySelector('.node-context-menu[data-level="3"]');
-    const labels = Array.from(level3.querySelectorAll('.menu-item-label')).map((l) => l.textContent);
-    expect(labels).toEqual(['Coach', '+ neues Attribut ...']);
-    level3.querySelector('.menu-item').click();
-    expect(globalThis.personAttributes.get('p1').get('Team::Coach')).toBe('1');
-    expect(document.querySelector('.node-context-menu[data-level="2"]')).toBeNull();
-    expect(globalThis.nodeMenuEl.style.display).toBe('none');
-  });
+
 });
 
 describe('prompts', () => {

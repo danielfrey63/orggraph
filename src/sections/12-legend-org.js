@@ -1064,22 +1064,21 @@ export function showNodeMenu(x, y, actionsOrOnHide) {
   if (typeof actionsOrOnHide === 'function') {
     addItem('Ausblenden', actionsOrOnHide);
   } else {
+    // Unified type-independent menu (E24, FR-8.7): one action list for graph
+    // nodes and legend rows; inapplicable entries are DISABLED, never hidden.
+    // The attribute editing submenu is gone (§9.3: data maintenance happens
+    // at the source or in the crawl, never in the viewer).
     const actions = actionsOrOnHide || {};
-    if (actions.onHideSubtree) addItem('Ausblenden', actions.onHideSubtree);
-    
-    // Neuer Root-Eintrag [SF]
     const isRootFlag = !!actions.isRoot;
-    if (actions.onSetAsRoot) addItem('Als Root definieren', actions.onSetAsRoot, false, isRootFlag);
-    
-    if (isRootFlag && actions.onRemoveRoot && Array.isArray(selectedRootIds) && selectedRootIds.length > 1) {
-      addItem('Als Root entfernen', actions.onRemoveRoot);
-    }
-    
-    // Attribute-Menü hinzufügen
-    if (actions.nodeId) {
-      const attrMenuItem = addItem('Attribute', null, true);
-      addAttributeSubmenu(attrMenuItem, el, actions.nodeId);
-    }
+    addItem('Ausblenden', actions.onHideSubtree, false, !actions.onHideSubtree);
+    addItem('Einblenden', actions.onUnhide, false, !actions.onUnhide);
+    addItem('Nur direkte Kinder anzeigen', actions.onOnlyDirectChildren, false, !actions.onOnlyDirectChildren);
+    addItem('Als Root definieren', actions.onSetAsRoot, false, !actions.onSetAsRoot || isRootFlag);
+    // Only active while the node IS a root and more than one root is set —
+    // the last root is not removable (an empty projection is impossible).
+    const canRemoveRoot = isRootFlag && !!actions.onRemoveRoot
+      && Array.isArray(selectedRootIds) && selectedRootIds.length > 1;
+    addItem('Als Root entfernen', actions.onRemoveRoot, false, !canRemoveRoot);
   }
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
