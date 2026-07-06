@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   migrateTenant, parseAttributeText, containerNodeOf, resolveIdentifier,
-  buildPersonIndex, verifyByImport, toUnmatchedCsv, slug,
+  buildPersonIndex, verifyByImport, toUnmatchedCsv, slug, buildTenantEnv,
 } from '../../scripts/migrate-legacy.mjs';
+import { validateView } from '../../src/sections/27-og2-path.js';
 
 // AK 12 — direction migration test plus E72 container rule, FR-10.4 matching
 // and idempotency. Type names come from the committed registry (E14: the
@@ -18,6 +19,7 @@ const cfg = {
     'ERZ PA': { treatment: 'node', type: 'Gremium', edge: 'imGremium', categoryProp: 'kategorie' },
     'AKROS': { treatment: 'contextRole' },
     'ERZ Rollen Rom': { treatment: 'role' },
+    'ERZ Teams Rom': { treatment: 'node', type: 'Team', edge: 'imTeam' },
     'Beschaeftigungsgrad': { treatment: 'property', prop: 'pensum', valueType: 'number' },
   },
 };
@@ -171,5 +173,31 @@ describe('FR-10.2 — parsing, snapshot shape, verification, idempotency', () =>
     const two = migrate({ attributes });
     expect(one.report.snapshotHash).toBe(two.report.snapshotHash);
     expect(JSON.stringify(one.snapshot)).toBe(JSON.stringify(two.snapshot));
+  });
+});
+
+describe('deliverable tenant env (FR-7.4)', () => {
+  it('builds the start view from migrated edge types and validates against the registry', () => {
+    const attributes = [
+      { category: 'ERZ Rollen Rom', rows: [{ identifier: 'anna.boss@x.ch', value: 'Dev' }] },
+      { category: 'ERZ Teams Rom', rows: [{ identifier: 'anna.boss@x.ch', value: 'T1' }] },
+    ];
+    const { snapshot } = migrate({ attributes });
+    const legacyEnv = { GRAPH_START_ID_DEFAULT: 'p-1', TOOLBAR_MANAGEMENT_ACTIVE: true, DATA_URL: './data.json' };
+    const env = buildTenantEnv({ source: 'legacy-test', registry, snapshot, legacyEnv });
+    const view = env.VIEWS.Start;
+    expect(view.roots).toEqual(['__auto__']);
+    expect(view.path).toContain('<--berichtetAn-- Person');
+    expect(view.path).toContain('OE[cluster]');
+    expect(view.path).toContain('--hatRolle--> Rolle[ring]');
+    expect(view.path).toContain('--imTeam--> Team[ring]');
+    expect(view.path).not.toContain('arbeitetBei'); // projected base edge, no ring
+    // registry-aware validation must accept the generated fixture (FR-7.1a)
+    const res = validateView(view, registry);
+    expect(res.errors).toEqual([]);
+    // legacy start id is namespaced; legacy-only keys are not carried over
+    expect(env.GRAPH_START_ID_DEFAULT).toBe('legacy-test:p-1');
+    expect(env.TOOLBAR_MANAGEMENT_ACTIVE).toBe(true);
+    expect(env.DATA_URL).toBeUndefined();
   });
 });

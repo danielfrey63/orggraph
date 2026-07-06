@@ -338,6 +338,46 @@ export function toUnmatchedCsv(unmatched) {
   return lines.join('\n') + '\n';
 }
 
+// ---------------------------------------------------------------- env fixture
+
+// Deliverable env.json of a migrated tenant (FR-7.4, E14 fixture): the start
+// view reproduces today's active rendering — person hierarchy, OE cluster
+// ancestors, and every migrated person-attached relation as a ring. The type
+// names come from the tenant registry commit, never from engine code (NFR-5).
+// A legacy GRAPH_START_ID_DEFAULT is carried over (namespaced when needed).
+export function buildTenantEnv({ source, registry, snapshot, legacyEnv }) {
+  const usedEdgeTypes = new Set(snapshot.edges.map((e) => e.type));
+  const structuralHops = ['berichtetAn', 'mitgliedIn', 'unterstellt'];
+  const ringHops = [];
+  for (const [name, decl] of Object.entries(registry.edgeTypes)) {
+    if (!usedEdgeTypes.has(name) || structuralHops.includes(name)) continue;
+    if (decl.from !== 'Person') continue;
+    // arbeitetBei is the projected base edge of hatRolle (FR-4.8) — the role
+    // ring already represents that fact; no separate company ring in v1.
+    if (name === 'arbeitetBei') continue;
+    ringHops.push(`--${name}--> ${decl.to}[ring]`);
+  }
+  ringHops.sort();
+  const path = `Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster]${ringHops.length ? ', ' + ringHops.join(', ') : ''})`;
+
+  const env = {
+    VIEWS: {
+      Start: { path, roots: ['__auto__'], depth: 3 },
+    },
+  };
+  const legacyStart = legacyEnv && legacyEnv.GRAPH_START_ID_DEFAULT;
+  if (legacyStart != null) {
+    const nodeIds = new Set(snapshot.nodes.map((n) => n.id));
+    const mapId = (v) => (nodeIds.has(String(v)) ? String(v) : nodeIds.has(`${source}:${v}`) ? `${source}:${v}` : null);
+    const mapped = (Array.isArray(legacyStart) ? legacyStart : [legacyStart]).map(mapId).filter(Boolean);
+    if (mapped.length) env.GRAPH_START_ID_DEFAULT = Array.isArray(legacyStart) ? mapped : mapped[0];
+  }
+  for (const key of ['TOOLBAR_DEPTH_DEFAULT', 'TOOLBAR_MANAGEMENT_ACTIVE', 'TOOLBAR_PSEUDO_ACTIVE', 'TOOLBAR_PSEUDO_PASSWORD', 'TOOLBAR_LABELS_DEFAULT']) {
+    if (legacyEnv && legacyEnv[key] !== undefined) env[key] = legacyEnv[key];
+  }
+  return env;
+}
+
 // ---------------------------------------------------------------- CLI
 
 async function main() {
@@ -407,6 +447,15 @@ async function main() {
     writeFileSync(join(outDir, `${source}.snapshot-${snapshot.meta.snapshot}.json`), JSON.stringify(snapshot, null, 2) + '\n');
     writeFileSync(join(outDir, `${source}.unmatched.csv`), toUnmatchedCsv(unmatched));
     writeFileSync(join(outDir, `${source}.report.json`), JSON.stringify(report, null, 2) + '\n');
+
+    // Deliverable tenant env with the start view (FR-7.4).
+    let legacyEnv = null;
+    const legacyEnvPath = join(dir, 'env.json');
+    if (existsSync(legacyEnvPath)) {
+      try { legacyEnv = JSON.parse(readFileSync(legacyEnvPath, 'utf8')); } catch { /* optional */ }
+    }
+    const env = buildTenantEnv({ source, registry, snapshot, legacyEnv });
+    writeFileSync(join(outDir, `${source}.env.json`), JSON.stringify(env, null, 2) + '\n');
 
     console.log(`\n=== ${source} ===`);
     console.log(`input:  ${report.input.persons} persons, ${report.input.orgs} orgs, ${report.input.links} links`);
