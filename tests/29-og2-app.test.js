@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parsePathExpression } from '../src/sections/27-og2-path.js';
 import { createTenantStore, createNodeIdentity, createEdgeIdentity, edgeKeyOf, startInterval } from '../src/sections/23-og2-store.js';
 import { projectView } from '../src/sections/28-og2-project.js';
-import { serializeTenantStore, deserializeTenantStore, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure } from '../src/sections/29-og2-app.js';
+import { serializeTenantStore, deserializeTenantStore, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure, og2ResolveAnchorRoot } from '../src/sections/29-og2-app.js';
 import { looksLikeSnapshot, looksLikeRegistry, looksLikeData } from '../src/sections/04-storage.js';
 
 // Type names are fixture data (E14, NFR-5 exception).
@@ -203,5 +203,46 @@ describe('app view state (FR-7.5/7.6/7.7, §7)', () => {
     expect(data.orgRoots).toEqual(['o1']);
     expect(data.links.length).toBe(5);
     expect(data.persons.find((n) => n.id === 'p1').label).toBe('Chef');
+  });
+});
+
+describe('non-anchor search resolution (E64, AK 40)', () => {
+  const PATH = 'Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster], --hatRolle--> Rolle[ring])';
+  const ENV = { VIEWS: { Start: { path: PATH, roots: ['__auto__'], depth: 3 } } };
+
+  it('an anchor-type hit roots itself', () => {
+    const state = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: ENV });
+    expect(og2ResolveAnchorRoot(state, 'p2')).toMatchObject({ ok: true, root: 'p2', self: true });
+  });
+
+  it('a ring-type hit resolves backwards over hatRolle to the nearest person', () => {
+    const state = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: ENV });
+    const res = og2ResolveAnchorRoot(state, 'r1');
+    expect(res.ok).toBe(true);
+    expect(res.root).toBe('p2'); // p2 --hatRolle--> r1
+  });
+
+  it('a cluster-type hit resolves over mitgliedIn, across the cluster chain when needed', () => {
+    const state = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: ENV });
+    const direct = og2ResolveAnchorRoot(state, 'o2');
+    expect(direct.ok).toBe(true);
+    expect(['p1', 'p2'].includes(direct.root)).toBe(true); // members of o2
+    // o1 has no direct member in the fixture except via unterstellt chain
+    const chained = og2ResolveAnchorRoot(state, 'o1');
+    expect(chained.ok).toBe(true);
+  });
+
+  it('an unreachable hit reports instead of a silent no-op (AK 40)', () => {
+    const store = fixtureStore();
+    addNode(store, 'r9', 'Rolle', 'Verwaist');
+    const state = createOg2State({ store, registry: REGISTRY, env: ENV });
+    const res = og2ResolveAnchorRoot(state, 'r9');
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('unreachable');
+  });
+
+  it('a dead identity is not resolvable', () => {
+    const state = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: ENV });
+    expect(og2ResolveAnchorRoot(state, 'ghost')).toMatchObject({ ok: false, reason: 'not-alive' });
   });
 });

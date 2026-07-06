@@ -273,6 +273,59 @@ export function og2BuildGlobalsData(state) {
   return { persons, orgs, links, orgParent, orgChildren, orgRoots };
 }
 
+// Non-anchor search resolution (E64, FR-7.6): a visible hit outside the
+// anchor type resolves deterministically BACKWARDS over the path's hops to
+// the nearest anchor node, which becomes the temporary root. An unreachable
+// hit is reported — never a silent no-op (AK 40).
+export function og2ResolveAnchorRoot(state, targetId) {
+  const view = og2ActiveView(state);
+  if (!view) return { ok: true, root: String(targetId), self: true }; // diagnosis: any node roots
+  const structure = og2PathStructure(view.parsed);
+  const idx = buildLiveIndexes(state.store, state.asOf, structure.allEdgeTypes);
+  const target = idx.nodes.get(String(targetId));
+  if (!target) return { ok: false, reason: 'not-alive' };
+  const anchorType = view.parsed.type;
+  if (target.type === anchorType) return { ok: true, root: String(targetId), self: true };
+
+  // Collect the path's hops as (fromStationType, dir, edgeType, toStationType).
+  const hops = [];
+  (function walk(node) {
+    for (const hop of node.hops) {
+      hops.push({ from: node.type, dir: hop.dir, edgeType: hop.edgeType, to: hop.target.type });
+      walk(hop.target);
+    }
+  })(view.parsed);
+
+  // BFS backwards: from a node of a hop's TO-type step to neighbors of the
+  // FROM-type via the inverse stored direction. Deterministic neighbor order
+  // (sorted edge keys in the index) — the first anchor found is the nearest.
+  const queue = [String(targetId)];
+  const visited = new Set(queue);
+  let guard = 0;
+  while (queue.length) {
+    if (++guard > 20000) break;
+    const currentId = queue.shift();
+    const current = idx.nodes.get(currentId);
+    if (!current) continue;
+    for (const hop of hops) {
+      if (hop.to !== current.type) continue;
+      // forward '<--E--': stored edge source=to-station, target=from-station
+      // => backwards we follow bySource; forward '--E-->' inverts that.
+      const list = (hop.dir === '<--' ? idx.bySource : idx.byTarget).get(currentId) || [];
+      for (const edge of list) {
+        if (edge.type !== hop.edgeType) continue;
+        const otherId = hop.dir === '<--' ? edge.target : edge.source;
+        const other = idx.nodes.get(otherId);
+        if (!other || other.type !== hop.from || visited.has(otherId)) continue;
+        if (other.type === anchorType) return { ok: true, root: otherId, via: currentId };
+        visited.add(otherId);
+        queue.push(otherId);
+      }
+    }
+  }
+  return { ok: false, reason: 'unreachable' };
+}
+
 function og2StandOf(state, identity) {
   const stand = { label: undefined, props: {} };
   for (const [prop, tl] of identity.timelines) {

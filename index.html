@@ -2295,7 +2295,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.141.130';
+const APP_VERSION = '1.142.131';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -13465,6 +13465,59 @@ function og2BuildGlobalsData(state) {
   return { persons, orgs, links, orgParent, orgChildren, orgRoots };
 }
 
+// Non-anchor search resolution (E64, FR-7.6): a visible hit outside the
+// anchor type resolves deterministically BACKWARDS over the path's hops to
+// the nearest anchor node, which becomes the temporary root. An unreachable
+// hit is reported — never a silent no-op (AK 40).
+function og2ResolveAnchorRoot(state, targetId) {
+  const view = og2ActiveView(state);
+  if (!view) return { ok: true, root: String(targetId), self: true }; // diagnosis: any node roots
+  const structure = og2PathStructure(view.parsed);
+  const idx = buildLiveIndexes(state.store, state.asOf, structure.allEdgeTypes);
+  const target = idx.nodes.get(String(targetId));
+  if (!target) return { ok: false, reason: 'not-alive' };
+  const anchorType = view.parsed.type;
+  if (target.type === anchorType) return { ok: true, root: String(targetId), self: true };
+
+  // Collect the path's hops as (fromStationType, dir, edgeType, toStationType).
+  const hops = [];
+  (function walk(node) {
+    for (const hop of node.hops) {
+      hops.push({ from: node.type, dir: hop.dir, edgeType: hop.edgeType, to: hop.target.type });
+      walk(hop.target);
+    }
+  })(view.parsed);
+
+  // BFS backwards: from a node of a hop's TO-type step to neighbors of the
+  // FROM-type via the inverse stored direction. Deterministic neighbor order
+  // (sorted edge keys in the index) — the first anchor found is the nearest.
+  const queue = [String(targetId)];
+  const visited = new Set(queue);
+  let guard = 0;
+  while (queue.length) {
+    if (++guard > 20000) break;
+    const currentId = queue.shift();
+    const current = idx.nodes.get(currentId);
+    if (!current) continue;
+    for (const hop of hops) {
+      if (hop.to !== current.type) continue;
+      // forward '<--E--': stored edge source=to-station, target=from-station
+      // => backwards we follow bySource; forward '--E-->' inverts that.
+      const list = (hop.dir === '<--' ? idx.bySource : idx.byTarget).get(currentId) || [];
+      for (const edge of list) {
+        if (edge.type !== hop.edgeType) continue;
+        const otherId = hop.dir === '<--' ? edge.target : edge.source;
+        const other = idx.nodes.get(otherId);
+        if (!other || other.type !== hop.from || visited.has(otherId)) continue;
+        if (other.type === anchorType) return { ok: true, root: otherId, via: currentId };
+        visited.add(otherId);
+        queue.push(otherId);
+      }
+    }
+  }
+  return { ok: false, reason: 'unreachable' };
+}
+
 function og2StandOf(state, identity) {
   const stand = { label: undefined, props: {} };
   for (const [prop, tl] of identity.timelines) {
@@ -13699,11 +13752,21 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
   og2.runtimeDepth = Number.isFinite(depth) ? depth : og2.runtimeDepth;
 
   // Combo/context-menu roots (FR-7.6): the combo keeps writing the v1
-  // globals; they override the view roots for this session.
+  // globals; they override the view roots for this session. Non-anchor hits
+  // resolve backwards to the nearest anchor node (E64) — an unreachable hit
+  // reports instead of silently doing nothing (AK 40).
   const comboRoots = Array.isArray(selectedRootIds) && selectedRootIds.length > 0
     ? selectedRootIds.slice()
     : (currentSelectedId ? [String(currentSelectedId)] : null);
-  og2.runtimeRoots = comboRoots || og2.runtimeRoots;
+  if (comboRoots) {
+    const resolved = [];
+    for (const id of comboRoots) {
+      const res = og2ResolveAnchorRoot(og2, id);
+      if (res.ok) resolved.push(res.root);
+      else setStatus(`«${id}» ist in dieser View nicht erreichbar — Root unverändert.`);
+    }
+    if (resolved.length) og2.runtimeRoots = resolved;
+  }
 
   const res = og2Project(og2);
   const projection = res.projection;

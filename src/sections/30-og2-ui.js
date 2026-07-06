@@ -3,7 +3,7 @@
 // §1.5), translation of stock + projection into the globals the layout/render
 // machinery consumes (§9.2), and the reactive apply path (FR-8.11).
 import { KEY_STORE, KEY_REGISTRY, getStoredText, getStoredJson, getPendingSnapshots, putStored, delStored, looksLikeRegistry, looksLikeSnapshot } from './04-storage.js';
-import { serializeTenantStore, deserializeTenantStore, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData } from './29-og2-app.js';
+import { serializeTenantStore, deserializeTenantStore, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot } from './29-og2-app.js';
 import { createTenantStore } from './23-og2-store.js';
 import { importSnapshot } from './26-og2-import.js';
 
@@ -215,11 +215,21 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
   og2.runtimeDepth = Number.isFinite(depth) ? depth : og2.runtimeDepth;
 
   // Combo/context-menu roots (FR-7.6): the combo keeps writing the v1
-  // globals; they override the view roots for this session.
+  // globals; they override the view roots for this session. Non-anchor hits
+  // resolve backwards to the nearest anchor node (E64) — an unreachable hit
+  // reports instead of silently doing nothing (AK 40).
   const comboRoots = Array.isArray(selectedRootIds) && selectedRootIds.length > 0
     ? selectedRootIds.slice()
     : (currentSelectedId ? [String(currentSelectedId)] : null);
-  og2.runtimeRoots = comboRoots || og2.runtimeRoots;
+  if (comboRoots) {
+    const resolved = [];
+    for (const id of comboRoots) {
+      const res = og2ResolveAnchorRoot(og2, id);
+      if (res.ok) resolved.push(res.root);
+      else setStatus(`«${id}» ist in dieser View nicht erreichbar — Root unverändert.`);
+    }
+    if (resolved.length) og2.runtimeRoots = resolved;
+  }
 
   const res = og2Project(og2);
   const projection = res.projection;
