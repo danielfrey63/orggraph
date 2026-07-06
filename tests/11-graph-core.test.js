@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { idOf, processData } from '../src/sections/09-data-load.js';
+import { idOf, processData, drawKindOf } from '../src/sections/09-data-load.js';
 import {
   buildAdjacency,
   computeSubgraph,
@@ -43,6 +43,7 @@ beforeEach(() => {
   for (const k of STATE_GLOBALS) globalThis[k] = undefined;
   globalThis.Logger = { log: () => {} };
   globalThis.idOf = idOf;
+  globalThis.drawKindOf = drawKindOf;
   globalThis.personAttributes = new Map();
   globalThis.managementEnabled = false;
   globalThis.currentHiddenCount = 0;

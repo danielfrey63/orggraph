@@ -354,12 +354,18 @@ export function isNodeTemporarilyVisible(nodeId) {
 
 export function collectReportSubtree(rootId) {
   const rid = String(rootId);
-  const out = new Map();
+  const out = new Map(); // parent -> children in descent direction
+  // Legacy links run manager->report; v2 stored direction is child->parent
+  // (FR-7.2a), so the descent traverses target->source (§9.2: subtree
+  // hiding follows the view path's descent hops).
+  const inverted = typeof og2Active === 'function' && og2Active();
   for (const l of raw.links) {
     const s = idOf(l.source), t = idOf(l.target);
-    if (byId.get(s)?.type === 'person' && byId.get(t)?.type === 'person') {
-      if (!out.has(s)) out.set(s, new Set());
-      out.get(s).add(t);
+    if (drawKindOf(byId.get(s)) === 'node' && drawKindOf(byId.get(t)) === 'node') {
+      const parent = inverted ? t : s;
+      const child = inverted ? s : t;
+      if (!out.has(parent)) out.set(parent, new Set());
+      out.get(parent).add(child);
     }
   }
   const seen = new Set([rid]);
@@ -376,7 +382,7 @@ export function collectReportSubtree(rootId) {
 export function hideSubtreeFromRoot(rootId) {
   const rid = String(rootId);
   const n = byId.get(rid);
-  if (!n || n.type !== 'person') { setStatus('Bitte eine Management-Person wählen'); return; }
+  if (!n || drawKindOf(n) !== 'node') { setStatus('Bitte einen Graph-Knoten wählen'); return; }
   const sub = collectReportSubtree(rid);
   hiddenByRoot.set(rid, sub);
   recomputeHiddenNodes();
