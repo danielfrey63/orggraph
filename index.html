@@ -2292,7 +2292,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.137.125';
+const APP_VERSION = '1.138.126';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -3907,7 +3907,9 @@ const Logger = {
 /**
  * Lädt die Pseudonymisierungs-Daten aus der fixen URL
  */
+
 async function loadPseudoData() {
+  resetPseudoAssignments();
   try {
     // 1) IndexedDB (standalone persistence)
     const storedPseudo = await getStoredJson(KEY_PSEUDO);
@@ -3935,95 +3937,116 @@ async function loadPseudoData() {
   }
 }
 
-/**
- * Holt ein Pseudonym für einen Personennamen (konsistentes Mapping)
- */
-function getPseudoName(originalName) {
-  if (!pseudoData?.names?.length) return originalName;
-  
-  const key = String(originalName);
-  if (pseudoNameMapping.has(key)) {
-    return pseudoNameMapping.get(key);
-  }
-  
-  // Neues Mapping erstellen
-  const pseudoName = pseudoData.names[pseudoNameIndex % pseudoData.names.length];
-  pseudoNameIndex++;
-  pseudoNameMapping.set(key, pseudoName);
-  return pseudoName;
+// Pool assignment state, one mapping/index per pool key (generic across
+// capability pools; replaces the fixed name/org maps).
+let pseudoPoolMappings = new Map();
+let pseudoPoolIndices = new Map();
+
+/** Drop all pool assignments (new pseudo data / tenant switch / tests). */
+function resetPseudoAssignments() {
+  pseudoPoolMappings = new Map();
+  pseudoPoolIndices = new Map();
 }
 
-/**
- * Holt ein Pseudonym für eine OE basierend auf ihrem Level (konsistentes Mapping)
- */
-function getPseudoOrgLabel(originalLabel, level) {
-  if (!pseudoData) return originalLabel;
-  
+// The tenant's pseudonymize capability of a node's type (FR-8.5): v2 reads
+// the tenant registry; the legacy tenant maps its structural tags onto the
+// classic pools. The capability only selects the NICER pool — it never
+// decides WHETHER masking happens (E48).
+function pseudoCapabilityOf(node) {
+  if (typeof og2Active === 'function' && og2Active() && og2State()) {
+    const decl = (og2State().registry.nodeTypes || {})[node.type];
+    return (decl && decl.pseudonymize) || null;
+  }
+  if (node.type === 'person') return { pool: 'names' };
+  if (node.type === 'org') return { pool: 'organizationalUnits', byLevel: true };
+  return null;
+}
+
+// Fail-closed generic fallback "<Typname> N" (E48): deterministic and stable
+// per identity (id hash) — never the real label, never random.
+function pseudoFallbackLabel(node) {
+  // fnv1a64 returns a hex string — reduce to a compact stable number.
+  const n = Number(BigInt('0x' + fnv1a64(String(node.id))) % 100000n);
+  return `${node.type || 'Knoten'} ${n}`;
+}
+
+function poolState(poolKey) {
+  if (!pseudoPoolMappings.has(poolKey)) {
+    pseudoPoolMappings.set(poolKey, new Map());
+    pseudoPoolIndices.set(poolKey, 0);
+  }
+  return pseudoPoolMappings.get(poolKey);
+}
+
+function assignFromPool(poolKey, list, originalKey, nameOf) {
+  const mapping = poolState(poolKey);
+  if (mapping.has(originalKey)) return mapping.get(originalKey);
+  const idx = pseudoPoolIndices.get(poolKey) || 0;
+  const entry = list[idx % list.length];
+  pseudoPoolIndices.set(poolKey, idx + 1);
+  const label = nameOf(entry);
+  mapping.set(originalKey, label);
+  return label;
+}
+
+/** Pseudonym aus einem flachen Pool (konsistentes Mapping). */
+function getPseudoName(originalName, pool = 'names', node = null) {
+  const list = pseudoData && pseudoData[pool];
+  if (!list?.length) return node ? pseudoFallbackLabel(node) : String(originalName);
+  return assignFromPool(pool, list, String(originalName), (e) => (typeof e === 'string' ? e : e.name));
+}
+
+/** Pseudonym aus einem level-basierten Pool (konsistentes Mapping). */
+function getPseudoOrgLabel(originalLabel, level, pool = 'organizationalUnits', node = null) {
+  const fallback = () => (node ? pseudoFallbackLabel(node) : String(originalLabel));
+  if (!pseudoData) return fallback();
   const key = String(originalLabel);
-  if (pseudoOrgMapping.has(key)) {
-    return pseudoOrgMapping.get(key);
-  }
-  
-  // Level-basierte OE-Liste finden
-  const levelKey = `organizationalUnits${level}`;
-  const orgList = pseudoData[levelKey];
-  
-  if (!orgList?.length) {
-    // Fallback: höchstes verfügbares Level verwenden
-    const availableLevels = Object.keys(pseudoData)
-      .filter(k => k.startsWith('organizationalUnits'))
-      .map(k => parseInt(k.replace('organizationalUnits', '')))
-      .sort((a, b) => b - a);
-    
-    if (availableLevels.length === 0) return originalLabel;
-    
-    const fallbackLevel = availableLevels.find(l => l <= level) ?? availableLevels[0];
-    const fallbackKey = `organizationalUnits${fallbackLevel}`;
-    const fallbackList = pseudoData[fallbackKey];
-    if (!fallbackList?.length) return originalLabel;
-    
-    const idx = pseudoOrgIndices.get(fallbackLevel) || 0;
-    const pseudoOrg = fallbackList[idx % fallbackList.length];
-    pseudoOrgIndices.set(fallbackLevel, idx + 1);
-    pseudoOrgMapping.set(key, pseudoOrg.name);
-    return pseudoOrg.name;
-  }
-  
-  // Neues Mapping erstellen
-  const idx = pseudoOrgIndices.get(level) || 0;
-  const pseudoOrg = orgList[idx % orgList.length];
-  pseudoOrgIndices.set(level, idx + 1);
-  pseudoOrgMapping.set(key, pseudoOrg.name);
-  return pseudoOrg.name;
+  const mapping = poolState(pool);
+  if (mapping.has(key)) return mapping.get(key);
+
+  const pickFrom = (lvl) => {
+    const list = pseudoData[`${pool}${lvl}`];
+    if (!list?.length) return null;
+    const idxKey = `${pool}${lvl}`;
+    const idx = pseudoPoolIndices.get(idxKey) || 0;
+    pseudoPoolIndices.set(idxKey, idx + 1);
+    const entry = list[idx % list.length];
+    const label = typeof entry === 'string' ? entry : entry.name;
+    mapping.set(key, label);
+    return label;
+  };
+
+  const direct = pickFrom(level);
+  if (direct !== null) return direct;
+  // Fallback: nächst-passendes verfügbares Level
+  const availableLevels = Object.keys(pseudoData)
+    .filter(k => k.startsWith(pool) && /\d+$/.test(k))
+    .map(k => parseInt(k.slice(pool.length), 10))
+    .sort((a, b) => b - a);
+  if (availableLevels.length === 0) return fallback();
+  const fallbackLevel = availableLevels.find(l => l <= level) ?? availableLevels[0];
+  const picked = pickFrom(fallbackLevel);
+  return picked !== null ? picked : fallback();
 }
 
 /**
- * Gibt das anzuzeigende Label für einen Knoten zurück (Person oder OE)
- * @param {Object} node - Der Knoten mit id, label, type
- * @param {number} [level] - Optional: OE-Level für level-basierte Pseudonyme
+ * Anzuzeigendes Label eines Knotens, capability-getrieben (FR-8.5, E48):
+ * Pseudo aktiv => IMMER maskiert — Capability-Pool wenn vorhanden und
+ * befüllt, sonst der deterministische Fallback "<Typname> N"; das echte
+ * Label erscheint im Pseudo-Modus an keiner Stelle (fail-closed).
  */
 function getDisplayLabel(node, level) {
   if (!node) return '';
-  
   const originalLabel = node.label || node.id || '';
-  
-  // Wenn Pseudonymisierung deaktiviert, Original zurückgeben
-  if (!pseudonymizationEnabled || !pseudoData) {
-    return originalLabel;
+  if (!pseudonymizationEnabled) return originalLabel;
+
+  const cap = pseudoCapabilityOf(node);
+  if (!cap || !pseudoData) return pseudoFallbackLabel(node);
+  if (cap.byLevel) {
+    const lvl = (level !== undefined) ? level : orgDepth(node.id);
+    return getPseudoOrgLabel(originalLabel, lvl, cap.pool, node);
   }
-  
-  // Personen pseudonymisieren
-  if (node.type === 'person') {
-    return getPseudoName(originalLabel);
-  }
-  
-  // OEs pseudonymisieren
-  if (node.type === 'org') {
-    const orgLevel = (level !== undefined) ? level : orgDepth(node.id);
-    return getPseudoOrgLabel(originalLabel, orgLevel);
-  }
-  
-  return originalLabel;
+  return getPseudoName(originalLabel, cap.pool, node);
 }
 
 /**

@@ -6,10 +6,12 @@ import {
   getDisplayOrgLabel,
 } from '../src/sections/06-pseudo-labels.js';
 import { orgDepth } from '../src/sections/08-color-geometry.js';
+import { resetPseudoAssignments, pseudoFallbackLabel, pseudoCapabilityOf } from '../src/sections/06-pseudo-labels.js';
 import { guessIdFromInput } from '../src/sections/10-combo.js';
 
 beforeEach(() => {
   globalThis.pseudoData = null;
+  resetPseudoAssignments();
   globalThis.pseudoNameMapping = new Map();
   globalThis.pseudoNameIndex = 0;
   globalThis.pseudoOrgMapping = new Map();
@@ -120,5 +122,41 @@ describe('guessIdFromInput', () => {
   it('returns null for empty input or no match', () => {
     expect(guessIdFromInput('')).toBeNull();
     expect(guessIdFromInput('zzz')).toBeNull();
+  });
+});
+
+describe('fail-closed pseudonymization (FR-8.5, E48)', () => {
+  it('active pseudo mode without pseudo data NEVER shows the real label', () => {
+    globalThis.pseudonymizationEnabled = true;
+    globalThis.pseudoData = null;
+    const label = getDisplayLabel({ id: 'p9', label: 'Echter Name', type: 'person' });
+    expect(label).not.toBe('Echter Name');
+    expect(label).toMatch(/^person \d+$/);
+  });
+
+  it('a type without capability gets the deterministic generic fallback', () => {
+    globalThis.pseudonymizationEnabled = true;
+    globalThis.pseudoData = { names: ['Alias'] };
+    const node = { id: 'x1', label: 'Geheim', type: 'widget' };
+    const a = getDisplayLabel(node);
+    const b = getDisplayLabel(node);
+    expect(a).toBe(b); // stable per identity
+    expect(a).toMatch(/^widget \d+$/);
+    expect(a).not.toContain('Geheim');
+    expect(pseudoFallbackLabel(node)).toBe(a);
+  });
+
+  it('legacy structural tags map onto the classic pools', () => {
+    expect(pseudoCapabilityOf({ type: 'person' })).toEqual({ pool: 'names' });
+    expect(pseudoCapabilityOf({ type: 'org' })).toEqual({ pool: 'organizationalUnits', byLevel: true });
+    expect(pseudoCapabilityOf({ type: 'widget' })).toBe(null);
+  });
+
+  it('an exhausted capability pool falls back closed, not open', () => {
+    globalThis.pseudonymizationEnabled = true;
+    globalThis.pseudoData = { organizationalUnits1: [] };
+    const label = getDisplayLabel({ id: 'o2', label: 'Echte OE', type: 'org' }, 1);
+    expect(label).not.toBe('Echte OE');
+    expect(label).toMatch(/^org \d+$/);
   });
 });
