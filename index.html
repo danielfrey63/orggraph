@@ -2292,7 +2292,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.139.127';
+const APP_VERSION = '1.140.128';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -4396,42 +4396,48 @@ function updateDebugZoomDisplay() {
  */
 function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
   const lines = [];
-  
-  // Section header for node
-  lines.push(`👤 ${nodeLabel}`);
-  
-  // Zeige Attribute für diese Person an
+  const node = byId.get(String(personId));
+
+  // Header: registry type name instead of a fixed emoji (FR-4.2a); legacy
+  // structural tags keep a neutral header.
+  const typeName = node && node.type && node.type !== 'person' && node.type !== 'org' ? node.type : '';
+  lines.push(typeName ? `${typeName}: ${nodeLabel}` : String(nodeLabel));
+
+  // Scalar props (FR-8.13), through the privacy gate (E60): in pseudo mode
+  // only props whitelisted as nonSensitive in the tenant registry appear.
+  if (node && node.props && typeof og2Active === 'function' && og2Active() && og2State()) {
+    const decls = ((og2State().registry.nodeTypes || {})[node.type] || {}).props || {};
+    const entries = Object.entries(node.props).filter(([key, value]) =>
+      value !== undefined && value !== null &&
+      (!pseudonymizationEnabled || (decls[key] && decls[key].nonSensitive === true)));
+    for (const [key, value] of entries) lines.push(`  ${key}: ${value}`);
+  }
+
+  // Ring badges of this node (grouped '<Typ>::<Label>' keys)
   if (personId && personAttributes.has(personId)) {
     const attrs = personAttributes.get(personId);
-    lines.push('📊 Attribute:');
     let hasAttributes = false;
     for (const [attrName, attrValue] of attrs.entries()) {
       if (activeAttributes.has(attrName)) {
-        const displayValue = attrValue !== '1' ? `: ${attrValue}` : '';
+        if (!hasAttributes) lines.push('Ringe:');
+        const displayValue = attrValue && attrValue !== '1' ? `: ${attrValue}` : '';
         lines.push(`  • ${attrName}${displayValue}`);
         hasAttributes = true;
       }
     }
-    if (!hasAttributes) {
-      lines.push('  • Keine aktiven Attribute');
-    }
   }
-  
-  // Get all OEs this person belongs to (not just visible ones)
+
+  // Cluster memberships: at the cursor and the full upward chain
   const allPersonOrgs = findAllPersonOrgs(personId);
-  
-  // Add visible org memberships (at mouse point) with a header
   if (visibleOrgs.length > 0) {
-    lines.push('🔍 OEs am Cursor:');
+    lines.push('Am Cursor:');
     visibleOrgs.forEach(org => lines.push(`  • ${org}`));
   }
-  
-  // Add all org memberships with header
   if (allPersonOrgs.length > 0) {
-    lines.push('🏢 Alle OE-Zugehörigkeiten:');
+    lines.push('Zugehörigkeiten:');
     allPersonOrgs.forEach(org => lines.push(`  • ${org}`));
   }
-  
+
   return lines;
 }
 
@@ -4471,7 +4477,7 @@ function handleClusterHover(event, svgSel) {
     lines = buildPersonTooltipLines(personId, nodeLabel, hits);
   } else if (hits.length) {
     // Display cluster information with header
-    lines.push('🏢 OE-Bereiche:');
+    lines.push('Cluster:');
     hits.forEach(hit => lines.push(`  • ${hit}`));
   }
   
@@ -5351,8 +5357,10 @@ function populateCombo(filterText) {
     }
 
     const displayLabel = getDisplayLabel(n).toLowerCase();
-    const idStr = String(n.id).toLowerCase();
-    if (matchesWordPrefixes(termWords, displayLabel) || idStr.includes(term)) {
+    // E60: raw node ids identify (emails, name slugs) - in pseudo mode the
+    // search runs over pseudo labels and nonSensitive values only.
+    const idStr = pseudonymizationEnabled ? '' : String(n.id).toLowerCase();
+    if (matchesWordPrefixes(termWords, displayLabel) || (idStr && idStr.includes(term))) {
       filteredItems.push(n);
       count++;
     }
@@ -13422,7 +13430,7 @@ function og2BuildGlobalsData(state) {
     const decl = nodeTypes[identity.type] || {};
     const stand = og2StandOf(state, identity);
     const isCluster = structure.clusterTypes.has(identity.type);
-    const entry = { id: identity.id, type: identity.type, kind: isCluster ? 'cluster' : 'node', label: resolveDisplayLabel(decl, stand) };
+    const entry = { id: identity.id, type: identity.type, kind: isCluster ? 'cluster' : 'node', label: resolveDisplayLabel(decl, stand), props: stand.props };
     for (const path of decl.identifiers || []) {
       const m = /^props\.([^.]+)$/.exec(path);
       if (m && stand && stand.props[m[1]] !== undefined) entry[m[1]] = stand.props[m[1]];

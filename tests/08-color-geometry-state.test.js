@@ -114,8 +114,8 @@ describe('findAllPersonOrgs', () => {
 describe('buildPersonTooltipLines', () => {
   it('starts with the person header and lists all org memberships', () => {
     const lines = buildPersonTooltipLines('p1', 'Alice');
-    expect(lines[0]).toBe('👤 Alice');
-    expect(lines).toContain('🏢 Alle OE-Zugehörigkeiten:');
+    expect(lines[0]).toBe('Alice'); // FR-4.2a: no emoji, registry type name when typed
+    expect(lines).toContain('Zugehörigkeiten:');
     expect(lines).toContain('  • Team');
   });
 
@@ -128,12 +128,12 @@ describe('buildPersonTooltipLines', () => {
 
     globalThis.activeAttributes = new Set();
     const none = buildPersonTooltipLines('p1', 'Alice');
-    expect(none).toContain('  • Keine aktiven Attribute');
+    expect(none).not.toContain('Ringe:'); // no active badges, no empty section
   });
 
   it('lists cursor orgs when provided', () => {
     const lines = buildPersonTooltipLines('p1', 'Alice', ['Division']);
-    expect(lines).toContain('🔍 OEs am Cursor:');
+    expect(lines).toContain('Am Cursor:');
     expect(lines).toContain('  • Division');
   });
 });

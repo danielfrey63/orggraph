@@ -52,8 +52,10 @@ export function populateCombo(filterText) {
     }
 
     const displayLabel = getDisplayLabel(n).toLowerCase();
-    const idStr = String(n.id).toLowerCase();
-    if (matchesWordPrefixes(termWords, displayLabel) || idStr.includes(term)) {
+    // E60: raw node ids identify (emails, name slugs) - in pseudo mode the
+    // search runs over pseudo labels and nonSensitive values only.
+    const idStr = pseudonymizationEnabled ? '' : String(n.id).toLowerCase();
+    if (matchesWordPrefixes(termWords, displayLabel) || (idStr && idStr.includes(term))) {
       filteredItems.push(n);
       count++;
     }

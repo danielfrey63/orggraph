@@ -113,7 +113,7 @@ describe('handleClusterHover', () => {
     handleClusterHover(event, svgSel);
     const tooltip = document.querySelector('.graph-tooltip, [class*="tooltip"]') || document.body.lastElementChild;
     expect(tooltip.style.display).toBe('block');
-    expect(tooltip.textContent).toContain('👤 Alice');
+    expect(tooltip.textContent).toContain('Alice');
   });
 
   it('shows cluster labels when hovering only an org area', () => {
@@ -125,7 +125,7 @@ describe('handleClusterHover', () => {
       polygonContains: () => true,
     };
     handleClusterHover(event, svgSel);
-    expect(document.body.lastElementChild.textContent).toContain('🏢 OE-Bereiche:');
+    expect(document.body.lastElementChild.textContent).toContain('Cluster:');
     expect(document.body.lastElementChild.textContent).toContain('Company');
   });
 

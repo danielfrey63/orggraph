@@ -246,7 +246,7 @@ export function og2BuildGlobalsData(state) {
     const decl = nodeTypes[identity.type] || {};
     const stand = og2StandOf(state, identity);
     const isCluster = structure.clusterTypes.has(identity.type);
-    const entry = { id: identity.id, type: identity.type, kind: isCluster ? 'cluster' : 'node', label: resolveDisplayLabel(decl, stand) };
+    const entry = { id: identity.id, type: identity.type, kind: isCluster ? 'cluster' : 'node', label: resolveDisplayLabel(decl, stand), props: stand.props };
     for (const path of decl.identifiers || []) {
       const m = /^props\.([^.]+)$/.exec(path);
       if (m && stand && stand.props[m[1]] !== undefined) entry[m[1]] = stand.props[m[1]];

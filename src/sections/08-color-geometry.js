@@ -162,42 +162,48 @@ export function updateDebugZoomDisplay() {
  */
 export function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
   const lines = [];
-  
-  // Section header for node
-  lines.push(`👤 ${nodeLabel}`);
-  
-  // Zeige Attribute für diese Person an
+  const node = byId.get(String(personId));
+
+  // Header: registry type name instead of a fixed emoji (FR-4.2a); legacy
+  // structural tags keep a neutral header.
+  const typeName = node && node.type && node.type !== 'person' && node.type !== 'org' ? node.type : '';
+  lines.push(typeName ? `${typeName}: ${nodeLabel}` : String(nodeLabel));
+
+  // Scalar props (FR-8.13), through the privacy gate (E60): in pseudo mode
+  // only props whitelisted as nonSensitive in the tenant registry appear.
+  if (node && node.props && typeof og2Active === 'function' && og2Active() && og2State()) {
+    const decls = ((og2State().registry.nodeTypes || {})[node.type] || {}).props || {};
+    const entries = Object.entries(node.props).filter(([key, value]) =>
+      value !== undefined && value !== null &&
+      (!pseudonymizationEnabled || (decls[key] && decls[key].nonSensitive === true)));
+    for (const [key, value] of entries) lines.push(`  ${key}: ${value}`);
+  }
+
+  // Ring badges of this node (grouped '<Typ>::<Label>' keys)
   if (personId && personAttributes.has(personId)) {
     const attrs = personAttributes.get(personId);
-    lines.push('📊 Attribute:');
     let hasAttributes = false;
     for (const [attrName, attrValue] of attrs.entries()) {
       if (activeAttributes.has(attrName)) {
-        const displayValue = attrValue !== '1' ? `: ${attrValue}` : '';
+        if (!hasAttributes) lines.push('Ringe:');
+        const displayValue = attrValue && attrValue !== '1' ? `: ${attrValue}` : '';
         lines.push(`  • ${attrName}${displayValue}`);
         hasAttributes = true;
       }
     }
-    if (!hasAttributes) {
-      lines.push('  • Keine aktiven Attribute');
-    }
   }
-  
-  // Get all OEs this person belongs to (not just visible ones)
+
+  // Cluster memberships: at the cursor and the full upward chain
   const allPersonOrgs = findAllPersonOrgs(personId);
-  
-  // Add visible org memberships (at mouse point) with a header
   if (visibleOrgs.length > 0) {
-    lines.push('🔍 OEs am Cursor:');
+    lines.push('Am Cursor:');
     visibleOrgs.forEach(org => lines.push(`  • ${org}`));
   }
-  
-  // Add all org memberships with header
   if (allPersonOrgs.length > 0) {
-    lines.push('🏢 Alle OE-Zugehörigkeiten:');
+    lines.push('Zugehörigkeiten:');
     allPersonOrgs.forEach(org => lines.push(`  • ${org}`));
   }
-  
+
   return lines;
 }
 
@@ -237,7 +243,7 @@ export function handleClusterHover(event, svgSel) {
     lines = buildPersonTooltipLines(personId, nodeLabel, hits);
   } else if (hits.length) {
     // Display cluster information with header
-    lines.push('🏢 OE-Bereiche:');
+    lines.push('Cluster:');
     hits.forEach(hit => lines.push(`  • ${hit}`));
   }
   
