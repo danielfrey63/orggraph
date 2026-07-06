@@ -24,6 +24,8 @@ test('Entfällt (E22/E23): direction toggle and apply button do not exist', asyn
 });
 
 test('Entfällt (§9.3): attribute upload/save/download controls do not exist', async ({ page }) => {
+  await expect(page.locator('#loadAttributes')).toHaveCount(0);
+  await expect(page.locator('#attributeFileInput')).toHaveCount(0);
   await expect(page.locator('#attributeUploadBtn, #attrUpload, .attr-save-btn, .attr-download-btn')).toHaveCount(0);
 });
 
