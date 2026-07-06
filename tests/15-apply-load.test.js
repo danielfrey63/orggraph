@@ -108,7 +108,7 @@ describe('applyFromUI', () => {
     expect(globalThis.currentSubgraph.nodes.map((n) => n.id).sort()).toEqual(['p1', 'p2', 'p3']);
     expect(globalThis.lastRenderRoots).toEqual(['p1']);
     expect(globalThis.lastRenderDepth).toBe(1);
-    expect(globalThis.lastRenderDirMode).toBe('down');
+    expect(globalThis.lastRenderDirMode).toBe('both'); // E22: direction lives in the view path
     expect(globalThis.transitionGraph).toHaveBeenCalledTimes(1);
     expect(globalThis.updateHiddenLegendTitle).toHaveBeenCalled();
   });

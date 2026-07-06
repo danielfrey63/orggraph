@@ -5,7 +5,6 @@ import {
   INPUT_COMBO_ID,
   LIST_COMBO_ID,
   INPUT_DEPTH_ID,
-  BTN_APPLY_ID,
   WIDTH,
   HEIGHT,
   MAX_DROPDOWN_ITEMS,
@@ -21,7 +20,6 @@ describe('config constants', () => {
     expect(INPUT_COMBO_ID).toBe('#comboInput');
     expect(LIST_COMBO_ID).toBe('#comboList');
     expect(INPUT_DEPTH_ID).toBe('#depth');
-    expect(BTN_APPLY_ID).toBe('#apply');
   });
 
   it('exposes numeric layout and behavior constants', () => {

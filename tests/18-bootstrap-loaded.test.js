@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
 import {
-  INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, BTN_APPLY_ID, INPUT_DEPTH_ID, SVG_ID,
+  INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, INPUT_DEPTH_ID, SVG_ID,
 } from '../src/sections/01-config-status.js';
 import { KEY_DATA, ATTR_PREFIX } from '../src/sections/04-storage.js';
 
@@ -54,7 +54,6 @@ beforeAll(async () => {
   globalThis.INPUT_COMBO_ID = INPUT_COMBO_ID;
   globalThis.LIST_COMBO_ID = LIST_COMBO_ID;
   globalThis.STATUS_ID = STATUS_ID;
-  globalThis.BTN_APPLY_ID = BTN_APPLY_ID;
   globalThis.INPUT_DEPTH_ID = INPUT_DEPTH_ID;
   globalThis.SVG_ID = SVG_ID;
   globalThis.KEY_DATA = KEY_DATA;
@@ -148,10 +147,10 @@ beforeEach(() => {
 });
 
 describe('env-driven bootstrap with loaded data', () => {
-  it('applies env defaults: depth, direction, management, labels, simulation, layout, attributes', () => {
+  it('applies env defaults: depth, management, labels, simulation, layout, attributes', () => {
     expect(document.getElementById('depth').value).toBe('4');
-    expect(document.querySelector('.direction-up').classList.contains('active')).toBe(true);
-    expect(document.querySelector('.direction-down').classList.contains('active')).toBe(false);
+    // E22: TOOLBAR_DIRECTION_DEFAULT is ignored — legacy markup stays untouched
+    expect(document.querySelector('.direction-up').classList.contains('active')).toBe(false);
     expect(globalThis.managementEnabled).toBe(false);
     expect(document.getElementById('toggleManagement').classList.contains('active')).toBe(false);
     expect(globalThis.labelsVisible).toBe('attributes');
@@ -232,20 +231,6 @@ describe('env-driven bootstrap with loaded data', () => {
     const btn = document.getElementById('toggleHierarchy');
     btn.click();
     expect(globalThis.switchLayout).toHaveBeenCalledWith('hierarchy', globalThis.currentSimulation);
-  });
-
-  it('direction halves enforce at-least-one-active', () => {
-    const up = document.querySelector('.direction-up');
-    const down = document.querySelector('.direction-down');
-    // state: up only -> clicking up switches to down only
-    up.click();
-    expect(up.classList.contains('active')).toBe(false);
-    expect(down.classList.contains('active')).toBe(true);
-    down.click(); // down only -> switches to up only
-    expect(up.classList.contains('active')).toBe(true);
-    expect(down.classList.contains('active')).toBe(false);
-    expect(globalThis.applyFromUI).toHaveBeenCalledWith('directionUp');
-    expect(globalThis.applyFromUI).toHaveBeenCalledWith('directionDown');
   });
 
   it('keyboard navigation chooses items and Enter re-renders', () => {

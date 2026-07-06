@@ -19,21 +19,9 @@ export function applyFromUI(triggerSource = 'unknown', callStack = false) {
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
   const depth = depthEl ? parseInt(depthEl.value, 10) || 0 : 0;
 
-  // Get direction mode from split component
-  let dirMode = 'both';
-  const upHalf = document.querySelector('#directionToggle .direction-up');
-  const downHalf = document.querySelector('#directionToggle .direction-down');
-  if (upHalf && downHalf) {
-    const upActive = upHalf.classList.contains('active');
-    const downActive = downHalf.classList.contains('active');
-    if (upActive && downActive) {
-      dirMode = 'both';
-    } else if (upActive) {
-      dirMode = 'up';
-    } else if (downActive) {
-      dirMode = 'down';
-    }
-  }
+  // Direction toggle removed (E22): the legacy subgraph traversal always
+  // runs both directions; v2 direction semantics live in the view path.
+  const dirMode = 'both';
 
   // Determine roots
   let roots = Array.isArray(selectedRootIds) && selectedRootIds.length > 0 ? selectedRootIds.slice() : [];

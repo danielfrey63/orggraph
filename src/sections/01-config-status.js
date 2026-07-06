@@ -5,7 +5,6 @@ export const STATUS_ID = "#status";
 export const INPUT_COMBO_ID = "#comboInput";
 export const LIST_COMBO_ID = "#comboList";
 export const INPUT_DEPTH_ID = "#depth";
-export const BTN_APPLY_ID = "#apply";
 
 export const WIDTH = 1200;
 export const HEIGHT = 800;

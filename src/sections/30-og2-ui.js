@@ -125,6 +125,7 @@ export async function og2TryBoot() {
     showTemporaryNotification(`Ungültige View-Konfiguration:\n${lines.join('\n')}`, 10000);
   }
   og2SyncStockGlobals();
+  og2BuildViewSwitcher();
   return true;
 }
 
@@ -147,6 +148,60 @@ export function og2SyncStockGlobals() {
 export function og2HasRenderableView() {
   const view = og2 && og2ActiveView(og2);
   return !!(view && Array.isArray(view.roots) && view.roots.length > 0);
+}
+
+// Footer view switcher (FR-7.5), analogous to the profile switcher.
+export function og2BuildViewSwitcher() {
+  const host = document.querySelector('.footer-stats');
+  if (!og2 || !host) return;
+  let wrap = document.getElementById('viewSwitcher');
+  const names = Object.keys(og2.views);
+  if (names.length === 0) { if (wrap) wrap.remove(); return; }
+  if (!wrap) {
+    wrap = document.createElement('span');
+    wrap.id = 'viewSwitcher';
+    wrap.className = 'view-switcher';
+    const label = document.createElement('span');
+    label.textContent = 'View: ';
+    const sel = document.createElement('select');
+    sel.id = 'viewSwitcherSelect';
+    sel.addEventListener('change', () => og2SwitchView(sel.value));
+    wrap.append(label, sel);
+    const sep = document.createElement('span');
+    sep.className = 'stat-separator';
+    sep.textContent = '|';
+    host.prepend(sep);
+    host.prepend(wrap);
+  }
+  const sel = wrap.querySelector('select');
+  sel.innerHTML = '';
+  for (const name of names) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    if (name === og2.activeViewName) opt.selected = true;
+    sel.append(opt);
+  }
+}
+
+// Switch the active view; runtime overrides reset (FR-7.5) and the search
+// domain follows the new path's visible types (FR-7.6/8.4).
+export function og2SwitchView(name) {
+  if (!og2 || !og2.views[name] || name === og2.activeViewName) return;
+  og2.activeViewName = name;
+  og2.runtimeRoots = null;
+  og2.runtimeDepth = null;
+  selectedRootIds = [];
+  currentSelectedId = null;
+  const view = og2ActiveView(og2);
+  const depthEl = document.querySelector(INPUT_DEPTH_ID);
+  if (depthEl && view && view.depth != null) {
+    depthEl.value = view.depth;
+    const display = document.querySelector('#depthControl .depth-value');
+    if (display) display.textContent = String(view.depth);
+  }
+  og2SyncStockGlobals();
+  applyFromUI('viewSwitch');
 }
 
 // v2 apply path (FR-8.11): read runtime overrides, project, translate, hand

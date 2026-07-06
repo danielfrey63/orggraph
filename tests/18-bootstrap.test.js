@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
 import {
-  INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, BTN_APPLY_ID, INPUT_DEPTH_ID, SVG_ID,
+  INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, INPUT_DEPTH_ID, SVG_ID,
 } from '../src/sections/01-config-status.js';
 import { KEY_DATA, ATTR_PREFIX } from '../src/sections/04-storage.js';
 
@@ -46,7 +46,6 @@ const setupGlobals = () => {
   globalThis.INPUT_COMBO_ID = INPUT_COMBO_ID;
   globalThis.LIST_COMBO_ID = LIST_COMBO_ID;
   globalThis.STATUS_ID = STATUS_ID;
-  globalThis.BTN_APPLY_ID = BTN_APPLY_ID;
   globalThis.INPUT_DEPTH_ID = INPUT_DEPTH_ID;
   globalThis.SVG_ID = SVG_ID;
   globalThis.KEY_DATA = KEY_DATA;
@@ -150,9 +149,9 @@ describe('bootstrap wiring (DOMContentLoaded)', () => {
     expect(globalThis.initializeCollapsibleLegends).toHaveBeenCalled();
   });
 
-  it('wires the apply button to applyFromUI', () => {
+  it('apply button is gone (E23): a legacy #apply element stays unwired', () => {
     document.querySelector('#apply').click();
-    expect(globalThis.applyFromUI).toHaveBeenCalled();
+    expect(globalThis.applyFromUI).not.toHaveBeenCalled();
   });
 
   it('debounces search input into populateCombo', async () => {
@@ -213,10 +212,11 @@ describe('bootstrap wiring (DOMContentLoaded)', () => {
     expect(document.querySelector('#legend .no-matches-message')).toBeNull();
   });
 
-  it('direction halves re-render via applyFromUI', () => {
+  it('direction toggle is gone (E22): no handler is wired to the legacy markup', () => {
     document.querySelector('#directionToggle .direction-up').click();
     document.querySelector('#directionToggle .direction-down').click();
-    expect(globalThis.applyFromUI).toHaveBeenCalled();
+    expect(globalThis.applyFromUI).not.toHaveBeenCalledWith('directionUp');
+    expect(globalThis.applyFromUI).not.toHaveBeenCalledWith('directionDown');
   });
 
   it('attribute visibility toggle only redraws circles', () => {

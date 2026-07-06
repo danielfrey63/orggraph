@@ -2106,16 +2106,7 @@ body.dz-dragging::after {
       </div>
       <input id="depth" type="number" min="0" max="6" value="2" step="1" inputmode="numeric" hidden />
       
-      <div class="direction-split" id="directionToggle">
-        <button class="direction-half direction-up active" data-dir="up" title="Aufwärts">
-          <i data-icon="arrowUp"></i>
-        </button>
-        <button class="direction-half direction-down active" data-dir="down" title="Abwärts">
-          <i data-icon="arrowDown"></i>
-        </button>
-      </div>
-      
-      <button id="toggleManagement" class="toggle-btn active" title="Management">
+      <button id="toggleManagement" class="toggle-btn active" title="Blätter ausblenden">
         <i data-icon="organization"></i>
       </button>
       
@@ -2301,7 +2292,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.135.122';
+const APP_VERSION = '1.136.124';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -2310,7 +2301,6 @@ const STATUS_ID = "#status";
 const INPUT_COMBO_ID = "#comboInput";
 const LIST_COMBO_ID = "#comboList";
 const INPUT_DEPTH_ID = "#depth";
-const BTN_APPLY_ID = "#apply";
 
 const WIDTH = 1200;
 const HEIGHT = 800;
@@ -8171,21 +8161,9 @@ function applyFromUI(triggerSource = 'unknown', callStack = false) {
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
   const depth = depthEl ? parseInt(depthEl.value, 10) || 0 : 0;
 
-  // Get direction mode from split component
-  let dirMode = 'both';
-  const upHalf = document.querySelector('#directionToggle .direction-up');
-  const downHalf = document.querySelector('#directionToggle .direction-down');
-  if (upHalf && downHalf) {
-    const upActive = upHalf.classList.contains('active');
-    const downActive = downHalf.classList.contains('active');
-    if (upActive && downActive) {
-      dirMode = 'both';
-    } else if (upActive) {
-      dirMode = 'up';
-    } else if (downActive) {
-      dirMode = 'down';
-    }
-  }
+  // Direction toggle removed (E22): the legacy subgraph traversal always
+  // runs both directions; v2 direction semantics live in the view path.
+  const dirMode = 'both';
 
   // Determine roots
   let roots = Array.isArray(selectedRootIds) && selectedRootIds.length > 0 ? selectedRootIds.slice() : [];
@@ -9825,8 +9803,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   initializeLegendCollapsedStates();
   // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
   try { document.addEventListener('contextmenu', (e) => e.preventDefault()); } catch {}
-  const applyBtn = document.querySelector(BTN_APPLY_ID);
-  if (applyBtn) applyBtn.addEventListener("click", applyFromUI);
+  // "Anzeigen" button removed (E23): rendering reacts to every parameter
+  // change directly (FR-8.11).
   // OE-Sichtbarkeits-Toggle
   const oeVisibilityBtn = document.getElementById('toggleOesVisibility');
   if (oeVisibilityBtn) {
@@ -10410,82 +10388,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     depthEl.addEventListener('change', applyFromUI);
     depthEl.addEventListener('input', applyFromUI);
   }
-  // Direction Split Component
-  const upHalf = document.querySelector('#directionToggle .direction-up');
-  const downHalf = document.querySelector('#directionToggle .direction-down');
-  let currentDir = 'both';
-  
-  // Helper function to get current direction state
-  const getCurrentDirection = () => {
-    if (!upHalf || !downHalf) return 'both';
-    const upActive = upHalf.classList.contains('active');
-    const downActive = downHalf.classList.contains('active');
-    if (upActive && downActive) return 'both';
-    if (upActive) return 'up';
-    if (downActive) return 'down';
-    return 'both';
-  };
-  
-  // Initialize direction from config
-  if (envConfig?.TOOLBAR_DIRECTION_DEFAULT) {
-    currentDir = envConfig.TOOLBAR_DIRECTION_DEFAULT;
-    if (upHalf && downHalf) {
-      if (currentDir === 'both') {
-        upHalf.classList.add('active');
-        downHalf.classList.add('active');
-      } else if (currentDir === 'up') {
-        upHalf.classList.add('active');
-        downHalf.classList.remove('active');
-      } else if (currentDir === 'down') {
-        upHalf.classList.remove('active');
-        downHalf.classList.add('active');
-      }
-    }
-  }
-  
-  // Direction half click handlers with constraint: at least one must be active
-  if (upHalf && downHalf) {
-    upHalf.addEventListener('click', () => {
-      const upActive = upHalf.classList.contains('active');
-      const downActive = downHalf.classList.contains('active');
-      
-      if (upActive && !downActive) {
-        // Only up active - switch to only down
-        upHalf.classList.remove('active');
-        downHalf.classList.add('active');
-      } else if (upActive && downActive) {
-        // Both active - deactivate up
-        upHalf.classList.remove('active');
-      } else {
-        // Up inactive - activate it
-        upHalf.classList.add('active');
-      }
-      
-      currentDir = getCurrentDirection();
-      applyFromUI('directionUp');
-    });
-    
-    downHalf.addEventListener('click', () => {
-      const upActive = upHalf.classList.contains('active');
-      const downActive = downHalf.classList.contains('active');
-      
-      if (downActive && !upActive) {
-        // Only down active - switch to only up
-        downHalf.classList.remove('active');
-        upHalf.classList.add('active');
-      } else if (upActive && downActive) {
-        // Both active - deactivate down
-        downHalf.classList.remove('active');
-      } else {
-        // Down inactive - activate it
-        downHalf.classList.add('active');
-      }
-      
-      currentDir = getCurrentDirection();
-      applyFromUI('directionDown');
-    });
-  }
-  
+  // Direction toggle removed (E22): direction semantics live entirely in the
+  // view path expression; a runtime direction parameter has no function.
+
   // Hierarchy toggle button
   const hier = document.querySelector('#toggleHierarchy');
   if (hier) {
@@ -13665,6 +13570,7 @@ async function og2TryBoot() {
     showTemporaryNotification(`Ungültige View-Konfiguration:\n${lines.join('\n')}`, 10000);
   }
   og2SyncStockGlobals();
+  og2BuildViewSwitcher();
   return true;
 }
 
@@ -13687,6 +13593,60 @@ function og2SyncStockGlobals() {
 function og2HasRenderableView() {
   const view = og2 && og2ActiveView(og2);
   return !!(view && Array.isArray(view.roots) && view.roots.length > 0);
+}
+
+// Footer view switcher (FR-7.5), analogous to the profile switcher.
+function og2BuildViewSwitcher() {
+  const host = document.querySelector('.footer-stats');
+  if (!og2 || !host) return;
+  let wrap = document.getElementById('viewSwitcher');
+  const names = Object.keys(og2.views);
+  if (names.length === 0) { if (wrap) wrap.remove(); return; }
+  if (!wrap) {
+    wrap = document.createElement('span');
+    wrap.id = 'viewSwitcher';
+    wrap.className = 'view-switcher';
+    const label = document.createElement('span');
+    label.textContent = 'View: ';
+    const sel = document.createElement('select');
+    sel.id = 'viewSwitcherSelect';
+    sel.addEventListener('change', () => og2SwitchView(sel.value));
+    wrap.append(label, sel);
+    const sep = document.createElement('span');
+    sep.className = 'stat-separator';
+    sep.textContent = '|';
+    host.prepend(sep);
+    host.prepend(wrap);
+  }
+  const sel = wrap.querySelector('select');
+  sel.innerHTML = '';
+  for (const name of names) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    if (name === og2.activeViewName) opt.selected = true;
+    sel.append(opt);
+  }
+}
+
+// Switch the active view; runtime overrides reset (FR-7.5) and the search
+// domain follows the new path's visible types (FR-7.6/8.4).
+function og2SwitchView(name) {
+  if (!og2 || !og2.views[name] || name === og2.activeViewName) return;
+  og2.activeViewName = name;
+  og2.runtimeRoots = null;
+  og2.runtimeDepth = null;
+  selectedRootIds = [];
+  currentSelectedId = null;
+  const view = og2ActiveView(og2);
+  const depthEl = document.querySelector(INPUT_DEPTH_ID);
+  if (depthEl && view && view.depth != null) {
+    depthEl.value = view.depth;
+    const display = document.querySelector('#depthControl .depth-value');
+    if (display) display.textContent = String(view.depth);
+  }
+  og2SyncStockGlobals();
+  applyFromUI('viewSwitch');
 }
 
 // v2 apply path (FR-8.11): read runtime overrides, project, translate, hand

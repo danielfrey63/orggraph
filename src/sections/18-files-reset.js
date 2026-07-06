@@ -146,8 +146,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   initializeLegendCollapsedStates();
   // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
   try { document.addEventListener('contextmenu', (e) => e.preventDefault()); } catch {}
-  const applyBtn = document.querySelector(BTN_APPLY_ID);
-  if (applyBtn) applyBtn.addEventListener("click", applyFromUI);
+  // "Anzeigen" button removed (E23): rendering reacts to every parameter
+  // change directly (FR-8.11).
   // OE-Sichtbarkeits-Toggle
   const oeVisibilityBtn = document.getElementById('toggleOesVisibility');
   if (oeVisibilityBtn) {
@@ -731,82 +731,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     depthEl.addEventListener('change', applyFromUI);
     depthEl.addEventListener('input', applyFromUI);
   }
-  // Direction Split Component
-  const upHalf = document.querySelector('#directionToggle .direction-up');
-  const downHalf = document.querySelector('#directionToggle .direction-down');
-  let currentDir = 'both';
-  
-  // Helper function to get current direction state
-  const getCurrentDirection = () => {
-    if (!upHalf || !downHalf) return 'both';
-    const upActive = upHalf.classList.contains('active');
-    const downActive = downHalf.classList.contains('active');
-    if (upActive && downActive) return 'both';
-    if (upActive) return 'up';
-    if (downActive) return 'down';
-    return 'both';
-  };
-  
-  // Initialize direction from config
-  if (envConfig?.TOOLBAR_DIRECTION_DEFAULT) {
-    currentDir = envConfig.TOOLBAR_DIRECTION_DEFAULT;
-    if (upHalf && downHalf) {
-      if (currentDir === 'both') {
-        upHalf.classList.add('active');
-        downHalf.classList.add('active');
-      } else if (currentDir === 'up') {
-        upHalf.classList.add('active');
-        downHalf.classList.remove('active');
-      } else if (currentDir === 'down') {
-        upHalf.classList.remove('active');
-        downHalf.classList.add('active');
-      }
-    }
-  }
-  
-  // Direction half click handlers with constraint: at least one must be active
-  if (upHalf && downHalf) {
-    upHalf.addEventListener('click', () => {
-      const upActive = upHalf.classList.contains('active');
-      const downActive = downHalf.classList.contains('active');
-      
-      if (upActive && !downActive) {
-        // Only up active - switch to only down
-        upHalf.classList.remove('active');
-        downHalf.classList.add('active');
-      } else if (upActive && downActive) {
-        // Both active - deactivate up
-        upHalf.classList.remove('active');
-      } else {
-        // Up inactive - activate it
-        upHalf.classList.add('active');
-      }
-      
-      currentDir = getCurrentDirection();
-      applyFromUI('directionUp');
-    });
-    
-    downHalf.addEventListener('click', () => {
-      const upActive = upHalf.classList.contains('active');
-      const downActive = downHalf.classList.contains('active');
-      
-      if (downActive && !upActive) {
-        // Only down active - switch to only up
-        downHalf.classList.remove('active');
-        upHalf.classList.add('active');
-      } else if (upActive && downActive) {
-        // Both active - deactivate down
-        downHalf.classList.remove('active');
-      } else {
-        // Down inactive - activate it
-        downHalf.classList.add('active');
-      }
-      
-      currentDir = getCurrentDirection();
-      applyFromUI('directionDown');
-    });
-  }
-  
+  // Direction toggle removed (E22): direction semantics live entirely in the
+  // view path expression; a runtime direction parameter has no function.
+
   // Hierarchy toggle button
   const hier = document.querySelector('#toggleHierarchy');
   if (hier) {
