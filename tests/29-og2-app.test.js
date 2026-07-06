@@ -2,11 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { parsePathExpression } from '../src/sections/27-og2-path.js';
 import { createTenantStore, createNodeIdentity, createEdgeIdentity, edgeKeyOf, startInterval } from '../src/sections/23-og2-store.js';
 import { projectView } from '../src/sections/28-og2-project.js';
-import {
-  serializeTenantStore, deserializeTenantStore,
-  looksLikeSnapshot, looksLikeRegistry, looksLikeLegacyData,
-  adaptProjection, projectionFingerprint,
-} from '../src/sections/29-og2-app.js';
+import { serializeTenantStore, deserializeTenantStore, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure } from '../src/sections/29-og2-app.js';
+import { looksLikeSnapshot, looksLikeRegistry, looksLikeData } from '../src/sections/04-storage.js';
 
 // Type names are fixture data (E14, NFR-5 exception).
 const REGISTRY = {
@@ -95,8 +92,8 @@ describe('file classification (FR-6.7, E25)', () => {
     expect(looksLikeSnapshot(legacy)).toBe(false);
     expect(looksLikeRegistry(registry)).toBe(true);
     expect(looksLikeRegistry(snapshot)).toBe(false);
-    expect(looksLikeLegacyData(legacy)).toBe(true);
-    expect(looksLikeLegacyData(snapshot)).toBe(false);
+    expect(looksLikeData(legacy)).toBe(true);
+    expect(looksLikeData(snapshot)).toBe(false);
   });
 });
 
@@ -136,6 +133,14 @@ describe('projection → render adapter (§9.2)', () => {
     expect(projectionFingerprint(a)).not.toBe(projectionFingerprint(c));
   });
 
+  it('path structure extraction: cluster types, cluster edges, all edge types', () => {
+    const { parsed } = { parsed: parsePathExpression(PATH) };
+    const s = og2PathStructure(parsed);
+    expect([...s.clusterTypes]).toEqual(['OE']);
+    expect([...s.clusterEdgeTypes]).toEqual(['unterstellt']);
+    expect([...s.allEdgeTypes].sort()).toEqual(['berichtetAn', 'hatRolle', 'mitgliedIn', 'unterstellt']);
+  });
+
   it('derived edges route as draw links flagged derived', () => {
     const projection = projectView({
       store: fixtureStore(),
@@ -145,5 +150,58 @@ describe('projection → render adapter (§9.2)', () => {
     const adapted = adaptProjection(projection, REGISTRY);
     expect(adapted.drawLinks).toEqual([{ source: 'p1', target: 'p2', edgeType: 'mitgliedIn', derived: true }]);
     expect(adapted.clusters.length).toBe(0);
+  });
+});
+
+describe('app view state (FR-7.5/7.6/7.7, §7)', () => {
+  const PATH = 'Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster], --hatRolle--> Rolle[ring])';
+  const ENV = { VIEWS: { Start: { path: PATH, roots: ['__auto__'], depth: 3 } } };
+
+  it('validates views, picks the first valid one and projects with __auto__ roots', () => {
+    const state = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: ENV });
+    expect(state.activeViewName).toBe('Start');
+    expect(Object.keys(state.rejectedViews)).toEqual([]);
+    const res = og2Project(state);
+    expect(res.mode).toBe('view');
+    expect(res.sub.nodes.map((n) => n.id).sort()).toEqual(['o1', 'o2', 'p1', 'p2']);
+    expect(res.sub.nodes.find((n) => n.id === 'o2').kind).toBe('cluster');
+    expect(res.projection.resolvedRoots).toEqual(['p1']);
+  });
+
+  it('AK 84 building block: zero valid views => diagnosis mode with per-view reasons', () => {
+    const badEnv = { VIEWS: { Kaputt: { path: 'Alien --gibtEsNicht--> Weg', roots: ['x'] } } };
+    const state = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: badEnv });
+    expect(state.activeViewName).toBe(null);
+    expect(state.rejectedViews.Kaputt.length).toBeGreaterThan(0);
+    const idle = og2Project(state);
+    expect(idle.mode).toBe('diagnosis');
+    expect(idle.projection.needsRoot).toBe(true);
+    expect(idle.sub.nodes.length).toBe(0); // never a full-graph render
+    state.runtimeRoots = ['p1'];
+    const res = og2Project(state);
+    expect(res.mode).toBe('diagnosis');
+    expect(res.sub.nodes.length).toBeGreaterThan(0);
+  });
+
+  it('runtime overrides win over view roots/depth (FR-7.6/7.7)', () => {
+    const state = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: ENV });
+    state.runtimeRoots = ['p2'];
+    state.runtimeDepth = 0;
+    const res = og2Project(state);
+    expect(res.sub.nodes.map((n) => n.id)).toEqual(['p2']);
+  });
+
+  it('stock globals translation: search domain, cluster hierarchy, live links', () => {
+    const state = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: ENV });
+    const data = og2BuildGlobalsData(state);
+    // visible path types: Person, OE, Rolle — Person/Rolle as draw nodes, OE as cluster
+    expect(data.persons.map((n) => n.id).sort()).toEqual(['p1', 'p2', 'r1']);
+    expect(data.orgs.map((n) => n.id).sort()).toEqual(['o1', 'o2']);
+    expect(data.orgs.every((o) => o.kind === 'cluster')).toBe(true);
+    expect(data.orgParent.get('o2')).toBe('o1');
+    expect([...data.orgChildren.get('o1')]).toEqual(['o2']);
+    expect(data.orgRoots).toEqual(['o1']);
+    expect(data.links.length).toBe(5);
+    expect(data.persons.find((n) => n.id === 'p1').label).toBe('Chef');
   });
 });

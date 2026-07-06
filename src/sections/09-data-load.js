@@ -2,6 +2,15 @@ export function idOf(v) {
   return String(typeof v === 'object' && v ? v.id : v);
 }
 
+// Draw kind of a graph node (§9.2): 'node' = simulated graph node, 'cluster'
+// = hull. v2 nodes carry `kind` from the view's render mode; legacy v1 nodes
+// fall back to their structural tag.
+export function drawKindOf(n) {
+  if (!n) return null;
+  if (n.kind) return n.kind;
+  return n.type === 'org' ? 'cluster' : 'node';
+}
+
 let allowedOrgs = new Set();
 
 export function processData(data) {
@@ -14,8 +23,8 @@ export function processData(data) {
 
   const nodes = [];
   const personIds = new Set();
-  persons.forEach(p => { if (p && p.id) { nodes.push({ ...p, id: String(p.id), type: 'person' }); personIds.add(String(p.id)); } });
-  orgs.forEach(o => { if (o && o.id) { nodes.push({ ...o, id: String(o.id), type: 'org' }); } });
+  persons.forEach(p => { if (p && p.id) { nodes.push({ ...p, id: String(p.id), type: 'person', kind: 'node' }); personIds.add(String(p.id)); } });
+  orgs.forEach(o => { if (o && o.id) { nodes.push({ ...o, id: String(o.id), type: 'org', kind: 'cluster' }); } });
 
   const seen = new Set();
   const idSet = new Set(nodes.map(n => String(n.id)));
@@ -289,6 +298,20 @@ export async function loadAttributesFromUrl(url) {
 
 export async function loadData() {
   setStatus("Lade Daten...");
+
+  // OrgGraph 2.0 tenant (registry present in this profile): the v2 boot path
+  // owns loading — snapshots/store instead of the legacy dataset (§1.5).
+  try {
+    if (typeof og2TryBoot === 'function' && await og2TryBoot()) {
+      setStatus('OrgGraph 2.0 Tenant geladen.');
+      return true;
+    }
+  } catch (e) {
+    console.error('OrgGraph 2.0 Boot fehlgeschlagen:', e);
+    setStatus('OrgGraph 2.0 Boot fehlgeschlagen — Details in der Konsole.');
+    return false;
+  }
+
   let data = null;
   let sourceName = '(keine Daten)';
 

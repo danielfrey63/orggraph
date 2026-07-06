@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { idOf } from '../src/sections/09-data-load.js';
+import { idOf, drawKindOf } from '../src/sections/09-data-load.js';
 import { cssNumber, getNodeFillByLevel, countVisibleAttributeRings } from '../src/sections/08-color-geometry.js';
 import {
   SVG_ID, WIDTH, HEIGHT, BFS_LEVEL_ANIMATION_DELAY_MS,
@@ -28,6 +28,7 @@ beforeEach(() => {
   document.body.innerHTML = '<svg id="graph"></svg>';
   globalThis.d3 = d3;
   globalThis.idOf = idOf;
+  globalThis.drawKindOf = drawKindOf;
   globalThis.cssNumber = cssNumber;
   globalThis.getNodeFillByLevel = getNodeFillByLevel;
   globalThis.SVG_ID = SVG_ID;

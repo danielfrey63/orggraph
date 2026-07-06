@@ -335,6 +335,7 @@ export function projectView(options) {
     truncated,
     skipped,
     autoEmpty,
+    resolvedRoots: roots,
     // AK 63: a capped projection with active filters must never look complete;
     // a capped-and-filtered EMPTY result is "not evaluable", never "no hits".
     cappedBeforeFilter: truncated && filtersActive,

@@ -42,14 +42,14 @@ export function computeHierarchyLevels(nodes, links) {
   for (const l of links) {
     const s = idOf(l.source), t = idOf(l.target);
     const sNode = byId.get(s), tNode = byId.get(t);
-    // Manager -> Employee link (source manages target)
-    if (sNode?.type === 'person' && tNode?.type === 'person' && nodeSet.has(s) && nodeSet.has(t)) {
+    // Descent link between drawn graph nodes (source manages target)
+    if (drawKindOf(sNode) === 'node' && drawKindOf(tNode) === 'node' && nodeSet.has(s) && nodeSet.has(t)) {
       managerOf.set(t, s);
     }
   }
-  
-  // Find roots (persons without managers in this subgraph)
-  const roots = nodes.filter(n => n.type === 'person' && !managerOf.has(String(n.id)));
+
+  // Find roots (drawn nodes without parents in this subgraph)
+  const roots = nodes.filter(n => drawKindOf(n) === 'node' && !managerOf.has(String(n.id)));
   
   // BFS to assign levels
   const queue = roots.map(r => ({ id: String(r.id), level: 0 }));
@@ -69,8 +69,8 @@ export function computeHierarchyLevels(nodes, links) {
   
   // Assign level to org nodes (not used for positioning, but for consistency)
   nodes.forEach(n => {
-    if (n.type === 'org' && !levels.has(String(n.id))) {
-      levels.set(String(n.id), -1); // Orgs get special level
+    if (drawKindOf(n) === 'cluster' && !levels.has(String(n.id))) {
+      levels.set(String(n.id), -1); // cluster hulls get special level
     }
   });
   
@@ -90,7 +90,7 @@ export function configureLayout(nodes, links, simulation, mode) {
   for (const l of links) {
     const s = idOf(l.source), t = idOf(l.target);
     const sNode = byId.get(s), tNode = byId.get(t);
-    if (sNode?.type === 'person' && tNode?.type === 'person') {
+    if (drawKindOf(sNode) === 'node' && drawKindOf(tNode) === 'node') {
       pMap.set(t, s);
     }
   }
@@ -142,8 +142,8 @@ export function configureLayout(nodes, links, simulation, mode) {
     for (const l of raw.links) {
       const s = idOf(l.source), t = idOf(l.target);
       if (!nodeIdSet.has(s)) continue;
-      if (byId.get(s)?.type !== 'person') continue;
-      if (byId.get(t)?.type !== 'org') continue;
+      if (drawKindOf(byId.get(s)) !== 'node') continue;
+      if (drawKindOf(byId.get(t)) !== 'cluster') continue;
       if (!allowedOrgs.has(t)) continue;
       if (!memberships.has(s)) memberships.set(s, new Set());
       memberships.get(s).add(t);

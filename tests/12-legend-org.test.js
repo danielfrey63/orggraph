@@ -13,7 +13,7 @@ import { getDisplayLabel } from '../src/sections/06-pseudo-labels.js';
 import { getChevronSVG } from '../src/sections/16-legend-attributes.js';
 import { colorForOrg } from '../src/sections/08-color-geometry.js';
 import { setIcon, ICON } from '../src/sections/02-icons.js';
-import { idOf } from '../src/sections/09-data-load.js';
+import { idOf, drawKindOf } from '../src/sections/09-data-load.js';
 
 // Org tree: o1 -> (o2, o3), o2 -> o4
 const setupOrgState = () => {
@@ -46,6 +46,7 @@ beforeEach(() => {
   globalThis.ICON = ICON;
   globalThis.setIcon = setIcon;
   globalThis.idOf = idOf;
+  globalThis.drawKindOf = drawKindOf;
   globalThis.getDisplayLabel = getDisplayLabel;
   globalThis.getChevronSVG = getChevronSVG;
   globalThis.colorForOrg = colorForOrg;

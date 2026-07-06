@@ -175,8 +175,8 @@ export function renderGraph(sub) {
     gZoom = svg.append("g").attr("class", "zoom-layer");
   }
 
-  // Nur Personen-zu-Personen-Verbindungen anzeigen
-  const personIdsInSub = new Set(sub.nodes.filter(n => byId.get(String(n.id))?.type === 'person').map(n => String(n.id)));
+  // Nur Verbindungen zwischen gezeichneten Graph-Knoten anzeigen (§9.2)
+  const personIdsInSub = new Set(sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node').map(n => String(n.id)));
   const linksPP = sub.links.filter(l => personIdsInSub.has(idOf(l.source)) && personIdsInSub.has(idOf(l.target)));
 
   // Cluster-Ebene (hinter Links und Knoten)
@@ -219,8 +219,8 @@ export function renderGraph(sub) {
     .style("fill", "#666")
     .style("pointer-events", "none");
 
-  // Nur Personen-Knoten rendern
-  const personNodes = sub.nodes.filter(n => byId.get(String(n.id))?.type === 'person');
+  // Nur Graph-Knoten (Draw-Kind 'node') rendern; Cluster werden als Hüllen gezeichnet
+  const personNodes = sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node');
   const simById = new Map(personNodes.map(d => [String(d.id), d]));
   clusterSimById = simById;
   clusterPersonIds = new Set(personNodes.map(d => String(d.id)));

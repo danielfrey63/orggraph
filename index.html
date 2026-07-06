@@ -2301,7 +2301,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.132.119';
+const APP_VERSION = '1.133.120';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -2837,6 +2837,12 @@ const LEGACY_STORE = 'files';
 const KEY_ENV = 'env';
 const KEY_DATA = 'data';
 const KEY_PSEUDO = 'pseudo';
+// OrgGraph 2.0 tenant persistence (FR-8.9): serialized tenant store, tenant
+// registry, and dropped-but-not-yet-imported snapshots (imported with their
+// confirmation dialogs on the next boot, then removed).
+const KEY_STORE = 'og2Store';
+const KEY_REGISTRY = 'og2Registry';
+const SNAPSHOT_PREFIX = 'og2Snapshot::';
 const ATTR_PREFIX = 'attr:';
 const KEY_ATTR_MATCHES = 'attrMatches';
 
@@ -3237,6 +3243,18 @@ function looksLikeData(obj) {
   return Array.isArray(obj.persons) || Array.isArray(obj.orgs) || Array.isArray(obj.links);
 }
 
+/** OrgGraph 2.0 snapshot (§3): meta.source/snapshot + schema + nodes/edges. */
+function looksLikeSnapshot(obj) {
+  return !!(obj && obj.meta && typeof obj.meta.source === 'string' && typeof obj.meta.snapshot === 'string'
+    && obj.schema && Array.isArray(obj.nodes) && Array.isArray(obj.edges));
+}
+
+/** OrgGraph 2.0 type registry (FR-4.1): version + nodeTypes/edgeTypes. */
+function looksLikeRegistry(obj) {
+  return !!(obj && typeof obj.version === 'string' && obj.nodeTypes && obj.edgeTypes
+    && !obj.meta && !Array.isArray(obj.nodes));
+}
+
 const ATTR_EXT = /\.(tsv|txt|csv)$/i;
 
 /**
@@ -3257,9 +3275,28 @@ async function classifyFile(file) {
 
   if (looksLikeEnv(obj)) return { kind: 'env', key: KEY_ENV, filename, text };
   if (looksLikePseudo(obj)) return { kind: 'pseudo', key: KEY_PSEUDO, filename, text };
+  // OrgGraph 2.0 artifacts first — a snapshot/registry never matches the
+  // legacy shape, but keep the order explicit (FR-6.7, E25).
+  if (looksLikeSnapshot(obj)) return { kind: 'snapshot', key: SNAPSHOT_PREFIX + filename, filename, text };
+  if (looksLikeRegistry(obj)) return { kind: 'registry', key: KEY_REGISTRY, filename, text };
   if (looksLikeData(obj)) return { kind: 'data', key: KEY_DATA, filename, text };
 
   return { kind: 'unknown', key: null, filename, text };
+}
+
+/** Dropped snapshots awaiting import: [{ key, filename, text }]. */
+async function getPendingSnapshots() {
+  const id = await ensureProfilesInitialized();
+  const db = await openDb();
+  if (!db.objectStoreNames.contains(profileStoreName(id))) return [];
+  const pairs = await readAllPairs(profileStoreName(id));
+  const out = [];
+  for (const [k, text] of pairs) {
+    if (typeof k !== 'string' || !k.startsWith(SNAPSHOT_PREFIX)) continue;
+    if (typeof text !== 'string') continue;
+    out.push({ key: k, filename: k.slice(SNAPSHOT_PREFIX.length), text });
+  }
+  return out.sort((a, b) => a.filename.localeCompare(b.filename));
 }
 
 // ---- Relative-path resolution for folder/ZIP drops ----
@@ -4804,6 +4841,15 @@ function idOf(v) {
   return String(typeof v === 'object' && v ? v.id : v);
 }
 
+// Draw kind of a graph node (§9.2): 'node' = simulated graph node, 'cluster'
+// = hull. v2 nodes carry `kind` from the view's render mode; legacy v1 nodes
+// fall back to their structural tag.
+function drawKindOf(n) {
+  if (!n) return null;
+  if (n.kind) return n.kind;
+  return n.type === 'org' ? 'cluster' : 'node';
+}
+
 let allowedOrgs = new Set();
 
 function processData(data) {
@@ -4816,8 +4862,8 @@ function processData(data) {
 
   const nodes = [];
   const personIds = new Set();
-  persons.forEach(p => { if (p && p.id) { nodes.push({ ...p, id: String(p.id), type: 'person' }); personIds.add(String(p.id)); } });
-  orgs.forEach(o => { if (o && o.id) { nodes.push({ ...o, id: String(o.id), type: 'org' }); } });
+  persons.forEach(p => { if (p && p.id) { nodes.push({ ...p, id: String(p.id), type: 'person', kind: 'node' }); personIds.add(String(p.id)); } });
+  orgs.forEach(o => { if (o && o.id) { nodes.push({ ...o, id: String(o.id), type: 'org', kind: 'cluster' }); } });
 
   const seen = new Set();
   const idSet = new Set(nodes.map(n => String(n.id)));
@@ -5089,6 +5135,20 @@ async function loadAttributesFromUrl(url) {
 
 async function loadData() {
   setStatus("Lade Daten...");
+
+  // OrgGraph 2.0 tenant (registry present in this profile): the v2 boot path
+  // owns loading — snapshots/store instead of the legacy dataset (§1.5).
+  try {
+    if (typeof og2TryBoot === 'function' && await og2TryBoot()) {
+      setStatus('OrgGraph 2.0 Tenant geladen.');
+      return true;
+    }
+  } catch (e) {
+    console.error('OrgGraph 2.0 Boot fehlgeschlagen:', e);
+    setStatus('OrgGraph 2.0 Boot fehlgeschlagen — Details in der Konsole.');
+    return false;
+  }
+
   let data = null;
   let sourceName = '(keine Daten)';
 
@@ -6194,7 +6254,7 @@ function buildOrgLegend() {
     const hasParent = new Set();
     for (const l of raw.links || []) {
       const s = idOf(l.source), t = idOf(l.target);
-      if (byId.get(s)?.type !== 'org' || byId.get(t)?.type !== 'org') continue;
+      if (drawKindOf(byId.get(s)) !== 'cluster' || drawKindOf(byId.get(t)) !== 'cluster') continue;
       const sid = String(s);
       const tid = String(t);
       if (!localChildren.has(sid)) localChildren.set(sid, new Set());
@@ -7471,8 +7531,8 @@ function renderGraph(sub) {
     gZoom = svg.append("g").attr("class", "zoom-layer");
   }
 
-  // Nur Personen-zu-Personen-Verbindungen anzeigen
-  const personIdsInSub = new Set(sub.nodes.filter(n => byId.get(String(n.id))?.type === 'person').map(n => String(n.id)));
+  // Nur Verbindungen zwischen gezeichneten Graph-Knoten anzeigen (§9.2)
+  const personIdsInSub = new Set(sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node').map(n => String(n.id)));
   const linksPP = sub.links.filter(l => personIdsInSub.has(idOf(l.source)) && personIdsInSub.has(idOf(l.target)));
 
   // Cluster-Ebene (hinter Links und Knoten)
@@ -7515,8 +7575,8 @@ function renderGraph(sub) {
     .style("fill", "#666")
     .style("pointer-events", "none");
 
-  // Nur Personen-Knoten rendern
-  const personNodes = sub.nodes.filter(n => byId.get(String(n.id))?.type === 'person');
+  // Nur Graph-Knoten (Draw-Kind 'node') rendern; Cluster werden als Hüllen gezeichnet
+  const personNodes = sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node');
   const simById = new Map(personNodes.map(d => [String(d.id), d]));
   clusterSimById = simById;
   clusterPersonIds = new Set(personNodes.map(d => String(d.id)));
@@ -8092,6 +8152,8 @@ function renderGraph(sub) {
 
 function applyFromUI(triggerSource = 'unknown', callStack = false) {
   Logger.log(`[Timing] Start: applyFromUI.${triggerSource}`);
+  // OrgGraph 2.0 tenant: the projection-based apply path owns rendering.
+  if (typeof og2Active === 'function' && og2Active()) { og2ApplyFromUI(triggerSource); return; }
   if (!raw || !raw.links || !raw.nodes) return;
   if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
   
@@ -9678,6 +9740,12 @@ async function handleDroppedFiles(entryList) {
   }
   if (!summary.stored.length) return;
 
+  // E25/FR-6.7: Legacy-Datensätze werden im OrgGraph-2.0-Tenant abgewiesen —
+  // der Weg führt über das Einmal-Migrationsskript (§10).
+  if (typeof og2Active === 'function' && og2Active() && summary.stored.some(s => s.kind === 'data')) {
+    showTemporaryNotification('Legacy-Format erkannt: dieser Tenant versteht nur Snapshots. Bitte mit scripts/migrate-legacy.mjs migrieren und den Snapshot laden.', 8000);
+  }
+
   const kinds = new Set(summary.stored.map(s => s.kind));
   const onlyAttributes = kinds.size > 0 && [...kinds].every(k => k === 'attr');
 
@@ -10546,6 +10614,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Einmaliger initialer Update-Aufruf, falls Parameter gesetzt wurden
     if (initialUpdateTriggered) {
         try { applyFromUI('initialLoad'); } catch(_) {}
+    } else if (typeof og2Active === 'function' && og2Active()) {
+        // OrgGraph 2.0: Combo/Legenden aufbauen; eine View mit eigenen roots
+        // (inkl. __auto__) rendert direkt — reaktiv, ohne Start-ID (FR-7.4).
+        renderFullView('OrgGraph 2.0');
+        if (og2HasRenderableView()) {
+            try { applyFromUI('initialLoad'); } catch(e) { console.error(e); }
+        }
     } else {
         renderFullView(envConfig?.DATA_URL || '(geladen)');
     }
@@ -10625,14 +10700,14 @@ function computeHierarchyLevels(nodes, links) {
   for (const l of links) {
     const s = idOf(l.source), t = idOf(l.target);
     const sNode = byId.get(s), tNode = byId.get(t);
-    // Manager -> Employee link (source manages target)
-    if (sNode?.type === 'person' && tNode?.type === 'person' && nodeSet.has(s) && nodeSet.has(t)) {
+    // Descent link between drawn graph nodes (source manages target)
+    if (drawKindOf(sNode) === 'node' && drawKindOf(tNode) === 'node' && nodeSet.has(s) && nodeSet.has(t)) {
       managerOf.set(t, s);
     }
   }
-  
-  // Find roots (persons without managers in this subgraph)
-  const roots = nodes.filter(n => n.type === 'person' && !managerOf.has(String(n.id)));
+
+  // Find roots (drawn nodes without parents in this subgraph)
+  const roots = nodes.filter(n => drawKindOf(n) === 'node' && !managerOf.has(String(n.id)));
   
   // BFS to assign levels
   const queue = roots.map(r => ({ id: String(r.id), level: 0 }));
@@ -10652,8 +10727,8 @@ function computeHierarchyLevels(nodes, links) {
   
   // Assign level to org nodes (not used for positioning, but for consistency)
   nodes.forEach(n => {
-    if (n.type === 'org' && !levels.has(String(n.id))) {
-      levels.set(String(n.id), -1); // Orgs get special level
+    if (drawKindOf(n) === 'cluster' && !levels.has(String(n.id))) {
+      levels.set(String(n.id), -1); // cluster hulls get special level
     }
   });
   
@@ -10673,7 +10748,7 @@ function configureLayout(nodes, links, simulation, mode) {
   for (const l of links) {
     const s = idOf(l.source), t = idOf(l.target);
     const sNode = byId.get(s), tNode = byId.get(t);
-    if (sNode?.type === 'person' && tNode?.type === 'person') {
+    if (drawKindOf(sNode) === 'node' && drawKindOf(tNode) === 'node') {
       pMap.set(t, s);
     }
   }
@@ -10725,8 +10800,8 @@ function configureLayout(nodes, links, simulation, mode) {
     for (const l of raw.links) {
       const s = idOf(l.source), t = idOf(l.target);
       if (!nodeIdSet.has(s)) continue;
-      if (byId.get(s)?.type !== 'person') continue;
-      if (byId.get(t)?.type !== 'org') continue;
+      if (drawKindOf(byId.get(s)) !== 'node') continue;
+      if (drawKindOf(byId.get(t)) !== 'cluster') continue;
       if (!allowedOrgs.has(t)) continue;
       if (!memberships.has(s)) memberships.set(s, new Set());
       memberships.get(s).add(t);
@@ -13093,6 +13168,7 @@ function projectView(options) {
     truncated,
     skipped,
     autoEmpty,
+    resolvedRoots: roots,
     // AK 63: a capped projection with active filters must never look complete;
     // a capped-and-filtered EMPTY result is "not evaluable", never "no hits".
     cappedBeforeFilter: truncated && filtersActive,
@@ -13222,24 +13298,6 @@ function deserializeTenantStore(text) {
   return decodeValue(doc.store);
 }
 
-// --- File classification (FR-6.7, E25) -------------------------------------
-
-function looksLikeSnapshot(obj) {
-  return !!(obj && obj.meta && typeof obj.meta.source === 'string' && typeof obj.meta.snapshot === 'string'
-    && obj.schema && Array.isArray(obj.nodes) && Array.isArray(obj.edges));
-}
-
-function looksLikeRegistry(obj) {
-  return !!(obj && typeof obj.version === 'string' && obj.nodeTypes && obj.edgeTypes
-    && !obj.meta && !Array.isArray(obj.nodes));
-}
-
-// Legacy v1 dataset (persons/orgs/links): recognized ONLY to reject it with
-// the migration hint — the app understands snapshots exclusively (§9.3).
-function looksLikeLegacyData(obj) {
-  return !!(obj && Array.isArray(obj.persons) && Array.isArray(obj.orgs) && Array.isArray(obj.links));
-}
-
 // --- Projection → render adapter (§9.2) ------------------------------------
 // The layout/render machinery works on: draw nodes (simulated graph nodes),
 // draw links between them, cluster nodes with a parent relation and a
@@ -13331,6 +13389,149 @@ function adaptProjection(projection, registry) {
   };
 }
 
+// --- App view state (FR-7.5/7.6/7.7, §7) ------------------------------------
+// One state object per tenant session: validated views, active view, runtime
+// overrides (roots/depth/time). Views come from env.VIEWS; zero valid views
+// => diagnosis projection plus a per-view rejection report (§7, AK 84).
+
+function createOg2State({ store, registry, env }) {
+  const rawViews = (env && env.VIEWS) || null;
+  const { valid, rejected, anyValid } = rawViews ? validateViews(rawViews, registry) : { valid: {}, rejected: {}, anyValid: false };
+  return {
+    store,
+    registry,
+    env: env || {},
+    views: valid,
+    rejectedViews: rejected,
+    activeViewName: anyValid ? Object.keys(valid)[0] : null,
+    runtimeRoots: null,   // search/context-menu override (FR-7.6), null = view roots
+    runtimeDepth: null,   // toolbar override (FR-7.7), null = view depth
+    asOf: null,           // time slice (FR-8.6), null = now
+  };
+}
+
+function og2ActiveView(state) {
+  return state.activeViewName ? state.views[state.activeViewName] : null;
+}
+
+// Project the current state: active view path (or the capped diagnosis
+// projection when no valid view exists) with runtime overrides applied.
+// Returns { projection, adapted, mode: 'view'|'diagnosis', sub } where sub is
+// the draw-ready subgraph for the layout machinery: nodes carry
+// { id, label, type (registry), kind ('node'|'cluster'), level }.
+function og2Project(state) {
+  const view = og2ActiveView(state);
+  if (!view) {
+    const projection = projectDiagnosis({
+      store: state.store,
+      roots: state.runtimeRoots || [],
+      depth: state.runtimeDepth ?? 3,
+      asOf: state.asOf,
+    });
+    const nodeTypes = state.registry.nodeTypes || {};
+    const nodes = [...projection.nodes.values()].map((n) => ({
+      id: n.id, kind: 'node', type: n.type, level: n.order,
+      label: resolveDisplayLabel(nodeTypes[n.type], n.stand),
+    }));
+    return {
+      projection, mode: 'diagnosis', adapted: null,
+      sub: { nodes, links: projection.edges.map((e) => ({ source: e.source, target: e.target })) },
+    };
+  }
+  const projection = projectView({
+    store: state.store,
+    parsed: view.parsed,
+    roots: state.runtimeRoots || view.roots || [],
+    depth: state.runtimeDepth ?? view.depth ?? null,
+    asOf: state.asOf,
+    filters: view.filters || {},
+  });
+  const adapted = adaptProjection(projection, state.registry);
+  const nodes = [
+    ...adapted.drawNodes.map((n) => ({ id: n.id, kind: 'node', type: n.type, label: n.label, level: n.level, props: n.props })),
+    ...adapted.clusters.map((c) => ({ id: c.id, kind: 'cluster', type: c.type, label: c.label, level: c.level })),
+  ];
+  const links = adapted.drawLinks.map((l) => ({ source: l.source, target: l.target, derived: l.derived }));
+  return { projection, adapted, mode: 'view', sub: { nodes, links } };
+}
+
+// Cluster/member path structure of a parsed view: which node types render as
+// cluster, which edge types connect cluster→cluster (hull hierarchy) and
+// node→cluster (membership) — all read from the path AST, never hardcoded.
+function og2PathStructure(parsed) {
+  const renderOfType = new Map();
+  const clusterEdgeTypes = new Set();
+  const allEdgeTypes = new Set();
+  const walk = (node) => {
+    if (!renderOfType.has(node.type)) renderOfType.set(node.type, node.render);
+    for (const hop of node.hops) {
+      allEdgeTypes.add(hop.edgeType);
+      if (node.render === 'cluster' && hop.target.render === 'cluster') clusterEdgeTypes.add(hop.edgeType);
+      walk(hop.target);
+    }
+  };
+  walk(parsed);
+  const clusterTypes = new Set([...renderOfType.entries()].filter(([, r]) => r === 'cluster').map(([t]) => t));
+  return { renderOfType, clusterTypes, clusterEdgeTypes, allEdgeTypes };
+}
+
+// Tenant-stock translation for the legacy-shaped globals the layout/render
+// machinery consumes (§9.2): search domain (FR-8.4: ALIVE identities of the
+// visible path types with resolved labels), cluster stock with its hierarchy,
+// and the live edge list of the path's edge types. Diagnosis mode covers all
+// registry types (§7).
+function og2BuildGlobalsData(state) {
+  const view = og2ActiveView(state);
+  const nodeTypes = state.registry.nodeTypes || {};
+  const types = view ? visibleTypesOf(view.parsed) : new Set(Object.keys(nodeTypes));
+  const structure = view ? og2PathStructure(view.parsed) : { clusterTypes: new Set(), clusterEdgeTypes: new Set(), allEdgeTypes: null };
+  const idx = buildLiveIndexes(state.store, state.asOf, structure.allEdgeTypes ? structure.allEdgeTypes : undefined);
+
+  const persons = [];
+  const orgs = [];
+  for (const identity of idx.nodes.values()) {
+    if (!types.has(identity.type)) continue;
+    const decl = nodeTypes[identity.type] || {};
+    const stand = og2StandOf(state, identity);
+    const isCluster = structure.clusterTypes.has(identity.type);
+    const entry = { id: identity.id, type: identity.type, kind: isCluster ? 'cluster' : 'node', label: resolveDisplayLabel(decl, stand) };
+    for (const path of decl.identifiers || []) {
+      const m = /^props\.([^.]+)$/.exec(path);
+      if (m && stand && stand.props[m[1]] !== undefined) entry[m[1]] = stand.props[m[1]];
+    }
+    (isCluster ? orgs : persons).push(entry);
+  }
+
+  const links = [];
+  const orgParent = new Map();
+  const orgChildren = new Map();
+  const clusterIds = new Set(orgs.map((o) => o.id));
+  for (const list of idx.bySource.values()) {
+    for (const edge of list) {
+      links.push({ source: edge.source, target: edge.target });
+      // stored direction: child/member -> parent/container (FR-7.2a)
+      if (structure.clusterEdgeTypes.has(edge.type) && clusterIds.has(edge.source) && clusterIds.has(edge.target)) {
+        orgParent.set(edge.source, edge.target);
+        if (!orgChildren.has(edge.target)) orgChildren.set(edge.target, new Set());
+        orgChildren.get(edge.target).add(edge.source);
+      }
+    }
+  }
+  const orgRoots = orgs.filter((o) => !orgParent.has(o.id)).map((o) => o.id);
+  return { persons, orgs, links, orgParent, orgChildren, orgRoots };
+}
+
+function og2StandOf(state, identity) {
+  const stand = { label: undefined, props: {} };
+  for (const [prop, tl] of identity.timelines) {
+    const open = tl.find((iv) => iv.to === null);
+    if (!open || open.value === undefined) continue;
+    if (prop === 'label') stand.label = open.value;
+    else stand.props[prop.replace(/^props\./, '')] = open.value;
+  }
+  return stand;
+}
+
 // Stable content key of a projection for cheap render-skip decisions
 // (reactive rendering, FR-8.11: parameter changes re-render; identical
 // projections need not).
@@ -13341,6 +13542,205 @@ function projectionFingerprint(adapted) {
     c: adapted.clusters.map((c) => c.id),
     r: [...adapted.ringsByHost.keys()],
   });
+}
+// OrgGraph 2.0 — UI wiring of the v2 data path: boot from the persisted
+// tenant store, snapshot import with its confirmation dialogs (product HILs,
+// §1.5), translation of stock + projection into the globals the layout/render
+// machinery consumes (§9.2), and the reactive apply path (FR-8.11).
+
+let og2 = null;
+
+function og2Active() {
+  return og2 !== null;
+}
+
+function og2State() {
+  return og2;
+}
+
+// Product HIL dialogs (FR-5.7, E46, E69, E70, FR-6.8): plain confirm dialogs
+// for now — every decision point is injectable and covered by fixture tests
+// at the engine level (E71); these are the interactive counterparts.
+function og2UiHooks() {
+  const ask = (title, detail) => window.confirm(`${title}\n\n${detail}`);
+  return {
+    confirmSourceRegistration: (info) => ({
+      ok: ask('Neue Quelle registrieren?', `Quelle "${info && info.source}" ist diesem Mandanten unbekannt. Import nur nach bestätigter Registrierung (E70).`),
+      moveOutEdgeTypes: [],
+    }),
+    confirmJoin: (info) => ask('Cross-Source-Join freigeben?', `Erstmaliger Anschluss an bestehende Identitäten (E69):\n${JSON.stringify(info && info.pairs || info || {}, null, 2).slice(0, 800)}`),
+    confirmGate: (info) => ask('Plausibilitäts-Gate', `Der Import überschreitet eine 20%-Schwelle (FR-5.7):\n${JSON.stringify(info || {}, null, 2).slice(0, 800)}\nTrotzdem anwenden?`),
+    confirmDestructive: (info) => ask('Destruktive Wirkungen bestätigen', `Bestätigungspflichtige Schliessungen (E70/FR-6.8):\n${JSON.stringify(info || {}, null, 2).slice(0, 800)}`),
+    confirmAuthority: (info) => ask('Autoritäts-Antrag bestätigen', `Der Snapshot beansprucht Autorität über fremde Quellen (E46):\n${JSON.stringify(info || {}, null, 2).slice(0, 800)}`),
+  };
+}
+
+// Boot the v2 tenant: registry + persisted store + pending dropped snapshots.
+// Returns true when the v2 path owns this tenant (a registry is present).
+async function og2TryBoot() {
+  const registry = await getStoredJson(KEY_REGISTRY);
+  if (!registry) return false;
+
+  let store;
+  const storedStore = await getStoredText(KEY_STORE);
+  if (storedStore != null) {
+    try {
+      store = deserializeTenantStore(storedStore);
+    } catch (e) {
+      console.error('Gespeicherter Tenant-Store ist nicht lesbar:', e);
+      setStatus('Tenant-Store beschädigt — bitte Snapshots erneut importieren.');
+      store = createTenantStore();
+    }
+  } else {
+    store = createTenantStore();
+  }
+
+  // Import snapshots dropped before this boot, with their dialogs (E25).
+  const pending = await getPendingSnapshots();
+  let imported = 0;
+  for (const p of pending) {
+    let snapshot = null;
+    try { snapshot = JSON.parse(p.text); } catch { /* classified as snapshot, so parseable — defensive */ }
+    if (snapshot) {
+      const res = importSnapshot(store, registry, snapshot, og2UiHooks());
+      if (res.status === 'imported') {
+        store = res.store || store;
+        imported++;
+        showTemporaryNotification(`Snapshot ${p.filename}: importiert`, 3000);
+      } else if (res.status === 'noop') {
+        showTemporaryNotification(`Snapshot ${p.filename}: bereits importiert`, 4000);
+      } else {
+        showTemporaryNotification(`Snapshot ${p.filename}: ${res.status}${res.reason ? ' — ' + res.reason : ''}`, 8000);
+        console.warn('Snapshot-Import abgelehnt:', p.filename, res);
+      }
+    }
+    await delStored(p.key);
+  }
+  if (imported > 0) await putStored(KEY_STORE, serializeTenantStore(store));
+
+  og2 = createOg2State({ store, registry, env: envConfig || {} });
+  const rejectedNames = Object.keys(og2.rejectedViews);
+  if (rejectedNames.length) {
+    // §7 / AK 84: never a silent blank — report each rejected view.
+    const lines = rejectedNames.map((n) => `${n}: ${og2.rejectedViews[n].join('; ')}`);
+    showTemporaryNotification(`Ungültige View-Konfiguration:\n${lines.join('\n')}`, 10000);
+  }
+  og2SyncStockGlobals();
+  return true;
+}
+
+// Fill the stock-shaped globals (raw/byId/…) from the tenant store so the
+// search combo, legends and layout membership logic keep working unchanged.
+function og2SyncStockGlobals() {
+  const data = og2BuildGlobalsData(og2);
+  raw = { nodes: [...data.persons, ...data.orgs], links: data.links, persons: data.persons, orgs: data.orgs };
+  byId = new Map(raw.nodes.map(n => [String(n.id), n]));
+  allNodesUnique = Array.from(byId.values());
+  orgParent = data.orgParent;
+  orgChildren = data.orgChildren;
+  orgRoots = data.orgRoots;
+  parentOf = new Map(data.orgParent);
+  hiddenNodes = hiddenNodes || new Set();
+  hiddenByRoot = hiddenByRoot || new Map();
+}
+
+// Does the active view render without a manual root (own roots or __auto__)?
+function og2HasRenderableView() {
+  const view = og2 && og2ActiveView(og2);
+  return !!(view && Array.isArray(view.roots) && view.roots.length > 0);
+}
+
+// v2 apply path (FR-8.11): read runtime overrides, project, translate, hand
+// over to the existing transition/render machinery, refresh legends/footer.
+function og2ApplyFromUI(triggerSource = 'unknown') {
+  if (!og2) return;
+  Logger.log(`[UI] og2ApplyFromUI triggered by: ${triggerSource}`);
+
+  const depthEl = document.querySelector(INPUT_DEPTH_ID);
+  const depth = depthEl ? parseInt(depthEl.value, 10) : NaN;
+  og2.runtimeDepth = Number.isFinite(depth) ? depth : og2.runtimeDepth;
+
+  // Combo/context-menu roots (FR-7.6): the combo keeps writing the v1
+  // globals; they override the view roots for this session.
+  const comboRoots = Array.isArray(selectedRootIds) && selectedRootIds.length > 0
+    ? selectedRootIds.slice()
+    : (currentSelectedId ? [String(currentSelectedId)] : null);
+  og2.runtimeRoots = comboRoots || og2.runtimeRoots;
+
+  const res = og2Project(og2);
+  const projection = res.projection;
+
+  // Leaf filter (FR-8.3, leafProp capability) and hidden subtrees (FR-8.7)
+  // prune the drawn subgraph after projection.
+  const nodeTypes = og2.registry.nodeTypes || {};
+  const isLeafHidden = (n) => {
+    if (!managementEnabled || n.kind !== 'node') return false;
+    const leafPath = (nodeTypes[n.type] || {}).leafProp;
+    const m = leafPath && /^props\.([^.]+)$/.exec(leafPath);
+    return !!(m && n.props && n.props[m[1]] === true);
+  };
+  const dropped = new Set();
+  for (const n of res.sub.nodes) {
+    if (hiddenNodes.has(String(n.id)) || isLeafHidden(n)) dropped.add(String(n.id));
+  }
+  const sub = {
+    nodes: res.sub.nodes.filter(n => !dropped.has(String(n.id))),
+    links: res.sub.links.filter(l => !dropped.has(String(l.source)) && !dropped.has(String(l.target))),
+  };
+  currentHiddenCount = dropped.size;
+
+  // Ring globals for the badge renderer and ring legend (FR-8.2).
+  if (res.adapted) {
+    const nextTypes = new Map();
+    const nextByHost = new Map();
+    for (const [host, ringMap] of res.adapted.ringsByHost) {
+      const perHost = new Map();
+      for (const [key, entry] of ringMap) {
+        perHost.set(key, '');
+        if (!nextTypes.has(key)) nextTypes.set(key, entry.color);
+      }
+      nextByHost.set(String(host), perHost);
+    }
+    for (const key of nextTypes.keys()) {
+      if (!attributeTypes.has(key)) activeAttributes.add(key); // new groups start visible
+    }
+    for (const key of [...activeAttributes]) {
+      if (!nextTypes.has(key)) activeAttributes.delete(key);
+    }
+    personAttributes = nextByHost;
+    attributeTypes = nextTypes;
+  }
+
+  // Cluster scope: hull roots = projected cluster nodes (FR-8.2).
+  const scopeOrgs = new Set(sub.nodes.filter(n => n.kind === 'cluster').map(n => String(n.id)));
+  allowedOrgs = new Set(scopeOrgs);
+
+  // Truncation hints (E67, FR-8.1/AK 63) — explicit, never silent.
+  if (projection.notEvaluable) {
+    setStatus('Nicht auswertbar — Projektion vor Filterung gekappt (Roots/Tiefe einschränken).');
+  } else if (projection.cappedBeforeFilter) {
+    setStatus(`Gekappt vor Filterung — Ergebnis möglicherweise unvollständig (mindestens ${projection.skipped} weitere).`);
+  } else if (projection.truncated) {
+    setStatus(`Projektion gekappt — Tiefe, Filter oder Roots einschränken (mindestens ${projection.skipped} weitere).`);
+  } else if (projection.autoEmpty) {
+    setStatus('Keine automatischen Wurzeln bestimmbar (Zyklus-Verdacht) — bitte Root über die Suche wählen.');
+  } else if (res.mode === 'diagnosis' && projection.needsRoot) {
+    setStatus('Keine View-Konfiguration — Diagnoseansicht: bitte Root über die Suche wählen.');
+  }
+
+  const roots = (og2.runtimeRoots && og2.runtimeRoots.length ? og2.runtimeRoots : projection.resolvedRoots) || [];
+  const oldSubgraph = currentSubgraph;
+  currentSubgraph = sub;
+  const transitionId = ++lastTransitionId;
+  transitionGraph(oldSubgraph, sub, roots, transitionId).then(() => {
+    if (transitionId !== lastTransitionId) return;
+    updateFooterStats(sub);
+    applyLegendScope(scopeOrgs);
+  });
+  buildAttributeLegend();
+  updateHiddenLegendTitle();
+  lastRenderRoots = roots.slice();
+  lastRenderDepth = og2.runtimeDepth;
 }
 
 </script>

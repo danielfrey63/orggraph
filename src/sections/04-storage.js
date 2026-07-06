@@ -11,6 +11,12 @@ export const LEGACY_STORE = 'files';
 export const KEY_ENV = 'env';
 export const KEY_DATA = 'data';
 export const KEY_PSEUDO = 'pseudo';
+// OrgGraph 2.0 tenant persistence (FR-8.9): serialized tenant store, tenant
+// registry, and dropped-but-not-yet-imported snapshots (imported with their
+// confirmation dialogs on the next boot, then removed).
+export const KEY_STORE = 'og2Store';
+export const KEY_REGISTRY = 'og2Registry';
+export const SNAPSHOT_PREFIX = 'og2Snapshot::';
 export const ATTR_PREFIX = 'attr:';
 export const KEY_ATTR_MATCHES = 'attrMatches';
 
@@ -411,6 +417,18 @@ export function looksLikeData(obj) {
   return Array.isArray(obj.persons) || Array.isArray(obj.orgs) || Array.isArray(obj.links);
 }
 
+/** OrgGraph 2.0 snapshot (§3): meta.source/snapshot + schema + nodes/edges. */
+export function looksLikeSnapshot(obj) {
+  return !!(obj && obj.meta && typeof obj.meta.source === 'string' && typeof obj.meta.snapshot === 'string'
+    && obj.schema && Array.isArray(obj.nodes) && Array.isArray(obj.edges));
+}
+
+/** OrgGraph 2.0 type registry (FR-4.1): version + nodeTypes/edgeTypes. */
+export function looksLikeRegistry(obj) {
+  return !!(obj && typeof obj.version === 'string' && obj.nodeTypes && obj.edgeTypes
+    && !obj.meta && !Array.isArray(obj.nodes));
+}
+
 export const ATTR_EXT = /\.(tsv|txt|csv)$/i;
 
 /**
@@ -431,9 +449,28 @@ export async function classifyFile(file) {
 
   if (looksLikeEnv(obj)) return { kind: 'env', key: KEY_ENV, filename, text };
   if (looksLikePseudo(obj)) return { kind: 'pseudo', key: KEY_PSEUDO, filename, text };
+  // OrgGraph 2.0 artifacts first — a snapshot/registry never matches the
+  // legacy shape, but keep the order explicit (FR-6.7, E25).
+  if (looksLikeSnapshot(obj)) return { kind: 'snapshot', key: SNAPSHOT_PREFIX + filename, filename, text };
+  if (looksLikeRegistry(obj)) return { kind: 'registry', key: KEY_REGISTRY, filename, text };
   if (looksLikeData(obj)) return { kind: 'data', key: KEY_DATA, filename, text };
 
   return { kind: 'unknown', key: null, filename, text };
+}
+
+/** Dropped snapshots awaiting import: [{ key, filename, text }]. */
+export async function getPendingSnapshots() {
+  const id = await ensureProfilesInitialized();
+  const db = await openDb();
+  if (!db.objectStoreNames.contains(profileStoreName(id))) return [];
+  const pairs = await readAllPairs(profileStoreName(id));
+  const out = [];
+  for (const [k, text] of pairs) {
+    if (typeof k !== 'string' || !k.startsWith(SNAPSHOT_PREFIX)) continue;
+    if (typeof text !== 'string') continue;
+    out.push({ key: k, filename: k.slice(SNAPSHOT_PREFIX.length), text });
+  }
+  return out.sort((a, b) => a.filename.localeCompare(b.filename));
 }
 
 // ---- Relative-path resolution for folder/ZIP drops ----

@@ -323,7 +323,7 @@ export function buildOrgLegend() {
     const hasParent = new Set();
     for (const l of raw.links || []) {
       const s = idOf(l.source), t = idOf(l.target);
-      if (byId.get(s)?.type !== 'org' || byId.get(t)?.type !== 'org') continue;
+      if (drawKindOf(byId.get(s)) !== 'cluster' || drawKindOf(byId.get(t)) !== 'cluster') continue;
       const sid = String(s);
       const tid = String(t);
       if (!localChildren.has(sid)) localChildren.set(sid, new Set());

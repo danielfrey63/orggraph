@@ -61,6 +61,12 @@ export async function handleDroppedFiles(entryList) {
   }
   if (!summary.stored.length) return;
 
+  // E25/FR-6.7: Legacy-Datensätze werden im OrgGraph-2.0-Tenant abgewiesen —
+  // der Weg führt über das Einmal-Migrationsskript (§10).
+  if (typeof og2Active === 'function' && og2Active() && summary.stored.some(s => s.kind === 'data')) {
+    showTemporaryNotification('Legacy-Format erkannt: dieser Tenant versteht nur Snapshots. Bitte mit scripts/migrate-legacy.mjs migrieren und den Snapshot laden.', 8000);
+  }
+
   const kinds = new Set(summary.stored.map(s => s.kind));
   const onlyAttributes = kinds.size > 0 && [...kinds].every(k => k === 'attr');
 
@@ -929,6 +935,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Einmaliger initialer Update-Aufruf, falls Parameter gesetzt wurden
     if (initialUpdateTriggered) {
         try { applyFromUI('initialLoad'); } catch(_) {}
+    } else if (typeof og2Active === 'function' && og2Active()) {
+        // OrgGraph 2.0: Combo/Legenden aufbauen; eine View mit eigenen roots
+        // (inkl. __auto__) rendert direkt — reaktiv, ohne Start-ID (FR-7.4).
+        renderFullView('OrgGraph 2.0');
+        if (og2HasRenderableView()) {
+            try { applyFromUI('initialLoad'); } catch(e) { console.error(e); }
+        }
     } else {
         renderFullView(envConfig?.DATA_URL || '(geladen)');
     }

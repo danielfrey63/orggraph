@@ -6,7 +6,8 @@
 // declarative — draw kinds follow the render mode, never a type name).
 import { canonicalJson } from './21-og2-util.js';
 import { quantizedHueFromCategory } from './08-color-geometry.js';
-import { resolveDisplayLabel } from './28-og2-project.js';
+import { validateViews, visibleTypesOf } from './27-og2-path.js';
+import { projectView, projectDiagnosis, buildLiveIndexes, resolveDisplayLabel } from './28-og2-project.js';
 
 // --- Store serialization (FR-8.9) ------------------------------------------
 // The in-memory tenant store uses Maps/Sets; IndexedDB persistence stores one
@@ -47,24 +48,6 @@ export function deserializeTenantStore(text) {
   const doc = JSON.parse(text);
   if (!doc || doc.format !== STORE_FORMAT) throw new Error(`unknown store format: ${doc && doc.format}`);
   return decodeValue(doc.store);
-}
-
-// --- File classification (FR-6.7, E25) -------------------------------------
-
-export function looksLikeSnapshot(obj) {
-  return !!(obj && obj.meta && typeof obj.meta.source === 'string' && typeof obj.meta.snapshot === 'string'
-    && obj.schema && Array.isArray(obj.nodes) && Array.isArray(obj.edges));
-}
-
-export function looksLikeRegistry(obj) {
-  return !!(obj && typeof obj.version === 'string' && obj.nodeTypes && obj.edgeTypes
-    && !obj.meta && !Array.isArray(obj.nodes));
-}
-
-// Legacy v1 dataset (persons/orgs/links): recognized ONLY to reject it with
-// the migration hint — the app understands snapshots exclusively (§9.3).
-export function looksLikeLegacyData(obj) {
-  return !!(obj && Array.isArray(obj.persons) && Array.isArray(obj.orgs) && Array.isArray(obj.links));
 }
 
 // --- Projection → render adapter (§9.2) ------------------------------------
@@ -156,6 +139,149 @@ export function adaptProjection(projection, registry) {
       autoEmpty: projection.autoEmpty,
     },
   };
+}
+
+// --- App view state (FR-7.5/7.6/7.7, §7) ------------------------------------
+// One state object per tenant session: validated views, active view, runtime
+// overrides (roots/depth/time). Views come from env.VIEWS; zero valid views
+// => diagnosis projection plus a per-view rejection report (§7, AK 84).
+
+export function createOg2State({ store, registry, env }) {
+  const rawViews = (env && env.VIEWS) || null;
+  const { valid, rejected, anyValid } = rawViews ? validateViews(rawViews, registry) : { valid: {}, rejected: {}, anyValid: false };
+  return {
+    store,
+    registry,
+    env: env || {},
+    views: valid,
+    rejectedViews: rejected,
+    activeViewName: anyValid ? Object.keys(valid)[0] : null,
+    runtimeRoots: null,   // search/context-menu override (FR-7.6), null = view roots
+    runtimeDepth: null,   // toolbar override (FR-7.7), null = view depth
+    asOf: null,           // time slice (FR-8.6), null = now
+  };
+}
+
+export function og2ActiveView(state) {
+  return state.activeViewName ? state.views[state.activeViewName] : null;
+}
+
+// Project the current state: active view path (or the capped diagnosis
+// projection when no valid view exists) with runtime overrides applied.
+// Returns { projection, adapted, mode: 'view'|'diagnosis', sub } where sub is
+// the draw-ready subgraph for the layout machinery: nodes carry
+// { id, label, type (registry), kind ('node'|'cluster'), level }.
+export function og2Project(state) {
+  const view = og2ActiveView(state);
+  if (!view) {
+    const projection = projectDiagnosis({
+      store: state.store,
+      roots: state.runtimeRoots || [],
+      depth: state.runtimeDepth ?? 3,
+      asOf: state.asOf,
+    });
+    const nodeTypes = state.registry.nodeTypes || {};
+    const nodes = [...projection.nodes.values()].map((n) => ({
+      id: n.id, kind: 'node', type: n.type, level: n.order,
+      label: resolveDisplayLabel(nodeTypes[n.type], n.stand),
+    }));
+    return {
+      projection, mode: 'diagnosis', adapted: null,
+      sub: { nodes, links: projection.edges.map((e) => ({ source: e.source, target: e.target })) },
+    };
+  }
+  const projection = projectView({
+    store: state.store,
+    parsed: view.parsed,
+    roots: state.runtimeRoots || view.roots || [],
+    depth: state.runtimeDepth ?? view.depth ?? null,
+    asOf: state.asOf,
+    filters: view.filters || {},
+  });
+  const adapted = adaptProjection(projection, state.registry);
+  const nodes = [
+    ...adapted.drawNodes.map((n) => ({ id: n.id, kind: 'node', type: n.type, label: n.label, level: n.level, props: n.props })),
+    ...adapted.clusters.map((c) => ({ id: c.id, kind: 'cluster', type: c.type, label: c.label, level: c.level })),
+  ];
+  const links = adapted.drawLinks.map((l) => ({ source: l.source, target: l.target, derived: l.derived }));
+  return { projection, adapted, mode: 'view', sub: { nodes, links } };
+}
+
+// Cluster/member path structure of a parsed view: which node types render as
+// cluster, which edge types connect cluster→cluster (hull hierarchy) and
+// node→cluster (membership) — all read from the path AST, never hardcoded.
+export function og2PathStructure(parsed) {
+  const renderOfType = new Map();
+  const clusterEdgeTypes = new Set();
+  const allEdgeTypes = new Set();
+  const walk = (node) => {
+    if (!renderOfType.has(node.type)) renderOfType.set(node.type, node.render);
+    for (const hop of node.hops) {
+      allEdgeTypes.add(hop.edgeType);
+      if (node.render === 'cluster' && hop.target.render === 'cluster') clusterEdgeTypes.add(hop.edgeType);
+      walk(hop.target);
+    }
+  };
+  walk(parsed);
+  const clusterTypes = new Set([...renderOfType.entries()].filter(([, r]) => r === 'cluster').map(([t]) => t));
+  return { renderOfType, clusterTypes, clusterEdgeTypes, allEdgeTypes };
+}
+
+// Tenant-stock translation for the legacy-shaped globals the layout/render
+// machinery consumes (§9.2): search domain (FR-8.4: ALIVE identities of the
+// visible path types with resolved labels), cluster stock with its hierarchy,
+// and the live edge list of the path's edge types. Diagnosis mode covers all
+// registry types (§7).
+export function og2BuildGlobalsData(state) {
+  const view = og2ActiveView(state);
+  const nodeTypes = state.registry.nodeTypes || {};
+  const types = view ? visibleTypesOf(view.parsed) : new Set(Object.keys(nodeTypes));
+  const structure = view ? og2PathStructure(view.parsed) : { clusterTypes: new Set(), clusterEdgeTypes: new Set(), allEdgeTypes: null };
+  const idx = buildLiveIndexes(state.store, state.asOf, structure.allEdgeTypes ? structure.allEdgeTypes : undefined);
+
+  const persons = [];
+  const orgs = [];
+  for (const identity of idx.nodes.values()) {
+    if (!types.has(identity.type)) continue;
+    const decl = nodeTypes[identity.type] || {};
+    const stand = og2StandOf(state, identity);
+    const isCluster = structure.clusterTypes.has(identity.type);
+    const entry = { id: identity.id, type: identity.type, kind: isCluster ? 'cluster' : 'node', label: resolveDisplayLabel(decl, stand) };
+    for (const path of decl.identifiers || []) {
+      const m = /^props\.([^.]+)$/.exec(path);
+      if (m && stand && stand.props[m[1]] !== undefined) entry[m[1]] = stand.props[m[1]];
+    }
+    (isCluster ? orgs : persons).push(entry);
+  }
+
+  const links = [];
+  const orgParent = new Map();
+  const orgChildren = new Map();
+  const clusterIds = new Set(orgs.map((o) => o.id));
+  for (const list of idx.bySource.values()) {
+    for (const edge of list) {
+      links.push({ source: edge.source, target: edge.target });
+      // stored direction: child/member -> parent/container (FR-7.2a)
+      if (structure.clusterEdgeTypes.has(edge.type) && clusterIds.has(edge.source) && clusterIds.has(edge.target)) {
+        orgParent.set(edge.source, edge.target);
+        if (!orgChildren.has(edge.target)) orgChildren.set(edge.target, new Set());
+        orgChildren.get(edge.target).add(edge.source);
+      }
+    }
+  }
+  const orgRoots = orgs.filter((o) => !orgParent.has(o.id)).map((o) => o.id);
+  return { persons, orgs, links, orgParent, orgChildren, orgRoots };
+}
+
+function og2StandOf(state, identity) {
+  const stand = { label: undefined, props: {} };
+  for (const [prop, tl] of identity.timelines) {
+    const open = tl.find((iv) => iv.to === null);
+    if (!open || open.value === undefined) continue;
+    if (prop === 'label') stand.label = open.value;
+    else stand.props[prop.replace(/^props\./, '')] = open.value;
+  }
+  return stand;
 }
 
 // Stable content key of a projection for cheap render-skip decisions

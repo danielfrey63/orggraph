@@ -1,5 +1,7 @@
 export function applyFromUI(triggerSource = 'unknown', callStack = false) {
   Logger.log(`[Timing] Start: applyFromUI.${triggerSource}`);
+  // OrgGraph 2.0 tenant: the projection-based apply path owns rendering.
+  if (typeof og2Active === 'function' && og2Active()) { og2ApplyFromUI(triggerSource); return; }
   if (!raw || !raw.links || !raw.nodes) return;
   if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
   
