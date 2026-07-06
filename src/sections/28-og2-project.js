@@ -331,7 +331,7 @@ export function projectView(options) {
     nodes: keptNodes,
     edges: keptEdges,
     derivedEdges: keptDerived,
-    rings: keptRings.map(({ host, node, type, edgeKey }) => ({ host, node, type, edgeKey })),
+    rings: keptRings.map(({ host, node, type, edgeKey, stand }) => ({ host, node, type, edgeKey, stand })),
     truncated,
     skipped,
     autoEmpty,
