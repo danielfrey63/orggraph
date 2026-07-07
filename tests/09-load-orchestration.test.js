@@ -5,7 +5,7 @@ import {
   idOf,
 } from '../src/sections/09-data-load.js';
 import { loadPseudoData } from '../src/sections/06-pseudo-labels.js';
-import { KEY_ENV, KEY_PSEUDO, ATTR_EXT } from '../src/sections/04-storage.js';
+import { KEY_ENV, KEY_PSEUDO, KEY_REGISTRY, ATTR_EXT } from '../src/sections/04-storage.js';
 
 // In-memory stand-in for the IndexedDB-backed accessors.
 let store;
@@ -22,6 +22,7 @@ beforeEach(() => {
   globalThis.Logger = { log: () => {} };
   globalThis.KEY_ENV = KEY_ENV;
   globalThis.KEY_PSEUDO = KEY_PSEUDO;
+  globalThis.KEY_REGISTRY = KEY_REGISTRY;
   globalThis.ATTR_EXT = ATTR_EXT;
   globalThis.getStoredJson = async (k) => store.get(k);
   globalThis.getStoredText = async (k) => store.get(k);
