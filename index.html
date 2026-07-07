@@ -1968,7 +1968,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.154.145';
+const APP_VERSION = '1.155.146';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -9739,11 +9739,12 @@ function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
     }
     const open = openExistence(identity);
     if (open) {
-      const before = { ...open.provenance };
       const prevInst = open.provenance[source];
       open.provenance[source] = latestInstant(prevInst, t);
       if (open.provenance[source] !== prevInst) {
-        jot('provenance-confirm', id, { provenance: before }, { provenance: { ...open.provenance } }, null,
+        // compact position (NFR-2/AK 37): the provenance delta carries the
+        // full rollback information — no before/after map copies.
+        jot('provenance-confirm', id, null, null, null,
           { provDelta: { source, from: prevInst ?? null, to: open.provenance[source] } });
       }
     } else if (inNodeScope) {
@@ -9788,11 +9789,10 @@ function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
     }
     const open = identity.existence.find((iv) => iv.to === null);
     if (open) {
-      const before = { ...open.provenance };
       const prevInst = open.provenance[source];
       open.provenance[source] = latestInstant(prevInst, t);
       if (open.provenance[source] !== prevInst) {
-        jot('provenance-confirm', key, { provenance: before }, { provenance: { ...open.provenance } }, null,
+        jot('provenance-confirm', key, null, null, null,
           { provDelta: { source, from: prevInst ?? null, to: open.provenance[source] } });
       }
     } else {
@@ -10012,7 +10012,9 @@ function mergeProp(identity, prop, value, ctx) {
   }
   if (open.value === value) {
     if (open.source === source && instantCompare(t, open.instant) > 0) {
-      jot('prop-confirm', iKey, { from: open.from, value, instant: open.instant }, { instant: t }, null, { prop });
+      // compact position (NFR-2/AK 37): from + prior instant suffice for the
+      // precondition check and the rollback — no value copy.
+      jot('prop-confirm', iKey, { from: open.from, instant: open.instant }, null, null, { prop });
       open.instant = t; // confirmation
     }
     return;
@@ -11786,6 +11788,17 @@ async function og2TryBoot() {
     store = createTenantStore();
   }
 
+  // NFR-3: guarantee a painted progress hint before the (still synchronous)
+  // engine import blocks the main thread; the <200ms block criterion itself
+  // stays OPEN until the import is batched asynchronously (AK 10 note).
+  const og2YieldPaint = async (message) => {
+    setStatus(message);
+    await new Promise((resolve) => {
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
+      else setTimeout(resolve, 0);
+    });
+  };
+
   // Import snapshots dropped before this boot, with their dialogs (E25).
   const pending = await getPendingSnapshots();
   let imported = 0;
@@ -11793,6 +11806,7 @@ async function og2TryBoot() {
     let snapshot = null;
     try { snapshot = JSON.parse(p.text); } catch { /* classified as snapshot, so parseable — defensive */ }
     if (snapshot) {
+      await og2YieldPaint(`Importiere ${p.filename} …`);
       const res = importSnapshot(store, registry, snapshot, og2UiHooks());
       if (res.status === 'imported') {
         store = res.store || store;
@@ -11829,6 +11843,7 @@ async function og2TryBoot() {
             confirmDestructive: () => true,
             confirmAuthority: () => true,
           };
+          await og2YieldPaint(`Importiere Snapshot (${seedUrl}) …`);
           const imp = importSnapshot(store, registry, snapshot, seedHooks);
           if (imp.status === 'imported') {
             store = imp.store || store;

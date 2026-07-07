@@ -183,11 +183,12 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
     }
     const open = openExistence(identity);
     if (open) {
-      const before = { ...open.provenance };
       const prevInst = open.provenance[source];
       open.provenance[source] = latestInstant(prevInst, t);
       if (open.provenance[source] !== prevInst) {
-        jot('provenance-confirm', id, { provenance: before }, { provenance: { ...open.provenance } }, null,
+        // compact position (NFR-2/AK 37): the provenance delta carries the
+        // full rollback information — no before/after map copies.
+        jot('provenance-confirm', id, null, null, null,
           { provDelta: { source, from: prevInst ?? null, to: open.provenance[source] } });
       }
     } else if (inNodeScope) {
@@ -232,11 +233,10 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
     }
     const open = identity.existence.find((iv) => iv.to === null);
     if (open) {
-      const before = { ...open.provenance };
       const prevInst = open.provenance[source];
       open.provenance[source] = latestInstant(prevInst, t);
       if (open.provenance[source] !== prevInst) {
-        jot('provenance-confirm', key, { provenance: before }, { provenance: { ...open.provenance } }, null,
+        jot('provenance-confirm', key, null, null, null,
           { provDelta: { source, from: prevInst ?? null, to: open.provenance[source] } });
       }
     } else {
@@ -456,7 +456,9 @@ function mergeProp(identity, prop, value, ctx) {
   }
   if (open.value === value) {
     if (open.source === source && instantCompare(t, open.instant) > 0) {
-      jot('prop-confirm', iKey, { from: open.from, value, instant: open.instant }, { instant: t }, null, { prop });
+      // compact position (NFR-2/AK 37): from + prior instant suffice for the
+      // precondition check and the rollback — no value copy.
+      jot('prop-confirm', iKey, { from: open.from, instant: open.instant }, null, null, { prop });
       open.instant = t; // confirmation
     }
     return;

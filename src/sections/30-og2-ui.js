@@ -65,6 +65,17 @@ export async function og2TryBoot() {
     store = createTenantStore();
   }
 
+  // NFR-3: guarantee a painted progress hint before the (still synchronous)
+  // engine import blocks the main thread; the <200ms block criterion itself
+  // stays OPEN until the import is batched asynchronously (AK 10 note).
+  const og2YieldPaint = async (message) => {
+    setStatus(message);
+    await new Promise((resolve) => {
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
+      else setTimeout(resolve, 0);
+    });
+  };
+
   // Import snapshots dropped before this boot, with their dialogs (E25).
   const pending = await getPendingSnapshots();
   let imported = 0;
@@ -72,6 +83,7 @@ export async function og2TryBoot() {
     let snapshot = null;
     try { snapshot = JSON.parse(p.text); } catch { /* classified as snapshot, so parseable — defensive */ }
     if (snapshot) {
+      await og2YieldPaint(`Importiere ${p.filename} …`);
       const res = importSnapshot(store, registry, snapshot, og2UiHooks());
       if (res.status === 'imported') {
         store = res.store || store;
@@ -108,6 +120,7 @@ export async function og2TryBoot() {
             confirmDestructive: () => true,
             confirmAuthority: () => true,
           };
+          await og2YieldPaint(`Importiere Snapshot (${seedUrl}) …`);
           const imp = importSnapshot(store, registry, snapshot, seedHooks);
           if (imp.status === 'imported') {
             store = imp.store || store;

@@ -11,7 +11,10 @@
     "transform": "node helpers/transform.js",
     "prepare": "git config core.hooksPath .githooks",
     "e2e": "playwright test --project=smoke",
-    "e2e:acceptance": "playwright test --project=acceptance"
+    "e2e:acceptance": "playwright test --project=acceptance",
+    "nfr": "node scripts/nfr-protocol.mjs",
+    "ak1:measure": "node scripts/measure-ak1.mjs",
+    "ak1:clarify": "node scripts/clarify-ak1.mjs"
   },
   "devDependencies": {
     "@babel/generator": "^7.28.5",
