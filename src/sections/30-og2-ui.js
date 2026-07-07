@@ -3,7 +3,7 @@
 // §1.5), translation of stock + projection into the globals the layout/render
 // machinery consumes (§9.2), and the reactive apply path (FR-8.11).
 import { KEY_STORE, KEY_REGISTRY, getStoredText, getStoredJson, getPendingSnapshots, putStored, delStored, looksLikeRegistry, looksLikeSnapshot } from './04-storage.js';
-import { serializeTenantStore, deserializeTenantStore, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot } from './29-og2-app.js';
+import { serializeTenantStore, deserializeTenantStore, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff } from './29-og2-app.js';
 import { createTenantStore } from './23-og2-store.js';
 import { importSnapshot } from './26-og2-import.js';
 
@@ -86,10 +86,14 @@ export async function og2TryBoot() {
     }
     await delStored(p.key);
   }
-  // Dev fallback: seed an empty store from the env's snapshot URL (FR-8.10).
-  if (store.nodes.size === 0 && envConfig && envConfig.DATA_URL) {
+  // Dev fallback: seed an empty store from the env's snapshot URL(s)
+  // (FR-8.10; an array imports consecutive stands in order).
+  const seedUrls = envConfig && envConfig.DATA_URL
+    ? (Array.isArray(envConfig.DATA_URL) ? envConfig.DATA_URL : [envConfig.DATA_URL])
+    : [];
+  if (store.nodes.size === 0) for (const seedUrl of seedUrls) {
     try {
-      const res = await fetch(envConfig.DATA_URL, { cache: 'no-store' });
+      const res = await fetch(seedUrl, { cache: 'no-store' });
       if (res.ok) {
         const snapshot = await res.json();
         if (looksLikeSnapshot(snapshot)) {
@@ -126,6 +130,7 @@ export async function og2TryBoot() {
   }
   og2SyncStockGlobals();
   og2BuildViewSwitcher();
+  og2BuildTimeControls();
   og2RemoveLegacyControls();
   return true;
 }
@@ -196,6 +201,92 @@ export function og2BuildViewSwitcher() {
   }
 }
 
+// Footer time controls (FR-8.6): asOf slider and diff pickers live next to
+// the view switcher. With fewer than two snapshot stands they stay VISIBLE
+// but disabled, with an explaining tooltip (AK 50); default is asOf on the
+// youngest instant.
+export function og2BuildTimeControls() {
+  const host = document.querySelector('.footer-stats');
+  if (!og2 || !host) return;
+  const instants = og2TimeInstants(og2);
+  let wrap = document.getElementById('timeControls');
+  if (!wrap) {
+    wrap = document.createElement('span');
+    wrap.id = 'timeControls';
+    wrap.className = 'time-controls';
+    wrap.innerHTML = '<span>Zeit: </span>'
+      + '<input type="range" id="timeSlider" min="0" max="0" step="1" />'
+      + '<span id="timeStamp"></span>'
+      + '<select id="diffT1" title="Diff T1"></select>'
+      + '<select id="diffT2" title="Diff T2"></select>'
+      + '<button id="diffToggle" class="toggle-btn" title="Diff-Modus T1→T2">Δ</button>';
+    const sep = document.createElement('span');
+    sep.className = 'stat-separator';
+    sep.textContent = '|';
+    const anchor = document.getElementById('viewSwitcher');
+    if (anchor && anchor.nextSibling) {
+      host.insertBefore(wrap, anchor.nextSibling.nextSibling || null);
+      host.insertBefore(sep, wrap);
+    } else {
+      host.prepend(sep);
+      host.prepend(wrap);
+    }
+    wrap.querySelector('#timeSlider').addEventListener('input', () => {
+      const list = og2TimeInstants(og2);
+      const idx = parseInt(wrap.querySelector('#timeSlider').value, 10);
+      // youngest = live view (open intervals), older stands slice via asOf
+      og2.asOf = idx >= list.length - 1 ? null : list[idx];
+      og2.diff = null;
+      og2SyncTimeControls();
+      applyFromUI('timeSlider');
+    });
+    wrap.querySelector('#diffToggle').addEventListener('click', () => {
+      const t1 = wrap.querySelector('#diffT1').value;
+      const t2 = wrap.querySelector('#diffT2').value;
+      if (og2.diff) og2.diff = null;
+      else if (t1 && t2 && t1 !== t2) og2.diff = { t1, t2 };
+      og2SyncTimeControls();
+      applyFromUI('diffToggle');
+    });
+  }
+  og2SyncTimeControls();
+}
+
+export function og2SyncTimeControls() {
+  const wrap = document.getElementById('timeControls');
+  if (!wrap || !og2) return;
+  const instants = og2TimeInstants(og2);
+  const enabled = instants.length >= 2;
+  const slider = wrap.querySelector('#timeSlider');
+  const t1Sel = wrap.querySelector('#diffT1');
+  const t2Sel = wrap.querySelector('#diffT2');
+  const toggle = wrap.querySelector('#diffToggle');
+  const hint = 'Zeitnavigation braucht mindestens zwei Snapshot-Stände (FR-8.6).';
+  for (const el of [slider, t1Sel, t2Sel, toggle]) {
+    el.disabled = !enabled;
+    el.title = enabled ? el.title : hint;
+  }
+  slider.max = String(Math.max(0, instants.length - 1));
+  const activeIdx = og2.asOf ? Math.max(0, instants.indexOf(og2.asOf)) : Math.max(0, instants.length - 1);
+  slider.value = String(activeIdx);
+  wrap.querySelector('#timeStamp').textContent = og2.diff
+    ? `${og2.diff.t1} → ${og2.diff.t2}`
+    : (og2.asOf || (instants.length ? instants[instants.length - 1] : '—'));
+  const fill = (sel, def) => {
+    sel.innerHTML = '';
+    for (const t of instants) {
+      const opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t;
+      sel.append(opt);
+    }
+    if (def) sel.value = def;
+  };
+  fill(t1Sel, og2.diff ? og2.diff.t1 : instants[0]);
+  fill(t2Sel, og2.diff ? og2.diff.t2 : instants[instants.length - 1]);
+  toggle.classList.toggle('active', !!og2.diff);
+}
+
 // Switch the active view; runtime overrides reset (FR-7.5) and the search
 // domain follows the new path's visible types (FR-7.6/8.4).
 export function og2SwitchView(name) {
@@ -243,8 +334,9 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
     if (resolved.length) og2.runtimeRoots = resolved;
   }
 
-  const res = og2Project(og2);
+  const res = og2.diff ? og2ProjectDiff(og2, og2.diff.t1, og2.diff.t2) : og2Project(og2);
   const projection = res.projection;
+  og2.lastDiff = res.diff || null;
 
   // Leaf filter (FR-8.3, leafProp capability) and hidden subtrees (FR-8.7)
   // prune the drawn subgraph after projection.

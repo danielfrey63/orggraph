@@ -16,7 +16,10 @@
     }
   },
   "REGISTRY_URL": "./registry.json",
-  "DATA_URL": "./snapshot.json",
+  "DATA_URL": [
+    "./snapshot.json",
+    "./snapshot2.json"
+  ],
   "TOOLBAR_DEPTH_DEFAULT": 3,
   "TOOLBAR_MANAGEMENT_ACTIVE": false,
   "TOOLBAR_PSEUDO_ACTIVE": false

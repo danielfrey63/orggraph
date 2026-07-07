@@ -611,6 +611,20 @@ export function updateFooterStats(subgraph) {
   setText('stats-orgs-count', allowedOrgs.size);
   setText('stats-hidden-count', typeof currentHiddenCount === 'number' ? currentHiddenCount : 0);
 
+  // Diff counters (FR-8.12): added / removed / changed of the visible scene.
+  const diffWrap = document.getElementById('stats-diff');
+  if (diffWrap) {
+    const diff = og2 && og2.lastDiff;
+    if (diff) {
+      setText('stats-diff-new', diff.added);
+      setText('stats-diff-removed', diff.removed);
+      setText('stats-diff-changed', diff.changed);
+      diffWrap.hidden = false;
+    } else {
+      diffWrap.hidden = true;
+    }
+  }
+
   // Cap counter (E67/FR-8.1): lower bound from the discovered frontier.
   const capped = document.getElementById('stats-capped');
   if (capped) {

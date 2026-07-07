@@ -27,6 +27,7 @@ const routes = () => {
     '/env.json': join(root, 'e2e/fixtures/fixture-env.json'),
     '/registry.json': join(root, 'schema/registry.json'),
     '/snapshot.json': join(root, 'e2e/fixtures/fixture-snapshot.json'),
+    '/snapshot2.json': join(root, 'e2e/fixtures/fixture-snapshot-2.json'),
     '/sem/': join(root, 'index.html'),
     '/sem/index.html': join(root, 'index.html'),
     '/sem/registry.json': join(root, 'schema/registry.json'),

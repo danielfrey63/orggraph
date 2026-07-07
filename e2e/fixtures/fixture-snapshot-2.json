@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "source": "e2e-fixture",
+    "crawledAt": "2026-07-01T00:00:00Z",
+    "snapshot": "20260701-0000",
+    "registryVersion": "2026-07-05.1",
+    "scope": {
+      "nodeTypes": ["Person", "OE", "Rolle", "Team"],
+      "edgeTypes": ["berichtetAn", "mitgliedIn", "unterstellt", "hatRolle", "imTeam"]
+    }
+  },
+  "schema": {
+    "nodeTypes": {
+      "Person": { "labelProp": "label", "identifiers": ["id", "props.email"], "leafProp": "props.isBasis", "props": { "email": {}, "isBasis": {}, "pensum": {} } },
+      "OE": {},
+      "Rolle": {},
+      "Team": {}
+    },
+    "edgeTypes": {
+      "berichtetAn": { "from": "Person", "to": "Person" },
+      "mitgliedIn": { "from": "Person", "to": "OE" },
+      "unterstellt": { "from": "OE", "to": "OE" },
+      "hatRolle": { "from": "Person", "to": "Rolle", "identityProps": ["kontext"], "props": { "kontext": { "ref": "Firma", "implies": "arbeitetBei" } } },
+      "imTeam": { "from": "Person", "to": "Team" }
+    }
+  },
+  "nodes": [
+    { "id": "p1", "type": "Person", "label": "Vera Chefin", "props": { "email": "vera@example.org", "isBasis": false, "pensum": 100 } },
+    { "id": "p2", "type": "Person", "label": "Max Meister", "props": { "email": "max@example.org", "isBasis": false, "pensum": 80 } },
+    { "id": "p3", "type": "Person", "label": "Nina Mittel", "props": { "email": "nina@example.org", "isBasis": false, "pensum": 90 } },
+    { "id": "p4", "type": "Person", "label": "Ben Blatt", "props": { "email": "ben@example.org", "isBasis": true, "pensum": 60 } },
+    { "id": "p6", "type": "Person", "label": "Pia Neu", "props": { "email": "pia@example.org", "isBasis": true, "pensum": 70 } },
+    { "id": "o1", "type": "OE", "label": "Direktion" },
+    { "id": "o2", "type": "OE", "label": "Abteilung A" },
+    { "id": "r1", "type": "Rolle", "label": "Dev" },
+    { "id": "r2", "type": "Rolle", "label": "Lead" },
+    { "id": "t1", "type": "Team", "label": "Team Rom" }
+  ],
+  "edges": [
+    { "type": "berichtetAn", "source": "p2", "target": "p1" },
+    { "type": "berichtetAn", "source": "p3", "target": "p1" },
+    { "type": "berichtetAn", "source": "p4", "target": "p2" },
+    { "type": "berichtetAn", "source": "p6", "target": "p3" },
+    { "type": "unterstellt", "source": "o2", "target": "o1" },
+    { "type": "mitgliedIn", "source": "p1", "target": "o1" },
+    { "type": "mitgliedIn", "source": "p2", "target": "o2" },
+    { "type": "mitgliedIn", "source": "p3", "target": "o2" },
+    { "type": "mitgliedIn", "source": "p4", "target": "o2" },
+    { "type": "mitgliedIn", "source": "p6", "target": "o2" },
+    { "type": "hatRolle", "source": "p1", "target": "r2", "props": { "kontext": null } },
+    { "type": "hatRolle", "source": "p2", "target": "r1", "props": { "kontext": null } },
+    { "type": "hatRolle", "source": "p4", "target": "r1", "props": { "kontext": null } },
+    { "type": "imTeam", "source": "p3", "target": "t1" },
+    { "type": "imTeam", "source": "p6", "target": "t1" }
+  ]
+}

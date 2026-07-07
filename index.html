@@ -2084,6 +2084,20 @@ body.dz-dragging::after {
   /* Nutzt dasselbe Hover-Verhalten wie andere legend-icon-btn */
 }
 
+/* Diff mode (§5/FR-8.6): added / removed / changed classification */
+.node.diff-new circle { stroke: #22c55e; stroke-width: 3px; }
+.node.diff-changed circle { stroke: #f59e0b; stroke-width: 3px; }
+.node.diff-removed { opacity: 0.45; }
+.node.diff-removed circle { stroke: #ef4444; stroke-width: 2px; stroke-dasharray: 4 3; }
+.link.diff-new { stroke: #22c55e; }
+.link.diff-removed { stroke: #ef4444; stroke-dasharray: 4 3; opacity: 0.5; }
+
+/* Footer time controls (FR-8.6) */
+.time-controls { display: inline-flex; align-items: center; gap: 6px; }
+.time-controls input[type="range"] { width: 110px; }
+.time-controls select { max-width: 130px; }
+.time-controls #diffToggle { padding: 0 6px; line-height: 1.4; }
+
   </style>
 </head>
 <body>
@@ -2243,6 +2257,7 @@ body.dz-dragging::after {
       <span class="stat-separator">|</span>
       <span id="stats-hidden">Ausgeblendet: <strong id="stats-hidden-count">0</strong></span>
       <span id="stats-capped" hidden><span class="stat-separator">|</span> gekappt — mindestens <strong id="stats-capped-count">0</strong> weitere</span>
+      <span id="stats-diff" hidden><span class="stat-separator">|</span> Diff: <strong id="stats-diff-new">0</strong> neu, <strong id="stats-diff-removed">0</strong> weg, <strong id="stats-diff-changed">0</strong> geändert</span>
     </div>
   </footer>
   <!-- Export Dialog -->
@@ -2295,7 +2310,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.146.135';
+const APP_VERSION = '1.147.136';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -4847,6 +4862,20 @@ function updateFooterStats(subgraph) {
   setText('stats-links-visible', subgraph ? subgraph.links.length : 0);
   setText('stats-orgs-count', allowedOrgs.size);
   setText('stats-hidden-count', typeof currentHiddenCount === 'number' ? currentHiddenCount : 0);
+
+  // Diff counters (FR-8.12): added / removed / changed of the visible scene.
+  const diffWrap = document.getElementById('stats-diff');
+  if (diffWrap) {
+    const diff = og2 && og2.lastDiff;
+    if (diff) {
+      setText('stats-diff-new', diff.added);
+      setText('stats-diff-removed', diff.removed);
+      setText('stats-diff-changed', diff.changed);
+      diffWrap.hidden = false;
+    } else {
+      diffWrap.hidden = true;
+    }
+  }
 
   // Cap counter (E67/FR-8.1): lower bound from the discovered frontier.
   const capped = document.getElementById('stats-capped');
@@ -7601,7 +7630,8 @@ function renderGraph(sub) {
         .attr("marker-end", "url(#arrow)"),
       update => update.attr("marker-end", "url(#arrow)"), // Ensure marker stays
       exit => exit.remove()
-    );
+    )
+    .attr("class", d => `link${d.diffClass ? ' ' + d.diffClass : ''}`);
 
   // Debug-Link-Labels (optional)
   let linkLabelGroup = gZoom.select("g.link-labels");
@@ -7642,7 +7672,9 @@ function renderGraph(sub) {
       },
       update => update,
       exit => exit.remove()
-    );
+    )
+    // Diff mode (§5/FR-8.6): added/removed/changed classification per node.
+    .attr("class", d => `node${d.diffClass ? ' ' + d.diffClass : ''}`);
 
   // Styling-Parameter
   const nodeRadius = cssNumber('--node-radius', 8);
@@ -13491,6 +13523,61 @@ function og2BuildGlobalsData(state) {
   return { persons, orgs, links, orgParent, orgChildren, orgRoots };
 }
 
+// --- Time navigation (FR-8.6, §5) -------------------------------------------
+
+// Distinct snapshot instants of the tenant, ascending. Time navigation
+// activates from two stands on (AK 50); the default asOf is the youngest.
+function og2TimeInstants(state) {
+  const instants = new Set();
+  for (const entry of state.store.snapshots.values()) {
+    if (entry && typeof entry.stamp === 'string') instants.add(entry.stamp);
+  }
+  return [...instants].sort();
+}
+
+// Diff projection (§5, AK 4): project the active view at T1 and T2 and
+// classify identities — added (only T2), removed (only T1), changed (both,
+// differing stand). The drawn scene is T2 plus the removed elements, each
+// entry carrying diffClass; counters feed the footer (FR-8.12).
+function og2ProjectDiff(state, t1, t2) {
+  const at = (asOf) => og2Project({ ...state, asOf, diff: null });
+  const p1 = at(t1);
+  const p2 = at(t2);
+  const standKey = (n) => canonicalJson({ label: n.label, props: n.props || {} });
+
+  const nodes1 = new Map(p1.sub.nodes.map((n) => [String(n.id), n]));
+  const nodes2 = new Map(p2.sub.nodes.map((n) => [String(n.id), n]));
+  const nodes = [];
+  let added = 0, removed = 0, changed = 0;
+  for (const [id, n2] of nodes2) {
+    const n1 = nodes1.get(id);
+    if (!n1) { added++; nodes.push({ ...n2, diffClass: 'diff-new' }); }
+    else if (standKey(n1) !== standKey(n2)) { changed++; nodes.push({ ...n2, diffClass: 'diff-changed', before: { label: n1.label, props: n1.props } }); }
+    else nodes.push(n2);
+  }
+  for (const [id, n1] of nodes1) {
+    if (!nodes2.has(id)) { removed++; nodes.push({ ...n1, diffClass: 'diff-removed' }); }
+  }
+
+  const linkKey = (l) => `${l.source}>${l.target}`;
+  const links1 = new Map(p1.sub.links.map((l) => [linkKey(l), l]));
+  const links2 = new Map(p2.sub.links.map((l) => [linkKey(l), l]));
+  const links = [];
+  for (const [key, l2] of links2) {
+    links.push(links1.has(key) ? l2 : { ...l2, diffClass: 'diff-new' });
+    if (!links1.has(key)) added++;
+  }
+  for (const [key, l1] of links1) {
+    if (!links2.has(key)) { removed++; links.push({ ...l1, diffClass: 'diff-removed' }); }
+  }
+
+  return {
+    ...p2,
+    sub: { nodes, links },
+    diff: { t1, t2, added, removed, changed },
+  };
+}
+
 // Non-anchor search resolution (E64, FR-7.6): a visible hit outside the
 // anchor type resolves deterministically BACKWARDS over the path's hops to
 // the nearest anchor node, which becomes the temporary root. An unreachable
@@ -13649,10 +13736,14 @@ async function og2TryBoot() {
     }
     await delStored(p.key);
   }
-  // Dev fallback: seed an empty store from the env's snapshot URL (FR-8.10).
-  if (store.nodes.size === 0 && envConfig && envConfig.DATA_URL) {
+  // Dev fallback: seed an empty store from the env's snapshot URL(s)
+  // (FR-8.10; an array imports consecutive stands in order).
+  const seedUrls = envConfig && envConfig.DATA_URL
+    ? (Array.isArray(envConfig.DATA_URL) ? envConfig.DATA_URL : [envConfig.DATA_URL])
+    : [];
+  if (store.nodes.size === 0) for (const seedUrl of seedUrls) {
     try {
-      const res = await fetch(envConfig.DATA_URL, { cache: 'no-store' });
+      const res = await fetch(seedUrl, { cache: 'no-store' });
       if (res.ok) {
         const snapshot = await res.json();
         if (looksLikeSnapshot(snapshot)) {
@@ -13689,6 +13780,7 @@ async function og2TryBoot() {
   }
   og2SyncStockGlobals();
   og2BuildViewSwitcher();
+  og2BuildTimeControls();
   og2RemoveLegacyControls();
   return true;
 }
@@ -13759,6 +13851,92 @@ function og2BuildViewSwitcher() {
   }
 }
 
+// Footer time controls (FR-8.6): asOf slider and diff pickers live next to
+// the view switcher. With fewer than two snapshot stands they stay VISIBLE
+// but disabled, with an explaining tooltip (AK 50); default is asOf on the
+// youngest instant.
+function og2BuildTimeControls() {
+  const host = document.querySelector('.footer-stats');
+  if (!og2 || !host) return;
+  const instants = og2TimeInstants(og2);
+  let wrap = document.getElementById('timeControls');
+  if (!wrap) {
+    wrap = document.createElement('span');
+    wrap.id = 'timeControls';
+    wrap.className = 'time-controls';
+    wrap.innerHTML = '<span>Zeit: </span>'
+      + '<input type="range" id="timeSlider" min="0" max="0" step="1" />'
+      + '<span id="timeStamp"></span>'
+      + '<select id="diffT1" title="Diff T1"></select>'
+      + '<select id="diffT2" title="Diff T2"></select>'
+      + '<button id="diffToggle" class="toggle-btn" title="Diff-Modus T1→T2">Δ</button>';
+    const sep = document.createElement('span');
+    sep.className = 'stat-separator';
+    sep.textContent = '|';
+    const anchor = document.getElementById('viewSwitcher');
+    if (anchor && anchor.nextSibling) {
+      host.insertBefore(wrap, anchor.nextSibling.nextSibling || null);
+      host.insertBefore(sep, wrap);
+    } else {
+      host.prepend(sep);
+      host.prepend(wrap);
+    }
+    wrap.querySelector('#timeSlider').addEventListener('input', () => {
+      const list = og2TimeInstants(og2);
+      const idx = parseInt(wrap.querySelector('#timeSlider').value, 10);
+      // youngest = live view (open intervals), older stands slice via asOf
+      og2.asOf = idx >= list.length - 1 ? null : list[idx];
+      og2.diff = null;
+      og2SyncTimeControls();
+      applyFromUI('timeSlider');
+    });
+    wrap.querySelector('#diffToggle').addEventListener('click', () => {
+      const t1 = wrap.querySelector('#diffT1').value;
+      const t2 = wrap.querySelector('#diffT2').value;
+      if (og2.diff) og2.diff = null;
+      else if (t1 && t2 && t1 !== t2) og2.diff = { t1, t2 };
+      og2SyncTimeControls();
+      applyFromUI('diffToggle');
+    });
+  }
+  og2SyncTimeControls();
+}
+
+function og2SyncTimeControls() {
+  const wrap = document.getElementById('timeControls');
+  if (!wrap || !og2) return;
+  const instants = og2TimeInstants(og2);
+  const enabled = instants.length >= 2;
+  const slider = wrap.querySelector('#timeSlider');
+  const t1Sel = wrap.querySelector('#diffT1');
+  const t2Sel = wrap.querySelector('#diffT2');
+  const toggle = wrap.querySelector('#diffToggle');
+  const hint = 'Zeitnavigation braucht mindestens zwei Snapshot-Stände (FR-8.6).';
+  for (const el of [slider, t1Sel, t2Sel, toggle]) {
+    el.disabled = !enabled;
+    el.title = enabled ? el.title : hint;
+  }
+  slider.max = String(Math.max(0, instants.length - 1));
+  const activeIdx = og2.asOf ? Math.max(0, instants.indexOf(og2.asOf)) : Math.max(0, instants.length - 1);
+  slider.value = String(activeIdx);
+  wrap.querySelector('#timeStamp').textContent = og2.diff
+    ? `${og2.diff.t1} → ${og2.diff.t2}`
+    : (og2.asOf || (instants.length ? instants[instants.length - 1] : '—'));
+  const fill = (sel, def) => {
+    sel.innerHTML = '';
+    for (const t of instants) {
+      const opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t;
+      sel.append(opt);
+    }
+    if (def) sel.value = def;
+  };
+  fill(t1Sel, og2.diff ? og2.diff.t1 : instants[0]);
+  fill(t2Sel, og2.diff ? og2.diff.t2 : instants[instants.length - 1]);
+  toggle.classList.toggle('active', !!og2.diff);
+}
+
 // Switch the active view; runtime overrides reset (FR-7.5) and the search
 // domain follows the new path's visible types (FR-7.6/8.4).
 function og2SwitchView(name) {
@@ -13806,8 +13984,9 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
     if (resolved.length) og2.runtimeRoots = resolved;
   }
 
-  const res = og2Project(og2);
+  const res = og2.diff ? og2ProjectDiff(og2, og2.diff.t1, og2.diff.t2) : og2Project(og2);
   const projection = res.projection;
+  og2.lastDiff = res.diff || null;
 
   // Leaf filter (FR-8.3, leafProp capability) and hidden subtrees (FR-8.7)
   // prune the drawn subgraph after projection.

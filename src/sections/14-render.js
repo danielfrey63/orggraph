@@ -200,7 +200,8 @@ export function renderGraph(sub) {
         .attr("marker-end", "url(#arrow)"),
       update => update.attr("marker-end", "url(#arrow)"), // Ensure marker stays
       exit => exit.remove()
-    );
+    )
+    .attr("class", d => `link${d.diffClass ? ' ' + d.diffClass : ''}`);
 
   // Debug-Link-Labels (optional)
   let linkLabelGroup = gZoom.select("g.link-labels");
@@ -241,7 +242,9 @@ export function renderGraph(sub) {
       },
       update => update,
       exit => exit.remove()
-    );
+    )
+    // Diff mode (§5/FR-8.6): added/removed/changed classification per node.
+    .attr("class", d => `node${d.diffClass ? ' ' + d.diffClass : ''}`);
 
   // Styling-Parameter
   const nodeRadius = cssNumber('--node-radius', 8);

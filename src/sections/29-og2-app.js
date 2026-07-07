@@ -273,6 +273,61 @@ export function og2BuildGlobalsData(state) {
   return { persons, orgs, links, orgParent, orgChildren, orgRoots };
 }
 
+// --- Time navigation (FR-8.6, §5) -------------------------------------------
+
+// Distinct snapshot instants of the tenant, ascending. Time navigation
+// activates from two stands on (AK 50); the default asOf is the youngest.
+export function og2TimeInstants(state) {
+  const instants = new Set();
+  for (const entry of state.store.snapshots.values()) {
+    if (entry && typeof entry.stamp === 'string') instants.add(entry.stamp);
+  }
+  return [...instants].sort();
+}
+
+// Diff projection (§5, AK 4): project the active view at T1 and T2 and
+// classify identities — added (only T2), removed (only T1), changed (both,
+// differing stand). The drawn scene is T2 plus the removed elements, each
+// entry carrying diffClass; counters feed the footer (FR-8.12).
+export function og2ProjectDiff(state, t1, t2) {
+  const at = (asOf) => og2Project({ ...state, asOf, diff: null });
+  const p1 = at(t1);
+  const p2 = at(t2);
+  const standKey = (n) => canonicalJson({ label: n.label, props: n.props || {} });
+
+  const nodes1 = new Map(p1.sub.nodes.map((n) => [String(n.id), n]));
+  const nodes2 = new Map(p2.sub.nodes.map((n) => [String(n.id), n]));
+  const nodes = [];
+  let added = 0, removed = 0, changed = 0;
+  for (const [id, n2] of nodes2) {
+    const n1 = nodes1.get(id);
+    if (!n1) { added++; nodes.push({ ...n2, diffClass: 'diff-new' }); }
+    else if (standKey(n1) !== standKey(n2)) { changed++; nodes.push({ ...n2, diffClass: 'diff-changed', before: { label: n1.label, props: n1.props } }); }
+    else nodes.push(n2);
+  }
+  for (const [id, n1] of nodes1) {
+    if (!nodes2.has(id)) { removed++; nodes.push({ ...n1, diffClass: 'diff-removed' }); }
+  }
+
+  const linkKey = (l) => `${l.source}>${l.target}`;
+  const links1 = new Map(p1.sub.links.map((l) => [linkKey(l), l]));
+  const links2 = new Map(p2.sub.links.map((l) => [linkKey(l), l]));
+  const links = [];
+  for (const [key, l2] of links2) {
+    links.push(links1.has(key) ? l2 : { ...l2, diffClass: 'diff-new' });
+    if (!links1.has(key)) added++;
+  }
+  for (const [key, l1] of links1) {
+    if (!links2.has(key)) { removed++; links.push({ ...l1, diffClass: 'diff-removed' }); }
+  }
+
+  return {
+    ...p2,
+    sub: { nodes, links },
+    diff: { t1, t2, added, removed, changed },
+  };
+}
+
 // Non-anchor search resolution (E64, FR-7.6): a visible hit outside the
 // anchor type resolves deterministically BACKWARDS over the path's hops to
 // the nearest anchor node, which becomes the temporary root. An unreachable

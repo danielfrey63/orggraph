@@ -108,3 +108,27 @@ test('pseudo mode is fail-closed in the browser (FR-8.5, E48 — AK 27 basis)', 
     expect(label).toMatch(/^Person \d+$/);
   }
 });
+
+test('time controls active with two stands; slider slices, diff classifies (FR-8.6, AK 4/50)', async ({ page }) => {
+  const slider = page.locator('#timeSlider');
+  await expect(slider).toBeEnabled(); // two snapshot stands in the fixture tenant
+  // youngest stand: Pia visible, Lea gone
+  await expect(page.locator('g.nodes text.label').filter({ hasText: 'Pia Neu' })).toHaveCount(1);
+  await expect(page.locator('g.nodes text.label').filter({ hasText: 'Lea Blatt' })).toHaveCount(0);
+  // slide to the oldest stand: Lea returns, Pia not yet there
+  await slider.fill('0');
+  await slider.dispatchEvent('input');
+  await expect(page.locator('g.nodes text.label').filter({ hasText: 'Lea Blatt' })).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.locator('g.nodes text.label').filter({ hasText: 'Pia Neu' })).toHaveCount(0);
+  // back to youngest, then diff T1->T2
+  await slider.fill('1');
+  await slider.dispatchEvent('input');
+  await page.locator('#diffToggle').click();
+  await expect(page.locator('g.nodes g.node.diff-new')).toHaveCount(1, { timeout: 15_000 });   // Pia
+  await expect(page.locator('g.nodes g.node.diff-removed')).toHaveCount(1);                     // Lea
+  await expect(page.locator('g.nodes g.node.diff-changed')).toHaveCount(1);                     // Max label change
+  await expect(page.locator('#stats-diff')).toBeVisible();
+  // back to asOf mode
+  await page.locator('#diffToggle').click();
+  await expect(page.locator('#stats-diff')).toBeHidden();
+});

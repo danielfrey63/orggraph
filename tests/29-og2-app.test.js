@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parsePathExpression } from '../src/sections/27-og2-path.js';
 import { createTenantStore, createNodeIdentity, createEdgeIdentity, edgeKeyOf, startInterval } from '../src/sections/23-og2-store.js';
 import { projectView } from '../src/sections/28-og2-project.js';
-import { serializeTenantStore, deserializeTenantStore, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure, og2ResolveAnchorRoot } from '../src/sections/29-og2-app.js';
+import { serializeTenantStore, deserializeTenantStore, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff } from '../src/sections/29-og2-app.js';
 import { looksLikeSnapshot, looksLikeRegistry, looksLikeData } from '../src/sections/04-storage.js';
 
 // Type names are fixture data (E14, NFR-5 exception).
@@ -244,5 +244,72 @@ describe('non-anchor search resolution (E64, AK 40)', () => {
   it('a dead identity is not resolvable', () => {
     const state = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: ENV });
     expect(og2ResolveAnchorRoot(state, 'ghost')).toMatchObject({ ok: false, reason: 'not-alive' });
+  });
+});
+
+describe('time navigation and diff projection (FR-8.6, §5, AK 4)', () => {
+  const T1 = '20260301-1200';
+  const ENV = { VIEWS: { Start: { path: 'Person <--berichtetAn-- Person', roots: ['p1'], depth: 3 } } };
+
+  function temporalStore() {
+    const store = fixtureStore();
+    // px existed from T0 and disappears at T1 (closed identity + edge)
+    addNode(store, 'px', 'Person', 'Weg');
+    store.nodes.get('px').existence[0].to = T1;
+    addEdge(store, 'berichtetAn', 'px', 'p1');
+    for (const e of store.edges.values()) {
+      if (e.source === 'px') e.existence[0].to = T1;
+    }
+    // p9 is new from T1 on
+    addNode(store, 'p9', 'Person', 'Neu');
+    store.nodes.get('p9').existence[0].from = T1;
+    addEdge(store, 'berichtetAn', 'p9', 'p1');
+    for (const e of store.edges.values()) {
+      if (e.source === 'p9') e.existence[0].from = T1;
+    }
+    // p2 label changes at T1
+    const labelTl = store.nodes.get('p2').timelines.get('label');
+    labelTl[0].to = T1;
+    labelTl.push({ from: T1, to: null, value: 'Mid v2', source: 'fix', instant: T1 });
+    // two import registry stands
+    store.snapshots.set('k1', { stamp: T0 });
+    store.snapshots.set('k2', { stamp: T1 });
+    return store;
+  }
+
+  it('collects distinct snapshot instants ascending (AK 50 basis)', () => {
+    const state = createOg2State({ store: temporalStore(), registry: REGISTRY, env: ENV });
+    expect(og2TimeInstants(state)).toEqual([T0, T1]);
+    const single = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: ENV });
+    expect(og2TimeInstants(single)).toEqual([]);
+  });
+
+  it('AK 4: diff classifies added, removed and changed and keeps removed drawable', () => {
+    const state = createOg2State({ store: temporalStore(), registry: REGISTRY, env: ENV });
+    const res = og2ProjectDiff(state, '20260201-1200', '20260401-1200');
+    const byId2 = new Map(res.sub.nodes.map((n) => [n.id, n]));
+    expect(byId2.get('p9').diffClass).toBe('diff-new');
+    expect(byId2.get('px').diffClass).toBe('diff-removed');
+    expect(byId2.get('p2').diffClass).toBe('diff-changed');
+    expect(byId2.get('p2').before.label).toBe('Mid');
+    expect(byId2.get('p1').diffClass).toBeUndefined();
+    expect(res.diff.added).toBeGreaterThanOrEqual(1);
+    expect(res.diff.removed).toBeGreaterThanOrEqual(1);
+    expect(res.diff.changed).toBe(1);
+    // removed edge of px still drawable, flagged
+    const removedLinks = res.sub.links.filter((l) => l.diffClass === 'diff-removed');
+    expect(removedLinks.some((l) => l.source === 'px')).toBe(true);
+  });
+
+  it('asOf slice drives the plain projection (FR-8.6 default youngest)', () => {
+    const state = createOg2State({ store: temporalStore(), registry: REGISTRY, env: ENV });
+    state.asOf = '20260201-1200';
+    const before = og2Project(state);
+    expect(before.sub.nodes.some((n) => n.id === 'px')).toBe(true);
+    expect(before.sub.nodes.some((n) => n.id === 'p9')).toBe(false);
+    state.asOf = null;
+    const now = og2Project(state);
+    expect(now.sub.nodes.some((n) => n.id === 'px')).toBe(false);
+    expect(now.sub.nodes.some((n) => n.id === 'p9')).toBe(true);
   });
 });

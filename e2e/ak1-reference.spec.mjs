@@ -53,3 +53,14 @@ test('start view on the SEM reference: node layer matches AK 1 exactly', async (
   await page.waitForTimeout(2000);
   await page.screenshot({ path: 'PRD-Rebuild-Screenshot.png' });
 });
+
+test('AK 50: with a single stand the time controls are visible but disabled', async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.goto('/sem/');
+  await expect(page.locator('g.nodes circle:not(.attribute-circle)').first()).toBeVisible({ timeout: 240_000 });
+  const slider = page.locator('#timeSlider');
+  await expect(slider).toBeVisible();
+  await expect(slider).toBeDisabled();
+  await expect(page.locator('#diffToggle')).toBeDisabled();
+  await expect(slider).toHaveAttribute('title', /zwei Snapshot/);
+});
