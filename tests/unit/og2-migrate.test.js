@@ -200,4 +200,14 @@ describe('deliverable tenant env (FR-7.4)', () => {
     expect(env.TOOLBAR_MANAGEMENT_ACTIVE).toBe(true);
     expect(env.DATA_URL).toBeUndefined();
   });
+
+  it('carries hidden subtree roots over, namespaced, dropping unknown ids (FR-7.4)', () => {
+    const { snapshot } = migrate({ attributes: [] });
+    const legacyEnv = { LEGEND_HIDDEN_ROOTS_DEFAULT: ['p-1', 'p-ghost'] };
+    const env = buildTenantEnv({ source: 'legacy-test', registry, snapshot, legacyEnv });
+    expect(env.LEGEND_HIDDEN_ROOTS_DEFAULT).toEqual(['legacy-test:p-1']);
+    // absent in the legacy env -> absent in the fixture
+    const none = buildTenantEnv({ source: 'legacy-test', registry, snapshot, legacyEnv: {} });
+    expect(none.LEGEND_HIDDEN_ROOTS_DEFAULT).toBeUndefined();
+  });
 });

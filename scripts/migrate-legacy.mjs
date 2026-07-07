@@ -365,12 +365,20 @@ export function buildTenantEnv({ source, registry, snapshot, legacyEnv }) {
       Start: { path, roots: ['__auto__'], depth: 3 },
     },
   };
+  const nodeIds = new Set(snapshot.nodes.map((n) => n.id));
+  const mapId = (v) => (nodeIds.has(String(v)) ? String(v) : nodeIds.has(`${source}:${v}`) ? `${source}:${v}` : null);
   const legacyStart = legacyEnv && legacyEnv.GRAPH_START_ID_DEFAULT;
   if (legacyStart != null) {
-    const nodeIds = new Set(snapshot.nodes.map((n) => n.id));
-    const mapId = (v) => (nodeIds.has(String(v)) ? String(v) : nodeIds.has(`${source}:${v}`) ? `${source}:${v}` : null);
     const mapped = (Array.isArray(legacyStart) ? legacyStart : [legacyStart]).map(mapId).filter(Boolean);
     if (mapped.length) env.GRAPH_START_ID_DEFAULT = Array.isArray(legacyStart) ? mapped : mapped[0];
+  }
+  // Hidden subtrees are part of "today's active rendering" (FR-7.4): the
+  // reference scene of PRD-Reference-Screenshot.png runs with these roots
+  // hidden, so the 1:1 fixture carries them over (namespaced).
+  const legacyHidden = legacyEnv && legacyEnv.LEGEND_HIDDEN_ROOTS_DEFAULT;
+  if (Array.isArray(legacyHidden) && legacyHidden.length) {
+    const mapped = legacyHidden.map(mapId).filter(Boolean);
+    if (mapped.length) env.LEGEND_HIDDEN_ROOTS_DEFAULT = mapped;
   }
   for (const key of ['TOOLBAR_DEPTH_DEFAULT', 'TOOLBAR_MANAGEMENT_ACTIVE', 'TOOLBAR_PSEUDO_ACTIVE', 'TOOLBAR_PSEUDO_PASSWORD', 'TOOLBAR_LABELS_DEFAULT']) {
     if (legacyEnv && legacyEnv[key] !== undefined) env[key] = legacyEnv[key];
