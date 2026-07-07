@@ -41,7 +41,13 @@ export async function loadEnvConfig() {
       Logger.log('[Init] env loaded from IndexedDB:', envConfig);
       return true;
     }
-    // 2) fetch fallback (dev server)
+    // 2) fetch fallback (dev server only — file:// cannot fetch, and the
+    // offline single-file mode must stay console-clean, NFR-8)
+    if (typeof location !== 'undefined' && location.protocol === 'file:') {
+      envConfig = null;
+      setStatus('Keine Konfiguration im Profil – Registry, env.json und Snapshot per Drag & Drop laden.');
+      return false;
+    }
     const res = await fetch("./env.json", { cache: "no-store" });
     if (res.ok) {
       envConfig = await res.json();
@@ -87,7 +93,14 @@ export async function loadData() {
 
   // No v2 tenant present: the app renders nothing legacy — data enters via
   // registry/env/snapshot drops only; legacy datasets migrate via
-  // scripts/migrate-legacy.mjs (PRD §9.3/§10, E25/FR-6.7).
-  setStatus('Kein OrgGraph-2.0-Tenant: Registry, env.json und Snapshot laden (Drag & Drop). Legacy-Daten mit scripts/migrate-legacy.mjs migrieren.');
+  // scripts/migrate-legacy.mjs (PRD §9.3/§10, E25/FR-6.7). A stored legacy
+  // config is named explicitly so a stale profile never fails silently.
+  const legacyEnvStored = envConfig && (envConfig.DATA_ATTRIBUTES_URL !== undefined
+    || envConfig.DATA_ATTRIBUTES_DIR !== undefined);
+  if (legacyEnvStored) {
+    setStatus('Legacy-v1-Konfiguration im Profil erkannt — bitte Daten zurücksetzen (Footer) und die migrierte env.json samt Registry und Snapshot laden (scripts/migrate-legacy.mjs).');
+  } else {
+    setStatus('Kein OrgGraph-2.0-Tenant: Registry, env.json und Snapshot laden (Drag & Drop). Legacy-Daten mit scripts/migrate-legacy.mjs migrieren.');
+  }
   return false;
 }

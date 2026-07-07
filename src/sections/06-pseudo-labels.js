@@ -11,6 +11,11 @@ export async function loadPseudoData() {
       return true;
     }
     // 2) fetch fallback (dev server)
+    // file:// cannot fetch — offline mode relies on dropped pseudo data only
+    if (typeof location !== 'undefined' && location.protocol === 'file:') {
+      pseudoData = null;
+      return false;
+    }
     const res = await fetch('./pseudo.data.json', { cache: 'no-store' });
     if (!res.ok) {
       Logger.log('[Pseudo] Konnte pseudo.data.json nicht laden:', res.status);

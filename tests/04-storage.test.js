@@ -87,6 +87,14 @@ describe('classifyFile', () => {
     expect(data).toMatchObject({ kind: 'data', key: null });
   });
 
+  it('rejects legacy v1 env configs with attribute references (E25/FR-6.7)', async () => {
+    const legacy = await classifyFile(makeFile('env.json', JSON.stringify({ DATA_URL: './data.json', DATA_ATTRIBUTES_URL: ['./attrs/Team.tsv'] })));
+    expect(legacy).toMatchObject({ kind: 'legacy-env', key: null });
+    const r = await storeFiles([makeFile('env.json', JSON.stringify({ DATA_ATTRIBUTES_DIR: './attrs' }))]);
+    expect(r.rejected).toEqual([{ kind: 'legacy-env', filename: 'env.json' }]);
+    expect(r.stored).toEqual([]);
+  });
+
   it('classifies env/pseudo/snapshot/registry JSON by content', async () => {
     expect((await classifyFile(makeFile('e.json', '{"DATA_URL":"x"}'))).kind).toBe('env');
     expect((await classifyFile(makeFile('p.json', '{"names":[]}'))).kind).toBe('pseudo');

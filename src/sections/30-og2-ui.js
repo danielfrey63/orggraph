@@ -42,7 +42,8 @@ function og2UiHooks() {
 // seeded from DATA_URL, which points at a graph SNAPSHOT in v2.
 export async function og2TryBoot() {
   let registry = await getStoredJson(KEY_REGISTRY);
-  if (!registry && envConfig && (envConfig.REGISTRY_URL || envConfig.VIEWS)) {
+  const canFetch = typeof location === 'undefined' || location.protocol !== 'file:';
+  if (!registry && canFetch && envConfig && (envConfig.REGISTRY_URL || envConfig.VIEWS)) {
     try {
       const res = await fetch(envConfig.REGISTRY_URL || './schema/registry.json', { cache: 'no-store' });
       if (res.ok) registry = await res.json();
@@ -115,7 +116,7 @@ export async function og2TryBoot() {
   }
   // Dev fallback: seed an empty store from the env's snapshot URL(s)
   // (FR-8.10; an array imports consecutive stands in order).
-  const seedUrls = envConfig && envConfig.DATA_URL
+  const seedUrls = canFetch && envConfig && envConfig.DATA_URL
     ? (Array.isArray(envConfig.DATA_URL) ? envConfig.DATA_URL : [envConfig.DATA_URL])
     : [];
   if (store.nodes.size === 0) for (const seedUrl of seedUrls) {

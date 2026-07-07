@@ -1968,7 +1968,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.157.148';
+const APP_VERSION = '1.158.149';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -2923,6 +2923,16 @@ function looksLikeEnv(obj) {
     k.startsWith('DATA_') || k.startsWith('TOOLBAR_') || k.startsWith('LEGEND_'));
 }
 
+/** Legacy v1 env config (E25/FR-6.7): attribute references or a dataset URL
+ * without VIEWS — recognized only to reject it with the migration hint, so a
+ * stale config can never silently take over a v2 profile. */
+function looksLikeLegacyEnv(obj) {
+  if (!looksLikeEnv(obj)) return false;
+  // attribute references are the unambiguous v1 marker; a bare DATA_URL is
+  // legitimate in v2 (snapshot seed, FR-8.10) and stays an env.
+  return obj.DATA_ATTRIBUTES_URL !== undefined || obj.DATA_ATTRIBUTES_DIR !== undefined;
+}
+
 function looksLikePseudo(obj) {
   if (!obj || typeof obj !== 'object') return false;
   if (Array.isArray(obj.names)) return true;
@@ -2966,6 +2976,7 @@ async function classifyFile(file) {
   let obj = null;
   try { obj = JSON.parse(text); } catch { /* not JSON */ }
 
+  if (looksLikeLegacyEnv(obj)) return { kind: 'legacy-env', key: null, filename, text };
   if (looksLikeEnv(obj)) return { kind: 'env', key: KEY_ENV, filename, text };
   if (looksLikePseudo(obj)) return { kind: 'pseudo', key: KEY_PSEUDO, filename, text };
   // OrgGraph 2.0 artifacts first — a snapshot/registry never matches the
@@ -3112,7 +3123,7 @@ async function storeEntries(entryList) {
     if (used.has(c)) continue;
     if (c.kind === 'unknown') { unknown.push(c.filename); continue; }
     // Legacy classes are rejected, never persisted (E25/FR-6.7).
-    if (c.kind === 'data' || c.kind === 'attr') { rejected.push({ kind: c.kind, filename: c.filename }); continue; }
+    if (c.kind === 'data' || c.kind === 'attr' || c.kind === 'legacy-env') { rejected.push({ kind: c.kind, filename: c.filename }); continue; }
     if (env && c.kind === 'env') { ignored.push(c.filename); continue; }
     await putStored(c.key, c.text);
     stored.push({ kind: c.kind, filename: c.filename });
@@ -3566,6 +3577,11 @@ async function loadPseudoData() {
       return true;
     }
     // 2) fetch fallback (dev server)
+    // file:// cannot fetch — offline mode relies on dropped pseudo data only
+    if (typeof location !== 'undefined' && location.protocol === 'file:') {
+      pseudoData = null;
+      return false;
+    }
     const res = await fetch('./pseudo.data.json', { cache: 'no-store' });
     if (!res.ok) {
       Logger.log('[Pseudo] Konnte pseudo.data.json nicht laden:', res.status);
@@ -4590,7 +4606,13 @@ async function loadEnvConfig() {
       Logger.log('[Init] env loaded from IndexedDB:', envConfig);
       return true;
     }
-    // 2) fetch fallback (dev server)
+    // 2) fetch fallback (dev server only — file:// cannot fetch, and the
+    // offline single-file mode must stay console-clean, NFR-8)
+    if (typeof location !== 'undefined' && location.protocol === 'file:') {
+      envConfig = null;
+      setStatus('Keine Konfiguration im Profil – Registry, env.json und Snapshot per Drag & Drop laden.');
+      return false;
+    }
     const res = await fetch("./env.json", { cache: "no-store" });
     if (res.ok) {
       envConfig = await res.json();
@@ -4636,8 +4658,15 @@ async function loadData() {
 
   // No v2 tenant present: the app renders nothing legacy — data enters via
   // registry/env/snapshot drops only; legacy datasets migrate via
-  // scripts/migrate-legacy.mjs (PRD §9.3/§10, E25/FR-6.7).
-  setStatus('Kein OrgGraph-2.0-Tenant: Registry, env.json und Snapshot laden (Drag & Drop). Legacy-Daten mit scripts/migrate-legacy.mjs migrieren.');
+  // scripts/migrate-legacy.mjs (PRD §9.3/§10, E25/FR-6.7). A stored legacy
+  // config is named explicitly so a stale profile never fails silently.
+  const legacyEnvStored = envConfig && (envConfig.DATA_ATTRIBUTES_URL !== undefined
+    || envConfig.DATA_ATTRIBUTES_DIR !== undefined);
+  if (legacyEnvStored) {
+    setStatus('Legacy-v1-Konfiguration im Profil erkannt — bitte Daten zurücksetzen (Footer) und die migrierte env.json samt Registry und Snapshot laden (scripts/migrate-legacy.mjs).');
+  } else {
+    setStatus('Kein OrgGraph-2.0-Tenant: Registry, env.json und Snapshot laden (Drag & Drop). Legacy-Daten mit scripts/migrate-legacy.mjs migrieren.');
+  }
   return false;
 }
 // Prop values join the search domain (FR-7.6): in pseudo mode ONLY values
@@ -11894,7 +11923,8 @@ function og2UiHooks() {
 // seeded from DATA_URL, which points at a graph SNAPSHOT in v2.
 async function og2TryBoot() {
   let registry = await getStoredJson(KEY_REGISTRY);
-  if (!registry && envConfig && (envConfig.REGISTRY_URL || envConfig.VIEWS)) {
+  const canFetch = typeof location === 'undefined' || location.protocol !== 'file:';
+  if (!registry && canFetch && envConfig && (envConfig.REGISTRY_URL || envConfig.VIEWS)) {
     try {
       const res = await fetch(envConfig.REGISTRY_URL || './schema/registry.json', { cache: 'no-store' });
       if (res.ok) registry = await res.json();
@@ -11967,7 +11997,7 @@ async function og2TryBoot() {
   }
   // Dev fallback: seed an empty store from the env's snapshot URL(s)
   // (FR-8.10; an array imports consecutive stands in order).
-  const seedUrls = envConfig && envConfig.DATA_URL
+  const seedUrls = canFetch && envConfig && envConfig.DATA_URL
     ? (Array.isArray(envConfig.DATA_URL) ? envConfig.DATA_URL : [envConfig.DATA_URL])
     : [];
   if (store.nodes.size === 0) for (const seedUrl of seedUrls) {

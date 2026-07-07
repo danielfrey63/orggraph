@@ -407,6 +407,16 @@ export function looksLikeEnv(obj) {
     k.startsWith('DATA_') || k.startsWith('TOOLBAR_') || k.startsWith('LEGEND_'));
 }
 
+/** Legacy v1 env config (E25/FR-6.7): attribute references or a dataset URL
+ * without VIEWS — recognized only to reject it with the migration hint, so a
+ * stale config can never silently take over a v2 profile. */
+export function looksLikeLegacyEnv(obj) {
+  if (!looksLikeEnv(obj)) return false;
+  // attribute references are the unambiguous v1 marker; a bare DATA_URL is
+  // legitimate in v2 (snapshot seed, FR-8.10) and stays an env.
+  return obj.DATA_ATTRIBUTES_URL !== undefined || obj.DATA_ATTRIBUTES_DIR !== undefined;
+}
+
 export function looksLikePseudo(obj) {
   if (!obj || typeof obj !== 'object') return false;
   if (Array.isArray(obj.names)) return true;
@@ -450,6 +460,7 @@ export async function classifyFile(file) {
   let obj = null;
   try { obj = JSON.parse(text); } catch { /* not JSON */ }
 
+  if (looksLikeLegacyEnv(obj)) return { kind: 'legacy-env', key: null, filename, text };
   if (looksLikeEnv(obj)) return { kind: 'env', key: KEY_ENV, filename, text };
   if (looksLikePseudo(obj)) return { kind: 'pseudo', key: KEY_PSEUDO, filename, text };
   // OrgGraph 2.0 artifacts first — a snapshot/registry never matches the
@@ -596,7 +607,7 @@ export async function storeEntries(entryList) {
     if (used.has(c)) continue;
     if (c.kind === 'unknown') { unknown.push(c.filename); continue; }
     // Legacy classes are rejected, never persisted (E25/FR-6.7).
-    if (c.kind === 'data' || c.kind === 'attr') { rejected.push({ kind: c.kind, filename: c.filename }); continue; }
+    if (c.kind === 'data' || c.kind === 'attr' || c.kind === 'legacy-env') { rejected.push({ kind: c.kind, filename: c.filename }); continue; }
     if (env && c.kind === 'env') { ignored.push(c.filename); continue; }
     await putStored(c.key, c.text);
     stored.push({ kind: c.kind, filename: c.filename });
