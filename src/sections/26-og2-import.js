@@ -143,6 +143,11 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
   // ---- 6) build the new stand on a CLONE (atomicity, FR-6.9a) ----
   const work = deepClone(store);
   const journal = [];
+  // Confirmations dominate a full-state re-import (~380k positions on the
+  // SEM reference). The NORMATIVE position set stays intact (FR-6.9b/AK 86),
+  // but the persisted layout is free (§14): confirmations are stored as
+  // compact batch arrays and materialized on demand (materializeJournal).
+  const confirmations = { nodes: [], edges: [], props: [] };
   let posCounter = 0;
   const counters = { a: 0, b: 0, c: 0, d: 0, e: 0, f: 0 };
   // Normative journal position (FR-6.9b, AK 86): identity key, delta kind,
@@ -160,7 +165,7 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
       audit: { operation: 'import', at: t },
     });
   };
-  const mergeCtx = { work, registry, source, t, counters, report, jot };
+  const mergeCtx = { work, registry, source, t, counters, report, jot, confirmations };
 
   // -- delivered nodes --
   // membership is the pre-import stock view (computed in validateSnapshot
@@ -185,12 +190,7 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
     if (open) {
       const prevInst = open.provenance[source];
       open.provenance[source] = latestInstant(prevInst, t);
-      if (open.provenance[source] !== prevInst) {
-        // compact position (NFR-2/AK 37): the provenance delta carries the
-        // full rollback information — no before/after map copies.
-        jot('provenance-confirm', id, null, null, null,
-          { provDelta: { source, from: prevInst ?? null, to: open.provenance[source] } });
-      }
+      if (open.provenance[source] !== prevInst) confirmations.nodes.push([id, prevInst ?? null]);
     } else if (inNodeScope) {
       identity.existence.push({ from: t, to: null, provenance: { [source]: t } });
       identity.existence.sort((a, b) => instantCompare(a.from, b.from));
@@ -235,10 +235,7 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
     if (open) {
       const prevInst = open.provenance[source];
       open.provenance[source] = latestInstant(prevInst, t);
-      if (open.provenance[source] !== prevInst) {
-        jot('provenance-confirm', key, null, null, null,
-          { provDelta: { source, from: prevInst ?? null, to: open.provenance[source] } });
-      }
+      if (open.provenance[source] !== prevInst) confirmations.edges.push([key, prevInst ?? null]);
     } else {
       identity.existence.push({ from: t, to: null, provenance: { [source]: t } });
       identity.existence.sort((a, b) => instantCompare(a.from, b.from));
@@ -302,7 +299,7 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
     importKey, source, stamp: t, scopeFingerprint: scopeFp,
     observationFingerprint: observationFingerprint(scope), kind: val.kind,
     registryVersion: meta.registryVersion, contentHash: hash,
-    degraded: val.degraded, journal, gateAudit, authorityStatus,
+    degraded: val.degraded, journal, confirmations, confirmationOverrides: {}, gateAudit, authorityStatus,
     precedenceUsed: [...store.precedence], contributions,
     revisionStatus: null,
     canonicalObservations: {
@@ -456,9 +453,7 @@ function mergeProp(identity, prop, value, ctx) {
   }
   if (open.value === value) {
     if (open.source === source && instantCompare(t, open.instant) > 0) {
-      // compact position (NFR-2/AK 37): from + prior instant suffice for the
-      // precondition check and the rollback — no value copy.
-      jot('prop-confirm', iKey, { from: open.from, instant: open.instant }, null, null, { prop });
+      ctx.confirmations.props.push([iKey, prop, open.instant]);
       open.instant = t; // confirmation
     }
     return;
@@ -684,8 +679,11 @@ function contributionHash(id, val, scope) {
 }
 
 function summarizeEntry(entry) {
-  const { journal, ...rest } = entry;
-  return { ...rest, journalPositions: journal ? journal.length : 0 };
+  const { journal, confirmations, ...rest } = entry;
+  const confirmCount = confirmations
+    ? confirmations.nodes.length + confirmations.edges.length + confirmations.props.length
+    : 0;
+  return { ...rest, journalPositions: (journal ? journal.length : 0) + confirmCount };
 }
 
 function swapStore(store, work) {
@@ -741,6 +739,42 @@ export function applyPrecedenceToConflicts(store, opts = {}) {
 // Dependent positions form a group (E35) and are taken back or skipped
 // together; the whole run is one atomic transaction on a clone (E47).
 
+// Materialize the normative position set (FR-6.9b/AK 86) from the persisted
+// layout: explicit journal positions plus the batch-encoded confirmations.
+// Real positions are returned as-is (mutable); confirmation positions are
+// synthesized with deterministic ids, their status living in the entry's
+// confirmationOverrides map (only deviations from 'offen' are stored).
+export function materializeJournal(entry) {
+  const t = entry.stamp;
+  const out = [...(entry.journal || [])];
+  const conf = entry.confirmations || { nodes: [], edges: [], props: [] };
+  const ov = entry.confirmationOverrides || {};
+  const mk = (posId, identityKey, deltaKind, prop, before, provDelta) => ({
+    posId, identityKey, deltaKind, prop,
+    before, after: null, provDelta,
+    preconditions: { instant: t }, groupId: null,
+    status: (ov[posId] && ov[posId].status) || 'offen',
+    blockedBy: ov[posId] ? ov[posId].blockedBy : undefined,
+    audit: (ov[posId] && ov[posId].audit) || { operation: 'import', at: t },
+    synthetic: true,
+  });
+  conf.nodes.forEach(([id, from], i) => out.push(mk(`cn${i}`, id, 'provenance-confirm', null, null, { source: entry.source, from: from ?? null, to: t })));
+  conf.edges.forEach(([key, from], i) => out.push(mk(`ce${i}`, key, 'provenance-confirm', null, null, { source: entry.source, from: from ?? null, to: t })));
+  conf.props.forEach(([key, prop, prev], i) => out.push(mk(`cp${i}`, key, 'prop-confirm', prop, { instant: prev }, null)));
+  return out;
+}
+
+// Status changes on real positions mutate the position; on synthetic
+// confirmation positions they land in the entry's override map.
+function setPositionStatus(entry, p, patch) {
+  Object.assign(p, patch);
+  if (p.synthetic) {
+    if (!entry.confirmationOverrides) entry.confirmationOverrides = {};
+    const prev = entry.confirmationOverrides[p.posId] || {};
+    entry.confirmationOverrides[p.posId] = { ...prev, status: p.status, blockedBy: p.blockedBy, audit: p.audit };
+  }
+}
+
 export function reviseImport(store, registry, importKey, opts = {}) {
   const entry = store.snapshots.get(importKey);
   if (!entry || !Array.isArray(entry.journal)) return { status: 'rejected', reason: 'unknown snapshots-registry entry or entry without journal (FR-6.9b)' };
@@ -750,7 +784,7 @@ export function reviseImport(store, registry, importKey, opts = {}) {
   const work = deepClone(store);
   const wEntry = work.snapshots.get(importKey);
   // repeatable: a repeated run retries EXCLUSIVELY the rest list (AK 67a)
-  const pending = wEntry.journal.filter((p) => p.status === 'offen' || p.status === 'blockiert');
+  const pending = materializeJournal(wEntry).filter((p) => p.status === 'offen' || p.status === 'blockiert');
   const createdPending = new Set(pending.filter((p) => p.deltaKind === 'created').map((p) => p.identityKey));
   const groups = buildRevisionGroups(work, pending);
   const blocked = [];
@@ -763,18 +797,19 @@ export function reviseImport(store, registry, importKey, opts = {}) {
       if (why) { blocker = { posId: p.posId, identityKey: p.identityKey, deviation: why }; break; }
     }
     if (blocker) {
-      for (const p of positions) { p.status = 'blockiert'; p.blockedBy = blocker; }
+      for (const p of positions) setPositionStatus(wEntry, p, { status: 'blockiert', blockedBy: blocker });
       blocked.push(blocker);
       continue;
     }
     // roll back in reverse journal order so provenance withdrawals restore
-    // AFTER their closure re-opened the interval they belong to.
-    for (const p of [...positions].sort((a, b) => Number(b.posId.slice(1)) - Number(a.posId.slice(1)))) {
+    // AFTER their closure re-opened the interval they belong to; synthetic
+    // confirmation positions commute and run last.
+    const ordinal = (p) => (p.synthetic ? -1 : Number(p.posId.slice(1)));
+    for (const p of [...positions].sort((a, b) => ordinal(b) - ordinal(a))) {
       const wasNode = work.nodes.has(p.identityKey);
       const edgeBefore = work.edges.get(p.identityKey);
       rollbackPosition(work, wEntry, p);
-      p.status = 'zurückgenommen';
-      p.audit = { ...p.audit, revisedAt: opts.at ?? null };
+      setPositionStatus(wEntry, p, { status: 'zurückgenommen', audit: { ...p.audit, revisedAt: opts.at ?? null } });
       rolledBack++;
       if (wasNode) affectedNodeIds.add(p.identityKey);
       else if (edgeBefore) { affectedNodeIds.add(edgeBefore.source); affectedNodeIds.add(edgeBefore.target); }
@@ -804,7 +839,7 @@ export function reviseImport(store, registry, importKey, opts = {}) {
 export function compensateRevisionPosition(store, registry, importKey, posId, opts = {}) {
   const entry = store.snapshots.get(importKey);
   if (!entry || !Array.isArray(entry.journal)) return { status: 'rejected', reason: 'unknown snapshots-registry entry' };
-  const pos = entry.journal.find((p) => p.posId === posId);
+  const pos = materializeJournal(entry).find((p) => p.posId === posId);
   if (!pos) return { status: 'rejected', reason: 'unknown journal position' };
   if (pos.status !== 'blockiert') return { status: 'rejected', reason: 'only blocked rest-list positions can be compensated' };
   if (!['prop-end', 'node-close', 'edge-close', 'cascade-close'].includes(pos.deltaKind)) {
@@ -812,7 +847,7 @@ export function compensateRevisionPosition(store, registry, importKey, posId, op
   }
   const work = deepClone(store);
   const wEntry = work.snapshots.get(importKey);
-  const p = wEntry.journal.find((x) => x.posId === posId);
+  const p = materializeJournal(wEntry).find((x) => x.posId === posId);
   const t = wEntry.stamp;
   const identity = work.nodes.get(p.identityKey) ?? work.edges.get(p.identityKey);
   if (!identity) return { status: 'rejected', reason: 'identity no longer exists — option disabled' };
@@ -841,8 +876,7 @@ export function compensateRevisionPosition(store, registry, importKey, posId, op
       if (tl) reopen(tl, cp.from); // interval-exact per timeline; occupied ranges stay untouched
     }
   }
-  p.status = 'kompensiert';
-  p.audit = { ...p.audit, operation: 'compensate', compensatedAt: opts.at ?? null };
+  setPositionStatus(wEntry, p, { status: 'kompensiert', audit: { ...p.audit, operation: 'compensate', compensatedAt: opts.at ?? null } });
   recomputeProjections(work, registry);
   finalizeRevisionStatus(wEntry, opts.at ?? null);
   swapStore(store, work);
@@ -855,14 +889,13 @@ export function compensateRevisionPosition(store, registry, importKey, posId, op
 export function acknowledgeRevisionPosition(store, importKey, posId, opts = {}) {
   const entry = store.snapshots.get(importKey);
   if (!entry || !Array.isArray(entry.journal)) return { status: 'rejected', reason: 'unknown snapshots-registry entry' };
-  const pos = entry.journal.find((p) => p.posId === posId);
+  const pos = materializeJournal(entry).find((p) => p.posId === posId);
   if (!pos) return { status: 'rejected', reason: 'unknown journal position' };
   if (pos.status !== 'blockiert') return { status: 'rejected', reason: 'only blocked rest-list positions can be acknowledged' };
   const work = deepClone(store);
   const wEntry = work.snapshots.get(importKey);
-  const p = wEntry.journal.find((x) => x.posId === posId);
-  p.status = 'quittiert';
-  p.audit = { ...p.audit, operation: 'acknowledge', acknowledgedAt: opts.at ?? null };
+  const p = materializeJournal(wEntry).find((x) => x.posId === posId);
+  setPositionStatus(wEntry, p, { status: 'quittiert', audit: { ...p.audit, operation: 'acknowledge', acknowledgedAt: opts.at ?? null } });
   finalizeRevisionStatus(wEntry, opts.at ?? null);
   swapStore(store, work);
   return { status: 'acknowledged', revisionStatus: wEntry.revisionStatus };
@@ -875,7 +908,7 @@ export function validateJournalFormat(entry) {
   const STATUSES = ['offen', 'zurückgenommen', 'kompensiert', 'quittiert', 'blockiert'];
   if (!entry || !Array.isArray(entry.journal)) return ['entry has no journal array (FR-6.9b)'];
   const errors = [];
-  for (const p of entry.journal) {
+  for (const p of materializeJournal(entry)) {
     for (const f of FIELDS) if (!(f in p)) errors.push(`${p.posId ?? '?'}: missing normative field "${f}"`);
     if (!p.preconditions || p.preconditions.instant === undefined) errors.push(`${p.posId}: preconditions must carry the import instant`);
     if (!STATUSES.includes(p.status)) errors.push(`${p.posId}: invalid status "${p.status}"`);
@@ -885,16 +918,17 @@ export function validateJournalFormat(entry) {
 }
 
 function finalizeRevisionStatus(entry, at) {
-  const rest = entry.journal.filter((p) => p.status === 'offen' || p.status === 'blockiert');
+  const all = materializeJournal(entry);
+  const rest = all.filter((p) => p.status === 'offen' || p.status === 'blockiert');
   if (rest.length) entry.revisionStatus = 'teilrevidiert';
-  else entry.revisionStatus = entry.journal.some((p) => p.status === 'quittiert') ? 'revidiert-quittiert' : 'revidiert';
+  else entry.revisionStatus = all.some((p) => p.status === 'quittiert') ? 'revidiert-quittiert' : 'revidiert';
   const perStatus = {};
-  for (const p of entry.journal) perStatus[p.status] = (perStatus[p.status] || 0) + 1;
+  for (const p of all) perStatus[p.status] = (perStatus[p.status] || 0) + 1;
   entry.revisionAudit = {
     at: at ?? null,
     status: entry.revisionStatus,
     perStatus,
-    acknowledged: entry.journal.filter((p) => p.status === 'quittiert').map((p) => p.posId),
+    acknowledged: all.filter((p) => p.status === 'quittiert').map((p) => p.posId),
     restList: rest.map((p) => ({ posId: p.posId, identityKey: p.identityKey, deltaKind: p.deltaKind, deviation: p.blockedBy ? p.blockedBy.deviation : null })),
   };
 }
@@ -913,10 +947,20 @@ function buildRevisionGroups(work, pending) {
     if (idGroup.has(p.identityKey)) union(keyOf(p), idGroup.get(p.identityKey));
     else idGroup.set(p.identityKey, keyOf(p));
   }
+  // The E35 dependency couples edge EXISTENCE to node EXISTENCE of its
+  // endpoints — existence-neutral positions (value changes, confirmations)
+  // never chain foreign identities together, or one blocked node would
+  // freeze the whole graph into a single group.
+  const NODE_EXISTENCE = new Set(['created', 'node-close', 'reactivated']);
+  const EDGE_EXISTENCE = new Set(['created', 'edge-close', 'cascade-close', 'reactivated']);
+  const nodeExistGroup = new Map();
+  for (const p of pending) {
+    if (NODE_EXISTENCE.has(p.deltaKind) && work.nodes.has(p.identityKey)) nodeExistGroup.set(p.identityKey, keyOf(p));
+  }
   for (const p of pending) {
     const edge = work.edges.get(p.identityKey);
-    if (!edge) continue;
-    for (const ep of [edge.source, edge.target]) if (idGroup.has(ep)) union(keyOf(p), idGroup.get(ep));
+    if (!edge || !EDGE_EXISTENCE.has(p.deltaKind)) continue;
+    for (const ep of [edge.source, edge.target]) if (nodeExistGroup.has(ep)) union(keyOf(p), nodeExistGroup.get(ep));
   }
   const byRoot = new Map();
   for (const p of pending) {
@@ -984,7 +1028,7 @@ function checkRevisionPrecondition(work, entry, p, createdPending) {
     }
     case 'prop-confirm': {
       const open = tl && openInterval(tl);
-      if (!open || open.from !== p.before.from || open.instant !== t || open.source !== src) return 'timeline changed since the import';
+      if (!open || open.instant !== t || open.source !== src) return 'timeline changed since the import';
       return null;
     }
     case 'prop-end': {
