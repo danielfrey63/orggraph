@@ -1,0 +1,14 @@
+{
+  "VIEWS": {
+    "Start": {
+      "path": "Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster], --hatRolle--> Rolle[ring], --imTeam--> Team[ring])",
+      "roots": [
+        "__auto__"
+      ],
+      "depth": 3
+    }
+  },
+  "TOOLBAR_DEPTH_DEFAULT": 3,
+  "TOOLBAR_MANAGEMENT_ACTIVE": false,
+  "TOOLBAR_PSEUDO_ACTIVE": false
+}

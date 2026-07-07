@@ -19,7 +19,7 @@ export default defineConfig({
     reuseExistingServer: true,
   },
   projects: [
-    { name: 'smoke', testMatch: /ak14-smoke\.spec\.mjs/ },
+    { name: 'smoke', testMatch: /ak14-smoke\.spec\.mjs|drop-intake\.spec\.mjs/ },
     { name: 'acceptance', testMatch: /ak1-reference\.spec\.mjs/ },
   ],
 });

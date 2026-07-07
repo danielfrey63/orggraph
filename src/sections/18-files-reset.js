@@ -42,7 +42,12 @@ export async function handleDroppedFiles(entryList) {
 
   const summary = await storeEntries(entryList);
   await requestPersistence();
-
+  // Every drop outcome is visible (live-test finding): an empty or fully
+  // unrecognized drop must never end silently.
+  console.info('[Drop] Ergebnis:', JSON.stringify({
+    stored: summary.stored, rejected: summary.rejected,
+    unknown: summary.unknown, missing: summary.missing, ignored: summary.ignored,
+  }));
   if (summary.unknown.length) {
     showTemporaryNotification(`Nicht erkannt, ignoriert: ${summary.unknown.join(', ')}`, 5000);
   }
@@ -57,7 +62,12 @@ export async function handleDroppedFiles(entryList) {
   if (summary.rejected && summary.rejected.length) {
     showTemporaryNotification(`Legacy-Format abgewiesen (${summary.rejected.map(r => r.filename).join(', ')}): dieser Tenant versteht nur Registry/env/Snapshots. Bitte mit scripts/migrate-legacy.mjs migrieren.`, 8000);
   }
-  if (!summary.stored.length) return;
+  if (!summary.stored.length) {
+    if (!summary.unknown.length && !(summary.rejected && summary.rejected.length) && !summary.missing.length && !summary.ignored.length) {
+      showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — erwartet werden registry.json, env.json und Snapshot-Dateien (JSON); alternativ den Auswahl-Dialog nutzen.', 6000);
+    }
+    return;
+  }
 
   // Datensatz/Env/Pseudo geändert → sauberer Neustart über den Init-Pfad.
   hideDropZone();

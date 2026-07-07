@@ -1968,7 +1968,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.158.149';
+const APP_VERSION = '1.159.150';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -3462,7 +3462,10 @@ function installGlobalDrop(onFiles) {
     // collectDropPayload materializes the entry handles synchronously here.
     collectDropPayload(e.dataTransfer)
       .then((entries) => {
+        // Never end a drop silently (live-test finding): on file:// pages
+        // Chrome sometimes yields no usable handles for certain sources.
         if (entries.length) onFiles(entries);
+        else showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — bitte den Auswahl-Dialog («Dateien auswählen…») nutzen.', 6000);
       })
       .catch((err) => {
         console.error('[dropzone] Drop konnte nicht verarbeitet werden:', err);
@@ -7483,7 +7486,12 @@ async function handleDroppedFiles(entryList) {
 
   const summary = await storeEntries(entryList);
   await requestPersistence();
-
+  // Every drop outcome is visible (live-test finding): an empty or fully
+  // unrecognized drop must never end silently.
+  console.info('[Drop] Ergebnis:', JSON.stringify({
+    stored: summary.stored, rejected: summary.rejected,
+    unknown: summary.unknown, missing: summary.missing, ignored: summary.ignored,
+  }));
   if (summary.unknown.length) {
     showTemporaryNotification(`Nicht erkannt, ignoriert: ${summary.unknown.join(', ')}`, 5000);
   }
@@ -7498,7 +7506,12 @@ async function handleDroppedFiles(entryList) {
   if (summary.rejected && summary.rejected.length) {
     showTemporaryNotification(`Legacy-Format abgewiesen (${summary.rejected.map(r => r.filename).join(', ')}): dieser Tenant versteht nur Registry/env/Snapshots. Bitte mit scripts/migrate-legacy.mjs migrieren.`, 8000);
   }
-  if (!summary.stored.length) return;
+  if (!summary.stored.length) {
+    if (!summary.unknown.length && !(summary.rejected && summary.rejected.length) && !summary.missing.length && !summary.ignored.length) {
+      showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — erwartet werden registry.json, env.json und Snapshot-Dateien (JSON); alternativ den Auswahl-Dialog nutzen.', 6000);
+    }
+    return;
+  }
 
   // Datensatz/Env/Pseudo geändert → sauberer Neustart über den Init-Pfad.
   hideDropZone();

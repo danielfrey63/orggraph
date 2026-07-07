@@ -295,7 +295,10 @@ export function installGlobalDrop(onFiles) {
     // collectDropPayload materializes the entry handles synchronously here.
     collectDropPayload(e.dataTransfer)
       .then((entries) => {
+        // Never end a drop silently (live-test finding): on file:// pages
+        // Chrome sometimes yields no usable handles for certain sources.
         if (entries.length) onFiles(entries);
+        else showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — bitte den Auswahl-Dialog («Dateien auswählen…») nutzen.', 6000);
       })
       .catch((err) => {
         console.error('[dropzone] Drop konnte nicht verarbeitet werden:', err);
