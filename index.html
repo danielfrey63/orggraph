@@ -1968,7 +1968,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.151.142';
+const APP_VERSION = '1.152.143';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -4057,6 +4057,33 @@ function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
       value !== undefined && value !== null &&
       (!pseudonymizationEnabled || (decls[key] && decls[key].nonSensitive === true)));
     for (const [key, value] of entries) lines.push(`  ${key}: ${value}`);
+
+    // Property diff in diff mode (FR-8.13/FR-5.8): previous value next to
+    // the current one, through the same privacy gate — the raw predecessor
+    // label stays hidden in pseudo mode (fail-closed, E48).
+    const scene = (typeof currentSubgraph !== 'undefined' && currentSubgraph && Array.isArray(currentSubgraph.nodes))
+      ? currentSubgraph.nodes.find(n => String(n.id) === String(personId)) : null;
+    if (scene && scene.diffClass === 'diff-changed' && scene.before) {
+      const before = scene.before.props || {};
+      const now = scene.props || {};
+      const diffLines = [];
+      if ((scene.before.label ?? null) !== (scene.label ?? null)) {
+        diffLines.push(pseudonymizationEnabled ? '  Name geändert' : `  Name: ${scene.before.label} → ${scene.label}`);
+      }
+      for (const key of new Set([...Object.keys(before), ...Object.keys(now)])) {
+        if (pseudonymizationEnabled && !(decls[key] && decls[key].nonSensitive === true)) continue;
+        const a = before[key];
+        const b = now[key];
+        if (a === b) continue;
+        if (b === undefined) diffLines.push(`  ${key}: ${a} → entfernt`);
+        else if (a === undefined) diffLines.push(`  ${key}: neu ${b}`);
+        else diffLines.push(`  ${key}: ${a} → ${b}`);
+      }
+      if (diffLines.length) {
+        lines.push('Änderungen (Diff):');
+        lines.push(...diffLines);
+      }
+    }
   }
 
   // Ring badges of this node (grouped '<Typ>::<Label>' keys)
@@ -4612,6 +4639,21 @@ async function loadData() {
   setStatus('Kein OrgGraph-2.0-Tenant: Registry, env.json und Snapshot laden (Drag & Drop). Legacy-Daten mit scripts/migrate-legacy.mjs migrieren.');
   return false;
 }
+// Prop values join the search domain (FR-7.6): in pseudo mode ONLY values
+// whitelisted as nonSensitive in the tenant registry are searchable (E60);
+// without pseudo, every scalar prop value matches.
+function comboPropText(n) {
+  if (!n || !n.props || typeof og2Active !== 'function' || !og2Active() || !og2State()) return '';
+  const decls = ((og2State().registry.nodeTypes || {})[n.type] || {}).props || {};
+  const parts = [];
+  for (const [key, value] of Object.entries(n.props)) {
+    if (value === undefined || value === null) continue;
+    if (pseudonymizationEnabled && !(decls[key] && decls[key].nonSensitive === true)) continue;
+    parts.push(String(value).toLowerCase());
+  }
+  return parts.join(' ');
+}
+
 function matchesWordPrefixes(termWords, text) {
   if (termWords.length === 0) return false;
   if (termWords.length === 1) return text.includes(termWords[0]);
@@ -4669,7 +4711,8 @@ function populateCombo(filterText) {
     // E60: raw node ids identify (emails, name slugs) - in pseudo mode the
     // search runs over pseudo labels and nonSensitive values only.
     const idStr = pseudonymizationEnabled ? '' : String(n.id).toLowerCase();
-    if (matchesWordPrefixes(termWords, displayLabel) || (idStr && idStr.includes(term))) {
+    if (matchesWordPrefixes(termWords, displayLabel) || (idStr && idStr.includes(term))
+      || comboPropText(n).includes(term)) {
       filteredItems.push(n);
       count++;
     }
@@ -4685,7 +4728,8 @@ function populateCombo(filterText) {
   filteredItems.forEach((n, idx) => {
     const li = document.createElement('li');
     const displayLbl = getDisplayLabel(n);
-    li.textContent = `${displayLbl} — ${n.id}`;
+    // E60/E48 fail-closed: raw node ids identify — never shown in pseudo mode.
+    li.textContent = pseudonymizationEnabled ? displayLbl : `${displayLbl} — ${n.id}`;
     li.setAttribute('data-id', String(n.id));
     li.tabIndex = -1;
     li.addEventListener('mousedown', (e) => {

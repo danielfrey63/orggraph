@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   getNodeFillByLevel,
   clustersAtPoint,
@@ -135,5 +135,47 @@ describe('buildPersonTooltipLines', () => {
     const lines = buildPersonTooltipLines('p1', 'Alice', ['Division']);
     expect(lines).toContain('Am Cursor:');
     expect(lines).toContain('  • Division');
+  });
+
+  describe('property diff in diff mode (FR-8.13/FR-5.8)', () => {
+    afterEach(() => {
+      delete globalThis.og2Active;
+      delete globalThis.og2State;
+      delete globalThis.currentSubgraph;
+    });
+    beforeEach(() => {
+      globalThis.og2Active = () => true;
+      globalThis.og2State = () => ({
+        registry: { nodeTypes: { Person: { props: { pensum: { nonSensitive: true }, email: {} } } } },
+      });
+      globalThis.byId.set('p1', { id: 'p1', label: 'Alice', type: 'Person', props: { pensum: 80 } });
+      globalThis.currentSubgraph = { nodes: [{
+        id: 'p1', label: 'Alice Neu', type: 'Person', diffClass: 'diff-changed',
+        props: { pensum: 80, email: 'new@x.ch' },
+        before: { label: 'Alice', props: { pensum: 60, email: 'old@x.ch' } },
+      }] };
+    });
+
+    it('shows changed values next to their predecessors', () => {
+      const lines = buildPersonTooltipLines('p1', 'Alice Neu');
+      expect(lines).toContain('Änderungen (Diff):');
+      expect(lines).toContain('  Name: Alice → Alice Neu');
+      expect(lines).toContain('  pensum: 60 → 80');
+      expect(lines).toContain('  email: old@x.ch → new@x.ch');
+    });
+
+    it('stays fail-closed in pseudo mode: sensitive values and raw labels hidden (E48/E60)', () => {
+      globalThis.pseudonymizationEnabled = true;
+      const lines = buildPersonTooltipLines('p1', 'Person 7');
+      expect(lines).toContain('  Name geändert');
+      expect(lines).toContain('  pensum: 60 → 80'); // whitelisted
+      expect(lines.join('\n')).not.toContain('old@x.ch');
+      expect(lines.join('\n')).not.toContain('Alice');
+    });
+
+    it('adds no diff section for unchanged or non-diff nodes', () => {
+      globalThis.currentSubgraph = { nodes: [{ id: 'p1', label: 'Alice', type: 'Person', props: {} }] };
+      expect(buildPersonTooltipLines('p1', 'Alice')).not.toContain('Änderungen (Diff):');
+    });
   });
 });

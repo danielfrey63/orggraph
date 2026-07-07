@@ -1,3 +1,18 @@
+// Prop values join the search domain (FR-7.6): in pseudo mode ONLY values
+// whitelisted as nonSensitive in the tenant registry are searchable (E60);
+// without pseudo, every scalar prop value matches.
+export function comboPropText(n) {
+  if (!n || !n.props || typeof og2Active !== 'function' || !og2Active() || !og2State()) return '';
+  const decls = ((og2State().registry.nodeTypes || {})[n.type] || {}).props || {};
+  const parts = [];
+  for (const [key, value] of Object.entries(n.props)) {
+    if (value === undefined || value === null) continue;
+    if (pseudonymizationEnabled && !(decls[key] && decls[key].nonSensitive === true)) continue;
+    parts.push(String(value).toLowerCase());
+  }
+  return parts.join(' ');
+}
+
 export function matchesWordPrefixes(termWords, text) {
   if (termWords.length === 0) return false;
   if (termWords.length === 1) return text.includes(termWords[0]);
@@ -55,7 +70,8 @@ export function populateCombo(filterText) {
     // E60: raw node ids identify (emails, name slugs) - in pseudo mode the
     // search runs over pseudo labels and nonSensitive values only.
     const idStr = pseudonymizationEnabled ? '' : String(n.id).toLowerCase();
-    if (matchesWordPrefixes(termWords, displayLabel) || (idStr && idStr.includes(term))) {
+    if (matchesWordPrefixes(termWords, displayLabel) || (idStr && idStr.includes(term))
+      || comboPropText(n).includes(term)) {
       filteredItems.push(n);
       count++;
     }
@@ -71,7 +87,8 @@ export function populateCombo(filterText) {
   filteredItems.forEach((n, idx) => {
     const li = document.createElement('li');
     const displayLbl = getDisplayLabel(n);
-    li.textContent = `${displayLbl} — ${n.id}`;
+    // E60/E48 fail-closed: raw node ids identify — never shown in pseudo mode.
+    li.textContent = pseudonymizationEnabled ? displayLbl : `${displayLbl} — ${n.id}`;
     li.setAttribute('data-id', String(n.id));
     li.tabIndex = -1;
     li.addEventListener('mousedown', (e) => {

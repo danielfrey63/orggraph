@@ -177,6 +177,33 @@ export function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
       value !== undefined && value !== null &&
       (!pseudonymizationEnabled || (decls[key] && decls[key].nonSensitive === true)));
     for (const [key, value] of entries) lines.push(`  ${key}: ${value}`);
+
+    // Property diff in diff mode (FR-8.13/FR-5.8): previous value next to
+    // the current one, through the same privacy gate — the raw predecessor
+    // label stays hidden in pseudo mode (fail-closed, E48).
+    const scene = (typeof currentSubgraph !== 'undefined' && currentSubgraph && Array.isArray(currentSubgraph.nodes))
+      ? currentSubgraph.nodes.find(n => String(n.id) === String(personId)) : null;
+    if (scene && scene.diffClass === 'diff-changed' && scene.before) {
+      const before = scene.before.props || {};
+      const now = scene.props || {};
+      const diffLines = [];
+      if ((scene.before.label ?? null) !== (scene.label ?? null)) {
+        diffLines.push(pseudonymizationEnabled ? '  Name geändert' : `  Name: ${scene.before.label} → ${scene.label}`);
+      }
+      for (const key of new Set([...Object.keys(before), ...Object.keys(now)])) {
+        if (pseudonymizationEnabled && !(decls[key] && decls[key].nonSensitive === true)) continue;
+        const a = before[key];
+        const b = now[key];
+        if (a === b) continue;
+        if (b === undefined) diffLines.push(`  ${key}: ${a} → entfernt`);
+        else if (a === undefined) diffLines.push(`  ${key}: neu ${b}`);
+        else diffLines.push(`  ${key}: ${a} → ${b}`);
+      }
+      if (diffLines.length) {
+        lines.push('Änderungen (Diff):');
+        lines.push(...diffLines);
+      }
+    }
   }
 
   // Ring badges of this node (grouped '<Typ>::<Label>' keys)

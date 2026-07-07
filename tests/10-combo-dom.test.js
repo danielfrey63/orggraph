@@ -78,6 +78,43 @@ describe('populateCombo', () => {
     expect(list().hidden).toBe(true);
   });
 
+  it('searches prop values; in pseudo mode only nonSensitive ones (FR-7.6/E60)', () => {
+    globalThis.og2Active = () => true;
+    globalThis.og2State = () => ({
+      registry: { nodeTypes: { Person: { props: { standort: { nonSensitive: true }, email: {} } } } },
+    });
+    globalThis.allNodesUnique = [
+      { id: 'p1', label: 'Alice', type: 'Person', props: { standort: 'Bern', email: 'alice@x.ch' } },
+      { id: 'p2', label: 'Bob', type: 'Person', props: { standort: 'Zug' } },
+    ];
+    try {
+      populateCombo('bern');
+      expect(globalThis.filteredItems.map(n => n.id)).toEqual(['p1']);
+      // without pseudo every scalar prop matches
+      populateCombo('alice@x');
+      expect(globalThis.filteredItems.map(n => n.id)).toEqual(['p1']);
+      // pseudo on: sensitive values are unsearchable, whitelisted ones stay
+      globalThis.pseudonymizationEnabled = true;
+      populateCombo('alice@x');
+      expect(globalThis.filteredItems).toEqual([]);
+      populateCombo('bern');
+      expect(globalThis.filteredItems.map(n => n.id)).toEqual(['p1']);
+    } finally {
+      delete globalThis.og2Active;
+      delete globalThis.og2State;
+    }
+  });
+
+  it('never shows raw node ids in the dropdown while pseudo is on (E60/E48)', () => {
+    globalThis.pseudonymizationEnabled = true;
+    globalThis.pseudoData = { names: ['Nomen Nescio'] };
+    globalThis.orgDepth = () => 0; // org pool assignment consults the depth
+    populateCombo('nomen');
+    const texts = Array.from(list().children).map((li) => li.textContent);
+    expect(texts.length).toBeGreaterThan(0);
+    for (const t of texts) expect(t).not.toMatch(/p1|p2|o1| — /);
+  });
+
   it('truncates at MAX_DROPDOWN_ITEMS and appends a hint', () => {
     globalThis.allNodesUnique = Array.from({ length: MAX_DROPDOWN_ITEMS + 20 }, (_, i) => ({
       id: `p${i}`, label: `Same Name ${String(i).padStart(3, '0')}`, type: 'person',
