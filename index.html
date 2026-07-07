@@ -2295,7 +2295,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.145.134';
+const APP_VERSION = '1.146.135';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -6226,18 +6226,29 @@ function renderOrgLegendNode(oid, depth, options) {
       });
     }
     
-    showLegendMenu(e.clientX, e.clientY, {
-      onShowAll: () => {
+    // Unified context menu (E24): legend rows and graph nodes share the same
+    // action list; row semantics map onto the fixed entries.
+    showNodeMenu(e.clientX, e.clientY, {
+      onUnhide: () => {
         allowedOrgs.add(id);
         allDescendantIds.forEach(cid => allowedOrgs.add(cid));
         syncGraphAndLegendColors();
       },
-      onHideAll: () => {
+      onHideSubtree: () => {
         allowedOrgs.delete(id);
         allDescendantIds.forEach(cid => allowedOrgs.delete(cid));
         syncGraphAndLegendColors();
       },
-      onShowDirectChildrenOnly: () => {
+      isRoot: Array.isArray(selectedRootIds) && selectedRootIds.includes(String(id)),
+      onSetAsRoot: () => {
+        // v2 resolves a cluster hit to the nearest anchor node (E64); the
+        // legacy path roots the id directly.
+        selectedRootIds = [];
+        currentSelectedId = String(id);
+        applyFromUI('legendSetRoot');
+      },
+      onRemoveRoot: () => { removeRoot(String(id)); applyFromUI('legendRemoveRoot'); },
+      onOnlyDirectChildren: () => {
         allDescendantIds.forEach(cid => {
           allowedOrgs.delete(cid);
           if (subRoot) {
@@ -7890,6 +7901,16 @@ function renderGraph(sub) {
     const pid = String(d.id);
     showNodeMenu(event.clientX, event.clientY, {
       onHideSubtree: () => hideSubtreeFromRoot(pid),
+      onUnhide: hiddenByRoot.has(pid) ? () => unhideSubtree(pid) : null,
+      onOnlyDirectChildren: () => {
+        setSingleRoot(pid);
+        currentSelectedId = pid;
+        const depthEl = document.querySelector(INPUT_DEPTH_ID);
+        if (depthEl) depthEl.value = 1;
+        const depthDisplay = document.querySelector('#depthControl .depth-value');
+        if (depthDisplay) depthDisplay.textContent = '1';
+        applyFromUI('contextDirectChildren');
+      },
       onSetAsRoot: () => {
         // Setze als neue Root - Simulation NICHT auf null setzen [SF][DRY]
         // Die Positionen müssen erhalten bleiben für transitionGraph

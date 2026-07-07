@@ -500,6 +500,16 @@ export function renderGraph(sub) {
     const pid = String(d.id);
     showNodeMenu(event.clientX, event.clientY, {
       onHideSubtree: () => hideSubtreeFromRoot(pid),
+      onUnhide: hiddenByRoot.has(pid) ? () => unhideSubtree(pid) : null,
+      onOnlyDirectChildren: () => {
+        setSingleRoot(pid);
+        currentSelectedId = pid;
+        const depthEl = document.querySelector(INPUT_DEPTH_ID);
+        if (depthEl) depthEl.value = 1;
+        const depthDisplay = document.querySelector('#depthControl .depth-value');
+        if (depthDisplay) depthDisplay.textContent = '1';
+        applyFromUI('contextDirectChildren');
+      },
       onSetAsRoot: () => {
         // Setze als neue Root - Simulation NICHT auf null setzen [SF][DRY]
         // Die Positionen müssen erhalten bleiben für transitionGraph

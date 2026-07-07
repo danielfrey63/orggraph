@@ -53,6 +53,8 @@ beforeEach(() => {
   globalThis.pseudonymizationEnabled = false;
   globalThis.pseudoData = null;
   globalThis.parentOf = new Map();
+  globalThis.selectedRootIds = [];
+  globalThis.removeRoot = () => {};
   globalThis.allowedOrgs = new Set();
   globalThis.oesVisible = true;
   globalThis.orgLegendNodes = new Map();
@@ -118,28 +120,31 @@ describe('buildOrgLegend', () => {
     expect(sub.style.display).toBe('');
   });
 
-  it('opens the real context menu and applies its subtree actions', () => {
+  it('opens the unified E24 menu and applies its row actions', () => {
     buildOrgLegend();
     const openMenu = () => {
       liFor('o1').querySelector('.legend-row')
         .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-      const menu = globalThis.legendMenuEl;
+      const menu = globalThis.nodeMenuEl;
       expect(menu.style.display).toBe('block');
       return menu.querySelectorAll('.menu-item');
     };
 
+    // E24 order: Ausblenden / Einblenden / Nur direkte Kinder / Als Root
+    // definieren / Als Root entfernen — rows share the node menu.
     let items = openMenu();
-    expect(items[0].textContent).toBe('Alle einblenden');
-    items[0].click(); // onShowAll
+    const labels = Array.from(globalThis.nodeMenuEl.querySelectorAll('.menu-item-label')).map((l) => l.textContent);
+    expect(labels).toEqual(['Ausblenden', 'Einblenden', 'Nur direkte Kinder anzeigen', 'Als Root definieren', 'Als Root entfernen']);
+    items[1].click(); // Einblenden (onShowAll semantics)
     expect(Array.from(globalThis.allowedOrgs).sort()).toEqual(['o1', 'o2', 'o3', 'o4']);
-    expect(globalThis.legendMenuEl.style.display).toBe('none');
+    expect(globalThis.nodeMenuEl.style.display).toBe('none');
 
     items = openMenu();
-    items[1].click(); // onHideAll
+    items[0].click(); // Ausblenden (onHideAll semantics)
     expect(globalThis.allowedOrgs.size).toBe(0);
 
     items = openMenu();
-    items[2].click(); // onShowDirectChildrenOnly
+    items[2].click(); // Nur direkte Kinder anzeigen
     expect(Array.from(globalThis.allowedOrgs).sort()).toEqual(['o1', 'o2', 'o3']);
     // grandchild subtree is visually collapsed
     expect(liFor('o2').querySelector('ul').style.display).toBe('none');

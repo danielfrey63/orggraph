@@ -260,18 +260,29 @@ export function renderOrgLegendNode(oid, depth, options) {
       });
     }
     
-    showLegendMenu(e.clientX, e.clientY, {
-      onShowAll: () => {
+    // Unified context menu (E24): legend rows and graph nodes share the same
+    // action list; row semantics map onto the fixed entries.
+    showNodeMenu(e.clientX, e.clientY, {
+      onUnhide: () => {
         allowedOrgs.add(id);
         allDescendantIds.forEach(cid => allowedOrgs.add(cid));
         syncGraphAndLegendColors();
       },
-      onHideAll: () => {
+      onHideSubtree: () => {
         allowedOrgs.delete(id);
         allDescendantIds.forEach(cid => allowedOrgs.delete(cid));
         syncGraphAndLegendColors();
       },
-      onShowDirectChildrenOnly: () => {
+      isRoot: Array.isArray(selectedRootIds) && selectedRootIds.includes(String(id)),
+      onSetAsRoot: () => {
+        // v2 resolves a cluster hit to the nearest anchor node (E64); the
+        // legacy path roots the id directly.
+        selectedRootIds = [];
+        currentSelectedId = String(id);
+        applyFromUI('legendSetRoot');
+      },
+      onRemoveRoot: () => { removeRoot(String(id)); applyFromUI('legendRemoveRoot'); },
+      onOnlyDirectChildren: () => {
         allDescendantIds.forEach(cid => {
           allowedOrgs.delete(cid);
           if (subRoot) {
