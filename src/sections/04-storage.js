@@ -17,6 +17,9 @@ export const KEY_STORE = 'og2Store';
 export const KEY_STORE_PART_PREFIX = 'og2Store::part:';
 export const KEY_REGISTRY = 'og2Registry';
 export const SNAPSHOT_PREFIX = 'og2Snapshot::';
+// Per-tenant UI session state (FR-8.14): persisted reactively on every
+// parameter change, restored on boot before the first render.
+export const KEY_UI_STATE = 'og2UiState';
 
 let _dbPromise = null;
 

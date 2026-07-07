@@ -55,14 +55,61 @@ test('search combo selects a runtime root (FR-7.6, FR-8.4)', async ({ page }) =>
   await expect(page.locator(NODE_CIRCLES)).toHaveCount(1);
 });
 
-test('view switcher exists and switching views re-projects (FR-7.5, Neu)', async ({ page }) => {
-  const sel = page.locator('#viewSwitcherSelect');
-  await expect(sel).toHaveCount(1);
-  await sel.selectOption('Nur Hierarchie');
+test('AK 97: views legend is the topmost section and switches views (FR-7.5)', async ({ page }) => {
+  // the footer view switcher is gone — the views legend replaces it
+  await expect(page.locator('#viewSwitcherSelect')).toHaveCount(0);
+  const firstSection = page.locator('#legendPane .legend-section').first();
+  await expect(firstSection.locator('.legend-title')).toHaveText('Views');
+  const rows = page.locator('#viewsLegend .legend-row');
+  await expect(rows).toHaveCount(2);
+  await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Start');
+  await rows.filter({ hasText: 'Nur Hierarchie' }).click();
   await expect(page.locator('path.cluster')).toHaveCount(0); // no cluster station in that path
   await expect(page.locator(NODE_CIRCLES)).toHaveCount(5);
-  await sel.selectOption('Start');
+  await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Nur Hierarchie');
+  await page.locator('#viewsLegend .legend-row').filter({ hasText: 'Start' }).click();
   await expect(page.locator('path.cluster')).toHaveCount(2);
+});
+
+test('AK 98: save current scene as a named view, survives reload (FR-7.5a)', async ({ page }) => {
+  page.on('dialog', (d) => d.accept('Meine View'));
+  // depth 3 -> 1 so the saved view differs from Start
+  await page.locator('#depthControl .depth-down').click();
+  await page.locator('#depthControl .depth-down').click();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(3);
+  await page.locator('#viewsSection .legend-header').hover(); // actions appear on hover
+  await page.locator('#saveViewBtn').click({ force: true });
+  await expect(page.locator('#viewsLegend .legend-row')).toHaveCount(3);
+  await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Meine View');
+  // persisted in env.VIEWS: still there and still active after a reload
+  await page.waitForTimeout(700); // let the state write land (debounced 400ms)
+  await page.reload();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(3, { timeout: 30_000 });
+  await expect(page.locator('#viewsLegend .legend-row')).toHaveCount(3);
+  await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Meine View');
+});
+
+test('AK 99: session state survives a reload (FR-8.14)', async ({ page }) => {
+  // deselect one cluster, let the debounced state write land, reload
+  const firstRow = page.locator('#legend .legend-row').first();
+  await firstRow.waitFor();
+  const before = await page.locator('path.cluster').count();
+  await firstRow.click();
+  await page.waitForTimeout(500);
+  const afterDeselect = await page.locator('path.cluster').count();
+  expect(afterDeselect).toBeLessThan(before);
+  await page.waitForTimeout(700);
+  await page.reload();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(5, { timeout: 30_000 });
+  await expect(page.locator('path.cluster')).toHaveCount(afterDeselect, { timeout: 15_000 });
+  // now change the depth and reload again: the depth is restored too
+  await page.locator('#depthControl .depth-down').click();
+  await page.locator('#depthControl .depth-down').click();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(3);
+  await page.waitForTimeout(900);
+  await page.reload();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(3, { timeout: 30_000 });
+  await expect(page.locator('#depthControl .depth-value')).toHaveText('1');
 });
 
 test('toolbar toggles exist and stay operable (§9.4)', async ({ page }) => {

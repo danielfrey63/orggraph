@@ -1760,6 +1760,17 @@ body.dz-dragging::after {
 .time-controls select { max-width: 130px; }
 .time-controls #diffToggle { padding: 0 6px; line-height: 1.4; }
 
+/* Views legend (FR-7.5): topmost sidebar section, one row per view */
+#viewsLegend .legend-row { cursor: pointer; padding: 3px 6px; }
+#viewsLegend .legend-row:hover { background-color: var(--hover-bg, rgba(128, 128, 128, 0.15)); }
+#viewsLegend .legend-row.active {
+  background-color: var(--active-toggle-bg, #4a9eff);
+  border-left: 3px solid var(--active-toggle-bg, #4a9eff);
+  padding-left: 3px;
+}
+#viewsLegend .legend-label-chip { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#viewsLegend .view-row-invalid { opacity: 0.45; cursor: not-allowed; }
+
   </style>
 </head>
 <body>
@@ -1820,6 +1831,25 @@ body.dz-dragging::after {
       <svg id="graph" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
     <aside id="legendPane" aria-label="Organisationseinheiten">
+      <div class="legend-section" id="viewsSection" style="display: none;">
+        <div class="legend-header">
+          <div class="legend-header-layout">
+            <div class="legend-collapse-area">
+              <button class="legend-chevron expanded" data-target="viewsLegend" aria-label="Ein-/Ausklappen">
+                <!-- SVG wird durch JavaScript gesetzt -->
+              </button>
+              <h2 class="legend-title">Views</h2>
+            </div>
+            <div class="legend-actions-area">
+              <button id="saveViewBtn" class="legend-icon-btn" title="Aktuelle Ansicht als View speichern" data-ignore-header-click="true">
+                <i data-icon="plus"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="viewsLegend" class="legend-content"></div>
+      </div>
+
       <div class="legend-section">
         <div class="legend-header">
           <div class="legend-header-layout">
@@ -1968,7 +1998,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.164.155';
+const APP_VERSION = '1.165.157';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -2071,6 +2101,7 @@ const ICON = {
   cloudUpload:  `<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
   cloudDownload:`<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
   close:        `<svg ${SVG_ATTR}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  plus:         `<svg ${SVG_ATTR}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
 };
 
 /** Replace an element's icon (sets data-icon + innerHTML). */
@@ -2533,6 +2564,9 @@ const KEY_STORE = 'og2Store';
 const KEY_STORE_PART_PREFIX = 'og2Store::part:';
 const KEY_REGISTRY = 'og2Registry';
 const SNAPSHOT_PREFIX = 'og2Snapshot::';
+// Per-tenant UI session state (FR-8.14): persisted reactively on every
+// parameter change, restored on boot before the first render.
+const KEY_UI_STATE = 'og2UiState';
 
 let _dbPromise = null;
 
@@ -3926,6 +3960,18 @@ function quantizedHueFromCategory(category) {
   categoryHueCache.set(category, hue);
   return hue;
 }
+// Long rainbow palette (FR-4.2a): one spectral sweep (red → violet, the
+// rainbow read top-down) laid ONCE across the ordered list of ALL ring
+// attributes — first label of the first group through the last label of the
+// last group. Groups land in distinct spectral bands (clearly different),
+// labels within a group sit on adjacent hues (similar but distinguishable).
+function colorForRainbowPosition(index, total) {
+  const n = Math.max(1, total);
+  const t = n === 1 ? 0 : Math.min(1, Math.max(0, index / (n - 1)));
+  const hue = Math.round(t * 300); // 0=red … 300=violet
+  return `hsl(${hue}, 70%, 50%)`;
+}
+
 function colorForCategoryAttribute(category, attrName, ordinal) {
   const baseHue = quantizedHueFromCategory(category);
   const localShift = (ordinal % 6) * 10; // kleine Variation innerhalb der Kategorie
@@ -7557,6 +7603,12 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await loadEnvConfig();
 
+  // FR-8.14: restore the persisted UI session state BEFORE the toolbar
+  // defaults are wired — the restored state supersedes env start defaults.
+  if (typeof og2PreloadUiState === 'function') {
+    try { await og2PreloadUiState(); } catch (e) { console.warn('UI-State-Restore fehlgeschlagen:', e); }
+  }
+
   // Pseudonymisierung initialisieren [SF]
   if (envConfig && typeof envConfig.TOOLBAR_PSEUDO_ACTIVE === 'boolean') {
     pseudonymizationEnabled = envConfig.TOOLBAR_PSEUDO_ACTIVE;
@@ -8195,9 +8247,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Lade Daten erst nachdem ENV vollständig verarbeitet wurde [SF][REH]
   if (await loadData()) {
     hideDropZone();
-    // Apply initial start node(s) from env.json if provided
+    // Apply initial start node(s) from env.json if provided. A restored
+    // session state supersedes the env start defaults (FR-8.14) — env
+    // defaults only apply on a first start without stored state.
+    const og2Restored = typeof og2UiStateWasRestored === 'function' && og2UiStateWasRestored();
     let initialUpdateTriggered = false;
-    if (envConfig && envConfig.GRAPH_START_ID_DEFAULT != null) {
+    if (!og2Restored && envConfig && envConfig.GRAPH_START_ID_DEFAULT != null) {
     const def = envConfig.GRAPH_START_ID_DEFAULT;
     if (Array.isArray(def)) {
       const requested = def.map(v => String(v));
@@ -8239,8 +8294,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
     }
   }
-  // Apply default hidden roots from env
-  if (Array.isArray(envConfig?.LEGEND_HIDDEN_ROOTS_DEFAULT) && envConfig.LEGEND_HIDDEN_ROOTS_DEFAULT.length > 0) {
+  // Apply default hidden roots from env (skipped after a session restore —
+  // the restored hiddenByRoot is the user's last state, FR-8.14)
+  if (!og2Restored && Array.isArray(envConfig?.LEGEND_HIDDEN_ROOTS_DEFAULT) && envConfig.LEGEND_HIDDEN_ROOTS_DEFAULT.length > 0) {
     hiddenByRoot = new Map();
     for (const ridRaw of envConfig.LEGEND_HIDDEN_ROOTS_DEFAULT) {
       const rid = String(ridRaw);
@@ -8265,7 +8321,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         // OrgGraph 2.0: Combo/Legenden aufbauen; eine View mit eigenen roots
         // (inkl. __auto__) rendert direkt — reaktiv, ohne Start-ID (FR-7.4).
         renderFullView('OrgGraph 2.0');
-        if (og2HasRenderableView()) {
+        // A restored session may carry runtime roots even when the view has
+        // none of its own (FR-8.14) — that scene renders too.
+        if (og2HasRenderableView() || selectedRootIds.length > 0 || currentSelectedId) {
             try { applyFromUI('initialLoad'); } catch(e) { console.error(e); }
         }
     }
@@ -11625,11 +11683,11 @@ function adaptProjection(projection, registry) {
   for (const edge of projection.derivedEdges) routeEdge(edge.source, edge.target, edge.via, true);
 
   // Ring badges (E21): grouped per host under the composite key
-  // "<Type>::<resolved label>". Colors follow the two-level strategy (E13,
-  // FR-4.2a): the TYPE sets the base hue (clearly distinct between groups),
-  // the label's ordinal within its sorted group adds a small hue/lightness
-  // variation (distinguishable, but visibly the same family). Ordinals come
-  // from the sorted label list, so the palette is deterministic per scene.
+  // "<Type>::<resolved label>". Colors follow the long rainbow palette (E13,
+  // FR-4.2a): one spectral sweep laid once across the ordered list of ALL
+  // attributes — groups sorted, labels sorted within their group — so groups
+  // occupy distinct spectral bands while labels of one group sit on adjacent
+  // hues. The order is sorted, so the palette is deterministic per scene.
   const ringsByHost = new Map();
   const ringGroups = new Map();
   const resolvedRings = [];
@@ -11642,12 +11700,14 @@ function adaptProjection(projection, registry) {
     labelsByType.get(ring.type).add(label);
   }
   const ordinalOf = new Map();
-  for (const [type, labels] of labelsByType) {
-    [...labels].sort().forEach((label, i) => ordinalOf.set(`${type}::${label}`, i));
+  const orderedKeys = [];
+  for (const type of [...labelsByType.keys()].sort()) {
+    for (const label of [...labelsByType.get(type)].sort()) orderedKeys.push(`${type}::${label}`);
   }
+  orderedKeys.forEach((key, i) => ordinalOf.set(key, i));
   for (const { ring, label } of resolvedRings) {
     const key = `${ring.type}::${label}`;
-    const color = colorForCategoryAttribute(ring.type, label, ordinalOf.get(key) || 0);
+    const color = colorForRainbowPosition(ordinalOf.get(key) || 0, orderedKeys.length);
     let hostMap = ringsByHost.get(ring.host);
     if (!hostMap) { hostMap = new Map(); ringsByHost.set(ring.host, hostMap); }
     hostMap.set(key, { color, node: ring.node });
@@ -12102,10 +12162,164 @@ async function og2TryBoot() {
     const lines = rejectedNames.map((n) => `${n}: ${og2.rejectedViews[n].join('; ')}`);
     showTemporaryNotification(`Ungültige View-Konfiguration:\n${lines.join('\n')}`, 10000);
   }
+  // FR-8.14: restore the persisted session state before the first render —
+  // og2 fields before the stock globals (the combo domain follows the active
+  // view), id-dependent parts after them (they filter against byId).
+  og2ApplySessionStateEarly();
   og2SyncStockGlobals();
-  og2BuildViewSwitcher();
+  og2ApplySessionStateLate();
+  og2BuildViewsLegend();
   og2BuildTimeControls();
+  og2InstallStatePersistence();
   return true;
+}
+
+// --- FR-8.14 session state: persist reactively, restore on boot ------------
+
+let og2PendingUiState = null;
+let og2StateRestored = false;
+let og2PersistTimer = null;
+
+function og2UiStateWasRestored() {
+  return og2StateRestored;
+}
+
+// Runs right after loadEnvConfig and BEFORE the toolbar default wiring: maps
+// the persisted toggle state onto the in-memory env defaults so the existing
+// TOOLBAR_* initialization applies it — restored state supersedes env start
+// defaults (FR-8.14). The og2-specific parts wait for og2TryBoot.
+async function og2PreloadUiState() {
+  let state = null;
+  try { state = await getStoredJson(KEY_UI_STATE); } catch { return; }
+  if (!state || typeof state !== 'object') return;
+  og2PendingUiState = state;
+  if (!envConfig) return;
+  if (typeof state.management === 'boolean') envConfig.TOOLBAR_MANAGEMENT_ACTIVE = state.management;
+  if (typeof state.labels === 'string') envConfig.TOOLBAR_LABELS_ACTIVE = state.labels;
+  if (typeof state.layout === 'string') envConfig.TOOLBAR_HIERARCHY_ACTIVE = state.layout === 'hierarchy';
+  if (typeof state.simulation === 'boolean') envConfig.TOOLBAR_SIMULATION_ACTIVE = state.simulation;
+  if (Number.isFinite(state.depth)) envConfig.TOOLBAR_DEPTH_DEFAULT = state.depth;
+  // Pseudo restores fail-closed: only ever towards ON — a stored "off" never
+  // supersedes the env default or the built-in default "on" (FR-8.5/FR-8.14).
+  if (state.pseudo === true) envConfig.TOOLBAR_PSEUDO_ACTIVE = true;
+}
+
+// og2-owned state parts; unresolvable pieces fall back individually (FR-8.14).
+function og2ApplySessionStateEarly() {
+  const s = og2PendingUiState;
+  if (!s || !og2) return;
+  og2StateRestored = true;
+  if (s.activeViewName && og2.views[s.activeViewName]) og2.activeViewName = s.activeViewName;
+  if (Number.isFinite(s.depth)) {
+    og2.runtimeDepth = s.depth;
+    // sync input AND stepper display — boot order independent (FR-8.14)
+    const depthEl = document.querySelector(INPUT_DEPTH_ID);
+    if (depthEl) {
+      depthEl.value = s.depth;
+      const display = document.querySelector('#depthControl .depth-value');
+      if (display) display.textContent = String(s.depth);
+    }
+  }
+  const instants = og2TimeInstants(og2);
+  if (s.asOf && instants.includes(s.asOf) && s.asOf !== instants[instants.length - 1]) og2.asOf = s.asOf;
+  if (s.diff && s.diff.t1 && s.diff.t2 && instants.includes(s.diff.t1) && instants.includes(s.diff.t2)) {
+    og2.diff = { t1: s.diff.t1, t2: s.diff.t2 };
+  }
+  // Cluster deselection is a runtime override (FR-8.2a): restoring scope +
+  // allowed set lets the next apply treat survivors and newcomers correctly.
+  if (Array.isArray(s.scopeOrgs)) {
+    og2.lastScopeOrgs = new Set(s.scopeOrgs.map(String));
+    allowedOrgs = new Set((Array.isArray(s.allowedOrgs) ? s.allowedOrgs : []).map(String));
+  }
+  if (Array.isArray(s.attributesOff)) og2.pendingAttributesOff = new Set(s.attributesOff.map(String));
+  if (Array.isArray(s.hiddenCategories)) hiddenCategories = new Set(s.hiddenCategories.map(String));
+  if (typeof s.attributeFocus === 'boolean') {
+    attributeFocusEnabled = s.attributeFocus;
+    const focusBtn = document.getElementById('toggleAttributeFocus');
+    if (focusBtn) focusBtn.classList.toggle('active', attributeFocusEnabled);
+  }
+}
+
+function og2ApplySessionStateLate() {
+  const s = og2PendingUiState;
+  if (!s || !og2) return;
+  og2PendingUiState = null;
+  if (Array.isArray(s.selectedRootIds) && s.selectedRootIds.length) {
+    const roots = s.selectedRootIds.map(String).filter(id => byId.has(id));
+    if (roots.length) {
+      selectedRootIds = roots;
+      currentSelectedId = roots[0];
+    }
+  } else if (s.currentSelectedId != null && byId.has(String(s.currentSelectedId))) {
+    currentSelectedId = String(s.currentSelectedId);
+  }
+  if (Array.isArray(s.runtimeRoots) && s.runtimeRoots.length) {
+    const roots = s.runtimeRoots.map(String).filter(id => byId.has(id));
+    if (roots.length) og2.runtimeRoots = roots;
+  }
+  if (Array.isArray(s.hiddenByRoot)) {
+    hiddenByRoot = new Map();
+    for (const [rootId, ids] of s.hiddenByRoot) {
+      if (!byId.has(String(rootId))) continue;
+      hiddenByRoot.set(String(rootId), new Set((ids || []).map(String).filter(id => byId.has(id))));
+    }
+    if (typeof recomputeHiddenNodes === 'function') recomputeHiddenNodes();
+  }
+}
+
+function og2CollectUiState() {
+  if (!og2) return null;
+  const depthEl = document.querySelector(INPUT_DEPTH_ID);
+  const uiDepth = depthEl ? parseInt(depthEl.value, 10) : NaN;
+  return {
+    v: 1,
+    activeViewName: og2.activeViewName,
+    runtimeRoots: og2.runtimeRoots ? og2.runtimeRoots.map(String) : null,
+    depth: Number.isFinite(uiDepth) ? uiDepth : og2.runtimeDepth,
+    asOf: og2.asOf,
+    diff: og2.diff,
+    scopeOrgs: og2.lastScopeOrgs ? [...og2.lastScopeOrgs] : null,
+    allowedOrgs: [...allowedOrgs],
+    attributesOff: [...attributeTypes.keys()].filter(k => !activeAttributes.has(k)),
+    hiddenCategories: [...hiddenCategories],
+    attributeFocus: !!attributeFocusEnabled,
+    management: !!managementEnabled,
+    labels: labelsVisible,
+    layout: currentLayoutMode,
+    simulation: !!continuousSimulation,
+    pseudo: !!pseudonymizationEnabled,
+    hiddenByRoot: [...hiddenByRoot.entries()].map(([r, set]) => [r, [...set]]),
+    selectedRootIds: Array.isArray(selectedRootIds) ? selectedRootIds.slice() : [],
+    currentSelectedId: currentSelectedId != null ? String(currentSelectedId) : null,
+  };
+}
+
+async function og2PersistUiStateNow() {
+  if (!og2) return;
+  if (og2PersistTimer) { clearTimeout(og2PersistTimer); og2PersistTimer = null; }
+  const state = og2CollectUiState();
+  if (!state) return;
+  try {
+    await putStored(KEY_UI_STATE, JSON.stringify(state));
+  } catch (e) {
+    console.warn('UI-State nicht persistierbar:', e);
+  }
+}
+
+function og2PersistUiStateSoon() {
+  if (!og2) return;
+  if (og2PersistTimer) clearTimeout(og2PersistTimer);
+  og2PersistTimer = setTimeout(() => { og2PersistTimer = null; og2PersistUiStateNow(); }, 400);
+}
+
+function og2InstallStatePersistence() {
+  if (og2InstallStatePersistence.done) return;
+  og2InstallStatePersistence.done = true;
+  // FR-8.14: toggles that do not run through og2ApplyFromUI (labels, layout,
+  // simulation, pseudo, legend eyes) still change state — any click/change
+  // schedules a debounced snapshot; the debounce runs after their handlers.
+  document.addEventListener('click', () => og2PersistUiStateSoon());
+  document.addEventListener('change', () => og2PersistUiStateSoon());
 }
 
 // Fill the stock-shaped globals (raw/byId/…) from the tenant store so the
@@ -12129,38 +12343,93 @@ function og2HasRenderableView() {
   return !!(view && Array.isArray(view.roots) && view.roots.length > 0);
 }
 
-// Footer view switcher (FR-7.5), analogous to the profile switcher.
-function og2BuildViewSwitcher() {
-  const host = document.querySelector('.footer-stats');
-  if (!og2 || !host) return;
-  let wrap = document.getElementById('viewSwitcher');
-  const names = Object.keys(og2.views);
-  if (names.length === 0) { if (wrap) wrap.remove(); return; }
-  if (!wrap) {
-    wrap = document.createElement('span');
-    wrap.id = 'viewSwitcher';
-    wrap.className = 'view-switcher';
+// Views legend (FR-7.5): the topmost sidebar section replaces the former
+// footer switcher — one row per configured view, active view marked, invalid
+// views greyed out with their rejection reason (§7, AK 84), plus the
+// save-current-view action (FR-7.5a).
+function og2BuildViewsLegend() {
+  const section = document.getElementById('viewsSection');
+  const host = document.getElementById('viewsLegend');
+  if (!section || !host) return;
+  if (!og2) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  host.innerHTML = '';
+  const describe = (name) => {
+    const rawDef = og2.env && og2.env.VIEWS ? og2.env.VIEWS[name] : null;
+    if (!rawDef) return name;
+    const parts = [];
+    if (rawDef.path) parts.push(String(rawDef.path));
+    if (rawDef.depth != null) parts.push(`Tiefe ${rawDef.depth}`);
+    return parts.join(' — ') || name;
+  };
+  const makeRow = (name, { invalid = false, title }) => {
+    const { row, left } = createLegendRow({ active: !invalid && name === og2.activeViewName, withRight: false });
+    row.classList.add('view-row');
+    if (invalid) row.classList.add('view-row-invalid');
+    row.title = title;
     const label = document.createElement('span');
-    label.textContent = 'View: ';
-    const sel = document.createElement('select');
-    sel.id = 'viewSwitcherSelect';
-    sel.addEventListener('change', () => og2SwitchView(sel.value));
-    wrap.append(label, sel);
-    const sep = document.createElement('span');
-    sep.className = 'stat-separator';
-    sep.textContent = '|';
-    host.prepend(sep);
-    host.prepend(wrap);
+    label.className = 'legend-label-chip';
+    label.textContent = name;
+    left.appendChild(label);
+    if (!invalid) row.addEventListener('click', () => og2SwitchView(name));
+    host.appendChild(row);
+  };
+  for (const name of Object.keys(og2.views)) makeRow(name, { title: describe(name) });
+  for (const [name, reasons] of Object.entries(og2.rejectedViews || {})) {
+    makeRow(name, { invalid: true, title: `Ungültig: ${(reasons || []).join('; ')}` });
   }
-  const sel = wrap.querySelector('select');
-  sel.innerHTML = '';
-  for (const name of names) {
-    const opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name;
-    if (name === og2.activeViewName) opt.selected = true;
-    sel.append(opt);
+  const saveBtn = document.getElementById('saveViewBtn');
+  if (saveBtn && !saveBtn.dataset.og2Wired) {
+    saveBtn.dataset.og2Wired = '1';
+    saveBtn.addEventListener('click', (e) => { e.stopPropagation(); og2SaveCurrentView(); });
   }
+}
+
+// Save the current scene as a named view (FR-7.5a): the active view's path
+// with the effective runtime overrides (roots FR-7.6, depth FR-7.7) becomes a
+// new named entry in env.VIEWS, validated like any configured view and
+// persisted in the tenant store — never a silent overwrite.
+async function og2SaveCurrentView() {
+  if (!og2 || !og2.activeViewName) {
+    showTemporaryNotification('Keine aktive View — nichts zu speichern.', 4000);
+    return;
+  }
+  const baseRaw = og2.env && og2.env.VIEWS ? og2.env.VIEWS[og2.activeViewName] : null;
+  if (!baseRaw) {
+    showTemporaryNotification('Die aktive Ansicht hat keine View-Konfiguration als Basis (Diagnose-Projektion) — bitte zuerst eine konfigurierte View wählen.', 6000);
+    return;
+  }
+  const name = (window.prompt('Name der neuen View:') || '').trim();
+  if (!name) return;
+  if ((og2.env.VIEWS && Object.prototype.hasOwnProperty.call(og2.env.VIEWS, name)) || og2.views[name] || (og2.rejectedViews && og2.rejectedViews[name])) {
+    showTemporaryNotification(`View «${name}» existiert bereits — bitte einen anderen Namen wählen (kein Überschreiben, FR-7.5a).`, 6000);
+    return;
+  }
+  const def = JSON.parse(JSON.stringify(baseRaw));
+  if (og2.runtimeRoots && og2.runtimeRoots.length) def.roots = og2.runtimeRoots.map(String);
+  const depthEl = document.querySelector(INPUT_DEPTH_ID);
+  const uiDepth = depthEl ? parseInt(depthEl.value, 10) : NaN;
+  if (Number.isFinite(uiDepth)) def.depth = uiDepth;
+  else if (og2.runtimeDepth != null) def.depth = og2.runtimeDepth;
+  const { valid, rejected } = validateViews({ [name]: def }, og2.registry);
+  if (!valid[name]) {
+    showTemporaryNotification(`View «${name}» ist ungültig: ${((rejected && rejected[name]) || []).join('; ')}`, 8000);
+    return;
+  }
+  og2.env.VIEWS = og2.env.VIEWS || {};
+  og2.env.VIEWS[name] = def;
+  og2.views[name] = valid[name];
+  try {
+    await putStored(KEY_ENV, JSON.stringify(og2.env));
+  } catch (e) {
+    console.error('View-Persistenz fehlgeschlagen:', e);
+    showTemporaryNotification('View konnte nicht gespeichert werden — Details in der Konsole.', 6000);
+    return;
+  }
+  og2SwitchView(name);
+  og2BuildViewsLegend();
+  await og2PersistUiStateNow(); // the new active view must survive an immediate reload
+  showTemporaryNotification(`View «${name}» gespeichert.`, 4000);
 }
 
 // Footer time controls (FR-8.6): asOf slider and diff pickers live next to
@@ -12185,14 +12454,10 @@ function og2BuildTimeControls() {
     const sep = document.createElement('span');
     sep.className = 'stat-separator';
     sep.textContent = '|';
-    const anchor = document.getElementById('viewSwitcher');
-    if (anchor && anchor.nextSibling) {
-      host.insertBefore(wrap, anchor.nextSibling.nextSibling || null);
-      host.insertBefore(sep, wrap);
-    } else {
-      host.prepend(sep);
-      host.prepend(wrap);
-    }
+    // FR-8.6: the time controls lead the footer; the view switch lives in
+    // the views legend since the FR-7.5 revision.
+    host.prepend(sep);
+    host.prepend(wrap);
     wrap.querySelector('#timeSlider').addEventListener('input', () => {
       const list = og2TimeInstants(og2);
       const idx = parseInt(wrap.querySelector('#timeSlider').value, 10);
@@ -12267,6 +12532,7 @@ function og2SwitchView(name) {
     if (display) display.textContent = String(view.depth);
   }
   og2SyncStockGlobals();
+  og2BuildViewsLegend();
   applyFromUI('viewSwitch');
 }
 
@@ -12337,6 +12603,12 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
     }
     for (const key of [...activeAttributes]) {
       if (!nextTypes.has(key)) activeAttributes.delete(key);
+    }
+    // FR-8.14: on the first apply after a session restore, the persisted
+    // ring-group deselection wins over the "new groups start visible" rule.
+    if (og2.pendingAttributesOff) {
+      for (const key of og2.pendingAttributesOff) activeAttributes.delete(key);
+      og2.pendingAttributesOff = null;
     }
     personAttributes = nextByHost;
     attributeTypes = nextTypes;
@@ -12409,6 +12681,7 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
   updateHiddenLegendTitle();
   lastRenderRoots = roots.slice();
   lastRenderDepth = og2.runtimeDepth;
+  og2PersistUiStateSoon(); // FR-8.14: every applied parameter change persists
 }
 
 </script>

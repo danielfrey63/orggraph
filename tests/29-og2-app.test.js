@@ -142,7 +142,7 @@ describe('projection → render adapter (§9.2)', () => {
     expect(adapted.footer.truncated).toBe(false);
   });
 
-  it('two-level ring palette: distinct hues between groups, nuances within (FR-4.2a, AK 96)', () => {
+  it('long rainbow ring palette: one spectral sweep across all attributes (FR-4.2a, AK 96)', () => {
     // second role on p1 so one group carries two labels
     const store = fixtureStore();
     addNode(store, 'r2', 'Rolle', 'Lead');
@@ -153,8 +153,15 @@ describe('projection → render adapter (§9.2)', () => {
     const groups = [...adapted.ringGroups.values()].filter((g) => g.type === 'Rolle');
     expect(groups.length).toBe(2);
     const [a, b] = groups.map((g) => g.color);
-    expect(a).not.toBe(b);                       // distinguishable within the group
-    expect(Math.abs(hueOf(a) - hueOf(b))).toBeLessThanOrEqual(60); // same family
+    expect(a).not.toBe(b); // distinguishable within the group
+    // the sweep runs across the whole ordered list: sorted labels of the
+    // sorted groups map to strictly increasing hues in [0, 300]
+    const ordered = [...adapted.ringGroups.values()]
+      .sort((x, y) => (x.type + '::' + x.label).localeCompare(y.type + '::' + y.label));
+    const hues = ordered.map((g) => hueOf(g.color));
+    for (let i = 1; i < hues.length; i++) expect(hues[i]).toBeGreaterThan(hues[i - 1]);
+    expect(Math.min(...hues)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...hues)).toBeLessThanOrEqual(300);
     // deterministic per scene
     const again = adaptProjection(projectView({ store, parsed: parsePathExpression(PATH), roots: ['p1'], depth: 3 }), REGISTRY);
     expect([...again.ringGroups.values()].map((g) => g.color)).toEqual([...adapted.ringGroups.values()].map((g) => g.color));

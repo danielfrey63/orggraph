@@ -14,6 +14,18 @@ export function quantizedHueFromCategory(category) {
   categoryHueCache.set(category, hue);
   return hue;
 }
+// Long rainbow palette (FR-4.2a): one spectral sweep (red → violet, the
+// rainbow read top-down) laid ONCE across the ordered list of ALL ring
+// attributes — first label of the first group through the last label of the
+// last group. Groups land in distinct spectral bands (clearly different),
+// labels within a group sit on adjacent hues (similar but distinguishable).
+export function colorForRainbowPosition(index, total) {
+  const n = Math.max(1, total);
+  const t = n === 1 ? 0 : Math.min(1, Math.max(0, index / (n - 1)));
+  const hue = Math.round(t * 300); // 0=red … 300=violet
+  return `hsl(${hue}, 70%, 50%)`;
+}
+
 export function colorForCategoryAttribute(category, attrName, ordinal) {
   const baseHue = quantizedHueFromCategory(category);
   const localShift = (ordinal % 6) * 10; // kleine Variation innerhalb der Kategorie

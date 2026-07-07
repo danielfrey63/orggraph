@@ -88,6 +88,12 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await loadEnvConfig();
 
+  // FR-8.14: restore the persisted UI session state BEFORE the toolbar
+  // defaults are wired — the restored state supersedes env start defaults.
+  if (typeof og2PreloadUiState === 'function') {
+    try { await og2PreloadUiState(); } catch (e) { console.warn('UI-State-Restore fehlgeschlagen:', e); }
+  }
+
   // Pseudonymisierung initialisieren [SF]
   if (envConfig && typeof envConfig.TOOLBAR_PSEUDO_ACTIVE === 'boolean') {
     pseudonymizationEnabled = envConfig.TOOLBAR_PSEUDO_ACTIVE;
@@ -726,9 +732,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Lade Daten erst nachdem ENV vollständig verarbeitet wurde [SF][REH]
   if (await loadData()) {
     hideDropZone();
-    // Apply initial start node(s) from env.json if provided
+    // Apply initial start node(s) from env.json if provided. A restored
+    // session state supersedes the env start defaults (FR-8.14) — env
+    // defaults only apply on a first start without stored state.
+    const og2Restored = typeof og2UiStateWasRestored === 'function' && og2UiStateWasRestored();
     let initialUpdateTriggered = false;
-    if (envConfig && envConfig.GRAPH_START_ID_DEFAULT != null) {
+    if (!og2Restored && envConfig && envConfig.GRAPH_START_ID_DEFAULT != null) {
     const def = envConfig.GRAPH_START_ID_DEFAULT;
     if (Array.isArray(def)) {
       const requested = def.map(v => String(v));
@@ -770,8 +779,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
     }
   }
-  // Apply default hidden roots from env
-  if (Array.isArray(envConfig?.LEGEND_HIDDEN_ROOTS_DEFAULT) && envConfig.LEGEND_HIDDEN_ROOTS_DEFAULT.length > 0) {
+  // Apply default hidden roots from env (skipped after a session restore —
+  // the restored hiddenByRoot is the user's last state, FR-8.14)
+  if (!og2Restored && Array.isArray(envConfig?.LEGEND_HIDDEN_ROOTS_DEFAULT) && envConfig.LEGEND_HIDDEN_ROOTS_DEFAULT.length > 0) {
     hiddenByRoot = new Map();
     for (const ridRaw of envConfig.LEGEND_HIDDEN_ROOTS_DEFAULT) {
       const rid = String(ridRaw);
@@ -796,7 +806,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         // OrgGraph 2.0: Combo/Legenden aufbauen; eine View mit eigenen roots
         // (inkl. __auto__) rendert direkt — reaktiv, ohne Start-ID (FR-7.4).
         renderFullView('OrgGraph 2.0');
-        if (og2HasRenderableView()) {
+        // A restored session may carry runtime roots even when the view has
+        // none of its own (FR-8.14) — that scene renders too.
+        if (og2HasRenderableView() || selectedRootIds.length > 0 || currentSelectedId) {
             try { applyFromUI('initialLoad'); } catch(e) { console.error(e); }
         }
     }

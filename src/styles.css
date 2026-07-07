@@ -1751,3 +1751,14 @@ body.dz-dragging::after {
 .time-controls input[type="range"] { width: 110px; }
 .time-controls select { max-width: 130px; }
 .time-controls #diffToggle { padding: 0 6px; line-height: 1.4; }
+
+/* Views legend (FR-7.5): topmost sidebar section, one row per view */
+#viewsLegend .legend-row { cursor: pointer; padding: 3px 6px; }
+#viewsLegend .legend-row:hover { background-color: var(--hover-bg, rgba(128, 128, 128, 0.15)); }
+#viewsLegend .legend-row.active {
+  background-color: var(--active-toggle-bg, #4a9eff);
+  border-left: 3px solid var(--active-toggle-bg, #4a9eff);
+  padding-left: 3px;
+}
+#viewsLegend .legend-label-chip { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#viewsLegend .view-row-invalid { opacity: 0.45; cursor: not-allowed; }

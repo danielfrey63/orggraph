@@ -5,7 +5,7 @@
 // machinery consumes (§9.2: algorithms stay, type binding becomes
 // declarative — draw kinds follow the render mode, never a type name).
 import { canonicalJson } from './21-og2-util.js';
-import { colorForCategoryAttribute } from './08-color-geometry.js';
+import { colorForRainbowPosition } from './08-color-geometry.js';
 import { validateViews, visibleTypesOf } from './27-og2-path.js';
 import { projectView, projectDiagnosis, buildLiveIndexes, resolveDisplayLabel } from './28-og2-project.js';
 
@@ -150,11 +150,11 @@ export function adaptProjection(projection, registry) {
   for (const edge of projection.derivedEdges) routeEdge(edge.source, edge.target, edge.via, true);
 
   // Ring badges (E21): grouped per host under the composite key
-  // "<Type>::<resolved label>". Colors follow the two-level strategy (E13,
-  // FR-4.2a): the TYPE sets the base hue (clearly distinct between groups),
-  // the label's ordinal within its sorted group adds a small hue/lightness
-  // variation (distinguishable, but visibly the same family). Ordinals come
-  // from the sorted label list, so the palette is deterministic per scene.
+  // "<Type>::<resolved label>". Colors follow the long rainbow palette (E13,
+  // FR-4.2a): one spectral sweep laid once across the ordered list of ALL
+  // attributes — groups sorted, labels sorted within their group — so groups
+  // occupy distinct spectral bands while labels of one group sit on adjacent
+  // hues. The order is sorted, so the palette is deterministic per scene.
   const ringsByHost = new Map();
   const ringGroups = new Map();
   const resolvedRings = [];
@@ -167,12 +167,14 @@ export function adaptProjection(projection, registry) {
     labelsByType.get(ring.type).add(label);
   }
   const ordinalOf = new Map();
-  for (const [type, labels] of labelsByType) {
-    [...labels].sort().forEach((label, i) => ordinalOf.set(`${type}::${label}`, i));
+  const orderedKeys = [];
+  for (const type of [...labelsByType.keys()].sort()) {
+    for (const label of [...labelsByType.get(type)].sort()) orderedKeys.push(`${type}::${label}`);
   }
+  orderedKeys.forEach((key, i) => ordinalOf.set(key, i));
   for (const { ring, label } of resolvedRings) {
     const key = `${ring.type}::${label}`;
-    const color = colorForCategoryAttribute(ring.type, label, ordinalOf.get(key) || 0);
+    const color = colorForRainbowPosition(ordinalOf.get(key) || 0, orderedKeys.length);
     let hostMap = ringsByHost.get(ring.host);
     if (!hostMap) { hostMap = new Map(); ringsByHost.set(ring.host, hostMap); }
     hostMap.set(key, { color, node: ring.node });

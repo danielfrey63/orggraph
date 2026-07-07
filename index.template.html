@@ -67,6 +67,25 @@
       <svg id="graph" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
     <aside id="legendPane" aria-label="Organisationseinheiten">
+      <div class="legend-section" id="viewsSection" style="display: none;">
+        <div class="legend-header">
+          <div class="legend-header-layout">
+            <div class="legend-collapse-area">
+              <button class="legend-chevron expanded" data-target="viewsLegend" aria-label="Ein-/Ausklappen">
+                <!-- SVG wird durch JavaScript gesetzt -->
+              </button>
+              <h2 class="legend-title">Views</h2>
+            </div>
+            <div class="legend-actions-area">
+              <button id="saveViewBtn" class="legend-icon-btn" title="Aktuelle Ansicht als View speichern" data-ignore-header-click="true">
+                <i data-icon="plus"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="viewsLegend" class="legend-content"></div>
+      </div>
+
       <div class="legend-section">
         <div class="legend-header">
           <div class="legend-header-layout">
@@ -214,7 +233,7 @@
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.164.155';
+const APP_VERSION = '1.165.157';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 @@APP@@
 </script>
