@@ -1968,7 +1968,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.156.147';
+const APP_VERSION = '1.157.148';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -2530,6 +2530,7 @@ const KEY_PSEUDO = 'pseudo';
 // registry, and dropped-but-not-yet-imported snapshots (imported with their
 // confirmation dialogs on the next boot, then removed).
 const KEY_STORE = 'og2Store';
+const KEY_STORE_PART_PREFIX = 'og2Store::part:';
 const KEY_REGISTRY = 'og2Registry';
 const SNAPSHOT_PREFIX = 'og2Snapshot::';
 
@@ -9575,7 +9576,32 @@ const FAIL_CLOSED_HOOKS = Object.freeze({
   confirmAuthority: () => false,
 });
 
+// Synchronous wrapper: exhausts the generator core in one go — identical
+// behavior for the engine, tests and scripts.
 function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
+  const gen = importSnapshotGen(store, registry, snapshot, hooks);
+  let r = gen.next();
+  while (!r.done) r = gen.next();
+  return r.value;
+}
+
+// Async wrapper (NFR-3): awaits `yieldFn` at the generator's checkpoints so
+// the browser boot can hand control back to the event loop between batches
+// instead of blocking the main thread for the whole import.
+async function importSnapshotAsync(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS, yieldFn = null) {
+  const gen = importSnapshotGen(store, registry, snapshot, hooks);
+  let r = gen.next();
+  while (!r.done) {
+    if (yieldFn) await yieldFn();
+    r = gen.next();
+  }
+  return r.value;
+}
+
+// Generator core: yields at phase boundaries and every BATCH entries inside
+// the large merge loops (checkpoints cost nothing when driven synchronously).
+const IMPORT_BATCH = 2000;
+function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
   const h = { ...FAIL_CLOSED_HOOKS, ...hooks };
   const meta = snapshot.meta || {};
   const scope = meta.scope || {};
@@ -9584,7 +9610,9 @@ function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
   const report = { warnings: [], conflicts: [], counters: null, journal: null };
 
   // ---- 1) preflight validation (FR-6.8), no mutation ----
+  yield;
   const val = validateSnapshot(snapshot, registry, store);
+  yield;
   report.warnings.push(...val.warnings);
   if (val.errors.length) return { status: 'rejected', reason: 'validation', errors: val.errors, report };
 
@@ -9697,7 +9725,9 @@ function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
   };
 
   // ---- 6) build the new stand on a CLONE (atomicity, FR-6.9a) ----
+  yield;
   const work = deepClone(store);
+  yield;
   const journal = [];
   // Confirmations dominate a full-state re-import (~380k positions on the
   // SEM reference). The NORMATIVE position set stays intact (FR-6.9b/AK 86),
@@ -9729,8 +9759,10 @@ function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
   const membership = val.membership;
   const nodeScopeTypes = new Set(scope.nodeTypes || []);
   const candidates = edgeDeletionCandidates(store, scope, membership, moveOutCapable);
+  let batchTick = 0;
   try {
   for (const [id, rec] of val.nodesById) {
+    if (++batchTick % IMPORT_BATCH === 0) yield;
     const inNodeScope = nodeScopeTypes.has(rec.type);
     let identity = work.nodes.get(id);
     if (!identity) {
@@ -9761,6 +9793,7 @@ function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
   // -- node deletion candidates (only root-free full states, E39) --
   if (membership.nodeDeletionCandidatesAllowed) {
     for (const id of membership.nodeScope) {
+      if (++batchTick % IMPORT_BATCH === 0) yield;
       if (val.nodesById.has(id)) continue;
       const identity = work.nodes.get(id);
       const open = identity && openExistence(identity);
@@ -9774,6 +9807,7 @@ function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
 
   // -- delivered edges --
   for (const [key, rec] of val.edgesByKey) {
+    if (++batchTick % IMPORT_BATCH === 0) yield;
     const decl = (registry.edgeTypes || {})[rec.type];
     let identity = work.edges.get(key);
     if (!identity) {
@@ -9802,6 +9836,7 @@ function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
 
   // -- edge deletion candidates (FR-5.5a(2)) --
   for (const [key] of candidates) {
+    if (++batchTick % IMPORT_BATCH === 0) yield;
     if (val.edgesByKey.has(key)) continue;
     const identity = work.edges.get(key);
     const open = identity && identity.existence.find((iv) => iv.to === null);
@@ -9813,7 +9848,9 @@ function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
   }
 
   // -- implied projection (E33/E52): recompute deterministically --
+  yield;
   recomputeProjections(work, registry);
+  yield;
   } catch (err) {
     if (err instanceof BundleValidationError) {
       return { status: 'rejected', reason: err.message, report };
@@ -11417,6 +11454,54 @@ function deserializeTenantStore(text) {
   return decodeValue(doc.store);
 }
 
+// Chunked persistence (FR-8.9, NFR-2/AK 37): the single-document encoding
+// breaks at the V8 string limit (~512MB) once the reference tenant carries a
+// stand series. v2 splits the large collections (nodes/edges/snapshots) into
+// byte-bounded part strings; the small store fields travel in the header.
+// v1 documents stay readable (boot falls back to deserializeTenantStore).
+const STORE_FORMAT_V2 = 'og2-store-v2';
+const STORE_PART_BYTES = 32 * 1024 * 1024;
+
+function serializeTenantStoreParts(store, maxPartBytes = STORE_PART_BYTES) {
+  const { nodes, edges, snapshots, ...small } = store;
+  const parts = [];
+  let current = [];
+  let currentBytes = 2;
+  const push = (tuple) => {
+    const s = JSON.stringify(tuple);
+    if (current.length && currentBytes + s.length + 1 > maxPartBytes) {
+      parts.push(`[${current.join(',')}]`);
+      current = [];
+      currentBytes = 2;
+    }
+    current.push(s);
+    currentBytes += s.length + 1;
+  };
+  for (const [k, v] of nodes) push(['n', k, encodeValue(v)]);
+  for (const [k, v] of edges) push(['e', k, encodeValue(v)]);
+  for (const [k, v] of snapshots) push(['s', k, encodeValue(v)]);
+  if (current.length) parts.push(`[${current.join(',')}]`);
+  const header = JSON.stringify({ format: STORE_FORMAT_V2, parts: parts.length, small: encodeValue(small) });
+  return { header, parts };
+}
+
+function isChunkedStoreHeader(text) {
+  if (typeof text !== 'string' || !text.startsWith('{')) return false;
+  try { return JSON.parse(text).format === STORE_FORMAT_V2; } catch { return false; }
+}
+
+function deserializeTenantStoreParts(headerText, partTexts) {
+  const doc = JSON.parse(headerText);
+  if (!doc || doc.format !== STORE_FORMAT_V2) throw new Error(`unknown store format: ${doc && doc.format}`);
+  const store = { nodes: new Map(), edges: new Map(), snapshots: new Map(), ...decodeValue(doc.small) };
+  for (const text of partTexts) {
+    for (const [kind, k, v] of JSON.parse(text)) {
+      (kind === 'n' ? store.nodes : kind === 'e' ? store.edges : store.snapshots).set(k, decodeValue(v));
+    }
+  }
+  return store;
+}
+
 // --- Projection → render adapter (§9.2) ------------------------------------
 // The layout/render machinery works on: draw nodes (simulated graph nodes),
 // draw links between them, cluster nodes with a parent relation and a
@@ -11822,7 +11907,15 @@ async function og2TryBoot() {
   const storedStore = await getStoredText(KEY_STORE);
   if (storedStore != null) {
     try {
-      store = deserializeTenantStore(storedStore);
+      if (isChunkedStoreHeader(storedStore)) {
+        // v2 chunked layout (FR-8.9): header under KEY_STORE, parts alongside
+        const partCount = JSON.parse(storedStore).parts;
+        const parts = [];
+        for (let i = 0; i < partCount; i++) parts.push(await getStoredText(KEY_STORE_PART_PREFIX + i));
+        store = deserializeTenantStoreParts(storedStore, parts);
+      } else {
+        store = deserializeTenantStore(storedStore); // v1 single document
+      }
     } catch (e) {
       console.error('Gespeicherter Tenant-Store ist nicht lesbar:', e);
       setStatus('Tenant-Store beschädigt — bitte Snapshots erneut importieren.');
@@ -11832,9 +11925,10 @@ async function og2TryBoot() {
     store = createTenantStore();
   }
 
-  // NFR-3: guarantee a painted progress hint before the (still synchronous)
-  // engine import blocks the main thread; the <200ms block criterion itself
-  // stays OPEN until the import is batched asynchronously (AK 10 note).
+  // NFR-3: guarantee a painted progress hint before the import starts. The
+  // import itself runs batched (importSnapshotAsync yields to the event loop
+  // every 2000 entries and at phase boundaries); the residual single blocks
+  // are deepClone/validate (~1-2s on the 62k reference) — noted for AK 10.
   const og2YieldPaint = async (message) => {
     setStatus(message);
     await new Promise((resolve) => {
@@ -11842,6 +11936,12 @@ async function og2TryBoot() {
       else setTimeout(resolve, 0);
     });
   };
+  // NFR-3 frame yield for the batched import: hand control back to the event
+  // loop at every generator checkpoint so paints and input stay live.
+  const og2FrameYield = () => new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
 
   // Import snapshots dropped before this boot, with their dialogs (E25).
   const pending = await getPendingSnapshots();
@@ -11851,7 +11951,7 @@ async function og2TryBoot() {
     try { snapshot = JSON.parse(p.text); } catch { /* classified as snapshot, so parseable — defensive */ }
     if (snapshot) {
       await og2YieldPaint(`Importiere ${p.filename} …`);
-      const res = importSnapshot(store, registry, snapshot, og2UiHooks());
+      const res = await importSnapshotAsync(store, registry, snapshot, og2UiHooks(), og2FrameYield);
       if (res.status === 'imported') {
         store = res.store || store;
         imported++;
@@ -11888,7 +11988,7 @@ async function og2TryBoot() {
             confirmAuthority: () => true,
           };
           await og2YieldPaint(`Importiere Snapshot (${seedUrl}) …`);
-          const imp = importSnapshot(store, registry, snapshot, seedHooks);
+          const imp = await importSnapshotAsync(store, registry, snapshot, seedHooks, og2FrameYield);
           if (imp.status === 'imported') {
             store = imp.store || store;
             imported++;
@@ -11899,7 +11999,15 @@ async function og2TryBoot() {
       }
     } catch (e) { console.warn('DATA_URL-Snapshot nicht ladbar:', e); }
   }
-  if (imported > 0) await putStored(KEY_STORE, serializeTenantStore(store));
+  if (imported > 0) {
+    // v2 chunked persist: parts first, then the header (a reader never sees
+    // a header pointing at missing parts); stale surplus parts are removed.
+    const prevParts = isChunkedStoreHeader(storedStore) ? JSON.parse(storedStore).parts : 0;
+    const { header, parts } = serializeTenantStoreParts(store);
+    for (let i = 0; i < parts.length; i++) await putStored(KEY_STORE_PART_PREFIX + i, parts[i]);
+    await putStored(KEY_STORE, header);
+    for (let i = parts.length; i < prevParts; i++) await delStored(KEY_STORE_PART_PREFIX + i);
+  }
 
   og2 = createOg2State({ store, registry, env: envConfig || {} });
   const rejectedNames = Object.keys(og2.rejectedViews);

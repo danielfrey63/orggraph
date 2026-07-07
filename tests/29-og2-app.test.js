@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parsePathExpression } from '../src/sections/27-og2-path.js';
 import { createTenantStore, createNodeIdentity, createEdgeIdentity, edgeKeyOf, startInterval } from '../src/sections/23-og2-store.js';
 import { projectView } from '../src/sections/28-og2-project.js';
-import { serializeTenantStore, deserializeTenantStore, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff } from '../src/sections/29-og2-app.js';
+import { serializeTenantStore, deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff } from '../src/sections/29-og2-app.js';
 import { looksLikeSnapshot, looksLikeRegistry, looksLikeData } from '../src/sections/04-storage.js';
 
 // Type names are fixture data (E14, NFR-5 exception).
@@ -79,6 +79,25 @@ describe('store serialization (FR-8.9)', () => {
 
   it('rejects unknown formats', () => {
     expect(() => deserializeTenantStore(JSON.stringify({ format: 'nope', store: {} }))).toThrow(/unknown store format/);
+  });
+
+  it('v2 chunked layout round-trips and splits by byte budget (NFR-2/AK 37)', () => {
+    const store = fixtureStore();
+    store.sourceBook.set('src-a', { registeredAt: T0, harvestSpecVersion: 'v1', moveOutEdgeTypes: new Set(['mitgliedIn']), specless: false });
+    store.precedence.push('src-a');
+    store.snapshots.set('k1', { importKey: 'k1', stamp: T0, journal: [], confirmations: { nodes: [], edges: [], props: [] } });
+    // tiny budget forces one part per entry — no giant strings ever
+    const { header, parts } = serializeTenantStoreParts(store, 8);
+    expect(isChunkedStoreHeader(header)).toBe(true);
+    expect(parts.length).toBe(store.nodes.size + store.edges.size + store.snapshots.size);
+    const back = deserializeTenantStoreParts(header, parts);
+    expect(back.nodes.get('p1').timelines.get('label')[0].value).toBe('Chef');
+    expect(back.sourceBook.get('src-a').moveOutEdgeTypes.has('mitgliedIn')).toBe(true);
+    expect(back.precedence).toEqual(['src-a']);
+    expect(back.snapshots.get('k1').stamp).toBe(T0);
+    // default budget: everything fits into one part; v1 docs are not chunked headers
+    expect(serializeTenantStoreParts(store).parts.length).toBe(1);
+    expect(isChunkedStoreHeader(serializeTenantStore(store))).toBe(false);
   });
 });
 

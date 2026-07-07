@@ -14,6 +14,7 @@ export const KEY_PSEUDO = 'pseudo';
 // registry, and dropped-but-not-yet-imported snapshots (imported with their
 // confirmation dialogs on the next boot, then removed).
 export const KEY_STORE = 'og2Store';
+export const KEY_STORE_PART_PREFIX = 'og2Store::part:';
 export const KEY_REGISTRY = 'og2Registry';
 export const SNAPSHOT_PREFIX = 'og2Snapshot::';
 

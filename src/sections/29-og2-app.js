@@ -50,6 +50,54 @@ export function deserializeTenantStore(text) {
   return decodeValue(doc.store);
 }
 
+// Chunked persistence (FR-8.9, NFR-2/AK 37): the single-document encoding
+// breaks at the V8 string limit (~512MB) once the reference tenant carries a
+// stand series. v2 splits the large collections (nodes/edges/snapshots) into
+// byte-bounded part strings; the small store fields travel in the header.
+// v1 documents stay readable (boot falls back to deserializeTenantStore).
+const STORE_FORMAT_V2 = 'og2-store-v2';
+const STORE_PART_BYTES = 32 * 1024 * 1024;
+
+export function serializeTenantStoreParts(store, maxPartBytes = STORE_PART_BYTES) {
+  const { nodes, edges, snapshots, ...small } = store;
+  const parts = [];
+  let current = [];
+  let currentBytes = 2;
+  const push = (tuple) => {
+    const s = JSON.stringify(tuple);
+    if (current.length && currentBytes + s.length + 1 > maxPartBytes) {
+      parts.push(`[${current.join(',')}]`);
+      current = [];
+      currentBytes = 2;
+    }
+    current.push(s);
+    currentBytes += s.length + 1;
+  };
+  for (const [k, v] of nodes) push(['n', k, encodeValue(v)]);
+  for (const [k, v] of edges) push(['e', k, encodeValue(v)]);
+  for (const [k, v] of snapshots) push(['s', k, encodeValue(v)]);
+  if (current.length) parts.push(`[${current.join(',')}]`);
+  const header = JSON.stringify({ format: STORE_FORMAT_V2, parts: parts.length, small: encodeValue(small) });
+  return { header, parts };
+}
+
+export function isChunkedStoreHeader(text) {
+  if (typeof text !== 'string' || !text.startsWith('{')) return false;
+  try { return JSON.parse(text).format === STORE_FORMAT_V2; } catch { return false; }
+}
+
+export function deserializeTenantStoreParts(headerText, partTexts) {
+  const doc = JSON.parse(headerText);
+  if (!doc || doc.format !== STORE_FORMAT_V2) throw new Error(`unknown store format: ${doc && doc.format}`);
+  const store = { nodes: new Map(), edges: new Map(), snapshots: new Map(), ...decodeValue(doc.small) };
+  for (const text of partTexts) {
+    for (const [kind, k, v] of JSON.parse(text)) {
+      (kind === 'n' ? store.nodes : kind === 'e' ? store.edges : store.snapshots).set(k, decodeValue(v));
+    }
+  }
+  return store;
+}
+
 // --- Projection → render adapter (§9.2) ------------------------------------
 // The layout/render machinery works on: draw nodes (simulated graph nodes),
 // draw links between them, cluster nodes with a parent relation and a

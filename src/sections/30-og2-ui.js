@@ -2,10 +2,10 @@
 // tenant store, snapshot import with its confirmation dialogs (product HILs,
 // §1.5), translation of stock + projection into the globals the layout/render
 // machinery consumes (§9.2), and the reactive apply path (FR-8.11).
-import { KEY_STORE, KEY_REGISTRY, getStoredText, getStoredJson, getPendingSnapshots, putStored, delStored, looksLikeRegistry, looksLikeSnapshot } from './04-storage.js';
-import { serializeTenantStore, deserializeTenantStore, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff } from './29-og2-app.js';
+import { KEY_STORE, KEY_STORE_PART_PREFIX, KEY_REGISTRY, getStoredText, getStoredJson, getPendingSnapshots, putStored, delStored, looksLikeRegistry, looksLikeSnapshot } from './04-storage.js';
+import { deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff } from './29-og2-app.js';
 import { createTenantStore } from './23-og2-store.js';
-import { importSnapshot } from './26-og2-import.js';
+import { importSnapshotAsync } from './26-og2-import.js';
 
 let og2 = null;
 
@@ -55,7 +55,15 @@ export async function og2TryBoot() {
   const storedStore = await getStoredText(KEY_STORE);
   if (storedStore != null) {
     try {
-      store = deserializeTenantStore(storedStore);
+      if (isChunkedStoreHeader(storedStore)) {
+        // v2 chunked layout (FR-8.9): header under KEY_STORE, parts alongside
+        const partCount = JSON.parse(storedStore).parts;
+        const parts = [];
+        for (let i = 0; i < partCount; i++) parts.push(await getStoredText(KEY_STORE_PART_PREFIX + i));
+        store = deserializeTenantStoreParts(storedStore, parts);
+      } else {
+        store = deserializeTenantStore(storedStore); // v1 single document
+      }
     } catch (e) {
       console.error('Gespeicherter Tenant-Store ist nicht lesbar:', e);
       setStatus('Tenant-Store beschädigt — bitte Snapshots erneut importieren.');
@@ -65,9 +73,10 @@ export async function og2TryBoot() {
     store = createTenantStore();
   }
 
-  // NFR-3: guarantee a painted progress hint before the (still synchronous)
-  // engine import blocks the main thread; the <200ms block criterion itself
-  // stays OPEN until the import is batched asynchronously (AK 10 note).
+  // NFR-3: guarantee a painted progress hint before the import starts. The
+  // import itself runs batched (importSnapshotAsync yields to the event loop
+  // every 2000 entries and at phase boundaries); the residual single blocks
+  // are deepClone/validate (~1-2s on the 62k reference) — noted for AK 10.
   const og2YieldPaint = async (message) => {
     setStatus(message);
     await new Promise((resolve) => {
@@ -75,6 +84,12 @@ export async function og2TryBoot() {
       else setTimeout(resolve, 0);
     });
   };
+  // NFR-3 frame yield for the batched import: hand control back to the event
+  // loop at every generator checkpoint so paints and input stay live.
+  const og2FrameYield = () => new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
 
   // Import snapshots dropped before this boot, with their dialogs (E25).
   const pending = await getPendingSnapshots();
@@ -84,7 +99,7 @@ export async function og2TryBoot() {
     try { snapshot = JSON.parse(p.text); } catch { /* classified as snapshot, so parseable — defensive */ }
     if (snapshot) {
       await og2YieldPaint(`Importiere ${p.filename} …`);
-      const res = importSnapshot(store, registry, snapshot, og2UiHooks());
+      const res = await importSnapshotAsync(store, registry, snapshot, og2UiHooks(), og2FrameYield);
       if (res.status === 'imported') {
         store = res.store || store;
         imported++;
@@ -121,7 +136,7 @@ export async function og2TryBoot() {
             confirmAuthority: () => true,
           };
           await og2YieldPaint(`Importiere Snapshot (${seedUrl}) …`);
-          const imp = importSnapshot(store, registry, snapshot, seedHooks);
+          const imp = await importSnapshotAsync(store, registry, snapshot, seedHooks, og2FrameYield);
           if (imp.status === 'imported') {
             store = imp.store || store;
             imported++;
@@ -132,7 +147,15 @@ export async function og2TryBoot() {
       }
     } catch (e) { console.warn('DATA_URL-Snapshot nicht ladbar:', e); }
   }
-  if (imported > 0) await putStored(KEY_STORE, serializeTenantStore(store));
+  if (imported > 0) {
+    // v2 chunked persist: parts first, then the header (a reader never sees
+    // a header pointing at missing parts); stale surplus parts are removed.
+    const prevParts = isChunkedStoreHeader(storedStore) ? JSON.parse(storedStore).parts : 0;
+    const { header, parts } = serializeTenantStoreParts(store);
+    for (let i = 0; i < parts.length; i++) await putStored(KEY_STORE_PART_PREFIX + i, parts[i]);
+    await putStored(KEY_STORE, header);
+    for (let i = parts.length; i < prevParts; i++) await delStored(KEY_STORE_PART_PREFIX + i);
+  }
 
   og2 = createOg2State({ store, registry, env: envConfig || {} });
   const rejectedNames = Object.keys(og2.rejectedViews);

@@ -19,7 +19,32 @@ export const FAIL_CLOSED_HOOKS = Object.freeze({
   confirmAuthority: () => false,
 });
 
+// Synchronous wrapper: exhausts the generator core in one go — identical
+// behavior for the engine, tests and scripts.
 export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
+  const gen = importSnapshotGen(store, registry, snapshot, hooks);
+  let r = gen.next();
+  while (!r.done) r = gen.next();
+  return r.value;
+}
+
+// Async wrapper (NFR-3): awaits `yieldFn` at the generator's checkpoints so
+// the browser boot can hand control back to the event loop between batches
+// instead of blocking the main thread for the whole import.
+export async function importSnapshotAsync(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS, yieldFn = null) {
+  const gen = importSnapshotGen(store, registry, snapshot, hooks);
+  let r = gen.next();
+  while (!r.done) {
+    if (yieldFn) await yieldFn();
+    r = gen.next();
+  }
+  return r.value;
+}
+
+// Generator core: yields at phase boundaries and every BATCH entries inside
+// the large merge loops (checkpoints cost nothing when driven synchronously).
+const IMPORT_BATCH = 2000;
+function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
   const h = { ...FAIL_CLOSED_HOOKS, ...hooks };
   const meta = snapshot.meta || {};
   const scope = meta.scope || {};
@@ -28,7 +53,9 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
   const report = { warnings: [], conflicts: [], counters: null, journal: null };
 
   // ---- 1) preflight validation (FR-6.8), no mutation ----
+  yield;
   const val = validateSnapshot(snapshot, registry, store);
+  yield;
   report.warnings.push(...val.warnings);
   if (val.errors.length) return { status: 'rejected', reason: 'validation', errors: val.errors, report };
 
@@ -141,7 +168,9 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
   };
 
   // ---- 6) build the new stand on a CLONE (atomicity, FR-6.9a) ----
+  yield;
   const work = deepClone(store);
+  yield;
   const journal = [];
   // Confirmations dominate a full-state re-import (~380k positions on the
   // SEM reference). The NORMATIVE position set stays intact (FR-6.9b/AK 86),
@@ -173,8 +202,10 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
   const membership = val.membership;
   const nodeScopeTypes = new Set(scope.nodeTypes || []);
   const candidates = edgeDeletionCandidates(store, scope, membership, moveOutCapable);
+  let batchTick = 0;
   try {
   for (const [id, rec] of val.nodesById) {
+    if (++batchTick % IMPORT_BATCH === 0) yield;
     const inNodeScope = nodeScopeTypes.has(rec.type);
     let identity = work.nodes.get(id);
     if (!identity) {
@@ -205,6 +236,7 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
   // -- node deletion candidates (only root-free full states, E39) --
   if (membership.nodeDeletionCandidatesAllowed) {
     for (const id of membership.nodeScope) {
+      if (++batchTick % IMPORT_BATCH === 0) yield;
       if (val.nodesById.has(id)) continue;
       const identity = work.nodes.get(id);
       const open = identity && openExistence(identity);
@@ -218,6 +250,7 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
 
   // -- delivered edges --
   for (const [key, rec] of val.edgesByKey) {
+    if (++batchTick % IMPORT_BATCH === 0) yield;
     const decl = (registry.edgeTypes || {})[rec.type];
     let identity = work.edges.get(key);
     if (!identity) {
@@ -246,6 +279,7 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
 
   // -- edge deletion candidates (FR-5.5a(2)) --
   for (const [key] of candidates) {
+    if (++batchTick % IMPORT_BATCH === 0) yield;
     if (val.edgesByKey.has(key)) continue;
     const identity = work.edges.get(key);
     const open = identity && identity.existence.find((iv) => iv.to === null);
@@ -257,7 +291,9 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
   }
 
   // -- implied projection (E33/E52): recompute deterministically --
+  yield;
   recomputeProjections(work, registry);
+  yield;
   } catch (err) {
     if (err instanceof BundleValidationError) {
       return { status: 'rejected', reason: err.message, report };
