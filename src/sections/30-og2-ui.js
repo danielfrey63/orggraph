@@ -394,6 +394,13 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
     setStatus('Keine automatischen Wurzeln bestimmbar (Zyklus-Verdacht) — bitte Root über die Suche wählen.');
   } else if (res.mode === 'diagnosis' && projection.needsRoot) {
     setStatus('Keine View-Konfiguration — Diagnoseansicht: bitte Root über die Suche wählen.');
+  } else if (og2.store && Array.isArray(og2.store.conflicts) && og2.store.conflicts.some(c => !c.resolved)) {
+    // Open tie-breaker conflicts are visible, never silent (FR-5.6): the UI
+    // shows the count, keeps the list inspectable and asks for a
+    // SOURCE_PRECEDENCE decision (follow-up via applyPrecedenceToConflicts).
+    const openConflicts = og2.store.conflicts.filter(c => !c.resolved);
+    setStatus(`${openConflicts.length} offene Quell-Konflikte (Tie-Breaker) — SOURCE_PRECEDENCE festlegen; Details in der Konsole (FR-5.6).`);
+    console.info('Offene Quell-Konflikte (FR-5.6):', openConflicts);
   }
 
   og2.lastProjection = { truncated: projection.truncated, skipped: projection.skipped, counters: projection.counters };

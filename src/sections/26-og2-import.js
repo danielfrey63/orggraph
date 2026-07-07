@@ -500,7 +500,7 @@ function mergeProp(identity, prop, value, ctx) {
     // deterministic tie-breaker: lexicographically smallest source (FR-5.6);
     // always persisted as an OPEN source conflict.
     const winner = source < open.source ? source : open.source;
-    work.conflicts.push({ identity: propKeyOf(identity, prop), prop, instant: t, a: { source: open.source, value: open.value }, b: { source, value }, winner });
+    work.conflicts.push({ identity: propKeyOf(identity, prop), identityKey: iKey, prop, instant: t, a: { source: open.source, value: open.value }, b: { source, value }, winner, resolved: null });
     report.conflicts.push({ kind: 'tie-breaker', identity: propKeyOf(identity, prop), winner, instant: t });
     if (winner === source) {
       counters.f++;
@@ -688,6 +688,47 @@ function summarizeEntry(entry) {
 
 function swapStore(store, work) {
   for (const k of Object.keys(work)) store[k] = work[k];
+}
+
+// --- SOURCE_PRECEDENCE follow-up operation (FR-5.6, AK 80) ------------------
+// The tie-breaker is deliberate makeshift determinism, never an authority
+// statement: every equal-instant conflict it resolved is persisted OPEN. A
+// later precedence stays prospective (AK 73) — with ONE narrowly scoped,
+// audited exception: this single operation re-decides EXACTLY the persisted
+// tie-breaker intervals by the new precedence. Never a general recomputation;
+// all other timelines stay untouched.
+export function applyPrecedenceToConflicts(store, opts = {}) {
+  const prec = store.precedence;
+  if (!prec || !prec.length) return { status: 'rejected', reason: 'no SOURCE_PRECEDENCE configured (FR-8.10)' };
+  const work = deepClone(store);
+  let adjusted = 0, confirmed = 0, skipped = 0;
+  const details = [];
+  for (const c of work.conflicts) {
+    if (c.resolved) continue;
+    if (!prec.includes(c.a.source) || !prec.includes(c.b.source)) { skipped++; details.push({ conflict: c.identity, action: 'skipped', reason: 'a source is not ranked' }); continue; }
+    const preferred = prec.indexOf(c.a.source) < prec.indexOf(c.b.source) ? c.a : c.b;
+    if (preferred.source === c.winner) {
+      c.resolved = { action: 'confirmed', at: opts.at ?? null, precedence: [...prec] };
+      confirmed++;
+      details.push({ conflict: c.identity, action: 'confirmed' });
+      continue;
+    }
+    // adjust EXACTLY the interval the tie-breaker decided: it must still
+    // carry the tie-breaker stand — younger facts stay untouched.
+    const winnerVal = c.winner === c.a.source ? c.a.value : c.b.value;
+    const identity = work.nodes.get(c.identityKey) ?? work.edges.get(c.identityKey);
+    const tl = identity && identity.timelines.get(c.prop);
+    const iv = tl && tl.find((x) => x.source === c.winner && x.instant === c.instant && x.value === winnerVal
+      && instantCompare(x.from, c.instant) <= 0 && (x.to === null || instantCompare(c.instant, x.to) < 0));
+    if (!iv) { skipped++; details.push({ conflict: c.identity, action: 'skipped', reason: 'interval no longer carries the tie-breaker stand' }); continue; }
+    iv.value = preferred.value;
+    iv.source = preferred.source;
+    c.resolved = { action: 'adjusted', at: opts.at ?? null, precedence: [...prec] };
+    adjusted++;
+    details.push({ conflict: c.identity, action: 'adjusted', value: preferred.value, source: preferred.source });
+  }
+  swapStore(store, work);
+  return { status: 'applied', adjusted, confirmed, skipped, details };
 }
 
 // --- import revision (FR-6.9b/E68) -----------------------------------------

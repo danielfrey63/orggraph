@@ -3,8 +3,9 @@ import { canonicalJson } from '../src/sections/21-og2-util.js';
 import { createTenantStore, nodeOpenNow, openExistence, edgeKeyOf } from '../src/sections/23-og2-store.js';
 import {
   importSnapshot, reviseImport, compensateRevisionPosition,
-  acknowledgeRevisionPosition, validateJournalFormat,
+  acknowledgeRevisionPosition, validateJournalFormat, applyPrecedenceToConflicts,
 } from '../src/sections/26-og2-import.js';
+import { recordStandAt } from '../src/sections/23-og2-store.js';
 
 // Import revision (FR-6.9b/E68): full-delta rollback, dependency groups,
 // rest-list exits, journal format. Type names in fixtures are data-level
@@ -317,6 +318,73 @@ describe('AK 67 — rest-list exits (FR-6.9b)', () => {
     const again = importSnapshot(store, REGISTRY, faultySnap(), YES);
     expect(again.status).toBe('rejected');
     expect(again.reason).toContain('consumed');
+  });
+});
+
+describe('AK 73/80 — prospective precedence + audited follow-up operation (FR-5.6)', () => {
+  const tieBreak = () => {
+    // equal instant, two sources, differing value: 'alpha' wins lexicographically
+    const stamp = T2;
+    const a = mkSnap('zeta', stamp, { nodeTypes: ['Person'], edgeTypes: [] },
+      [{ id: 'p1', type: 'Person', label: 'Boss', props: { pensum: 70 } }], []);
+    const b = mkSnap('alpha', stamp, { nodeTypes: ['Person'], edgeTypes: [] },
+      [{ id: 'p1', type: 'Person', label: 'Boss', props: { pensum: 90 } }], []);
+    expect(importSnapshot(store, REGISTRY, a, YES).status).toBe('imported');
+    expect(importSnapshot(store, REGISTRY, b, YES).status).toBe('imported');
+    expect(store.conflicts.length).toBe(1);
+    expect(store.conflicts[0].winner).toBe('alpha');
+  };
+
+  it('AK 73: changing SOURCE_PRECEDENCE leaves existing timelines untouched; entries carry the used stand', () => {
+    tieBreak();
+    const before = dataStand(store);
+    store.precedence = ['zeta', 'alpha', 'hrm'];
+    expect(dataStand(store)).toBe(before); // purely prospective
+    expect(recordStandAt(store.nodes.get('p1'), T3).props.pensum).toBe(90);
+    // the next import resolves by the NEW stand and audits it on its entry
+    const c = mkSnap('zeta', T3, { nodeTypes: ['Person'], edgeTypes: [] },
+      [{ id: 'p1', type: 'Person', label: 'Boss', props: { pensum: 75 } }], []);
+    expect(importSnapshot(store, REGISTRY, c, YES).status).toBe('imported');
+    expect(recordStandAt(store.nodes.get('p1'), '20260401-0000').props.pensum).toBe(75);
+    const entry = [...store.snapshots.values()].find((e) => e.stamp === T3);
+    expect(entry.precedenceUsed).toEqual(['zeta', 'alpha', 'hrm']);
+  });
+
+  it('AK 80: the follow-up operation re-decides exactly the tie-breaker intervals, nothing else', () => {
+    tieBreak();
+    store.precedence = ['zeta', 'alpha', 'hrm']; // zeta now outranks alpha
+    const p2Before = canonicalJson([...store.nodes.get('p2').timelines.entries()]);
+    const res = applyPrecedenceToConflicts(store, { at: T3 });
+    expect(res.status).toBe('applied');
+    expect(res.adjusted).toBe(1);
+    // exactly the conflicted interval now carries zeta's value…
+    expect(recordStandAt(store.nodes.get('p1'), T3).props.pensum).toBe(70);
+    // …and the conflict is audited as resolved with the applied precedence
+    expect(store.conflicts[0].resolved).toMatchObject({ action: 'adjusted', at: T3, precedence: ['zeta', 'alpha', 'hrm'] });
+    // all other timelines unchanged
+    expect(canonicalJson([...store.nodes.get('p2').timelines.entries()])).toBe(p2Before);
+    // idempotent: a second run has nothing left to adjust
+    expect(applyPrecedenceToConflicts(store, { at: T3 })).toMatchObject({ adjusted: 0, confirmed: 0 });
+  });
+
+  it('AK 80: a since-overwritten tie-breaker interval is skipped, never recomputed', () => {
+    tieBreak();
+    // a younger alpha import overwrites the conflicted value first
+    const younger = mkSnap('alpha', T3, { nodeTypes: ['Person'], edgeTypes: [] },
+      [{ id: 'p1', type: 'Person', label: 'Boss', props: { pensum: 95 } }], []);
+    expect(importSnapshot(store, REGISTRY, younger, YES).status).toBe('imported');
+    store.precedence = ['zeta', 'alpha'];
+    const res = applyPrecedenceToConflicts(store, { at: T3 });
+    // the tie-breaker interval [T2..T3) still carries the stand -> adjusted,
+    // but the younger open interval stays untouched
+    expect(res.adjusted).toBe(1);
+    expect(recordStandAt(store.nodes.get('p1'), '20260215-0000').props.pensum).toBe(70);
+    expect(recordStandAt(store.nodes.get('p1'), '20260401-0000').props.pensum).toBe(95);
+  });
+
+  it('rejects without a configured precedence', () => {
+    tieBreak();
+    expect(applyPrecedenceToConflicts(store).status).toBe('rejected');
   });
 });
 
