@@ -97,6 +97,13 @@ export async function loadData() {
   // config is named explicitly so a stale profile never fails silently.
   const legacyEnvStored = envConfig && (envConfig.DATA_ATTRIBUTES_URL !== undefined
     || envConfig.DATA_ATTRIBUTES_DIR !== undefined);
+  // A v2 env without a tenant registry is the most likely half-loaded state
+  // (live-test finding): name the missing piece, never the generic hint.
+  const registryStored = await getStoredJson(KEY_REGISTRY);
+  if (!legacyEnvStored && envConfig && envConfig.VIEWS && !registryStored) {
+    setStatus('Typ-Registry fehlt: bitte schema/registry.json zusätzlich per Drag & Drop laden — env und Snapshots sind gespeichert und warten auf den Import.');
+    return false;
+  }
   if (legacyEnvStored) {
     setStatus('Legacy-v1-Konfiguration im Profil erkannt — bitte Daten zurücksetzen (Footer) und die migrierte env.json samt Registry und Snapshot laden (scripts/migrate-legacy.mjs).');
   } else {

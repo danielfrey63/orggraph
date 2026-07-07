@@ -64,6 +64,19 @@ test('file:// drop intake: registry + env + small snapshot boot into a rendered 
   expect(relevant, `console errors:\n${relevant.join('\n')}`).toEqual([]);
 });
 
+test('file:// drop intake: env+snapshot without a registry names the missing piece', async ({ page }) => {
+  test.setTimeout(60_000);
+  page.on('dialog', (d) => d.accept());
+  await page.goto(appUrl);
+  await expect(page.locator('.dz-overlay')).toBeVisible();
+  await dropFiles(page, [DROP_FILES[1], DROP_FILES[2]]); // env + snapshot only
+  // after the self-reload the boot must say WHAT is missing, not the generic hint
+  await expect(page.locator('#status')).toContainText('Typ-Registry fehlt', { timeout: 30_000 });
+  // dropping the registry afterwards completes the tenant
+  await dropFiles(page, [DROP_FILES[0]]);
+  await expect(page.locator('g.nodes circle:not(.attribute-circle)')).toHaveCount(5, { timeout: 60_000 });
+});
+
 test('file:// drop intake: empty and legacy drops never end silently', async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto(appUrl);
