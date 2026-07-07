@@ -5,7 +5,7 @@
 // untouched (E47).
 import { canonicalJson, deepClone, instantCompare } from './21-og2-util.js';
 import { identityPropsOf, propDeclsOf } from './22-og2-registry.js';
-import { closeOpen, createEdgeIdentity, createNodeIdentity, edgeKeyOf, insertHistorical, nodeOpenNow, openExistence, openInterval, startInterval } from './23-og2-store.js';
+import { closeOpen, createEdgeIdentity, createNodeIdentity, edgeKeyOf, insertHistorical, nodeOpenNow, nodeValidAt, openExistence, openInterval, startInterval } from './23-og2-store.js';
 import { edgeDeletionCandidates, importKeyOf, observationFingerprint, scopeFingerprint } from './24-og2-scope.js';
 import { contentHashOf, validateSnapshot } from './25-og2-validate.js';
 
@@ -36,11 +36,23 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
   const importKey = importKeyOf(meta);
   const hash = contentHashOf(snapshot);
   const existing = store.snapshots.get(importKey);
+  // Revision end states (FR-6.9b): a fully revised entry frees the identity
+  // for a deliberate re-import; acknowledged or partial revisions leave it
+  // CONSUMED — never a re-import against a half-rolled-back base.
+  if (existing && existing.revisionStatus === 'revidiert-quittiert') {
+    return { status: 'rejected', reason: 'import identity consumed: revised with acknowledgements (FR-6.9b) — re-import against the changed base is excluded', report };
+  }
+  if (existing && existing.revisionStatus === 'teilrevidiert') {
+    return { status: 'rejected', reason: 'import identity consumed: entry is partially revised (FR-6.9b) — resolve the rest list first', report };
+  }
   if (existing && existing.revisionStatus !== 'revidiert') {
     if (existing.contentHash === hash) {
       return { status: 'noop', reason: 'already imported', priorEntry: summarizeEntry(existing), report };
     }
     return { status: 'rejected', reason: 'identity conflict: same full import identity with different content (E36)', report };
+  }
+  if (existing && existing.revisionStatus === 'revidiert') {
+    report.warnings.push('prior import of this identity was revised (FR-6.9b) — importing anew, not a no-op');
   }
   const scopeFp = scopeFingerprint(scope);
   if (val.kind === 'full') {
@@ -133,11 +145,18 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
   const journal = [];
   let posCounter = 0;
   const counters = { a: 0, b: 0, c: 0, d: 0, e: 0, f: 0 };
-  const jot = (deltaKind, identityKey, before, after, groupId = null) => {
+  // Normative journal position (FR-6.9b, AK 86): identity key, delta kind,
+  // timeline fragment before/after, provenance delta, preconditions,
+  // dependency group, status, audit. `prop` names the affected timeline for
+  // property-level positions; the revision works EXCLUSIVELY from these fields.
+  const jot = (deltaKind, identityKey, before, after, groupId = null, extra = {}) => {
     journal.push({
       posId: `p${++posCounter}`, identityKey, deltaKind,
+      prop: extra.prop ?? null,
       before: before === undefined ? null : before, after: after === undefined ? null : after,
-      preconditions: { instant: t }, groupId, status: 'offen',
+      provDelta: extra.provDelta ?? null,
+      preconditions: { instant: t },
+      groupId, status: 'offen',
       audit: { operation: 'import', at: t },
     });
   };
@@ -165,8 +184,12 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
     const open = openExistence(identity);
     if (open) {
       const before = { ...open.provenance };
-      open.provenance[source] = latestInstant(open.provenance[source], t);
-      if (before[source] === undefined) jot('provenance-confirm', id, before, { ...open.provenance });
+      const prevInst = open.provenance[source];
+      open.provenance[source] = latestInstant(prevInst, t);
+      if (open.provenance[source] !== prevInst) {
+        jot('provenance-confirm', id, { provenance: before }, { provenance: { ...open.provenance } }, null,
+          { provDelta: { source, from: prevInst ?? null, to: open.provenance[source] } });
+      }
     } else if (inNodeScope) {
       identity.existence.push({ from: t, to: null, provenance: { [source]: t } });
       identity.existence.sort((a, b) => instantCompare(a.from, b.from));
@@ -210,8 +233,12 @@ export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HO
     const open = identity.existence.find((iv) => iv.to === null);
     if (open) {
       const before = { ...open.provenance };
-      open.provenance[source] = latestInstant(open.provenance[source], t);
-      if (before[source] === undefined) jot('provenance-confirm', key, before, { ...open.provenance });
+      const prevInst = open.provenance[source];
+      open.provenance[source] = latestInstant(prevInst, t);
+      if (open.provenance[source] !== prevInst) {
+        jot('provenance-confirm', key, { provenance: before }, { provenance: { ...open.provenance } }, null,
+          { provDelta: { source, from: prevInst ?? null, to: open.provenance[source] } });
+      }
     } else {
       identity.existence.push({ from: t, to: null, provenance: { [source]: t } });
       identity.existence.sort((a, b) => instantCompare(a.from, b.from));
@@ -403,24 +430,35 @@ function mergeRecordProps(identity, rec, fullStand, ctx, edgeDecl = null) {
     if (open && open.source === ctx.source && instantCompare(ctx.t, open.instant) > 0) {
       closeOpen(tl, ctx.t);
       ctx.counters.b++;
-      ctx.jot('prop-end', propKeyOf(identity, prop), { value: open.value, source: open.source }, null);
+      ctx.jot('prop-end', identityKeyOf(identity), { from: open.from, value: open.value, source: open.source, instant: open.instant }, null, null, { prop });
     }
   }
 }
 
 function mergeProp(identity, prop, value, ctx) {
   const { work, source, t, counters, report, jot } = ctx;
+  const iKey = identityKeyOf(identity);
   if (!identity.timelines.has(prop)) identity.timelines.set(prop, []);
   const tl = identity.timelines.get(prop);
   const open = openInterval(tl);
+  const jotInsert = () => {
+    if (!insertHistorical(tl, t, value, source, t)) return;
+    const ins = tl.find((iv) => iv.from === t && iv.source === source);
+    jot('prop-insert', iKey, null, { from: ins.from, to: ins.to, value, source }, null, { prop });
+  };
   if (!open) {
     const last = tl[tl.length - 1];
-    if (!last || instantCompare(t, last.to) >= 0) startInterval(tl, t, value, source);
-    else insertHistorical(tl, t, value, source, t);
+    if (!last || instantCompare(t, last.to) >= 0) {
+      startInterval(tl, t, value, source);
+      jot('prop-start', iKey, null, { from: t, value, source }, null, { prop });
+    } else jotInsert();
     return;
   }
   if (open.value === value) {
-    if (open.source === source && instantCompare(t, open.instant) > 0) open.instant = t; // confirmation
+    if (open.source === source && instantCompare(t, open.instant) > 0) {
+      jot('prop-confirm', iKey, { from: open.from, value, instant: open.instant }, { instant: t }, null, { prop });
+      open.instant = t; // confirmation
+    }
     return;
   }
   // differing value
@@ -428,13 +466,13 @@ function mergeProp(identity, prop, value, ctx) {
     if (instantCompare(t, open.instant) > 0) {
       closeOpen(tl, t); startInterval(tl, t, value, source);
       counters.f++;
-      jot('value-change', propKeyOf(identity, prop), { value: open.value }, { value });
+      jot('value-change', iKey, { from: open.from, value: open.value, source: open.source, instant: open.instant }, { value, source }, null, { prop });
     } else if (instantCompare(t, open.instant) === 0) {
       // same source, same instant, differing value: validation error (E65) —
       // surfaced as hard error; caller treats a thrown error as rejection.
       throw new BundleValidationError(`same-instant differing contribution of source "${source}" for ${propKeyOf(identity, prop)} (E65)`);
     } else {
-      insertHistorical(tl, t, value, source, t);
+      jotInsert();
     }
     return;
   }
@@ -445,9 +483,11 @@ function mergeProp(identity, prop, value, ctx) {
       report.conflicts.push({ kind: 'precedence-discarded', identity: propKeyOf(identity, prop), kept: open.source, discarded: source, instant: t });
       return;
     }
-    closeOpen(tl, t) || (tl.splice(tl.indexOf(open), 1)); startInterval(tl, t, value, source);
+    const closed = closeOpen(tl, t);
+    if (!closed) tl.splice(tl.indexOf(open), 1);
+    startInterval(tl, t, value, source);
     counters.f++;
-    jot('value-change', propKeyOf(identity, prop), { value: open.value, source: open.source }, { value, source });
+    jot('value-change', iKey, { from: open.from, value: open.value, source: open.source, instant: open.instant, removed: !closed }, { value, source }, null, { prop });
     report.conflicts.push({ kind: 'precedence-won', identity: propKeyOf(identity, prop), kept: source, overridden: open.source, instant: t });
     return;
   }
@@ -455,21 +495,41 @@ function mergeProp(identity, prop, value, ctx) {
   if (cmp > 0) {
     closeOpen(tl, t); startInterval(tl, t, value, source);
     counters.f++;
-    jot('value-change', propKeyOf(identity, prop), { value: open.value, source: open.source }, { value, source });
+    jot('value-change', iKey, { from: open.from, value: open.value, source: open.source, instant: open.instant }, { value, source }, null, { prop });
   } else if (cmp === 0) {
     // deterministic tie-breaker: lexicographically smallest source (FR-5.6);
     // always persisted as an OPEN source conflict.
     const winner = source < open.source ? source : open.source;
     work.conflicts.push({ identity: propKeyOf(identity, prop), prop, instant: t, a: { source: open.source, value: open.value }, b: { source, value }, winner });
     report.conflicts.push({ kind: 'tie-breaker', identity: propKeyOf(identity, prop), winner, instant: t });
-    if (winner === source) { open.value = value; open.source = source; open.instant = t; }
+    if (winner === source) {
+      counters.f++;
+      jot('value-change', iKey, { from: open.from, value: open.value, source: open.source, instant: open.instant, inPlace: true }, { value, source, instant: t }, null, { prop });
+      open.value = value; open.source = source; open.instant = t;
+    }
   } else {
-    insertHistorical(tl, t, value, source, t);
+    jotInsert();
   }
 }
 
 function propKeyOf(identity, prop) {
   return `${identity.key || identity.id}#${prop}`;
+}
+
+function identityKeyOf(identity) {
+  return identity.key || identity.id;
+}
+
+// Close every open property timeline at t and return the closed fragments —
+// the journal needs them so the revision can restore the exact pre-import
+// stand without recomputation (FR-6.9b).
+function closeTimelines(identity, t) {
+  const closedProps = [];
+  for (const [prop, tl] of identity.timelines) {
+    const o = openInterval(tl);
+    if (o && closeOpen(tl, t)) closedProps.push({ prop, from: o.from, value: o.value, source: o.source, instant: o.instant });
+  }
+  return closedProps;
 }
 
 function withdrawAndMaybeClose(identity, open, authoritySources, ctx) {
@@ -479,8 +539,7 @@ function withdrawAndMaybeClose(identity, open, authoritySources, ctx) {
   if (Object.keys(open.provenance).length === 0) {
     open.to = t;
     counters.d++;
-    jot('node-close', identity.id, { openSince: open.from }, { closedAt: t }, groupId);
-    for (const tl of identity.timelines.values()) closeOpen(tl, t);
+    jot('node-close', identity.id, { openSince: open.from, closedProps: closeTimelines(identity, t) }, { closedAt: t }, groupId);
     // cascade (E35): close all open edges with this node as endpoint
     for (const edge of work.edges.values()) {
       if (edge.source !== identity.id && edge.target !== identity.id) continue;
@@ -488,8 +547,7 @@ function withdrawAndMaybeClose(identity, open, authoritySources, ctx) {
       if (!eOpen) continue;
       eOpen.to = t;
       counters.c++;
-      jot('cascade-close', edge.key, { openSince: eOpen.from }, { closedAt: t }, groupId);
-      for (const tl of edge.timelines.values()) closeOpen(tl, t);
+      jot('cascade-close', edge.key, { openSince: eOpen.from, provenance: { ...eOpen.provenance }, closedProps: closeTimelines(edge, t) }, { closedAt: t }, groupId);
     }
   }
 }
@@ -501,8 +559,7 @@ function withdrawEdge(identity, open, authoritySources, ctx) {
   if (Object.keys(open.provenance).length === 0) {
     open.to = t;
     counters.c++;
-    jot('edge-close', identity.key, { openSince: open.from }, { closedAt: t }, groupId);
-    for (const tl of identity.timelines.values()) closeOpen(tl, t);
+    jot('edge-close', identity.key, { openSince: open.from, closedProps: closeTimelines(identity, t) }, { closedAt: t }, groupId);
   }
 }
 
@@ -513,9 +570,11 @@ function withdrawProvenance(identityKey, open, authoritySources, ctx, groupId) {
   else if (Array.isArray(authoritySources)) toWithdraw.push(...authoritySources.filter((s) => open.provenance[s] !== undefined));
   for (const s of new Set(toWithdraw)) {
     if (open.provenance[s] === undefined) continue;
+    const prevInst = open.provenance[s];
     delete open.provenance[s];
     counters.a++;
-    jot('provenance-withdrawal', identityKey, { source: s }, null, groupId);
+    jot('provenance-withdrawal', identityKey, { source: s, instant: prevInst }, null, groupId,
+      { provDelta: { source: s, from: prevInst, to: null } });
   }
 }
 
@@ -629,4 +688,400 @@ function summarizeEntry(entry) {
 
 function swapStore(store, work) {
   for (const k of Object.keys(work)) store[k] = work[k];
+}
+
+// --- import revision (FR-6.9b/E68) -----------------------------------------
+// The operation "revise import" on the snapshots-registry entry takes back
+// exactly the FULL journalled delta: timelines and provenances strictly
+// journal-driven (never a recomputation); only projection contributions of
+// implied edges are re-derived from the REMAINING primary facts (E33/E52).
+// Dependent positions form a group (E35) and are taken back or skipped
+// together; the whole run is one atomic transaction on a clone (E47).
+
+export function reviseImport(store, registry, importKey, opts = {}) {
+  const entry = store.snapshots.get(importKey);
+  if (!entry || !Array.isArray(entry.journal)) return { status: 'rejected', reason: 'unknown snapshots-registry entry or entry without journal (FR-6.9b)' };
+  if (entry.revisionStatus === 'revidiert' || entry.revisionStatus === 'revidiert-quittiert') {
+    return { status: 'rejected', reason: 'entry is already fully revised (FR-6.9b)' };
+  }
+  const work = deepClone(store);
+  const wEntry = work.snapshots.get(importKey);
+  // repeatable: a repeated run retries EXCLUSIVELY the rest list (AK 67a)
+  const pending = wEntry.journal.filter((p) => p.status === 'offen' || p.status === 'blockiert');
+  const createdPending = new Set(pending.filter((p) => p.deltaKind === 'created').map((p) => p.identityKey));
+  const groups = buildRevisionGroups(work, pending);
+  const blocked = [];
+  const affectedNodeIds = new Set();
+  let rolledBack = 0;
+  for (const positions of groups) {
+    let blocker = null;
+    for (const p of positions) {
+      const why = checkRevisionPrecondition(work, wEntry, p, createdPending);
+      if (why) { blocker = { posId: p.posId, identityKey: p.identityKey, deviation: why }; break; }
+    }
+    if (blocker) {
+      for (const p of positions) { p.status = 'blockiert'; p.blockedBy = blocker; }
+      blocked.push(blocker);
+      continue;
+    }
+    // roll back in reverse journal order so provenance withdrawals restore
+    // AFTER their closure re-opened the interval they belong to.
+    for (const p of [...positions].sort((a, b) => Number(b.posId.slice(1)) - Number(a.posId.slice(1)))) {
+      const wasNode = work.nodes.has(p.identityKey);
+      const edgeBefore = work.edges.get(p.identityKey);
+      rollbackPosition(work, wEntry, p);
+      p.status = 'zurückgenommen';
+      p.audit = { ...p.audit, revisedAt: opts.at ?? null };
+      rolledBack++;
+      if (wasNode) affectedNodeIds.add(p.identityKey);
+      else if (edgeBefore) { affectedNodeIds.add(edgeBefore.source); affectedNodeIds.add(edgeBefore.target); }
+    }
+  }
+  // projection contributions are NOT replayed from the journal: re-derive
+  // deterministically from the remaining valid primary facts (E33/E52).
+  recomputeProjections(work, registry);
+  cleanupProjectionRemnants(work);
+  const violation = checkEndpointInvariant(work, affectedNodeIds);
+  if (violation) {
+    return { status: 'aborted', reason: `revision aborted — endpoint/reference invariant would be violated (E35): ${violation}`, blocked };
+  }
+  finalizeRevisionStatus(wEntry, opts.at ?? null);
+  swapStore(store, work);
+  return {
+    status: wEntry.revisionStatus === 'teilrevidiert' ? 'partial' : 'revised',
+    revisionStatus: wEntry.revisionStatus,
+    rolledBack,
+    restList: wEntry.revisionAudit.restList,
+  };
+}
+
+// Rest-list exit (b): compensating application — ONLY under machine-checkable
+// preconditions (interval end carries the import instant, the following range
+// up to the next occupied fact is free); otherwise the option is disabled.
+export function compensateRevisionPosition(store, registry, importKey, posId, opts = {}) {
+  const entry = store.snapshots.get(importKey);
+  if (!entry || !Array.isArray(entry.journal)) return { status: 'rejected', reason: 'unknown snapshots-registry entry' };
+  const pos = entry.journal.find((p) => p.posId === posId);
+  if (!pos) return { status: 'rejected', reason: 'unknown journal position' };
+  if (pos.status !== 'blockiert') return { status: 'rejected', reason: 'only blocked rest-list positions can be compensated' };
+  if (!['prop-end', 'node-close', 'edge-close', 'cascade-close'].includes(pos.deltaKind)) {
+    return { status: 'rejected', reason: 'not compensable: position is not a closure or ending (FR-6.9b) — option disabled' };
+  }
+  const work = deepClone(store);
+  const wEntry = work.snapshots.get(importKey);
+  const p = wEntry.journal.find((x) => x.posId === posId);
+  const t = wEntry.stamp;
+  const identity = work.nodes.get(p.identityKey) ?? work.edges.get(p.identityKey);
+  if (!identity) return { status: 'rejected', reason: 'identity no longer exists — option disabled' };
+  // re-open exactly the unoccupied range (FR-5.2b): never touches foreign or
+  // younger contributions; ranges occupied right at t disable the option.
+  const reopen = (timeline, from) => {
+    const iv = timeline.find((x) => x.from === from && x.to === t);
+    if (!iv) return false;
+    if (timeline.some((x) => x !== iv && instantCompare(x.from, t) === 0)) return false;
+    let next = null;
+    for (const x of timeline) if (instantCompare(x.from, t) > 0 && (next === null || instantCompare(x.from, next.from) < 0)) next = x;
+    iv.to = next ? next.from : null;
+    return true;
+  };
+  if (p.deltaKind === 'prop-end') {
+    const tl = identity.timelines.get(p.prop);
+    if (!tl || !reopen(tl, p.before.from)) {
+      return { status: 'rejected', reason: 'machine preconditions not met (interval end must carry the import instant, following range must be free) — option disabled' };
+    }
+  } else {
+    if (!reopen(identity.existence, p.before.openSince)) {
+      return { status: 'rejected', reason: 'machine preconditions not met (interval end must carry the import instant, following range must be free) — option disabled' };
+    }
+    for (const cp of p.before.closedProps || []) {
+      const tl = identity.timelines.get(cp.prop);
+      if (tl) reopen(tl, cp.from); // interval-exact per timeline; occupied ranges stay untouched
+    }
+  }
+  p.status = 'kompensiert';
+  p.audit = { ...p.audit, operation: 'compensate', compensatedAt: opts.at ?? null };
+  recomputeProjections(work, registry);
+  finalizeRevisionStatus(wEntry, opts.at ?? null);
+  swapStore(store, work);
+  return { status: 'compensated', revisionStatus: wEntry.revisionStatus };
+}
+
+// Rest-list exit (c): audited acknowledgement — the position counts as
+// processed, the current stand stays unchanged, the import identity stays
+// CONSUMED once the rest list is empty (FR-6.9b end state 2).
+export function acknowledgeRevisionPosition(store, importKey, posId, opts = {}) {
+  const entry = store.snapshots.get(importKey);
+  if (!entry || !Array.isArray(entry.journal)) return { status: 'rejected', reason: 'unknown snapshots-registry entry' };
+  const pos = entry.journal.find((p) => p.posId === posId);
+  if (!pos) return { status: 'rejected', reason: 'unknown journal position' };
+  if (pos.status !== 'blockiert') return { status: 'rejected', reason: 'only blocked rest-list positions can be acknowledged' };
+  const work = deepClone(store);
+  const wEntry = work.snapshots.get(importKey);
+  const p = wEntry.journal.find((x) => x.posId === posId);
+  p.status = 'quittiert';
+  p.audit = { ...p.audit, operation: 'acknowledge', acknowledgedAt: opts.at ?? null };
+  finalizeRevisionStatus(wEntry, opts.at ?? null);
+  swapStore(store, work);
+  return { status: 'acknowledged', revisionStatus: wEntry.revisionStatus };
+}
+
+// Automated check of the persisted journal form (AK 86): the revision works
+// exclusively from these normative fields.
+export function validateJournalFormat(entry) {
+  const FIELDS = ['posId', 'identityKey', 'deltaKind', 'prop', 'before', 'after', 'provDelta', 'preconditions', 'groupId', 'status', 'audit'];
+  const STATUSES = ['offen', 'zurückgenommen', 'kompensiert', 'quittiert', 'blockiert'];
+  if (!entry || !Array.isArray(entry.journal)) return ['entry has no journal array (FR-6.9b)'];
+  const errors = [];
+  for (const p of entry.journal) {
+    for (const f of FIELDS) if (!(f in p)) errors.push(`${p.posId ?? '?'}: missing normative field "${f}"`);
+    if (!p.preconditions || p.preconditions.instant === undefined) errors.push(`${p.posId}: preconditions must carry the import instant`);
+    if (!STATUSES.includes(p.status)) errors.push(`${p.posId}: invalid status "${p.status}"`);
+    if (!p.audit || !p.audit.operation || p.audit.at === undefined) errors.push(`${p.posId}: incomplete audit`);
+  }
+  return errors;
+}
+
+function finalizeRevisionStatus(entry, at) {
+  const rest = entry.journal.filter((p) => p.status === 'offen' || p.status === 'blockiert');
+  if (rest.length) entry.revisionStatus = 'teilrevidiert';
+  else entry.revisionStatus = entry.journal.some((p) => p.status === 'quittiert') ? 'revidiert-quittiert' : 'revidiert';
+  const perStatus = {};
+  for (const p of entry.journal) perStatus[p.status] = (perStatus[p.status] || 0) + 1;
+  entry.revisionAudit = {
+    at: at ?? null,
+    status: entry.revisionStatus,
+    perStatus,
+    acknowledged: entry.journal.filter((p) => p.status === 'quittiert').map((p) => p.posId),
+    restList: rest.map((p) => ({ posId: p.posId, identityKey: p.identityKey, deltaKind: p.deltaKind, deviation: p.blockedBy ? p.blockedBy.deviation : null })),
+  };
+}
+
+// Dependency groups (E35): the import's groupId, unioned so that (a) all
+// positions of the same identity and (b) edge positions and the node
+// positions of their endpoints are taken back or skipped TOGETHER.
+function buildRevisionGroups(work, pending) {
+  const keyOf = (p) => p.groupId || p.posId;
+  const parent = new Map();
+  for (const p of pending) if (!parent.has(keyOf(p))) parent.set(keyOf(p), keyOf(p));
+  const find = (k) => { while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); } return k; };
+  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+  const idGroup = new Map();
+  for (const p of pending) {
+    if (idGroup.has(p.identityKey)) union(keyOf(p), idGroup.get(p.identityKey));
+    else idGroup.set(p.identityKey, keyOf(p));
+  }
+  for (const p of pending) {
+    const edge = work.edges.get(p.identityKey);
+    if (!edge) continue;
+    for (const ep of [edge.source, edge.target]) if (idGroup.has(ep)) union(keyOf(p), idGroup.get(ep));
+  }
+  const byRoot = new Map();
+  for (const p of pending) {
+    const r = find(keyOf(p));
+    if (!byRoot.has(r)) byRoot.set(r, []);
+    byRoot.get(r).push(p);
+  }
+  return [...byRoot.values()];
+}
+
+// "Since the import unchanged" per delta kind: the position's effect must
+// still be the youngest state of the affected timeline/provenance — any
+// deviation blocks the whole dependency group (skipped, reported).
+function checkRevisionPrecondition(work, entry, p, createdPending) {
+  const t = entry.stamp;
+  const src = entry.source;
+  const identity = work.nodes.get(p.identityKey) ?? work.edges.get(p.identityKey);
+  if (!identity) return 'identity no longer exists';
+  const tl = p.prop ? identity.timelines.get(p.prop) : null;
+  switch (p.deltaKind) {
+    case 'created': {
+      const open = openExistence(identity);
+      if (!open || identity.existence.length !== 1 || identity.existence[0].from !== t) return 'existence changed since the import (new version or closure)';
+      const provKeys = Object.keys(open.provenance);
+      if (provKeys.length !== 1 || provKeys[0] !== src || open.provenance[src] !== t) return 'foreign or newer provenance since the import';
+      for (const timeline of identity.timelines.values()) {
+        for (const iv of timeline) if (iv.source !== src || iv.instant !== t) return 'timelines changed since the import';
+      }
+      if (work.nodes.has(p.identityKey)) {
+        for (const edge of work.edges.values()) {
+          if (edge.existence.length === 0) continue; // pure projection contribution — re-derived per E33
+          const touches = edge.source === p.identityKey || edge.target === p.identityKey || edgeReferencesNode(edge, p.identityKey);
+          if (touches && !createdPending.has(edge.key)) return `dependent edge or reference exists that this revision does not remove (E35): ${edge.key}`;
+        }
+      }
+      return null;
+    }
+    case 'reactivated': {
+      const iv = identity.existence.find((x) => x.from === t && x.to === null);
+      if (!iv) return 'reactivated interval changed since the import';
+      const provKeys = Object.keys(iv.provenance);
+      if (provKeys.length !== 1 || provKeys[0] !== src || iv.provenance[src] !== t) return 'provenance changed since the import';
+      return null;
+    }
+    case 'provenance-confirm': {
+      const open = openExistence(identity);
+      if (!open) return 'identity closed since the import';
+      if (open.provenance[p.provDelta.source] !== p.provDelta.to) return 'provenance changed since the import';
+      return null;
+    }
+    case 'provenance-withdrawal': {
+      const iv = openExistence(identity) ?? identity.existence.find((x) => x.to === t);
+      if (!iv) return 'existence changed since the import';
+      if (iv.provenance[p.before.source] !== undefined) return 'source has redelivered since the import';
+      return null;
+    }
+    case 'prop-start': {
+      const open = tl && openInterval(tl);
+      if (!open || open.from !== t || open.value !== p.after.value || open.source !== src || open.instant !== t) return 'timeline changed since the import';
+      return null;
+    }
+    case 'prop-insert': {
+      const iv = tl && tl.find((x) => x.from === p.after.from && x.to === p.after.to && x.source === p.after.source && x.value === p.after.value);
+      return iv ? null : 'inserted interval changed since the import';
+    }
+    case 'prop-confirm': {
+      const open = tl && openInterval(tl);
+      if (!open || open.from !== p.before.from || open.instant !== t || open.source !== src) return 'timeline changed since the import';
+      return null;
+    }
+    case 'prop-end': {
+      const iv = tl && tl.find((x) => x.from === p.before.from && x.to === t && x.value === p.before.value && x.source === p.before.source);
+      if (!iv) return 'ended interval changed since the import';
+      if (tl.some((x) => instantCompare(x.from, t) >= 0)) return 'later fact occupies the range since the import';
+      return null;
+    }
+    case 'value-change': {
+      const open = tl && openInterval(tl);
+      if (p.before.inPlace) {
+        if (!open || open.from !== p.before.from || open.value !== p.after.value || open.source !== p.after.source || open.instant !== t) return 'timeline changed since the import';
+        return null;
+      }
+      if (!open || open.from !== t || open.value !== p.after.value || open.instant !== t) return 'changed value is no longer the open stand';
+      if (!p.before.removed) {
+        const prev = tl.find((x) => x.from === p.before.from && x.to === t);
+        if (!prev) return 'prior interval changed since the import';
+      }
+      return null;
+    }
+    case 'node-close': case 'edge-close': case 'cascade-close': {
+      const iv = identity.existence.find((x) => x.from === p.before.openSince && x.to === t);
+      if (!iv) return 'closed interval changed since the import';
+      if (identity.existence.some((x) => instantCompare(x.from, t) >= 0)) return 'identity was reactivated since the import';
+      for (const cp of p.before.closedProps || []) {
+        const ptl = identity.timelines.get(cp.prop);
+        const civ = ptl && ptl.find((x) => x.from === cp.from && x.to === t && x.value === cp.value);
+        if (!civ) return `closed property timeline changed since the import: ${cp.prop}`;
+        if (ptl.some((x) => instantCompare(x.from, t) >= 0)) return `later fact on "${cp.prop}" since the import`;
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+// Strictly journal-driven rollback of one position — never a recomputation.
+function rollbackPosition(work, entry, p) {
+  const t = entry.stamp;
+  const identity = work.nodes.get(p.identityKey) ?? work.edges.get(p.identityKey);
+  const tl = p.prop && identity ? identity.timelines.get(p.prop) : null;
+  switch (p.deltaKind) {
+    case 'created': {
+      if (work.nodes.has(p.identityKey)) work.nodes.delete(p.identityKey);
+      else work.edges.delete(p.identityKey);
+      break;
+    }
+    case 'reactivated': {
+      const idx = identity.existence.findIndex((x) => x.from === t && x.to === null);
+      if (idx >= 0) identity.existence.splice(idx, 1);
+      break;
+    }
+    case 'provenance-confirm': {
+      const open = openExistence(identity);
+      if (p.provDelta.from === null) delete open.provenance[p.provDelta.source];
+      else open.provenance[p.provDelta.source] = p.provDelta.from;
+      break;
+    }
+    case 'provenance-withdrawal': {
+      const iv = openExistence(identity) ?? identity.existence.find((x) => x.to === t);
+      iv.provenance[p.before.source] = p.before.instant;
+      break;
+    }
+    case 'prop-start': {
+      const idx = tl.findIndex((x) => x.from === t && x.to === null);
+      tl.splice(idx, 1);
+      if (!tl.length) identity.timelines.delete(p.prop);
+      break;
+    }
+    case 'prop-insert': {
+      const idx = tl.findIndex((x) => x.from === p.after.from && x.to === p.after.to && x.source === p.after.source);
+      tl.splice(idx, 1);
+      if (!tl.length) identity.timelines.delete(p.prop);
+      break;
+    }
+    case 'prop-confirm': {
+      openInterval(tl).instant = p.before.instant;
+      break;
+    }
+    case 'prop-end': {
+      tl.find((x) => x.from === p.before.from && x.to === t).to = null;
+      break;
+    }
+    case 'value-change': {
+      if (p.before.inPlace) {
+        const open = openInterval(tl);
+        open.value = p.before.value; open.source = p.before.source; open.instant = p.before.instant;
+        break;
+      }
+      const idx = tl.findIndex((x) => x.from === t && x.to === null);
+      tl.splice(idx, 1);
+      if (p.before.removed) {
+        tl.push({ from: p.before.from, to: null, value: p.before.value, source: p.before.source, instant: p.before.instant });
+        tl.sort((a, b) => instantCompare(a.from, b.from));
+      } else {
+        tl.find((x) => x.from === p.before.from && x.to === t).to = null;
+      }
+      break;
+    }
+    case 'node-close': case 'edge-close': case 'cascade-close': {
+      identity.existence.find((x) => x.from === p.before.openSince && x.to === t).to = null;
+      for (const cp of p.before.closedProps || []) {
+        const ptl = identity.timelines.get(cp.prop);
+        const civ = ptl && ptl.find((x) => x.from === cp.from && x.to === t);
+        if (civ) civ.to = null;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+function edgeReferencesNode(edge, id) {
+  for (const v of Object.values(edge.identityProps || {})) if (v === id) return true;
+  for (const timeline of edge.timelines.values()) for (const iv of timeline) if (iv.value === id) return true;
+  return false;
+}
+
+function cleanupProjectionRemnants(work) {
+  for (const [key, e] of [...work.edges]) {
+    if (e.existence.length === 0 && (!e.projected || e.projected.length === 0) && e.timelines.size === 0) work.edges.delete(key);
+  }
+}
+
+// Temporal endpoint invariant (E35) over the affected identities: after the
+// rollback there is NO point in time with a valid edge on an invalid endpoint.
+function checkEndpointInvariant(work, affectedNodeIds) {
+  for (const edge of work.edges.values()) {
+    if (!affectedNodeIds.has(edge.source) && !affectedNodeIds.has(edge.target)) continue;
+    for (const endpoint of [edge.source, edge.target]) {
+      const node = work.nodes.get(endpoint);
+      for (const iv of edge.existence) {
+        if (!node) return `edge "${edge.key}" references missing node "${endpoint}"`;
+        if (!nodeValidAt(node, iv.from)) return `edge "${edge.key}" starts at ${iv.from} outside the validity of "${endpoint}"`;
+        if (iv.to === null && !nodeOpenNow(node)) return `edge "${edge.key}" is open but endpoint "${endpoint}" is closed`;
+      }
+    }
+  }
+  return null;
 }
