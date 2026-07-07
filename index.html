@@ -1968,7 +1968,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.162.153';
+const APP_VERSION = '1.163.154';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -2919,6 +2919,9 @@ async function requestPersistence() {
 
 function looksLikeEnv(obj) {
   if (!obj || typeof obj !== 'object') return false;
+  // VIEWS is the v2 core marker (FR-7.4) — a minimal migrated env may carry
+  // nothing else (live-test finding via the tenant-ZIP self-check).
+  if (obj.VIEWS && typeof obj.VIEWS === 'object') return true;
   return Object.keys(obj).some(k =>
     k.startsWith('DATA_') || k.startsWith('TOOLBAR_') || k.startsWith('LEGEND_'));
 }

@@ -6,9 +6,12 @@
 // a clean console under file://, a visible hint for an empty drop, and the
 // legacy-v1 env rejection.
 import { test, expect } from '@playwright/test';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
+import { buildZip } from '../scripts/package-tenants.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const appUrl = pathToFileURL(join(root, 'index.html')).href;
@@ -66,6 +69,21 @@ test('file:// drop intake: registry + env + small snapshot boot into a rendered 
   // noise under file:// (ignore favicon lookups some platforms emit)
   const relevant = consoleErrors.filter((t) => !/favicon/i.test(t));
   expect(relevant, `console errors:\n${relevant.join('\n')}`).toEqual([]);
+});
+
+test('file:// drop intake: one tenant ZIP boots the whole tenant (FR-6.7)', async ({ page }) => {
+  test.setTimeout(60_000);
+  page.on('dialog', (d) => d.accept());
+  // small on-the-fly ZIP from the same fixtures, written like package-tenants
+  const zip = buildZip(DROP_FILES.map((f) => ({ name: f.split(/[\/]/).pop(), data: readFileSync(f) })));
+  const zipPath = join(mkdtempSync(join(tmpdir(), 'og2-zip-')), 'tenant.zip');
+  writeFileSync(zipPath, zip);
+
+  await page.goto(appUrl);
+  await expect(page.locator('.dz-overlay')).toBeVisible();
+  await dropFiles(page, [zipPath]);
+  await expect(page.locator('g.nodes circle:not(.attribute-circle)')).toHaveCount(5, { timeout: 60_000 });
+  await expect(page.locator('path.cluster')).toHaveCount(2);
 });
 
 test('file:// drop intake: env+snapshot without a registry names the missing piece', async ({ page }) => {

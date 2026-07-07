@@ -46,6 +46,7 @@ describe('content classifiers', () => {
     expect(looksLikeEnv({ DATA_URL: './x.json' })).toBe(true);
     expect(looksLikeEnv({ TOOLBAR_FOO: 1 })).toBe(true);
     expect(looksLikeEnv({ LEGEND_BAR: 1 })).toBe(true);
+    expect(looksLikeEnv({ VIEWS: { Start: {} } })).toBe(true); // minimal v2 env
     expect(looksLikeEnv({ other: 1 })).toBe(false);
     expect(looksLikeEnv(null)).toBe(false);
     expect(looksLikeEnv('string')).toBe(false);

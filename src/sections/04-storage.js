@@ -403,6 +403,9 @@ export async function requestPersistence() {
 
 export function looksLikeEnv(obj) {
   if (!obj || typeof obj !== 'object') return false;
+  // VIEWS is the v2 core marker (FR-7.4) — a minimal migrated env may carry
+  // nothing else (live-test finding via the tenant-ZIP self-check).
+  if (obj.VIEWS && typeof obj.VIEWS === 'object') return true;
   return Object.keys(obj).some(k =>
     k.startsWith('DATA_') || k.startsWith('TOOLBAR_') || k.startsWith('LEGEND_'));
 }
