@@ -163,6 +163,28 @@ export function hideExportDialog() {
 }
 
 /**
+ * Export sanitization (FR-8.5, AK 89): the exported artifact must not leak
+ * raw tenant values anywhere a parser could read them. Visible text is
+ * already pseudonymized fail-closed by the display-label resolver, so what
+ * remains are interaction-only carriers: data-* attributes (ring group keys),
+ * <title>/<desc> tooltips and comments. They serve no purpose in an export
+ * and are stripped unconditionally. PNG exports go through canvas.toBlob,
+ * which writes no textual metadata chunks.
+ */
+export function sanitizeExportClone(root) {
+  for (const el of root.querySelectorAll('*')) {
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name.startsWith('data-')) el.removeAttribute(attr.name);
+    }
+  }
+  for (const t of root.querySelectorAll('title, desc')) t.remove();
+  const comments = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+  while (walker.nextNode()) comments.push(walker.currentNode);
+  for (const c of comments) c.remove();
+}
+
+/**
  * Exportiert den Graphen als SVG-Datei
  */
 export function exportAsSvg() {
@@ -176,7 +198,8 @@ export function exportAsSvg() {
   try {
     // Klonen des SVG-Elements für den Export
     const svgClone = svgElement.cloneNode(true);
-    
+    sanitizeExportClone(svgClone);
+
     // SVG-Attribute für Export setzen
     svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     
@@ -264,6 +287,7 @@ export function exportAsPng() {
     
     // Aktuellen Inhalt des SVGs klonen und für Export aufbereiten
     const svgClone = svgElement.cloneNode(true);
+    sanitizeExportClone(svgClone);
     svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     
     // Aktuelles ViewBox und Style extrahieren

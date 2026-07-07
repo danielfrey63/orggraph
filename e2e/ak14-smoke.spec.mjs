@@ -109,6 +109,30 @@ test('pseudo mode is fail-closed in the browser (FR-8.5, E48 — AK 27 basis)', 
   }
 });
 
+test('AK 89: SVG export in pseudo mode carries no raw tenant value (FR-8.5)', async ({ page }) => {
+  // raw values of the fixture tenant: labels, ids, emails, org/team names
+  const RAW = ['Vera', 'Max', 'Nina', 'Ben', 'Pia', 'Lea',
+    'vera@example.org', 'max@example.org', 'nina@example.org', 'ben@example.org', 'pia@example.org',
+    'Chefin', 'Meister', 'Mittel', 'Blatt', 'Neu',
+    'Direktion', 'Abteilung A', 'Team Rom'];
+  await page.locator('#togglePseudonymization').click();
+  await page.waitForTimeout(500);
+  await page.locator('#exportBtn').click();
+  await page.locator('.format-btn[data-format="svg"]').click();
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#downloadSvg').click();
+  const download = await downloadPromise;
+  const path = await download.path();
+  const { readFileSync } = await import('node:fs');
+  const svgText = readFileSync(path, 'utf8');
+  expect(svgText.length).toBeGreaterThan(1000); // a real scene was exported
+  for (const raw of RAW) {
+    expect(svgText, `raw tenant value "${raw}" leaked into the export`).not.toContain(raw);
+  }
+  // interaction-only carriers are stripped as a class, not just by value
+  expect(svgText).not.toContain('data-attribute');
+});
+
 test('time controls active with two stands; slider slices, diff classifies (FR-8.6, AK 4/50)', async ({ page }) => {
   const slider = page.locator('#timeSlider');
   await expect(slider).toBeEnabled(); // two snapshot stands in the fixture tenant

@@ -6,6 +6,7 @@ import {
   exportAsSvg,
   exportAsPng,
   getTimestamp,
+  sanitizeExportClone,
 } from '../src/sections/03-export-dialog.js';
 import { SVG_ID, WIDTH, HEIGHT } from '../src/sections/01-config-status.js';
 
@@ -153,5 +154,26 @@ describe('exportAsPng', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(globalThis.showTemporaryNotification.mock.calls.at(-1)[0]).toContain('Bild konnte nicht geladen werden');
     expect(errorSpy).toHaveBeenCalled();
+  });
+});
+
+describe('sanitizeExportClone (FR-8.5, AK 89)', () => {
+  it('strips data-* attributes, title/desc and comments but keeps visible text', () => {
+    const root = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    root.innerHTML = `
+      <!-- raw comment vera@example.org -->
+      <g class="node" data-id="p1"><title>Vera Chefin</title>
+        <circle class="attribute-circle" data-attribute="Rolle::Lead"></circle>
+        <text class="label">Person 7</text>
+      </g>`;
+    sanitizeExportClone(root);
+    const out = new XMLSerializer().serializeToString(root);
+    expect(out).not.toContain('data-id');
+    expect(out).not.toContain('data-attribute');
+    expect(out).not.toContain('Vera');
+    expect(out).not.toContain('vera@example.org');
+    expect(out).not.toContain('Rolle::Lead');
+    expect(out).toContain('Person 7');
+    expect(out).toContain('attribute-circle');
   });
 });
