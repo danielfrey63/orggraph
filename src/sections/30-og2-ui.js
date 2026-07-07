@@ -400,6 +400,12 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
     if (transitionId !== lastTransitionId) return;
     updateFooterStats(sub);
     applyLegendScope(scopeOrgs);
+    // Root changes via search/context menu re-center the scene (FR-8.13,
+    // AK 40): after an E64-resolved hit the anchor scene must be in view —
+    // parameter tweaks (depth/time/filter) keep the user's zoom untouched.
+    if (triggerSource === 'comboSelect' || triggerSource === 'contextSetRoot' || triggerSource === 'legendSetRoot') {
+      try { fitToViewport(); } catch (_) {}
+    }
   });
   buildAttributeLegend();
   updateHiddenLegendTitle();
