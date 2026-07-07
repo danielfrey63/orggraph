@@ -46,8 +46,12 @@ test('file:// drop intake: registry + env + small snapshot boot into a rendered 
   page.on('dialog', (d) => d.accept()); // E70 source registration
 
   await page.goto(appUrl);
-  // pristine profile: the app asks for files instead of fetching anything
+  // pristine profile: the app asks for files instead of fetching anything,
+  // and the drop zone names the three required tenant files
   await expect(page.locator('.dz-overlay')).toBeVisible();
+  await expect(page.locator('.dz-text')).toContainText('registry.json');
+  await expect(page.locator('.dz-text')).toContainText('env.json');
+  await expect(page.locator('.dz-text')).toContainText('Snapshot');
   await expect(page.locator('#status')).toContainText('Drag & Drop');
 
   await dropFiles(page, DROP_FILES);

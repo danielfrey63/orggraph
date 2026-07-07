@@ -71,7 +71,7 @@ describe('ensureOverlay / showDropZone / hideDropZone', () => {
     const b = ensureOverlay(() => {});
     expect(a).toBe(b);
     expect(document.querySelectorAll('.dz-overlay')).toHaveLength(1);
-    expect(a.querySelector('.dz-title').textContent).toBe('Daten hierher ziehen');
+    expect(a.querySelector('.dz-title').textContent).toBe('Mandanten-Dateien hierher ziehen');
   });
 
   it('toggles visibility via the dz-visible class', () => {

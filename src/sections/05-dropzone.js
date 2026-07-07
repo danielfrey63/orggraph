@@ -212,14 +212,17 @@ export function ensureOverlay(onFiles) {
   overlay.innerHTML = `
     <div class="dz-panel">
       <div class="dz-icon">⬇</div>
-      <h2 class="dz-title">Daten hierher ziehen</h2>
+      <h2 class="dz-title">Mandanten-Dateien hierher ziehen</h2>
       <p class="dz-text">
-        JSON-Datensatz, optional <code>pseudo.data.json</code>, <code>env.json</code>
-        und Attribut-Dateien (<code>.tsv</code>/<code>.csv</code>/<code>.txt</code>).<br>
-        Auch möglich: ein ganzer Ordner oder ein ZIP-Archiv mit <code>env.json</code> —
-        die darin referenzierten Dateien werden automatisch mitgeladen.<br>
-        Die Inhalte werden lokal im Browser (IndexedDB) gespeichert und beim
-        nächsten Öffnen automatisch geladen.
+        Benötigt werden <strong>drei Dateien</strong>:<br>
+        <code>registry.json</code> (Typ-Registry) ·
+        <code>env.json</code> (Views/Konfiguration) ·
+        mindestens ein <code>Snapshot (*.json)</code> (Datenstand).<br>
+        Optional: <code>pseudo.data.json</code> (Pseudonymisierungs-Pools).
+        Auch möglich: ein Ordner oder ZIP-Archiv mit diesen Dateien.<br>
+        Alles wird lokal im Browser (IndexedDB) gespeichert und beim
+        nächsten Öffnen automatisch geladen — Dateien können auch einzeln
+        nachgereicht werden.
       </p>
       <button class="dz-pick" type="button">Dateien auswählen…</button>
     </div>`;
