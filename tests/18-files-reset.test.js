@@ -14,6 +14,7 @@ beforeEach(() => {
   globalThis.hasStoredData = vi.fn(async () => true); // active profile already has data by default
   globalThis.classifyFile = vi.fn(async (file) => {
     const text = await file.text();
+    if (text.includes('nodeTypes')) return { kind: 'registry', filename: file.name, text };
     if (text.includes('DATA_URL')) return { kind: 'env', filename: file.name, text };
     if (text.includes('persons')) return { kind: 'data', filename: file.name, text };
     return { kind: 'unknown', filename: file.name, text };
@@ -49,13 +50,29 @@ describe('handleDroppedFiles', () => {
     expect(globalThis.showTemporaryNotification.mock.calls[0][0]).toContain('data.sem.json');
   });
 
-  it('creates and activates a new profile for a configuration drop (name from DATA_URL)', async () => {
+  it('creates and activates a new profile only for a FULL tenant drop (env + registry, FR-8.9/AK 100)', async () => {
     const env = { name: 'env.hrm.json', text: async () => '{"DATA_URL":"./data.hrm.json"}' };
-    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({ stored: [{ kind: 'env', filename: 'env.hrm.json' }] }));
-    await handleDroppedFiles([{ path: 'env.hrm.json', file: env }]);
+    const registry = { name: 'registry.json', text: async () => '{"nodeTypes":{}}' };
+    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({
+      stored: [{ kind: 'env', filename: 'env.hrm.json' }, { kind: 'registry', filename: 'registry.json' }],
+    }));
+    await handleDroppedFiles([
+      { path: 'env.hrm.json', file: env },
+      { path: 'registry.json', file: registry },
+    ]);
     expect(globalThis.createProfile).toHaveBeenCalledTimes(1);
     expect(globalThis.createProfile.mock.calls[0][0]).toBe('hrm');
     expect(globalThis.createProfile.mock.calls[0][1]).toMatchObject({ activate: true });
+    expect(globalThis.location.reload).toHaveBeenCalled();
+  });
+
+  it('env-only drop on a loaded tenant updates the ACTIVE profile in place (FR-8.9/AK 100)', async () => {
+    // hasStoredData stays true (default): the active profile carries a tenant
+    const env = { name: 'env.hrm.json', text: async () => '{"DATA_URL":"./data.hrm.json"}' };
+    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({ stored: [{ kind: 'env', filename: 'env.hrm.json' }] }));
+    await handleDroppedFiles([{ path: 'env.hrm.json', file: env }]);
+    expect(globalThis.createProfile).not.toHaveBeenCalled();
+    expect(globalThis.renameProfile).not.toHaveBeenCalled();
     expect(globalThis.location.reload).toHaveBeenCalled();
   });
 

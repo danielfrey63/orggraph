@@ -86,6 +86,32 @@ test('file:// drop intake: one tenant ZIP boots the whole tenant (FR-6.7)', asyn
   await expect(page.locator('path.cluster')).toHaveCount(2);
 });
 
+test('file:// drop intake: env-only re-drop updates the ACTIVE tenant, no phantom profile (FR-8.9, AK 100)', async ({ page }) => {
+  test.setTimeout(120_000);
+  page.on('dialog', (d) => d.accept());
+  await page.goto(appUrl);
+  await expect(page.locator('.dz-overlay')).toBeVisible();
+  await dropFiles(page, DROP_FILES);
+  await expect(page.locator('g.nodes circle:not(.attribute-circle)')).toHaveCount(5, { timeout: 60_000 });
+
+  // edit the env like a user would: replace the VIEWS, drop ONLY the env
+  const env = JSON.parse(readFileSync(DROP_FILES[1], 'utf8'));
+  const start = env.VIEWS['Start'];
+  env.VIEWS = { 'Alles': start, 'Flach': { ...start, depth: 1 } };
+  const envPath = join(mkdtempSync(join(tmpdir(), 'og2-env-')), 'fixture-drop-env.json');
+  writeFileSync(envPath, JSON.stringify(env));
+  await dropFiles(page, [envPath]);
+
+  // after the self-reload the SAME tenant renders with the new views —
+  // never the trapped empty-profile drop zone (live-test finding 2026-07-08)
+  await expect(page.locator('g.nodes circle:not(.attribute-circle)')).toHaveCount(5, { timeout: 60_000 });
+  await expect(page.locator('.dz-overlay')).toBeHidden();
+  await expect(page.locator('#viewsLegend .legend-row')).toHaveCount(2);
+  await expect(page.locator('#viewsLegend .legend-row').filter({ hasText: 'Alles' })).toHaveCount(1);
+  const profileCount = await page.evaluate(() => listProfiles().then((l) => l.length));
+  expect(profileCount).toBe(1); // no phantom profile
+});
+
 test('file:// drop intake: env+snapshot without a registry names the missing piece', async ({ page }) => {
   test.setTimeout(60_000);
   page.on('dialog', (d) => d.accept());

@@ -342,7 +342,7 @@ export async function duplicateProfile(id, name) {
 }
 
 /** True when the given profile carries a v2 configuration (env or registry). */
-async function profileHasData(id) {
+export async function profileHasData(id) {
   for (const key of [KEY_ENV, KEY_REGISTRY]) {
     const v = await profileTx(id, 'readonly', s => reqAsPromise(s.get(key)));
     if (typeof v === 'string' && v.length > 0) return true;

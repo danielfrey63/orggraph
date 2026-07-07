@@ -8,16 +8,22 @@ function profileNameFromDrop(env) {
   return base || 'Profil';
 }
 
-/** Inspect a drop for a configuration (env). Never throws. */
+/** Inspect a drop for a configuration (env) and a registry. Never throws. */
 async function detectConfigDrop(entryList) {
+  const found = { hasConfig: false, hasRegistry: false, name: null, source: null };
   for (const raw of Array.from(entryList || [])) {
     const file = raw && raw.file ? raw.file : raw;
     if (!file || typeof file.text !== 'function') continue;
     let c;
     try { c = await classifyFile(file); } catch (_) { continue; }
-    if (c.kind === 'env') return { hasConfig: true, name: profileNameFromDrop(c), source: c.filename };
+    if (c.kind === 'env' && !found.hasConfig) {
+      found.hasConfig = true;
+      found.name = profileNameFromDrop(c);
+      found.source = c.filename;
+    }
+    if (c.kind === 'registry') found.hasRegistry = true;
   }
-  return { hasConfig: false };
+  return found;
 }
 
 export async function handleDroppedFiles(entryList) {
@@ -28,15 +34,19 @@ export async function handleDroppedFiles(entryList) {
   try { cfg = await detectConfigDrop(entryList); } catch (e) { console.error(e); }
   if (cfg.hasConfig) {
     try {
-      if (await hasStoredData()) {
-        // The active profile already holds a configuration → keep it and add the
-        // dropped one as a separate, parallel profile.
-        await createProfile(cfg.name, { activate: true, source: cfg.source });
-      } else {
+      if (!(await hasStoredData())) {
         // The active profile is empty (e.g. the initial default) → fill it
         // instead of leaving an empty phantom profile behind.
         await renameProfile(await getActiveProfileId(), cfg.name);
+      } else if (cfg.hasRegistry) {
+        // A registry-carrying drop is a complete NEW tenant → keep the
+        // current one and add the dropped one as a parallel profile.
+        await createProfile(cfg.name, { activate: true, source: cfg.source });
       }
+      // env WITHOUT a registry on a loaded tenant is a config update
+      // (live-test finding 2026-07-08): the env replaces the one in the
+      // ACTIVE profile — never a new empty profile that boots into the
+      // non-dismissable drop zone without registry and store.
     } catch (e) { console.error(e); }
   }
 
@@ -813,8 +823,23 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
     }
   } else {
+    // Self-heal a stranded empty profile (live-test finding 2026-07-08):
+    // if another profile carries a tenant, switch there instead of trapping
+    // the user in the non-dismissable initial drop zone.
+    let healed = false;
+    try {
+      const activeId = await getActiveProfileId();
+      for (const p of await listProfiles()) {
+        if (p.id !== activeId && await profileHasData(p.id)) {
+          await switchProfile(p.id);
+          healed = true;
+          location.reload();
+          break;
+        }
+      }
+    } catch (e) { console.error(e); }
     // Keine Daten vorhanden → Drop-Zone zum Laden einblenden.
-    showDropZone(handleDroppedFiles);
+    if (!healed) showDropZone(handleDroppedFiles);
   }
 
   // hideSubtree-Button wurde aus der Toolbar entfernt
