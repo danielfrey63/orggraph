@@ -191,6 +191,21 @@ test('AK 94: attribute focus prunes the projected scene (FR-8.10a)', async ({ pa
   await expect(circles).toHaveCount(before, { timeout: 15_000 });
 });
 
+test('AK 101: view contexts — returning to a view restores its exact scene (FR-7.5b)', async ({ page }) => {
+  // set a runtime root in Start (Ben has no reports -> 1 circle)
+  const input = page.locator('#comboInput');
+  await input.fill('Ben');
+  await expect(page.locator('#comboList li').first()).toBeVisible({ timeout: 10_000 });
+  await page.locator('#comboList li').first().click();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(1);
+  // switch to the other view: renders ITS defaults (all 5 persons)
+  await page.locator('#viewsLegend .legend-row').filter({ hasText: 'Nur Hierarchie' }).click();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(5, { timeout: 15_000 });
+  // switch back: Start's context (root Ben) returns — not the view defaults
+  await page.locator('#viewsLegend .legend-row').filter({ hasText: 'Start' }).click();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(1, { timeout: 15_000 });
+});
+
 test('AK 89: SVG export in pseudo mode carries no raw tenant value (FR-8.5)', async ({ page }) => {
   // raw values of the fixture tenant: labels, ids, emails, org/team names
   const RAW = ['Vera', 'Max', 'Nina', 'Ben', 'Pia', 'Lea',

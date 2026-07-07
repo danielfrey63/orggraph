@@ -743,11 +743,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (await loadData()) {
     hideDropZone();
     // Apply initial start node(s) from env.json if provided. A restored
-    // session state supersedes the env start defaults (FR-8.14) — env
-    // defaults only apply on a first start without stored state.
+    // session state supersedes the env start defaults (FR-8.14) — but only
+    // when the ACTIVE view actually carries a restored context (FR-7.5b);
+    // a freshly entered view (e.g. after an env update renamed the views)
+    // still gets the env start root.
     const og2Restored = typeof og2UiStateWasRestored === 'function' && og2UiStateWasRestored();
+    const og2HasCtx = typeof og2ActiveViewHasContext === 'function' && og2ActiveViewHasContext();
     let initialUpdateTriggered = false;
-    if (!og2Restored && envConfig && envConfig.GRAPH_START_ID_DEFAULT != null) {
+    if (!og2HasCtx && envConfig && envConfig.GRAPH_START_ID_DEFAULT != null) {
     const def = envConfig.GRAPH_START_ID_DEFAULT;
     if (Array.isArray(def)) {
       const requested = def.map(v => String(v));

@@ -1998,7 +1998,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.166.158';
+const APP_VERSION = '1.167.159';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -8258,11 +8258,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (await loadData()) {
     hideDropZone();
     // Apply initial start node(s) from env.json if provided. A restored
-    // session state supersedes the env start defaults (FR-8.14) — env
-    // defaults only apply on a first start without stored state.
+    // session state supersedes the env start defaults (FR-8.14) — but only
+    // when the ACTIVE view actually carries a restored context (FR-7.5b);
+    // a freshly entered view (e.g. after an env update renamed the views)
+    // still gets the env start root.
     const og2Restored = typeof og2UiStateWasRestored === 'function' && og2UiStateWasRestored();
+    const og2HasCtx = typeof og2ActiveViewHasContext === 'function' && og2ActiveViewHasContext();
     let initialUpdateTriggered = false;
-    if (!og2Restored && envConfig && envConfig.GRAPH_START_ID_DEFAULT != null) {
+    if (!og2HasCtx && envConfig && envConfig.GRAPH_START_ID_DEFAULT != null) {
     const def = envConfig.GRAPH_START_ID_DEFAULT;
     if (Array.isArray(def)) {
       const requested = def.map(v => String(v));
@@ -12199,7 +12202,13 @@ async function og2TryBoot() {
   return true;
 }
 
-// --- FR-8.14 session state: persist reactively, restore on boot ------------
+// --- FR-7.5b view contexts + FR-8.14 session state --------------------------
+// Every view owns its runtime context (roots, depth, time slice, cluster and
+// ring selection, focus). Switching views captures the leaving view's context
+// and re-applies the entered view's one; a view entered for the first time
+// starts from its definition defaults. The session state persists ALL
+// contexts, so returning to a view reproduces its exact last scene — also
+// across reloads.
 
 let og2PendingUiState = null;
 let og2StateRestored = false;
@@ -12209,82 +12218,166 @@ function og2UiStateWasRestored() {
   return og2StateRestored;
 }
 
+// True when the restored session carries a context for the ACTIVE view — the
+// env start defaults (GRAPH_START_ID_DEFAULT) only apply without one.
+function og2ActiveViewHasContext() {
+  return !!(og2StateRestored && og2 && og2.viewContexts && og2.viewContexts[og2.activeViewName]);
+}
+
+// v1 session states (flat, pre view-context) convert into one view context.
+function og2NormalizeUiState(state) {
+  if (!state || typeof state !== 'object') return null;
+  if (state.v === 2) return state;
+  const ctx = {
+    runtimeRoots: state.runtimeRoots || null,
+    selectedRootIds: state.selectedRootIds || [],
+    currentSelectedId: state.currentSelectedId != null ? String(state.currentSelectedId) : null,
+    depth: state.depth,
+    asOf: state.asOf || null,
+    diff: state.diff || null,
+    scopeOrgs: state.scopeOrgs || null,
+    allowedOrgs: state.allowedOrgs || [],
+    attributesOff: state.attributesOff || [],
+    hiddenCategories: state.hiddenCategories || [],
+    attributeFocus: !!state.attributeFocus,
+  };
+  return {
+    v: 2,
+    activeViewName: state.activeViewName || null,
+    viewContexts: state.activeViewName ? { [state.activeViewName]: ctx } : {},
+    global: {
+      management: state.management,
+      labels: state.labels,
+      layout: state.layout,
+      simulation: state.simulation,
+      pseudo: state.pseudo,
+      hiddenByRoot: state.hiddenByRoot || [],
+    },
+  };
+}
+
 // Runs right after loadEnvConfig and BEFORE the toolbar default wiring: maps
-// the persisted toggle state onto the in-memory env defaults so the existing
-// TOOLBAR_* initialization applies it — restored state supersedes env start
-// defaults (FR-8.14). The og2-specific parts wait for og2TryBoot.
+// the persisted app-wide toggles onto the in-memory env defaults so the
+// existing TOOLBAR_* initialization applies them — restored state supersedes
+// env start defaults (FR-8.14). The og2 view contexts wait for og2TryBoot.
 async function og2PreloadUiState() {
   let state = null;
   try { state = await getStoredJson(KEY_UI_STATE); } catch { return; }
-  if (!state || typeof state !== 'object') return;
+  state = og2NormalizeUiState(state);
+  if (!state) return;
   og2PendingUiState = state;
   if (!envConfig) return;
-  if (typeof state.management === 'boolean') envConfig.TOOLBAR_MANAGEMENT_ACTIVE = state.management;
-  if (typeof state.labels === 'string') envConfig.TOOLBAR_LABELS_ACTIVE = state.labels;
-  if (typeof state.layout === 'string') envConfig.TOOLBAR_HIERARCHY_ACTIVE = state.layout === 'hierarchy';
-  if (typeof state.simulation === 'boolean') envConfig.TOOLBAR_SIMULATION_ACTIVE = state.simulation;
-  if (Number.isFinite(state.depth)) envConfig.TOOLBAR_DEPTH_DEFAULT = state.depth;
+  const g = state.global || {};
+  if (typeof g.management === 'boolean') envConfig.TOOLBAR_MANAGEMENT_ACTIVE = g.management;
+  if (typeof g.labels === 'string') envConfig.TOOLBAR_LABELS_ACTIVE = g.labels;
+  if (typeof g.layout === 'string') envConfig.TOOLBAR_HIERARCHY_ACTIVE = g.layout === 'hierarchy';
+  if (typeof g.simulation === 'boolean') envConfig.TOOLBAR_SIMULATION_ACTIVE = g.simulation;
   // Pseudo restores fail-closed: only ever towards ON — a stored "off" never
   // supersedes the env default or the built-in default "on" (FR-8.5/FR-8.14).
-  if (state.pseudo === true) envConfig.TOOLBAR_PSEUDO_ACTIVE = true;
+  if (g.pseudo === true) envConfig.TOOLBAR_PSEUDO_ACTIVE = true;
 }
 
-// og2-owned state parts; unresolvable pieces fall back individually (FR-8.14).
+// Capture the ACTIVE view's runtime context (FR-7.5b) into og2.viewContexts.
+function og2CaptureViewContext() {
+  if (!og2 || !og2.activeViewName) return;
+  og2.viewContexts = og2.viewContexts || {};
+  const depthEl = document.querySelector(INPUT_DEPTH_ID);
+  const uiDepth = depthEl ? parseInt(depthEl.value, 10) : NaN;
+  og2.viewContexts[og2.activeViewName] = {
+    runtimeRoots: og2.runtimeRoots ? og2.runtimeRoots.map(String) : null,
+    selectedRootIds: Array.isArray(selectedRootIds) ? selectedRootIds.map(String) : [],
+    currentSelectedId: currentSelectedId != null ? String(currentSelectedId) : null,
+    depth: Number.isFinite(uiDepth) ? uiDepth : og2.runtimeDepth,
+    asOf: og2.asOf,
+    diff: og2.diff,
+    scopeOrgs: og2.lastScopeOrgs ? [...og2.lastScopeOrgs] : null,
+    allowedOrgs: [...allowedOrgs],
+    attributesOff: [...attributeTypes.keys()].filter(k => !activeAttributes.has(k)),
+    hiddenCategories: [...hiddenCategories],
+    attributeFocus: !!attributeFocusEnabled,
+  };
+}
+
+// Apply a view's stored context — or its definition defaults when the view is
+// entered for the first time (FR-7.5b). validateIds=false during the early
+// boot restore (byId is not built yet); the late pass re-applies with checks.
+function og2ApplyViewContext(name, { validateIds = true } = {}) {
+  if (!og2) return;
+  const view = name ? og2.views[name] : null;
+  const ctx = name && og2.viewContexts ? og2.viewContexts[name] : null;
+  const knownId = (id) => !validateIds || (typeof byId !== 'undefined' && byId.has(String(id)));
+
+  // fresh-view defaults (FR-8.2a: all clusters visible, no overrides)
+  og2.runtimeRoots = null;
+  og2.runtimeDepth = null;
+  og2.asOf = null;
+  og2.diff = null;
+  og2.lastScopeOrgs = null;
+  selectedRootIds = [];
+  currentSelectedId = null;
+  og2.pendingAttributesOff = new Set();
+  hiddenCategories = new Set();
+  attributeFocusEnabled = false;
+  let depth = view && view.depth != null ? view.depth : null;
+
+  if (ctx) {
+    const roots = (ctx.runtimeRoots || []).map(String).filter(knownId);
+    if (roots.length) og2.runtimeRoots = roots;
+    const sel = (ctx.selectedRootIds || []).map(String).filter(knownId);
+    if (sel.length) {
+      selectedRootIds = sel;
+      currentSelectedId = sel[0];
+    } else if (ctx.currentSelectedId != null && knownId(ctx.currentSelectedId)) {
+      currentSelectedId = String(ctx.currentSelectedId);
+    }
+    if (Number.isFinite(ctx.depth)) depth = ctx.depth;
+    const instants = og2TimeInstants(og2);
+    if (ctx.asOf && instants.includes(ctx.asOf) && ctx.asOf !== instants[instants.length - 1]) og2.asOf = ctx.asOf;
+    if (ctx.diff && ctx.diff.t1 && ctx.diff.t2 && instants.includes(ctx.diff.t1) && instants.includes(ctx.diff.t2)) {
+      og2.diff = { t1: ctx.diff.t1, t2: ctx.diff.t2 };
+    }
+    if (Array.isArray(ctx.scopeOrgs)) {
+      og2.lastScopeOrgs = new Set(ctx.scopeOrgs.map(String));
+      allowedOrgs = new Set((ctx.allowedOrgs || []).map(String));
+    }
+    og2.pendingAttributesOff = new Set((ctx.attributesOff || []).map(String));
+    hiddenCategories = new Set((ctx.hiddenCategories || []).map(String));
+    attributeFocusEnabled = !!ctx.attributeFocus;
+  }
+
+  if (Number.isFinite(depth)) {
+    og2.runtimeDepth = depth;
+    const depthEl = document.querySelector(INPUT_DEPTH_ID);
+    if (depthEl) {
+      depthEl.value = depth;
+      const display = document.querySelector('#depthControl .depth-value');
+      if (display) display.textContent = String(depth);
+    }
+  }
+  const focusBtn = document.getElementById('toggleAttributeFocus');
+  if (focusBtn) focusBtn.classList.toggle('active', attributeFocusEnabled);
+}
+
+// og2-owned restore parts; unresolvable pieces fall back individually.
 function og2ApplySessionStateEarly() {
   const s = og2PendingUiState;
   if (!s || !og2) return;
   og2StateRestored = true;
+  og2.viewContexts = (s.viewContexts && typeof s.viewContexts === 'object') ? s.viewContexts : {};
   if (s.activeViewName && og2.views[s.activeViewName]) og2.activeViewName = s.activeViewName;
-  if (Number.isFinite(s.depth)) {
-    og2.runtimeDepth = s.depth;
-    // sync input AND stepper display — boot order independent (FR-8.14)
-    const depthEl = document.querySelector(INPUT_DEPTH_ID);
-    if (depthEl) {
-      depthEl.value = s.depth;
-      const display = document.querySelector('#depthControl .depth-value');
-      if (display) display.textContent = String(s.depth);
-    }
-  }
-  const instants = og2TimeInstants(og2);
-  if (s.asOf && instants.includes(s.asOf) && s.asOf !== instants[instants.length - 1]) og2.asOf = s.asOf;
-  if (s.diff && s.diff.t1 && s.diff.t2 && instants.includes(s.diff.t1) && instants.includes(s.diff.t2)) {
-    og2.diff = { t1: s.diff.t1, t2: s.diff.t2 };
-  }
-  // Cluster deselection is a runtime override (FR-8.2a): restoring scope +
-  // allowed set lets the next apply treat survivors and newcomers correctly.
-  if (Array.isArray(s.scopeOrgs)) {
-    og2.lastScopeOrgs = new Set(s.scopeOrgs.map(String));
-    allowedOrgs = new Set((Array.isArray(s.allowedOrgs) ? s.allowedOrgs : []).map(String));
-  }
-  if (Array.isArray(s.attributesOff)) og2.pendingAttributesOff = new Set(s.attributesOff.map(String));
-  if (Array.isArray(s.hiddenCategories)) hiddenCategories = new Set(s.hiddenCategories.map(String));
-  if (typeof s.attributeFocus === 'boolean') {
-    attributeFocusEnabled = s.attributeFocus;
-    const focusBtn = document.getElementById('toggleAttributeFocus');
-    if (focusBtn) focusBtn.classList.toggle('active', attributeFocusEnabled);
-  }
+  og2ApplyViewContext(og2.activeViewName, { validateIds: false });
 }
 
 function og2ApplySessionStateLate() {
   const s = og2PendingUiState;
   if (!s || !og2) return;
   og2PendingUiState = null;
-  if (Array.isArray(s.selectedRootIds) && s.selectedRootIds.length) {
-    const roots = s.selectedRootIds.map(String).filter(id => byId.has(id));
-    if (roots.length) {
-      selectedRootIds = roots;
-      currentSelectedId = roots[0];
-    }
-  } else if (s.currentSelectedId != null && byId.has(String(s.currentSelectedId))) {
-    currentSelectedId = String(s.currentSelectedId);
-  }
-  if (Array.isArray(s.runtimeRoots) && s.runtimeRoots.length) {
-    const roots = s.runtimeRoots.map(String).filter(id => byId.has(id));
-    if (roots.length) og2.runtimeRoots = roots;
-  }
-  if (Array.isArray(s.hiddenByRoot)) {
+  // re-apply the active context with id validation (byId is ready now)
+  og2ApplyViewContext(og2.activeViewName, { validateIds: true });
+  const g = s.global || {};
+  if (Array.isArray(g.hiddenByRoot)) {
     hiddenByRoot = new Map();
-    for (const [rootId, ids] of s.hiddenByRoot) {
+    for (const [rootId, ids] of g.hiddenByRoot) {
       if (!byId.has(String(rootId))) continue;
       hiddenByRoot.set(String(rootId), new Set((ids || []).map(String).filter(id => byId.has(id))));
     }
@@ -12294,28 +12387,19 @@ function og2ApplySessionStateLate() {
 
 function og2CollectUiState() {
   if (!og2) return null;
-  const depthEl = document.querySelector(INPUT_DEPTH_ID);
-  const uiDepth = depthEl ? parseInt(depthEl.value, 10) : NaN;
+  og2CaptureViewContext();
   return {
-    v: 1,
+    v: 2,
     activeViewName: og2.activeViewName,
-    runtimeRoots: og2.runtimeRoots ? og2.runtimeRoots.map(String) : null,
-    depth: Number.isFinite(uiDepth) ? uiDepth : og2.runtimeDepth,
-    asOf: og2.asOf,
-    diff: og2.diff,
-    scopeOrgs: og2.lastScopeOrgs ? [...og2.lastScopeOrgs] : null,
-    allowedOrgs: [...allowedOrgs],
-    attributesOff: [...attributeTypes.keys()].filter(k => !activeAttributes.has(k)),
-    hiddenCategories: [...hiddenCategories],
-    attributeFocus: !!attributeFocusEnabled,
-    management: !!managementEnabled,
-    labels: labelsVisible,
-    layout: currentLayoutMode,
-    simulation: !!continuousSimulation,
-    pseudo: !!pseudonymizationEnabled,
-    hiddenByRoot: [...hiddenByRoot.entries()].map(([r, set]) => [r, [...set]]),
-    selectedRootIds: Array.isArray(selectedRootIds) ? selectedRootIds.slice() : [],
-    currentSelectedId: currentSelectedId != null ? String(currentSelectedId) : null,
+    viewContexts: og2.viewContexts || {},
+    global: {
+      management: !!managementEnabled,
+      labels: labelsVisible,
+      layout: currentLayoutMode,
+      simulation: !!continuousSimulation,
+      pseudo: !!pseudonymizationEnabled,
+      hiddenByRoot: [...hiddenByRoot.entries()].map(([r, set]) => [r, [...set]]),
+    },
   };
 }
 
@@ -12539,25 +12623,17 @@ function og2SyncTimeControls() {
   toggle.classList.toggle('active', !!og2.diff);
 }
 
-// Switch the active view; runtime overrides reset (FR-7.5) and the search
-// domain follows the new path's visible types (FR-7.6/8.4).
+// Switch the active view (FR-7.5b): capture the leaving view's runtime
+// context, re-apply the entered view's one (or its definition defaults on
+// first entry); the search domain follows the new path's types (FR-7.6/8.4).
 function og2SwitchView(name) {
   if (!og2 || !og2.views[name] || name === og2.activeViewName) return;
+  og2CaptureViewContext();
   og2.activeViewName = name;
-  og2.runtimeRoots = null;
-  og2.runtimeDepth = null;
-  og2.lastScopeOrgs = null; // FR-8.2a: a view switch resets the legend override
-  selectedRootIds = [];
-  currentSelectedId = null;
-  const view = og2ActiveView(og2);
-  const depthEl = document.querySelector(INPUT_DEPTH_ID);
-  if (depthEl && view && view.depth != null) {
-    depthEl.value = view.depth;
-    const display = document.querySelector('#depthControl .depth-value');
-    if (display) display.textContent = String(view.depth);
-  }
+  og2ApplyViewContext(name);
   og2SyncStockGlobals();
   og2BuildViewsLegend();
+  og2SyncTimeControls();
   applyFromUI('viewSwitch');
 }
 
@@ -12629,10 +12705,11 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
     for (const key of [...activeAttributes]) {
       if (!nextTypes.has(key)) activeAttributes.delete(key);
     }
-    // FR-8.14: on the first apply after a session restore, the persisted
-    // ring-group deselection wins over the "new groups start visible" rule.
+    // FR-7.5b/FR-8.14: on the first apply after a view switch or session
+    // restore, the view context's ring selection replaces the carried-over
+    // one — exactly the stored off-set is deselected, everything else is on.
     if (og2.pendingAttributesOff) {
-      for (const key of og2.pendingAttributesOff) activeAttributes.delete(key);
+      activeAttributes = new Set([...nextTypes.keys()].filter(k => !og2.pendingAttributesOff.has(k)));
       og2.pendingAttributesOff = null;
     }
     personAttributes = nextByHost;
