@@ -179,26 +179,15 @@ describe('buildAttributeLegend', () => {
     expect(globalThis.collapsedCategories.size).toBe(0);
   });
 
-  it('renders collapsed categories closed and offers TSV download', () => {
+  it('renders collapsed categories closed — without TSV download or save buttons (§9.4)', () => {
     setupAttrs();
     globalThis.collapsedCategories = new Set(['Team']);
     buildAttributeLegend();
     const teamLi = Array.from(document.querySelectorAll('#attributeLegend > ul > li'))
       .find((li) => li.textContent.includes('Team'));
     expect(teamLi.querySelector('ul').style.display).toBe('none');
-    teamLi.querySelector('.legend-icon-btn[title*="TSV"]').click();
-    expect(globalThis.exportCategoryAsTSV).toHaveBeenCalledWith('Team');
-  });
-
-  it('shows the save button for every modified category', () => {
-    setupAttrs();
-    // 'Rolle' has no source entry (UI-created) and still gets a save button
-    globalThis.modifiedCategories = new Set(['Team', 'Rolle']);
-    globalThis.categorySourceFiles = new Map([['Team', { filename: 'Team.tsv' }]]);
-    buildAttributeLegend();
-    const saveButtons = document.querySelectorAll('#attributeLegend .save-btn');
-    expect(saveButtons).toHaveLength(2);
-    saveButtons[0].click();
-    expect(globalThis.saveCategory).toHaveBeenCalled();
+    // the attribute round-trip is gone: no per-category download/save controls
+    expect(document.querySelector('#attributeLegend .legend-icon-btn[title*="TSV"]')).toBeNull();
+    expect(document.querySelector('#attributeLegend .save-btn')).toBeNull();
   });
 });

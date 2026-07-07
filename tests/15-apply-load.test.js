@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { applyFromUI, loadAttributesFromFile } from '../src/sections/15-ui-apply-search.js';
-import { idOf, processData } from '../src/sections/09-data-load.js';
+import { applyFromUI } from '../src/sections/15-ui-apply-search.js';
+import { idOf } from '../src/sections/09-data-load.js';
 import { computeSubgraph } from '../src/sections/11-graph-core.js';
 import { guessIdFromInput } from '../src/sections/10-combo.js';
 import { colorForCategoryAttribute, hashCode } from '../src/sections/08-color-geometry.js';
@@ -57,10 +57,6 @@ beforeEach(() => {
   globalThis.buildAttributeLegend = vi.fn();
   globalThis.updateAttributeStats = vi.fn();
   globalThis.updateAttributeCircles = vi.fn();
-  globalThis.exportUnmatchedEntries = vi.fn();
-  globalThis.showFuzzyMatchDialog = vi.fn();
-  globalThis.getStoredAttrMatches = vi.fn(async () => ({}));
-  globalThis.mergeStoredAttrMatches = vi.fn(async (u) => u);
   globalThis.personAttributes = new Map();
   globalThis.attributeTypes = new Map();
   globalThis.activeAttributes = new Set();
@@ -69,24 +65,36 @@ beforeEach(() => {
   for (const k of ['raw', 'byId', 'allNodesUnique', 'parentOf', 'orgParent', 'orgChildren', 'orgRoots', 'hiddenNodes', 'hiddenByRoot']) {
     globalThis[k] = undefined;
   }
-  processData({
-    persons: [
-      { id: 'p1', label: 'Boss', email: 'boss@x.ch' },
-      { id: 'p2', label: 'Dev' },
-      { id: 'p3', label: 'Lead' },
-    ],
-    orgs: [],
-    links: [
-      { source: 'p1', target: 'p2' },
-      { source: 'p1', target: 'p3' },
-    ],
-  });
+  applyStock();
   setupDom();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+// Local stock-globals builder (mirrors og2SyncStockGlobals) — the legacy
+// processData intake was torn down with the v1 data path (§9.3/E25).
+function applyStock() {
+  const persons = [
+    { id: 'p1', label: 'Boss', email: 'boss@x.ch', type: 'person', kind: 'node' },
+    { id: 'p2', label: 'Dev', type: 'person', kind: 'node' },
+    { id: 'p3', label: 'Lead', type: 'person', kind: 'node' },
+  ];
+  const links = [
+    { source: 'p1', target: 'p2' },
+    { source: 'p1', target: 'p3' },
+  ];
+  globalThis.raw = { nodes: persons, links, persons, orgs: [] };
+  globalThis.byId = new Map(persons.map(n => [n.id, n]));
+  globalThis.allNodesUnique = persons.slice();
+  globalThis.parentOf = new Map();
+  globalThis.orgParent = new Map();
+  globalThis.orgChildren = new Map();
+  globalThis.orgRoots = [];
+  globalThis.hiddenNodes = new Set();
+  globalThis.hiddenByRoot = new Map();
+}
 
 describe('applyFromUI', () => {
   it('bails out without data and without a resolvable start node', () => {
@@ -132,63 +140,3 @@ describe('applyFromUI', () => {
   });
 });
 
-describe('loadAttributesFromFile', () => {
-  it('registers an empty file as an empty category', async () => {
-    expect(await loadAttributesFromFile(makeFile('Leere Kategorie.tsv', ' \n'))).toBe(true);
-    expect(globalThis.emptyCategories.has('Leere Kategorie')).toBe(true);
-    expect(globalThis.categorySourceFiles.get('Leere Kategorie')).toMatchObject({
-      filename: 'Leere Kategorie.tsv',
-      url: null,
-    });
-  });
-
-  it('applies exact matches and registers attribute types', async () => {
-    const ok = await loadAttributesFromFile(makeFile('Team.tsv', 'boss@x.ch\tCoach\np2\tPL'));
-    expect(ok).toBe(true);
-    expect(globalThis.personAttributes.get('p1')).toBeTruthy();
-    expect(globalThis.personAttributes.get('p2')).toBeTruthy();
-    expect(globalThis.attributeTypes.size).toBeGreaterThan(0);
-    expect(globalThis.activeAttributes.size).toBeGreaterThan(0);
-    expect(globalThis.categorySourceFiles.has('Team')).toBe(true);
-  });
-
-  it('tolerates unmatched identifiers that have no fuzzy candidates', async () => {
-    const ok = await loadAttributesFromFile(
-      makeFile('Team.tsv', 'boss@x.ch\tCoach\nzzzzzzzzzzzzzzzz\tGhost'),
-    );
-    expect(ok).toBe(true);
-    expect(globalThis.personAttributes.get('p1')).toBeTruthy();
-  });
-
-  it('returns false for unreadable files', async () => {
-    const broken = { name: 'x.tsv', text: async () => { throw new Error('io'); } };
-    expect(await loadAttributesFromFile(broken)).toBe(false);
-  });
-
-  it('applies stored fuzzy resolutions without searching again', async () => {
-    globalThis.getStoredAttrMatches = vi.fn(async () => ({ 'ghost@x.ch': 'p2' }));
-    const ok = await loadAttributesFromFile(makeFile('Team.tsv', 'ghost@x.ch\tCoach'));
-    expect(ok).toBe(true);
-    expect(globalThis.personAttributes.get('p2').get('Team::Coach')).toBe('1');
-    expect(globalThis.showFuzzyMatchDialog).not.toHaveBeenCalled();
-    expect(globalThis.exportUnmatchedEntries).not.toHaveBeenCalled();
-  });
-
-  it('skips identifiers previously confirmed as unmatched', async () => {
-    globalThis.getStoredAttrMatches = vi.fn(async () => ({ 'ghost@x.ch': null }));
-    const ok = await loadAttributesFromFile(makeFile('Team.tsv', 'ghost@x.ch\tCoach\nboss@x.ch\tPL'));
-    expect(ok).toBe(true);
-    expect(globalThis.personAttributes.get('p1').get('Team::PL')).toBe('1');
-    expect(globalThis.showFuzzyMatchDialog).not.toHaveBeenCalled();
-    expect(globalThis.exportUnmatchedEntries).not.toHaveBeenCalled();
-  });
-
-  it('re-resolves stored matches whose person vanished from the dataset', async () => {
-    globalThis.getStoredAttrMatches = vi.fn(async () => ({ 'zzzzzzzzzzzzzzzz': 'p-gone' }));
-    const ok = await loadAttributesFromFile(makeFile('Team.tsv', 'zzzzzzzzzzzzzzzz\tGhost'));
-    expect(ok).toBe(true);
-    // falls back to the normal unmatched flow and remembers the no-match
-    expect(globalThis.mergeStoredAttrMatches).toHaveBeenCalledWith({ 'zzzzzzzzzzzzzzzz': null });
-    expect(globalThis.exportUnmatchedEntries).toHaveBeenCalled();
-  });
-});

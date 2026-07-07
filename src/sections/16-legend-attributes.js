@@ -153,13 +153,6 @@ export function buildAttributeLegend() {
       }));
     }
 
-    // Download-Button für Kategorie (TSV-Export) - vor Eye-Button
-    catRightArea.appendChild(createLegendIconButton({
-      svg: getDownloadSVG(),
-      title: `"${cat}" als TSV herunterladen`,
-      onClick: () => exportCategoryAsTSV(cat),
-    }));
-
     // Eye-Toggle Button (rechts) - blendet Kategorie temporär aus
     const isHidden = hiddenCategories.has(cat);
     const eyeBtn = createLegendIconButton({
@@ -192,17 +185,6 @@ export function buildAttributeLegend() {
     });
 
     catRightArea.appendChild(eyeBtn);
-    
-    // Save-Button (nur sichtbar wenn Kategorie geändert wurde); saveCategory
-    // legt für UI-erstellte Kategorien selbst einen Quell-Eintrag an
-    if (modifiedCategories.has(cat)) {
-      catRightArea.appendChild(createLegendIconButton({
-        svg: getSaveSVG(),
-        title: `Änderungen in "${cat}" speichern (lokal + Datei)`,
-        className: 'save-btn',
-        onClick: () => saveCategory(cat),
-      }));
-    }
 
     catLi.appendChild(catRow);
     
@@ -267,7 +249,3 @@ export function buildAttributeLegend() {
   legend.appendChild(ul);
   updateAttributeStats();
 }
-
-/**
- * Zeigt einen Dialog mit Fuzzy-Match-Vorschlägen
- */

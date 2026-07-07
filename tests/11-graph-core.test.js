@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { idOf, processData, drawKindOf } from '../src/sections/09-data-load.js';
+import { idOf, drawKindOf } from '../src/sections/09-data-load.js';
 import {
   buildAdjacency,
   computeSubgraph,
@@ -53,8 +53,36 @@ beforeEach(() => {
   globalThis.attributeFocusHiddenNodes = new Set();
   globalThis.attributeFocusSeeds = new Set();
   globalThis.hiddenCategories = new Set();
-  processData(sample());
+  applySample(sample());
 });
+
+// Local stock-globals builder (mirrors og2SyncStockGlobals): the legacy
+// processData intake was torn down with the v1 data path (§9.3/E25).
+function applySample(data) {
+  const persons = data.persons.map(p => ({ ...p, id: String(p.id), type: 'person', kind: 'node' }));
+  const orgs = data.orgs.map(o => ({ ...o, id: String(o.id), type: 'org', kind: 'cluster' }));
+  const nodes = [...persons, ...orgs];
+  const links = data.links.map(l => ({ source: String(l.source), target: String(l.target) }));
+  globalThis.raw = { nodes, links, persons, orgs };
+  globalThis.byId = new Map(nodes.map(n => [n.id, n]));
+  globalThis.allNodesUnique = nodes.slice();
+  const orgIds = new Set(orgs.map(o => o.id));
+  globalThis.parentOf = new Map();
+  globalThis.orgParent = new Map();
+  globalThis.orgChildren = new Map();
+  const hasParent = new Set();
+  for (const l of links) {
+    if (!orgIds.has(l.source) || !orgIds.has(l.target)) continue;
+    globalThis.parentOf.set(l.target, l.source);
+    globalThis.orgParent.set(l.target, l.source);
+    if (!globalThis.orgChildren.has(l.source)) globalThis.orgChildren.set(l.source, new Set());
+    globalThis.orgChildren.get(l.source).add(l.target);
+    hasParent.add(l.target);
+  }
+  globalThis.orgRoots = [...orgIds].filter(id => !hasParent.has(id));
+  globalThis.hiddenNodes = new Set();
+  globalThis.hiddenByRoot = new Map();
+}
 
 const ids = (result) => result.nodes.map((n) => n.id).sort();
 
@@ -236,7 +264,7 @@ describe('recomputeAttributeFocusHidden', () => {
   it('drops unattributed nodes on cycles that leaf peeling cannot remove', () => {
     // manager m, attributed person p, org o: m->p, p->o, m->o form a triangle;
     // o has degree 2 (never a leaf) but is a dead end and must disappear
-    processData({
+    applySample({
       persons: [{ id: 'm', label: 'Manager' }, { id: 'p', label: 'Person' }],
       orgs: [{ id: 'o', label: 'Org' }],
       links: [

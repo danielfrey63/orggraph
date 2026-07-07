@@ -2,13 +2,14 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   KEY_ENV,
-  KEY_DATA,
   KEY_PSEUDO,
-  ATTR_PREFIX,
+  KEY_REGISTRY,
+  SNAPSHOT_PREFIX,
   ATTR_EXT,
   looksLikeEnv,
   looksLikePseudo,
   looksLikeData,
+  looksLikeSnapshot,
   classifyFile,
   normalizeRelPath,
   dirOf,
@@ -23,15 +24,18 @@ import {
   delStored,
   getStoredText,
   getStoredJson,
-  getStoredAttributes,
-  getStoredAttrMatches,
-  mergeStoredAttrMatches,
   hasStoredData,
   requestPersistence,
 } from '../src/sections/04-storage.js';
 
 // jsdom's File lacks Blob.text(); classifyFile only uses .name and .text().
 const makeFile = (name, content) => ({ name, text: async () => content });
+
+const SNAPSHOT_TEXT = JSON.stringify({
+  meta: { source: 'hrm', snapshot: '20260101-1200', crawledAt: '2026-01-01T12:00:00Z', registryVersion: '1', scope: { nodeTypes: [], edgeTypes: [] } },
+  schema: { nodeTypes: {}, edgeTypes: {} },
+  nodes: [], edges: [],
+});
 
 beforeEach(async () => {
   await idbClear();
@@ -54,12 +58,17 @@ describe('content classifiers', () => {
     expect(looksLikePseudo(null)).toBe(false);
   });
 
-  it('looksLikeData detects persons/orgs/links arrays', () => {
+  it('looksLikeData still detects the legacy shape (for the rejection hint)', () => {
     expect(looksLikeData({ persons: [] })).toBe(true);
     expect(looksLikeData({ orgs: [] })).toBe(true);
     expect(looksLikeData({ links: [] })).toBe(true);
     expect(looksLikeData({ persons: 'no' })).toBe(false);
     expect(looksLikeData(null)).toBe(false);
+  });
+
+  it('looksLikeSnapshot detects the v2 snapshot shape', () => {
+    expect(looksLikeSnapshot(JSON.parse(SNAPSHOT_TEXT))).toBe(true);
+    expect(looksLikeSnapshot({ persons: [] })).toBe(false);
   });
 
   it('ATTR_EXT matches tsv/txt/csv case-insensitively', () => {
@@ -71,15 +80,18 @@ describe('content classifiers', () => {
 });
 
 describe('classifyFile', () => {
-  it('classifies attribute files by extension', async () => {
-    const c = await classifyFile(makeFile('Team.tsv', 'a@b\tX'));
-    expect(c).toMatchObject({ kind: 'attr', key: ATTR_PREFIX + 'Team.tsv', filename: 'Team.tsv' });
+  it('recognizes legacy classes without a storage key (E25/FR-6.7)', async () => {
+    const attr = await classifyFile(makeFile('Team.tsv', 'a@b\tX'));
+    expect(attr).toMatchObject({ kind: 'attr', key: null, filename: 'Team.tsv' });
+    const data = await classifyFile(makeFile('d.json', '{"persons":[]}'));
+    expect(data).toMatchObject({ kind: 'data', key: null });
   });
 
-  it('classifies env/pseudo/data JSON by content', async () => {
+  it('classifies env/pseudo/snapshot/registry JSON by content', async () => {
     expect((await classifyFile(makeFile('e.json', '{"DATA_URL":"x"}'))).kind).toBe('env');
     expect((await classifyFile(makeFile('p.json', '{"names":[]}'))).kind).toBe('pseudo');
-    expect((await classifyFile(makeFile('d.json', '{"persons":[]}'))).kind).toBe('data');
+    expect((await classifyFile(makeFile('s.json', SNAPSHOT_TEXT))).kind).toBe('snapshot');
+    expect((await classifyFile(makeFile('r.json', '{"version":"1","nodeTypes":{},"edgeTypes":{}}'))).kind).toBe('registry');
   });
 
   it('returns unknown for non-JSON and unrecognized JSON', async () => {
@@ -106,29 +118,28 @@ describe('profile-scoped storage roundtrip', () => {
   });
 });
 
-describe('storeFiles', () => {
-  it('stores classified files and reports unknown ones', async () => {
+describe('storeFiles (E25/FR-6.7: legacy classes rejected, never stored)', () => {
+  it('stores v2 files, rejects legacy ones and reports unknown ones', async () => {
     const result = await storeFiles([
+      makeFile('s.json', SNAPSHOT_TEXT),
       makeFile('d.json', '{"persons":[{"id":"p-1","label":"A"}]}'),
       makeFile('Team.tsv', 'a@b\tRole'),
       makeFile('junk.json', 'nope'),
     ]);
-    expect(result.stored).toEqual([
+    expect(result.stored).toEqual([{ kind: 'snapshot', filename: 's.json' }]);
+    expect(result.rejected).toEqual([
       { kind: 'data', filename: 'd.json' },
       { kind: 'attr', filename: 'Team.tsv' },
     ]);
     expect(result.unknown).toEqual(['junk.json']);
-    expect(await getStoredText(KEY_DATA)).toContain('p-1');
-  });
-
-  it('remembers the original attribute filename alongside the content', async () => {
-    await storeFiles([makeFile('My Team.tsv', 'x@y\tZ')]);
-    expect(await getStoredText(ATTR_PREFIX + 'My Team.tsv::name')).toBe('My Team.tsv');
+    expect(await getStoredText(SNAPSHOT_PREFIX + 's.json')).toContain('20260101-1200');
+    // nothing legacy landed in the profile store
+    expect(await getStoredText('data')).toBeUndefined();
   });
 
   it('handles an empty or missing file list', async () => {
-    expect(await storeFiles([])).toEqual({ stored: [], unknown: [], missing: [], ignored: [] });
-    expect(await storeFiles(null)).toEqual({ stored: [], unknown: [], missing: [], ignored: [] });
+    expect(await storeFiles([])).toEqual({ stored: [], unknown: [], missing: [], ignored: [], rejected: [] });
+    expect(await storeFiles(null)).toEqual({ stored: [], unknown: [], missing: [], ignored: [], rejected: [] });
   });
 });
 
@@ -190,73 +201,68 @@ describe('storeEntries (env-driven folder/zip drops)', () => {
     file: { name: path.split('/').pop(), text: async () => content },
   });
 
-  it('lets env.json decide which dataset and attribute files are stored', async () => {
+  it('DATA_URL references resolve to snapshots; legacy datasets are rejected', async () => {
     const result = await storeEntries([
-      entry('pkg/env.json', JSON.stringify({
-        DATA_URL: './data.hrm.json',
-        DATA_ATTRIBUTES_URL: ['./attrs/Team.tsv'],
-      })),
+      entry('pkg/env.json', JSON.stringify({ DATA_URL: './snap.json' })),
+      entry('pkg/snap.json', SNAPSHOT_TEXT),
       entry('pkg/data.json', '{"persons":[{"id":"p-other"}]}'),
-      entry('pkg/data.hrm.json', '{"persons":[{"id":"p-hrm"}]}'),
-      entry('pkg/attrs/Team.tsv', 'a@b\tRole'),
       entry('pkg/pseudo.data.json', '{"names":["Alias"]}'),
       entry('pkg/junk.bin', 'garbage'),
     ]);
 
     expect(result.stored).toEqual([
       { kind: 'env', filename: 'env.json' },
-      { kind: 'data', filename: 'data.hrm.json' },
-      { kind: 'attr', filename: 'Team.tsv' },
+      { kind: 'snapshot', filename: 'snap.json' },
       { kind: 'pseudo', filename: 'pseudo.data.json' },
     ]);
-    expect(result.ignored).toEqual(['data.json']);
+    expect(result.rejected).toEqual([{ kind: 'data', filename: 'data.json' }]);
     expect(result.unknown).toEqual(['junk.bin']);
     expect(result.missing).toEqual([]);
-    expect(await getStoredText(KEY_DATA)).toContain('p-hrm');
+    expect(await getStoredText(SNAPSHOT_PREFIX + 'snap.json')).toContain('20260101-1200');
     expect(await getStoredText(KEY_PSEUDO)).toContain('Alias');
-    expect(await getStoredText(ATTR_PREFIX + 'Team.tsv::name')).toBe('Team.tsv');
+  });
+
+  it('a DATA_URL reference pointing at a legacy dataset is rejected with a hint', async () => {
+    const result = await storeEntries([
+      entry('pkg/env.json', JSON.stringify({ DATA_URL: './data.json' })),
+      entry('pkg/data.json', '{"persons":[{"id":"p-1"}]}'),
+    ]);
+    expect(result.stored).toEqual([{ kind: 'env', filename: 'env.json' }]);
+    expect(result.rejected).toEqual([{ kind: 'data', filename: 'data.json' }]);
+    expect(await getStoredText('data')).toBeUndefined();
   });
 
   it('reports references that are not part of the drop as missing', async () => {
     const result = await storeEntries([
-      entry('env.json', JSON.stringify({
-        DATA_URL: './data.json',
-        DATA_ATTRIBUTES_URL: './Team.tsv',
-      })),
+      entry('env.json', JSON.stringify({ DATA_URL: './snap.json' })),
     ]);
     expect(result.stored).toEqual([{ kind: 'env', filename: 'env.json' }]);
-    expect(result.missing).toEqual(['./data.json', './Team.tsv']);
+    expect(result.missing).toEqual(['./snap.json']);
     expect(await getStoredText(KEY_ENV)).toContain('DATA_URL');
   });
 
   it('prefers a file named env.json over env variants', async () => {
     const result = await storeEntries([
-      entry('pkg/env.sem.json', '{"DATA_URL":"./data.sem.json"}'),
-      entry('pkg/env.json', '{"DATA_URL":"./data.json"}'),
-      entry('pkg/data.json', '{"persons":[{"id":"p-main"}]}'),
-      entry('pkg/data.sem.json', '{"persons":[{"id":"p-sem"}]}'),
+      entry('pkg/env.sem.json', '{"DATA_URL":"./other.json"}'),
+      entry('pkg/env.json', '{"DATA_URL":"./snap.json"}'),
+      entry('pkg/snap.json', SNAPSHOT_TEXT),
     ]);
     expect(result.stored).toContainEqual({ kind: 'env', filename: 'env.json' });
-    expect(result.ignored.sort()).toEqual(['data.sem.json', 'env.sem.json']);
-    expect(await getStoredText(KEY_DATA)).toContain('p-main');
-    expect(await getStoredJson(KEY_ENV)).toEqual({ DATA_URL: './data.json' });
+    expect(result.ignored).toEqual(['env.sem.json']);
+    expect(await getStoredJson(KEY_ENV)).toEqual({ DATA_URL: './snap.json' });
   });
 
-  it('stores unreferenced attribute files additively alongside an env drop', async () => {
+  it('stores registry drops under the registry key', async () => {
     const result = await storeEntries([
-      entry('env.json', '{"TOOLBAR_DEPTH_DEFAULT":2}'),
-      entry('Extra.csv', 'x@y,Z'),
+      entry('registry.json', '{"version":"1","nodeTypes":{},"edgeTypes":{}}'),
     ]);
-    expect(result.stored).toEqual([
-      { kind: 'env', filename: 'env.json' },
-      { kind: 'attr', filename: 'Extra.csv' },
-    ]);
-    expect(result.missing).toEqual([]);
+    expect(result.stored).toEqual([{ kind: 'registry', filename: 'registry.json' }]);
+    expect(await getStoredJson(KEY_REGISTRY)).toMatchObject({ version: '1' });
   });
 
   it('skips entries without a readable text() function', async () => {
-    const result = await storeEntries([null, { path: 'x.json' }, entry('d.json', '{"persons":[]}')]);
-    expect(result.stored).toEqual([{ kind: 'data', filename: 'd.json' }]);
+    const result = await storeEntries([null, { path: 'x.json' }, entry('s.json', SNAPSHOT_TEXT)]);
+    expect(result.stored).toEqual([{ kind: 'snapshot', filename: 's.json' }]);
   });
 });
 
@@ -274,17 +280,12 @@ describe('stored accessors', () => {
     expect(await getStoredJson('missing')).toBeUndefined();
   });
 
-  it('getStoredAttributes lists attr entries with original filenames', async () => {
-    await storeFiles([makeFile('A.tsv', 'a@b\tX'), makeFile('B.csv', 'c@d\tY')]);
-    const attrs = await getStoredAttributes();
-    expect(attrs.map((a) => a.filename).sort()).toEqual(['A.tsv', 'B.csv']);
-    expect(attrs.every((a) => a.key.includes(ATTR_PREFIX))).toBe(true);
-    expect(attrs.every((a) => typeof a.text === 'string')).toBe(true);
-  });
-
-  it('hasStoredData reflects presence of the data key', async () => {
+  it('hasStoredData reflects presence of a v2 configuration (env or registry)', async () => {
     expect(await hasStoredData()).toBe(false);
-    await putStored(KEY_DATA, '{"persons":[]}');
+    await putStored(KEY_ENV, '{"DATA_URL":"./snap.json"}');
+    expect(await hasStoredData()).toBe(true);
+    await delStored(KEY_ENV);
+    await putStored(KEY_REGISTRY, '{"version":"1","nodeTypes":{},"edgeTypes":{}}');
     expect(await hasStoredData()).toBe(true);
   });
 });
@@ -292,18 +293,6 @@ describe('stored accessors', () => {
 describe('requestPersistence', () => {
   it('returns false when navigator.storage.persist is unavailable', async () => {
     expect(await requestPersistence()).toBe(false);
-  });
-});
-
-describe('stored attribute match resolutions', () => {
-  it('returns an empty object when nothing is stored', async () => {
-    expect(await getStoredAttrMatches()).toEqual({});
-  });
-
-  it('merges updates over existing resolutions and round-trips', async () => {
-    await mergeStoredAttrMatches({ 'a@x.ch': 'p1', 'b@x.ch': null });
-    await mergeStoredAttrMatches({ 'b@x.ch': 'p2', 'c@x.ch': null });
-    expect(await getStoredAttrMatches()).toEqual({ 'a@x.ch': 'p1', 'b@x.ch': 'p2', 'c@x.ch': null });
   });
 });
 
@@ -319,49 +308,5 @@ describe('isPathUnderDir', () => {
     expect(isPathUnderDir('Team.tsv', '')).toBe(true);
     expect(isPathUnderDir('a/b/Team.tsv', '')).toBe(true);
     expect(isPathUnderDir('Team.tsv', null)).toBe(false);
-  });
-});
-
-describe('storeEntries with DATA_ATTRIBUTES_DIR', () => {
-  const entry = (path, content) => ({
-    path,
-    file: { name: path.split('/').pop(), text: async () => content },
-  });
-
-  it('stores every attribute file inside the configured directory', async () => {
-    const result = await storeEntries([
-      entry('pkg/env.json', JSON.stringify({
-        DATA_URL: './data.json',
-        DATA_ATTRIBUTES_DIR: './attrs/',
-      })),
-      entry('pkg/data.json', '{"persons":[]}'),
-      entry('pkg/attrs/Team.tsv', 'a@b\tX'),
-      entry('pkg/attrs/Roles.txt', 'a@b\tY'),
-    ]);
-    const attrNames = result.stored.filter(s => s.kind === 'attr').map(s => s.filename).sort();
-    expect(attrNames).toEqual(['Roles.txt', 'Team.tsv']);
-    expect(result.missing).toEqual([]);
-    expect(await getStoredText(ATTR_PREFIX + 'Team.tsv')).toBe('a@b\tX');
-  });
-
-  it('combines explicit refs and directories without storing twice', async () => {
-    const result = await storeEntries([
-      entry('env.json', JSON.stringify({
-        DATA_ATTRIBUTES_URL: ['./attrs/Team.tsv'],
-        DATA_ATTRIBUTES_DIR: './attrs',
-      })),
-      entry('attrs/Team.tsv', 'a@b\tX'),
-      entry('attrs/Extra.tsv', 'a@b\tY'),
-    ]);
-    const attrNames = result.stored.filter(s => s.kind === 'attr').map(s => s.filename).sort();
-    expect(attrNames).toEqual(['Extra.tsv', 'Team.tsv']);
-  });
-
-  it('reports a directory without attribute files as missing', async () => {
-    const result = await storeEntries([
-      entry('env.json', JSON.stringify({ DATA_ATTRIBUTES_DIR: './attrs' })),
-      entry('other/Team.tsv', 'a@b\tX'),
-    ]);
-    expect(result.missing).toEqual(['./attrs']);
   });
 });

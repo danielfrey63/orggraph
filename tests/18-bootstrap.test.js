@@ -3,7 +3,6 @@ import { ICON, setIcon } from '../src/sections/02-icons.js';
 import {
   INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, INPUT_DEPTH_ID, SVG_ID,
 } from '../src/sections/01-config-status.js';
-import { KEY_DATA, ATTR_PREFIX } from '../src/sections/04-storage.js';
 
 const FIXTURE = `
   <input id="comboInput"><ul id="comboList" hidden></ul>
@@ -48,8 +47,6 @@ const setupGlobals = () => {
   globalThis.STATUS_ID = STATUS_ID;
   globalThis.INPUT_DEPTH_ID = INPUT_DEPTH_ID;
   globalThis.SVG_ID = SVG_ID;
-  globalThis.KEY_DATA = KEY_DATA;
-  globalThis.ATTR_PREFIX = ATTR_PREFIX;
   globalThis.envConfig = null;
   globalThis.pseudonymizationEnabled = true;
   globalThis.oesVisible = true;
@@ -110,7 +107,6 @@ const setupGlobals = () => {
   globalThis.showDropZone = vi.fn();
   globalThis.hideDropZone = vi.fn();
   globalThis.requestPersistence = vi.fn(async () => true);
-  globalThis.loadAttributesFromFile = vi.fn(async () => true);
   globalThis.idbPut = vi.fn(async () => {});
   globalThis.idbClear = vi.fn(async () => {});
   globalThis.setStatus = vi.fn();

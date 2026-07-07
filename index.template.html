@@ -109,9 +109,6 @@
                 <i data-icon="chevronDown"></i>
                 <i data-icon="chevronDown" style="margin-top: -8px;"></i>
               </button>
-              <button id="loadAttributes" class="legend-icon-btn" title="Attributliste laden" data-ignore-header-click="true">
-                <i data-icon="cloudUpload"></i>
-              </button>
               <button id="toggleAllAttributes" class="legend-icon-btn" title="Alle Attribute an/abwählen" data-ignore-header-click="true">
                 <i data-icon="checkAll"></i>
               </button>
@@ -125,7 +122,6 @@
           </div>
         </div>
         <div id="attributeContainer" class="legend-content">
-          <input type="file" id="attributeFileInput" accept=".txt,.csv,text/plain,text/csv,text/tab-separated-values" hidden />
           <div id="attributeLegend" class="attribute-legend">
             <!-- Dynamisch generierte Attribut-Legende -->
           </div>
@@ -218,7 +214,7 @@
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.149.138';
+const APP_VERSION = '1.150.141';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 @@APP@@
 </script>

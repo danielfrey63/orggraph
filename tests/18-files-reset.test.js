@@ -2,10 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { handleDroppedFiles, resetAllData } from '../src/sections/18-files-reset.js';
 
 beforeEach(() => {
-  globalThis.storeEntries = vi.fn(async () => ({ stored: [], unknown: [], missing: [], ignored: [] }));
+  globalThis.storeEntries = vi.fn(async () => ({ stored: [], unknown: [], missing: [], ignored: [], rejected: [] }));
   globalThis.requestPersistence = vi.fn(async () => true);
   globalThis.showTemporaryNotification = vi.fn();
-  globalThis.loadAttributesFromFile = vi.fn(async () => true);
   globalThis.hideDropZone = vi.fn();
   globalThis.setStatus = vi.fn();
   globalThis.idbClear = vi.fn(async () => {});
@@ -27,7 +26,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const summaryOf = (overrides) => ({ stored: [], unknown: [], missing: [], ignored: [], ...overrides });
+const summaryOf = (overrides) => ({ stored: [], unknown: [], missing: [], ignored: [], rejected: [], ...overrides });
 
 describe('handleDroppedFiles', () => {
   it('reports unknown files and stops when nothing was stored', async () => {
@@ -35,7 +34,6 @@ describe('handleDroppedFiles', () => {
     await handleDroppedFiles([{ path: 'x.bin', file: { name: 'x.bin' } }]);
     expect(globalThis.showTemporaryNotification.mock.calls[0][0]).toContain('x.bin');
     expect(globalThis.location.reload).not.toHaveBeenCalled();
-    expect(globalThis.loadAttributesFromFile).not.toHaveBeenCalled();
   });
 
   it('reports env references that were not part of the import', async () => {
@@ -71,57 +69,26 @@ describe('handleDroppedFiles', () => {
     expect(globalThis.location.reload).toHaveBeenCalled();
   });
 
-  it('does not create a profile for an attribute-only drop', async () => {
-    const tsv = { name: 'Roles.tsv', text: async () => 'a@b\tX' };
-    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({ stored: [{ kind: 'attr', filename: 'Roles.tsv' }] }));
-    await handleDroppedFiles([{ path: 'Roles.tsv', file: tsv }]);
+  it('rejected legacy drops surface the migration hint and never reload (E25/FR-6.7)', async () => {
+    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({
+      rejected: [{ kind: 'attr', filename: 'Roles.tsv' }, { kind: 'data', filename: 'data.json' }],
+    }));
+    await handleDroppedFiles([{ path: 'Roles.tsv', file: { name: 'Roles.tsv', text: async () => 'a@b	X' } }]);
+    const hint = globalThis.showTemporaryNotification.mock.calls.map(c => c[0]).find(m => m.includes('migrate-legacy'));
+    expect(hint).toContain('Roles.tsv');
+    expect(hint).toContain('data.json');
     expect(globalThis.createProfile).not.toHaveBeenCalled();
     expect(globalThis.location.reload).not.toHaveBeenCalled();
   });
 
-  it('reloads attribute-only drops live without restarting', async () => {
-    const teamFile = { name: 'Team.tsv' };
-    const entries = [{ path: 'Team.tsv', file: teamFile }, { path: 'Rolle.tsv', file: { name: 'Rolle.tsv' } }];
+  it('restarts via the init path when a snapshot/env/pseudo file is stored', async () => {
     globalThis.storeEntries.mockResolvedValueOnce(summaryOf({
-      stored: [{ kind: 'attr', filename: 'Team.tsv' }, { kind: 'attr', filename: 'Rolle.tsv' }],
+      stored: [{ kind: 'snapshot', filename: 's.json' }],
     }));
-    await handleDroppedFiles(entries);
-    expect(globalThis.loadAttributesFromFile).toHaveBeenCalledTimes(2);
-    expect(globalThis.loadAttributesFromFile).toHaveBeenCalledWith(teamFile);
-    expect(globalThis.location.reload).not.toHaveBeenCalled();
-    expect(globalThis.showTemporaryNotification.mock.calls[0][0]).toContain('2 Attribut-Datei(en)');
-  });
-
-  it('accepts plain File lists for attribute-only drops (picker compatibility)', async () => {
-    const files = [{ name: 'A.tsv' }];
-    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({
-      stored: [{ kind: 'attr', filename: 'A.tsv' }],
-    }));
-    await handleDroppedFiles(files);
-    expect(globalThis.loadAttributesFromFile).toHaveBeenCalledWith(files[0]);
-  });
-
-  it('survives a failing attribute reload and continues with the rest', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const entries = [{ path: 'A.tsv', file: { name: 'A.tsv' } }, { path: 'B.tsv', file: { name: 'B.tsv' } }];
-    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({
-      stored: [{ kind: 'attr', filename: 'A.tsv' }, { kind: 'attr', filename: 'B.tsv' }],
-    }));
-    globalThis.loadAttributesFromFile.mockRejectedValueOnce(new Error('boom'));
-    await handleDroppedFiles(entries);
-    expect(globalThis.loadAttributesFromFile).toHaveBeenCalledTimes(2);
-    expect(errorSpy).toHaveBeenCalled();
-  });
-
-  it('restarts via the init path when a dataset/env/pseudo file is stored', async () => {
-    globalThis.storeEntries.mockResolvedValueOnce(summaryOf({
-      stored: [{ kind: 'data', filename: 'd.json' }, { kind: 'attr', filename: 'T.tsv' }],
-    }));
-    await handleDroppedFiles([{ path: 'd.json', file: { name: 'd.json' } }, { path: 'T.tsv', file: { name: 'T.tsv' } }]);
+    await handleDroppedFiles([{ path: 's.json', file: { name: 's.json' } }]);
     expect(globalThis.hideDropZone).toHaveBeenCalled();
     expect(globalThis.setStatus).toHaveBeenCalledWith('Daten gespeichert – lade neu …');
     expect(globalThis.location.reload).toHaveBeenCalled();
-    expect(globalThis.loadAttributesFromFile).not.toHaveBeenCalled();
   });
 });
 

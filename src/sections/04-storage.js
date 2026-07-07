@@ -9,7 +9,6 @@ export const LEGACY_STORE = 'files';
 
 // Stable logical keys (decoupled from env URLs).
 export const KEY_ENV = 'env';
-export const KEY_DATA = 'data';
 export const KEY_PSEUDO = 'pseudo';
 // OrgGraph 2.0 tenant persistence (FR-8.9): serialized tenant store, tenant
 // registry, and dropped-but-not-yet-imported snapshots (imported with their
@@ -17,8 +16,6 @@ export const KEY_PSEUDO = 'pseudo';
 export const KEY_STORE = 'og2Store';
 export const KEY_REGISTRY = 'og2Registry';
 export const SNAPSHOT_PREFIX = 'og2Snapshot::';
-export const ATTR_PREFIX = 'attr:';
-export const KEY_ATTR_MATCHES = 'attrMatches';
 
 let _dbPromise = null;
 
@@ -340,10 +337,13 @@ export async function duplicateProfile(id, name) {
   return newId;
 }
 
-/** True when the given profile has a stored dataset (KEY_DATA). */
+/** True when the given profile carries a v2 configuration (env or registry). */
 async function profileHasData(id) {
-  const v = await profileTx(id, 'readonly', s => reqAsPromise(s.get(KEY_DATA)));
-  return typeof v === 'string' && v.length > 0;
+  for (const key of [KEY_ENV, KEY_REGISTRY]) {
+    const v = await profileTx(id, 'readonly', s => reqAsPromise(s.get(key)));
+    if (typeof v === 'string' && v.length > 0) return true;
+  }
+  return false;
 }
 
 /** Prefer a profile that actually holds data, so a switch lands on something visible. */
@@ -439,8 +439,10 @@ export async function classifyFile(file) {
   const filename = file.name || 'unnamed';
   const text = await file.text();
 
+  // Legacy attribute lists are recognized only to reject them with a
+  // migration hint (E25/FR-6.7) — they are never stored in a v2 tenant.
   if (ATTR_EXT.test(filename)) {
-    return { kind: 'attr', key: ATTR_PREFIX + filename, filename, text };
+    return { kind: 'attr', key: null, filename, text };
   }
 
   // JSON-ish: classify by content.
@@ -453,7 +455,7 @@ export async function classifyFile(file) {
   // legacy shape, but keep the order explicit (FR-6.7, E25).
   if (looksLikeSnapshot(obj)) return { kind: 'snapshot', key: SNAPSHOT_PREFIX + filename, filename, text };
   if (looksLikeRegistry(obj)) return { kind: 'registry', key: KEY_REGISTRY, filename, text };
-  if (looksLikeData(obj)) return { kind: 'data', key: KEY_DATA, filename, text };
+  if (looksLikeData(obj)) return { kind: 'data', key: null, filename, text };
 
   return { kind: 'unknown', key: null, filename, text };
 }
@@ -545,6 +547,7 @@ export async function storeEntries(entryList) {
   const unknown = [];
   const missing = [];
   const ignored = [];
+  const rejected = [];
 
   const classified = [];
   for (const raw of Array.from(entryList || [])) {
@@ -553,13 +556,6 @@ export async function storeEntries(entryList) {
     const path = (raw && raw.path) || file.name || 'unnamed';
     classified.push({ path, ...(await classifyFile(file)) });
   }
-
-  const storeAttr = async (c) => {
-    // remember original filename alongside the content for category derivation
-    await putStored(ATTR_PREFIX + c.filename, c.text);
-    await putStored(ATTR_PREFIX + c.filename + '::name', c.filename);
-    stored.push({ kind: 'attr', filename: c.filename });
-  };
 
   // Pick the authoritative env: a file named env.json wins over variants.
   const envs = classified.filter(c => c.kind === 'env');
@@ -577,50 +573,35 @@ export async function storeEntries(entryList) {
     // classifyFile only marks parseable JSON as env, so this cannot throw.
     const cfg = JSON.parse(env.text);
 
-    if (cfg.DATA_URL) {
-      const hit = findEntryByRef(classified, env.path, cfg.DATA_URL);
-      if (hit) {
-        used.add(hit);
-        await putStored(KEY_DATA, hit.text);
-        stored.push({ kind: 'data', filename: hit.filename });
-      } else {
-        missing.push(String(cfg.DATA_URL));
-      }
-    }
-
-    const attrRefs = cfg.DATA_ATTRIBUTES_URL
-      ? (Array.isArray(cfg.DATA_ATTRIBUTES_URL) ? cfg.DATA_ATTRIBUTES_URL : [cfg.DATA_ATTRIBUTES_URL])
+    // DATA_URL references point at snapshots in a v2 tenant (FR-8.10);
+    // a referenced legacy dataset is rejected with the migration hint.
+    const dataRefs = cfg.DATA_URL
+      ? (Array.isArray(cfg.DATA_URL) ? cfg.DATA_URL : [cfg.DATA_URL])
       : [];
-    for (const ref of attrRefs) {
+    for (const ref of dataRefs) {
       const hit = findEntryByRef(classified, env.path, ref);
-      if (hit) { used.add(hit); await storeAttr(hit); }
-      else missing.push(String(ref));
-    }
-
-    // Attribute directories (DATA_ATTRIBUTES_DIR): every attribute file
-    // inside the directory counts as referenced — no explicit listing needed
-    const attrDirs = cfg.DATA_ATTRIBUTES_DIR
-      ? (Array.isArray(cfg.DATA_ATTRIBUTES_DIR) ? cfg.DATA_ATTRIBUTES_DIR : [cfg.DATA_ATTRIBUTES_DIR])
-      : [];
-    for (const dirRef of attrDirs) {
-      const dirPath = resolveRefPath(env.path, String(dirRef).replace(/\/+$/, ''));
-      const hits = classified.filter(c =>
-        c.kind === 'attr' && !used.has(c) && isPathUnderDir(c.path, dirPath));
-      if (!hits.length) { missing.push(String(dirRef)); continue; }
-      for (const hit of hits) { used.add(hit); await storeAttr(hit); }
+      if (!hit) { missing.push(String(ref)); continue; }
+      used.add(hit);
+      if (hit.kind === 'snapshot') {
+        await putStored(hit.key, hit.text);
+        stored.push({ kind: 'snapshot', filename: hit.filename });
+      } else {
+        rejected.push({ kind: hit.kind, filename: hit.filename });
+      }
     }
   }
 
   for (const c of classified) {
     if (used.has(c)) continue;
     if (c.kind === 'unknown') { unknown.push(c.filename); continue; }
-    if (env && (c.kind === 'env' || c.kind === 'data')) { ignored.push(c.filename); continue; }
-    if (c.kind === 'attr') { await storeAttr(c); continue; }
+    // Legacy classes are rejected, never persisted (E25/FR-6.7).
+    if (c.kind === 'data' || c.kind === 'attr') { rejected.push({ kind: c.kind, filename: c.filename }); continue; }
+    if (env && c.kind === 'env') { ignored.push(c.filename); continue; }
     await putStored(c.key, c.text);
     stored.push({ kind: c.kind, filename: c.filename });
   }
 
-  return { stored, unknown, missing, ignored };
+  return { stored, unknown, missing, ignored, rejected };
 }
 
 /**
@@ -643,42 +624,9 @@ export async function getStoredJson(key) {
   try { return JSON.parse(t); } catch { return undefined; }
 }
 
-/** List stored attribute files of the active profile as [{ key, filename, text }]. */
-export async function getStoredAttributes() {
-  const id = await ensureProfilesInitialized();
-  const db = await openDb();
-  if (!db.objectStoreNames.contains(profileStoreName(id))) return [];
-  const pairs = await readAllPairs(profileStoreName(id));
-  const byKey = new Map(pairs);
-  const out = [];
-  for (const [k, text] of pairs) {
-    if (typeof k !== 'string') continue;
-    if (!k.startsWith(ATTR_PREFIX) || k.endsWith('::name')) continue;
-    if (typeof text !== 'string') continue;
-    const nameVal = byKey.get(k + '::name');
-    const filename = (typeof nameVal === 'string' ? nameVal : null) || k.slice(ATTR_PREFIX.length);
-    out.push({ key: k, filename, text });
-  }
-  return out;
-}
-
+/** True when the given profile already carries a v2 configuration. */
 export async function hasStoredData() {
-  return (await getStoredText(KEY_DATA)) != null;
-}
-
-/**
- * Persisted resolutions for attribute identifiers without an exact match:
- * identifier -> person id (confirmed assignment) or null (confirmed unmatched).
- * Saves re-running the fuzzy search and re-asking the user on every reload.
- */
-export async function getStoredAttrMatches() {
-  return (await getStoredJson(KEY_ATTR_MATCHES)) || {};
-}
-
-export async function mergeStoredAttrMatches(updates) {
-  const merged = { ...(await getStoredAttrMatches()), ...updates };
-  await putStored(KEY_ATTR_MATCHES, JSON.stringify(merged));
-  return merged;
+  return (await getStoredText(KEY_ENV)) != null || (await getStoredText(KEY_REGISTRY)) != null;
 }
 
 

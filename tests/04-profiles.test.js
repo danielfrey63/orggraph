@@ -1,14 +1,12 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  KEY_DATA,
+  KEY_ENV,
   KEY_PROFILES,
-  ATTR_PREFIX,
   DEFAULT_PROFILE_ID,
   openDb,
   putStored,
   getStoredText,
-  getStoredAttributes,
   getProfilesMeta,
   listProfiles,
   getActiveProfileId,
@@ -20,6 +18,10 @@ import {
   deleteProfile,
   _resetProfilesCache,
 } from '../src/sections/04-storage.js';
+
+// A profile "has data" when it carries a v2 configuration (env or registry);
+// legacy 'data'/'attr:' keys survive migration as opaque entries only.
+const ENV_TEXT = '{"DATA_URL":"./snap.json"}';
 
 /** Wipe the whole database so each test starts from a clean slate. */
 function deleteDb() {
@@ -63,16 +65,16 @@ describe('profile initialization & migration', () => {
 
   it('migrates the legacy single-store layout into per-profile stores (idempotent)', async () => {
     await seedLegacyFilesStore([
-      [KEY_DATA, '{"persons":[]}'],                 // un-namespaced legacy keys
-      [ATTR_PREFIX + 'Team.tsv', 'a@b\tX'],
-      [ATTR_PREFIX + 'Team.tsv::name', 'Team.tsv'],
+      ['data', '{"persons":[]}'],                   // un-namespaced legacy keys
+      ['attr:Team.tsv', 'a@b\tX'],
+      ['attr:Team.tsv::name', 'Team.tsv'],
     ]);
     _resetProfilesCache();
 
     expect(await ensureProfilesInitialized()).toBe(DEFAULT_PROFILE_ID);
-    expect(await getStoredText(KEY_DATA)).toBe('{"persons":[]}');
-    const attrs = await getStoredAttributes();
-    expect(attrs.map((a) => a.filename)).toEqual(['Team.tsv']);
+    // legacy entries survive as opaque keys inside the migrated profile store
+    expect(await getStoredText('data')).toBe('{"persons":[]}');
+    expect(await getStoredText('attr:Team.tsv')).toBe('a@b\tX');
 
     // The obsolete single store is gone; the profile got its own store.
     const db = await openDb();
@@ -83,7 +85,7 @@ describe('profile initialization & migration', () => {
     _resetProfilesCache();
     await ensureProfilesInitialized();
     expect((await listProfiles()).length).toBe(1);
-    expect(await getStoredText(KEY_DATA)).toBe('{"persons":[]}');
+    expect(await getStoredText('data')).toBe('{"persons":[]}');
   });
 
   it('migrates the prefixed multi-profile layout into per-profile stores', async () => {
@@ -92,16 +94,16 @@ describe('profile initialization & migration', () => {
         { id: 'default', name: 'Standard' },
         { id: 'hrm', name: 'HRM' },
       ] }],
-      ['p:default:' + KEY_DATA, 'DEF'],
-      ['p:hrm:' + KEY_DATA, 'HRM-DATA'],
+      ['p:default:env', 'DEF'],
+      ['p:hrm:env', 'HRM-ENV'],
     ]);
     _resetProfilesCache();
 
     expect(await ensureProfilesInitialized()).toBe('hrm');
     expect((await listProfiles()).map((p) => p.id).sort()).toEqual(['default', 'hrm']);
-    expect(await getStoredText(KEY_DATA)).toBe('HRM-DATA');   // active = hrm
+    expect(await getStoredText(KEY_ENV)).toBe('HRM-ENV');   // active = hrm
     await switchProfile('default');
-    expect(await getStoredText(KEY_DATA)).toBe('DEF');
+    expect(await getStoredText(KEY_ENV)).toBe('DEF');
 
     const db = await openDb();
     expect(Array.from(db.objectStoreNames)).not.toContain('files');
@@ -112,14 +114,14 @@ describe('profile initialization & migration', () => {
 describe('profile CRUD & isolation', () => {
   it('keeps data of parallel profiles isolated', async () => {
     const alpha = await createProfile('Alpha');         // created and activated
-    await putStored(KEY_DATA, 'ALPHA');
-    const beta = await createProfile('Beta');           // active alpha has data → parallel profile
-    await putStored(KEY_DATA, 'BETA');
+    await putStored(KEY_ENV, 'ALPHA');
+    const beta = await createProfile('Beta');
+    await putStored(KEY_ENV, 'BETA');
 
     await switchProfile(alpha);
-    expect(await getStoredText(KEY_DATA)).toBe('ALPHA');
+    expect(await getStoredText(KEY_ENV)).toBe('ALPHA');
     await switchProfile(beta);
-    expect(await getStoredText(KEY_DATA)).toBe('BETA');
+    expect(await getStoredText(KEY_ENV)).toBe('BETA');
   });
 
   it('prunes the empty default profile as soon as another profile exists', async () => {
@@ -128,8 +130,8 @@ describe('profile CRUD & isolation', () => {
     expect(await getActiveProfileId()).toBe(hrm);
   });
 
-  it('keeps the default profile when it still holds data', async () => {
-    await putStored(KEY_DATA, '{"persons":[]}');        // default (active) has data
+  it('keeps the default profile when it still holds a configuration', async () => {
+    await putStored(KEY_ENV, ENV_TEXT);                 // default (active) has a config
     await createProfile('HRM');                         // → not pruned
     expect((await listProfiles()).map((p) => p.id).sort()).toEqual(['default', 'hrm']);
   });
@@ -148,19 +150,18 @@ describe('profile CRUD & isolation', () => {
 
   it('duplicateProfile copies the whole profile store', async () => {
     await createProfile('Src');
-    await putStored(KEY_DATA, 'D');
-    await putStored(ATTR_PREFIX + 'X.csv', 'x');
-    await putStored(ATTR_PREFIX + 'X.csv::name', 'X.csv');
+    await putStored(KEY_ENV, ENV_TEXT);
+    await putStored('og2Snapshot::s.json', '{"meta":{}}');
 
     const copy = await duplicateProfile('src', 'Copy');
     await switchProfile(copy);
-    expect(await getStoredText(KEY_DATA)).toBe('D');
-    expect((await getStoredAttributes()).map((a) => a.filename)).toEqual(['X.csv']);
+    expect(await getStoredText(KEY_ENV)).toBe(ENV_TEXT);
+    expect(await getStoredText('og2Snapshot::s.json')).toBe('{"meta":{}}');
   });
 
   it('deleteProfile removes its store and picks a new active profile', async () => {
     const x = await createProfile('X');
-    await putStored(KEY_DATA, 'GONE');
+    await putStored(KEY_ENV, 'GONE');
 
     const newActive = await deleteProfile(x);
     expect(newActive).toBe(DEFAULT_PROFILE_ID);
@@ -170,13 +171,13 @@ describe('profile CRUD & isolation', () => {
     expect(Array.from(db.objectStoreNames)).not.toContain('p:' + x);
   });
 
-  it('deleting the active profile lands on a remaining profile that has data', async () => {
+  it('deleting the active profile lands on a remaining profile that has a configuration', async () => {
     await createProfile('WithData');           // default pruned → list=[withdata], active=withdata
-    await putStored(KEY_DATA, '{"persons":[]}');
-    await createProfile('Empty');              // list=[withdata, empty], active=empty (no data)
+    await putStored(KEY_ENV, ENV_TEXT);
+    await createProfile('Empty');              // list=[withdata, empty], active=empty (no config)
 
     const newActive = await deleteProfile('empty');
-    expect(newActive).toBe('withdata');        // lands on the data-bearing profile
+    expect(newActive).toBe('withdata');        // lands on the config-bearing profile
   });
 
   it('deleting the last profile recreates an empty default', async () => {

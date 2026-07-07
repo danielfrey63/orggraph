@@ -4,7 +4,6 @@ import { ICON, setIcon } from '../src/sections/02-icons.js';
 import {
   INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, INPUT_DEPTH_ID, SVG_ID,
 } from '../src/sections/01-config-status.js';
-import { KEY_DATA, ATTR_PREFIX } from '../src/sections/04-storage.js';
 
 const d3Src = readFileSync('vendor/d3.v7.min.js', 'utf8');
 const d3Mod = { exports: {} };
@@ -41,8 +40,7 @@ const FIXTURE = `
   <svg id="graph"></svg>
   <div class="footer-stats"></div>
   <div id="legend"></div><div id="attributeLegend"></div><div id="hiddenLegend"></div>
-  <input id="attributeFileInput" type="file" style="display:none">
-  <button id="loadAttributes"></button>`;
+`;
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -56,8 +54,6 @@ beforeAll(async () => {
   globalThis.STATUS_ID = STATUS_ID;
   globalThis.INPUT_DEPTH_ID = INPUT_DEPTH_ID;
   globalThis.SVG_ID = SVG_ID;
-  globalThis.KEY_DATA = KEY_DATA;
-  globalThis.ATTR_PREFIX = ATTR_PREFIX;
   globalThis.envConfig = null;
   globalThis.pseudonymizationEnabled = true;
   globalThis.oesVisible = true;
@@ -85,7 +81,6 @@ beforeAll(async () => {
   globalThis.currentLayoutMode = 'force';
   globalThis.filteredItems = [];
   globalThis.activeIndex = -1;
-  globalThis.legendMenuEl = null;
   globalThis.nodeMenuEl = null;
   globalThis.Logger = { log: () => {} };
   globalThis.getDisplayLabel = vi.fn((n) => n?.label || '');
@@ -125,7 +120,6 @@ beforeAll(async () => {
   globalThis.showDropZone = vi.fn();
   globalThis.hideDropZone = vi.fn();
   globalThis.requestPersistence = vi.fn(async () => true);
-  globalThis.loadAttributesFromFile = vi.fn(async () => true);
   globalThis.idbPut = vi.fn(async () => {});
   globalThis.putStored = vi.fn(async () => {});
   globalThis.idbClear = vi.fn(async () => {});
@@ -133,7 +127,7 @@ beforeAll(async () => {
   globalThis.showTemporaryNotification = vi.fn();
   globalThis.showPasswordDialog = vi.fn();
   globalThis.setSingleRoot = vi.fn();
-  globalThis.storeEntries = vi.fn(async () => ({ stored: [], unknown: [], missing: [], ignored: [] }));
+  globalThis.storeEntries = vi.fn(async () => ({ stored: [], unknown: [], missing: [], ignored: [], rejected: [] }));
   vi.stubGlobal('location', { reload: vi.fn() });
 
   await import('../src/sections/18-files-reset.js');
@@ -246,15 +240,11 @@ describe('env-driven bootstrap with loaded data', () => {
     expect(document.getElementById('comboList').hidden).toBe(true);
   });
 
-  it('attribute file input loads and persists the chosen file', async () => {
-    const fileInput = document.getElementById('attributeFileInput');
-    const file = { name: 'Team.tsv', text: async () => 'a\tb' };
-    Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
-    fileInput.dispatchEvent(new Event('change'));
-    await flush(); await flush();
-    expect(globalThis.loadAttributesFromFile).toHaveBeenCalledWith(file);
-    expect(globalThis.putStored).toHaveBeenCalledWith(ATTR_PREFIX + 'Team.tsv', 'a\tb');
-    expect(globalThis.putStored).toHaveBeenCalledWith(ATTR_PREFIX + 'Team.tsv::name', 'Team.tsv');
+  it('the attribute upload path stays removed (§9.3/§9.4)', () => {
+    // no upload button, no hidden file input — attributes come from the view
+    // path; data enters via drop-zone snapshot imports only (E25/FR-6.7).
+    expect(document.getElementById('loadAttributes')).toBeNull();
+    expect(document.getElementById('attributeFileInput')).toBeNull();
   });
 
   it('creates the footer reset button which clears and reloads', async () => {

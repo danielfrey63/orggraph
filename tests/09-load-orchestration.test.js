@@ -1,17 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   loadEnvConfig,
-  categoryFromUrl,
-  loadAttributesFromUrl,
-  loadAttributesPreferStored,
-  parseAttributeDirListing,
   loadData,
   idOf,
 } from '../src/sections/09-data-load.js';
 import { loadPseudoData } from '../src/sections/06-pseudo-labels.js';
-import { parseAttributeList, findPersonIdsByIdentifier } from '../src/sections/15-ui-apply-search.js';
-import { colorForCategoryAttribute } from '../src/sections/08-color-geometry.js';
-import { KEY_ENV, KEY_DATA, KEY_PSEUDO, ATTR_EXT } from '../src/sections/04-storage.js';
+import { KEY_ENV, KEY_PSEUDO, ATTR_EXT } from '../src/sections/04-storage.js';
 
 // In-memory stand-in for the IndexedDB-backed accessors.
 let store;
@@ -27,21 +21,16 @@ beforeEach(() => {
   store = new Map();
   globalThis.Logger = { log: () => {} };
   globalThis.KEY_ENV = KEY_ENV;
-  globalThis.KEY_DATA = KEY_DATA;
   globalThis.KEY_PSEUDO = KEY_PSEUDO;
   globalThis.ATTR_EXT = ATTR_EXT;
   globalThis.getStoredJson = async (k) => store.get(k);
   globalThis.getStoredText = async (k) => store.get(k);
-  globalThis.getStoredAttributes = async () => [];
   globalThis.setStatus = () => {};
   globalThis.showTemporaryNotification = () => {};
   globalThis.buildAttributeLegend = () => {};
   globalThis.updateAttributeStats = () => {};
   globalThis.updateAttributeCircles = () => {};
   globalThis.notifyAttributeVisibilityChanged = () => {};
-  globalThis.parseAttributeList = parseAttributeList;
-  globalThis.findPersonIdsByIdentifier = findPersonIdsByIdentifier;
-  globalThis.colorForCategoryAttribute = colorForCategoryAttribute;
   globalThis.idOf = idOf;
   globalThis.envConfig = null;
   globalThis.debugMode = false;
@@ -53,7 +42,7 @@ beforeEach(() => {
   globalThis.categorySourceFiles = new Map();
   globalThis.collapsedCategories = new Set();
   globalThis.fetch = vi.fn(async () => httpError);
-  // state written by processData
+  globalThis.og2TryBoot = undefined;
   for (const k of ['raw', 'byId', 'allNodesUnique', 'parentOf', 'orgParent', 'orgChildren', 'orgRoots', 'hiddenNodes', 'hiddenByRoot']) {
     globalThis[k] = undefined;
   }
@@ -85,136 +74,23 @@ describe('loadEnvConfig', () => {
   });
 });
 
-describe('categoryFromUrl', () => {
-  it('derives the category from the filename without extension', () => {
-    expect(categoryFromUrl('./attributes/Team Rom.tsv')).toBe('Team Rom');
-    expect(categoryFromUrl('https://x/y/Roles.txt?v=2#top')).toBe('Roles');
-    expect(categoryFromUrl('NoExtension')).toBe('NoExtension');
-    expect(categoryFromUrl('.hidden')).toBe('.hidden');
-  });
-});
-
-describe('parseAttributeDirListing', () => {
-  it('extracts decoded attribute file names from listing HTML', () => {
-    const html = `
-      <a href="ERZ%20Rollen%20Rom.tsv">ERZ Rollen Rom.tsv</a>
-      <a href="/base/path/Roles.txt?v=1#x">Roles.txt</a>
-      <a href='Team.csv'>Team.csv</a>
-      <a href="subdir/">subdir/</a>
-      <a href="readme.md">readme.md</a>
-      <a href="ERZ%20Rollen%20Rom.tsv">duplicate</a>`;
-    expect(parseAttributeDirListing(html).sort()).toEqual(['ERZ Rollen Rom.tsv', 'Roles.txt', 'Team.csv']);
-  });
-
-  it('returns an empty list for non-listing HTML', () => {
-    expect(parseAttributeDirListing('<html><body>Hello</body></html>')).toEqual([]);
-  });
-});
-
-describe('loadAttributesPreferStored — DATA_ATTRIBUTES_DIR', () => {
-  beforeEach(() => {
-    globalThis.raw = { persons: [{ id: 'p-1', label: 'Alice', email: 'alice@x.ch' }] };
-  });
-
-  it('discovers and loads attribute files via the directory listing', async () => {
-    globalThis.envConfig = { DATA_ATTRIBUTES_DIR: './attrs' };
-    globalThis.fetch = vi.fn(async (url) => {
-      if (String(url) === './attrs/') return okText('<a href="Team%20Rom.tsv">Team Rom.tsv</a>');
-      return okText('alice@x.ch\tCoach');
-    });
-    await loadAttributesPreferStored();
-    expect(globalThis.attributeTypes.has('Team Rom::Coach')).toBe(true);
-    expect(globalThis.collapsedCategories.has('Team Rom')).toBe(true);
-  });
-
-  it('merges directory files with explicit URLs without duplicating categories', async () => {
-    globalThis.envConfig = {
-      DATA_ATTRIBUTES_URL: './attrs/Team.tsv',
-      DATA_ATTRIBUTES_DIR: './attrs',
-    };
-    globalThis.fetch = vi.fn(async (url) => {
-      if (String(url) === './attrs/') return okText('<a href="Team.tsv">x</a><a href="Extra.tsv">y</a>');
-      return okText('alice@x.ch\tCoach');
-    });
-    await loadAttributesPreferStored();
-    // Team.tsv only fetched once (listing + 2 distinct files = 3 calls)
-    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
-    expect(globalThis.attributeTypes.has('Team::Coach')).toBe(true);
-    expect(globalThis.attributeTypes.has('Extra::Coach')).toBe(true);
-  });
-
-  it('reports an unreadable directory without failing', async () => {
-    globalThis.envConfig = { DATA_ATTRIBUTES_DIR: './attrs' };
-    const notify = vi.fn();
-    globalThis.showTemporaryNotification = notify;
-    await loadAttributesPreferStored();
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining('konnte nicht gelesen werden'), 5000);
-  });
-});
-
-describe('loadAttributesFromUrl', () => {
-  beforeEach(() => {
-    globalThis.raw = { persons: [{ id: 'p-1', label: 'Alice', email: 'alice@x.ch' }] };
-  });
-
-  it('matches identifiers, registers composite types and source info', async () => {
-    globalThis.fetch = vi.fn(async () => okText('alice@x.ch\tCoach\nghost@x.ch\tPL'));
-    const r = await loadAttributesFromUrl('./attr/Team.tsv');
-    expect(r).toMatchObject({ loaded: true, matchedCount: 1, unmatchedCount: 1, totalAttributes: 2 });
-    expect(globalThis.personAttributes.get('p-1').has('Team::Coach')).toBe(true);
-    expect(globalThis.attributeTypes.has('Team::Coach')).toBe(true);
-    expect(globalThis.activeAttributes.has('Team::Coach')).toBe(true);
-    expect(globalThis.categorySourceFiles.get('Team')).toMatchObject({ filename: 'Team.tsv', format: 'tab' });
-  });
-
-  it('registers an empty file as an empty category', async () => {
-    globalThis.fetch = vi.fn(async () => okText('\n'));
-    const r = await loadAttributesFromUrl('./attr/Empty.txt');
-    expect(r).toMatchObject({ loaded: true, isEmpty: true, category: 'Empty' });
-    expect(globalThis.emptyCategories.has('Empty')).toBe(true);
-  });
-
-  it('reports HTTP failures', async () => {
-    const r = await loadAttributesFromUrl('./attr/Missing.tsv');
-    expect(r.loaded).toBe(false);
-    expect(r.error).toContain('404');
-  });
-
-  it('merges attributes into existing person maps', async () => {
-    globalThis.personAttributes = new Map([['p-1', new Map([['Old::X', '1']])]]);
-    globalThis.fetch = vi.fn(async () => okText('p-1\tCoach'));
-    await loadAttributesFromUrl('./attr/Team.tsv');
-    const attrs = globalThis.personAttributes.get('p-1');
-    expect(attrs.has('Old::X')).toBe(true);
-    expect(attrs.has('Team::Coach')).toBe(true);
-  });
-});
-
-describe('loadData', () => {
-  it('uses stored data and processes it', async () => {
-    store.set(KEY_DATA, JSON.stringify({ persons: [{ id: 'p-1', label: 'A' }], orgs: [], links: [] }));
-    globalThis.personAttributes = new Map();
+describe('loadData (v2-only, §9.3/E25)', () => {
+  it('boots the v2 tenant when og2TryBoot succeeds', async () => {
+    globalThis.og2TryBoot = async () => true;
     expect(await loadData()).toBe(true);
-    expect(globalThis.byId.has('p-1')).toBe(true);
   });
 
-  it('falls back to the env DATA_URL', async () => {
-    globalThis.envConfig = { DATA_URL: './data.json' };
-    globalThis.fetch = vi.fn(async () => okJson({ persons: [{ id: 'p-9', label: 'F' }], orgs: [], links: [] }));
-    expect(await loadData()).toBe(true);
-    expect(globalThis.byId.has('p-9')).toBe(true);
-  });
-
-  it('returns false when no source yields data', async () => {
+  it('renders nothing legacy and points to the migration script otherwise', async () => {
+    const statuses = [];
+    globalThis.setStatus = (s) => statuses.push(s);
+    globalThis.og2TryBoot = async () => false;
     expect(await loadData()).toBe(false);
+    expect(statuses.some((s) => s.includes('migrate-legacy'))).toBe(true);
   });
 
-  it('survives corrupt stored JSON by falling back', async () => {
-    store.set(KEY_DATA, '{broken');
-    globalThis.envConfig = { DATA_URL: './data.json' };
-    globalThis.fetch = vi.fn(async () => okJson({ persons: [{ id: 'p-2', label: 'B' }], orgs: [], links: [] }));
-    expect(await loadData()).toBe(true);
-    expect(globalThis.byId.has('p-2')).toBe(true);
+  it('reports a failing v2 boot without falling back', async () => {
+    globalThis.og2TryBoot = async () => { throw new Error('boom'); };
+    expect(await loadData()).toBe(false);
   });
 });
 

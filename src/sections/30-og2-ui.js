@@ -131,19 +131,7 @@ export async function og2TryBoot() {
   og2SyncStockGlobals();
   og2BuildViewSwitcher();
   og2BuildTimeControls();
-  og2RemoveLegacyControls();
   return true;
-}
-
-// §9.3 (E25/FR-6.7): the attribute upload path does not exist in a v2
-// tenant — attributes are nodes/props in the snapshot; data enters via
-// snapshot drops only. The legacy tenant keeps the controls until its
-// scheduled teardown.
-export function og2RemoveLegacyControls() {
-  for (const id of ['loadAttributes', 'attributeFileInput']) {
-    const el = document.getElementById(id);
-    if (el) el.remove();
-  }
 }
 
 // Fill the stock-shaped globals (raw/byId/…) from the tenant store so the

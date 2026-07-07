@@ -1,30 +1,23 @@
-/** Derive a readable profile name from a dropped env/data file. */
-function profileNameFromDrop(env, data) {
+/** Derive a readable profile name from a dropped env file. */
+function profileNameFromDrop(env) {
   let base = '';
-  if (env) {
-    try { const cfg = JSON.parse(env.text); if (cfg && cfg.DATA_URL) base = String(cfg.DATA_URL); } catch (_) {}
-    if (!base) base = env.filename || '';
-  } else if (data) {
-    base = data.filename || '';
-  }
+  try { const cfg = JSON.parse(env.text); if (cfg && cfg.DATA_URL) base = String(Array.isArray(cfg.DATA_URL) ? cfg.DATA_URL[0] : cfg.DATA_URL); } catch (_) {}
+  if (!base) base = env.filename || '';
   base = String(base).split('/').pop().replace(/\.[^.]+$/, '');   // strip dir + extension
   base = base.replace(/^(env|data)[.\-_]?/i, '');                 // drop env./data. prefix
   return base || 'Profil';
 }
 
-/** Inspect a drop for a configuration (env/data). Never throws. */
+/** Inspect a drop for a configuration (env). Never throws. */
 async function detectConfigDrop(entryList) {
-  let env = null, data = null;
   for (const raw of Array.from(entryList || [])) {
     const file = raw && raw.file ? raw.file : raw;
     if (!file || typeof file.text !== 'function') continue;
     let c;
     try { c = await classifyFile(file); } catch (_) { continue; }
-    if (c.kind === 'env' && !env) env = c;
-    else if (c.kind === 'data' && !data) data = c;
+    if (c.kind === 'env') return { hasConfig: true, name: profileNameFromDrop(c), source: c.filename };
   }
-  if (!env && !data) return { hasConfig: false };
-  return { hasConfig: true, name: profileNameFromDrop(env, data), source: (env || data).filename };
+  return { hasConfig: false };
 }
 
 export async function handleDroppedFiles(entryList) {
@@ -59,29 +52,12 @@ export async function handleDroppedFiles(entryList) {
   if (summary.ignored.length) {
     showTemporaryNotification(`Nicht verwendet (env.json ist massgebend): ${summary.ignored.join(', ')}`, 5000);
   }
+  // E25/FR-6.7: legacy datasets and attribute lists are rejected — the way
+  // in is the one-off migration script (§10), never an in-app import.
+  if (summary.rejected && summary.rejected.length) {
+    showTemporaryNotification(`Legacy-Format abgewiesen (${summary.rejected.map(r => r.filename).join(', ')}): dieser Tenant versteht nur Registry/env/Snapshots. Bitte mit scripts/migrate-legacy.mjs migrieren.`, 8000);
+  }
   if (!summary.stored.length) return;
-
-  // E25/FR-6.7: Legacy-Datensätze werden im OrgGraph-2.0-Tenant abgewiesen —
-  // der Weg führt über das Einmal-Migrationsskript (§10).
-  if (typeof og2Active === 'function' && og2Active() && summary.stored.some(s => s.kind === 'data')) {
-    showTemporaryNotification('Legacy-Format erkannt: dieser Tenant versteht nur Snapshots. Bitte mit scripts/migrate-legacy.mjs migrieren und den Snapshot laden.', 8000);
-  }
-
-  const kinds = new Set(summary.stored.map(s => s.kind));
-  const onlyAttributes = kinds.size > 0 && [...kinds].every(k => k === 'attr');
-
-  if (onlyAttributes) {
-    // Datensatz steht bereits – Attribute inkrementell nachladen.
-    for (const s of summary.stored) {
-      const entry = Array.from(entryList).find(en => (en && en.file ? en.file : en)?.name === s.filename);
-      const file = entry && (entry.file || entry);
-      if (file) {
-        try { await loadAttributesFromFile(file); } catch (e) { console.error(e); }
-      }
-    }
-    showTemporaryNotification(`${summary.stored.length} Attribut-Datei(en) geladen und gespeichert.`, 3000);
-    return;
-  }
 
   // Datensatz/Env/Pseudo geändert → sauberer Neustart über den Init-Pfad.
   hideDropZone();
@@ -109,36 +85,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   await loadPseudoData();
   const input = document.querySelector(INPUT_COMBO_ID);
   const list = document.querySelector(LIST_COMBO_ID);
-  // Footer: click status to open a file dialog and load JSON dataset
-  const statusEl = document.querySelector(STATUS_ID);
-  if (statusEl) {
-    statusEl.addEventListener('click', async () => {
-      const picker = document.createElement('input');
-      picker.type = 'file';
-      picker.accept = 'application/json,.json';
-      picker.style.display = 'none';
-      document.body.appendChild(picker);
-      picker.addEventListener('change', async () => {
-        try {
-          const file = picker.files && picker.files[0];
-          if (!file) return;
-          const text = await file.text();
-          const data = JSON.parse(text);
-          applyLoadedDataObject(data, file.name);
-          populateCombo("");
-          try { applyFromUI('fileLoad'); } catch(_) { updateFooterStats(null); }
-          // In IndexedDB persistieren, damit beim nächsten Öffnen automatisch geladen wird.
-          try { await putStored(KEY_DATA, text); await requestPersistence(); hideDropZone(); } catch(_) {}
-        } catch(_) {
-          setStatus('Ungültige Datei');
-        } finally {
-          picker.remove();
-        }
-      });
-      picker.click();
-    });
-  }
-
+  // E25: no hidden footer-status file intake — data enters via the drop
+  // zone / file dialog only (FR-6.7).
   // Initialisiere Chevron-Icons im HTML
   initializeChevronIcons();
   
@@ -757,39 +705,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // Attribute-Funktionalität einbinden
-  const loadAttrBtn = document.getElementById('loadAttributes');
-  const attrFileInput = document.getElementById('attributeFileInput');
-  if (loadAttrBtn && attrFileInput) {
-    // Klick auf Button löst File-Dialog aus
-    loadAttrBtn.addEventListener('click', (e) => {
-      // Verhindere Bubbling zum Header, damit dieser nicht kollabiert wird
-      e.preventDefault();
-      e.stopPropagation();
-      attrFileInput.click();
-    });
-    
-    // Datei-Input-Änderung verarbeiten
-    attrFileInput.addEventListener('change', async () => {
-      if (attrFileInput.files && attrFileInput.files[0]) {
-        const file = attrFileInput.files[0];
-        await loadAttributesFromFile(file);
-        // In IndexedDB persistieren (Inhalt + Originalname für Kategorie-Ableitung).
-        try {
-          const text = await file.text();
-          await putStored(ATTR_PREFIX + file.name, text);
-          await putStored(ATTR_PREFIX + file.name + '::name', file.name);
-          await requestPersistence();
-        } catch (_) {}
-        attrFileInput.value = ''; // Reset für wiederholtes Laden
-      }
-    });
-    
-    // Initialen leeren Attribut-Legend erzeugen
-    buildAttributeLegend();
-    updateAttributeStats();
-  }
-  
+  // Attribute upload path removed (§9.3/§9.4): rings come from the view
+  // path; the legend just renders what the projection provides.
+  buildAttributeLegend();
+  updateAttributeStats();
+
   // Kollabierbare Legenden einrichten
   initializeCollapsibleLegends();
 
@@ -869,8 +789,6 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (og2HasRenderableView()) {
             try { applyFromUI('initialLoad'); } catch(e) { console.error(e); }
         }
-    } else {
-        renderFullView(envConfig?.DATA_URL || '(geladen)');
     }
   } else {
     // Keine Daten vorhanden → Drop-Zone zum Laden einblenden.
