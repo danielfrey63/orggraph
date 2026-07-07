@@ -39,12 +39,16 @@ export function computeHierarchyLevels(nodes, links) {
   
   // Build parent map (manager relationships for persons)
   const managerOf = new Map(); // personId -> managerId
+  const v2 = typeof og2Active === 'function' && og2Active();
   for (const l of links) {
     const s = idOf(l.source), t = idOf(l.target);
     const sNode = byId.get(s), tNode = byId.get(t);
-    // Descent link between drawn graph nodes (source manages target)
     if (drawKindOf(sNode) === 'node' && drawKindOf(tNode) === 'node' && nodeSet.has(s) && nodeSet.has(t)) {
-      managerOf.set(t, s);
+      // Stored edge direction (FR-7.2a): v2 descent edges point subordinate
+      // -> superior (source reports to target); legacy stored manager ->
+      // report. Without the inversion the hierarchy layout is upside down.
+      if (v2) managerOf.set(s, t);
+      else managerOf.set(t, s);
     }
   }
 

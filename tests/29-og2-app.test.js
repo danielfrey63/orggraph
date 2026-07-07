@@ -142,6 +142,24 @@ describe('projection → render adapter (§9.2)', () => {
     expect(adapted.footer.truncated).toBe(false);
   });
 
+  it('two-level ring palette: distinct hues between groups, nuances within (FR-4.2a, AK 96)', () => {
+    // second role on p1 so one group carries two labels
+    const store = fixtureStore();
+    addNode(store, 'r2', 'Rolle', 'Lead');
+    addEdge(store, 'hatRolle', 'p1', 'r2');
+    const projection = projectView({ store, parsed: parsePathExpression(PATH + ''), roots: ['p1'], depth: 3 });
+    const adapted = adaptProjection(projection, REGISTRY);
+    const hueOf = (c) => Number(String(c).match(/hsl\((\d+)/)[1]);
+    const groups = [...adapted.ringGroups.values()].filter((g) => g.type === 'Rolle');
+    expect(groups.length).toBe(2);
+    const [a, b] = groups.map((g) => g.color);
+    expect(a).not.toBe(b);                       // distinguishable within the group
+    expect(Math.abs(hueOf(a) - hueOf(b))).toBeLessThanOrEqual(60); // same family
+    // deterministic per scene
+    const again = adaptProjection(projectView({ store, parsed: parsePathExpression(PATH), roots: ['p1'], depth: 3 }), REGISTRY);
+    expect([...again.ringGroups.values()].map((g) => g.color)).toEqual([...adapted.ringGroups.values()].map((g) => g.color));
+  });
+
   it('fingerprint is stable for identical projections and changes with parameters', () => {
     const store = fixtureStore();
     const parsed = parsePathExpression(PATH);

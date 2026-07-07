@@ -319,6 +319,7 @@ export function og2SwitchView(name) {
   og2.activeViewName = name;
   og2.runtimeRoots = null;
   og2.runtimeDepth = null;
+  og2.lastScopeOrgs = null; // FR-8.2a: a view switch resets the legend override
   selectedRootIds = [];
   currentSelectedId = null;
   const view = og2ActiveView(og2);
@@ -404,9 +405,32 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
     attributeTypes = nextTypes;
   }
 
-  // Cluster scope: hull roots = projected cluster nodes (FR-8.2).
+  // Attribute focus (§9.4/FR-8.10a): prune the projected scene to visibly
+  // attributed nodes, their tree connectors and the roots — the same
+  // semantics as the legacy traversal, applied to the projection output.
+  if (typeof attributeFocusEnabled !== 'undefined' && attributeFocusEnabled) {
+    recomputeAttributeFocusHidden();
+    const focusRoots = ((og2.runtimeRoots && og2.runtimeRoots.length ? og2.runtimeRoots : projection.resolvedRoots) || []).map(String);
+    const keep = applyAttributeFocusToScene(sub.nodes.filter(n => n.kind === 'node'), sub.links, focusRoots);
+    sub.nodes = sub.nodes.filter(n => n.kind !== 'node' || keep.has(String(n.id)));
+    sub.links = sub.links.filter(l => keep.has(String(l.source)) && keep.has(String(l.target)));
+  }
+
+  // Cluster scope: hull roots = projected cluster nodes (FR-8.2). The user's
+  // legend deselection is a runtime override (FR-8.2a): it survives every
+  // parameter change (depth/time/filter/focus) — only clusters NEW to the
+  // scope start visible; a view switch resets the override (FR-7.5).
   const scopeOrgs = new Set(sub.nodes.filter(n => n.kind === 'cluster').map(n => String(n.id)));
-  allowedOrgs = new Set(scopeOrgs);
+  if (!og2.lastScopeOrgs) {
+    allowedOrgs = new Set(scopeOrgs);
+  } else {
+    const next = new Set();
+    for (const id of scopeOrgs) {
+      if (!og2.lastScopeOrgs.has(id) || allowedOrgs.has(id)) next.add(id);
+    }
+    allowedOrgs = next;
+  }
+  og2.lastScopeOrgs = scopeOrgs;
 
   // Truncation hints (E67, FR-8.1/AK 63) — explicit, never silent.
   if (projection.notEvaluable) {

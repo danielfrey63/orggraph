@@ -185,63 +185,10 @@ export function computeSubgraph(startId, depth, mode) {
     }
   }
 
-  // Attribute focus: within THIS view keep only the start node, visibly
-  // attributed nodes and the connectors on their BFS-tree paths to the start.
-  // Leaf peeling alone cannot remove unattributed nodes sitting on cycles
-  // (person-org-manager triangles are everywhere), so the path marking is the
-  // primary mechanism; a final leaf sweep double-checks the result.
+  // Attribute focus: within THIS view keep only the roots, visibly
+  // attributed nodes and the connectors on their BFS-tree paths (§9.4).
   if (attributeFocusEnabled) {
-    const startKey = String(startId);
-    const present = new Set(nodes.map(n => String(n.id)));
-    const adj = new Map();
-    for (const l of raw.links) {
-      const s = idOf(l.source), t = idOf(l.target);
-      if (s === t || !present.has(s) || !present.has(t)) continue;
-      if (!adj.has(s)) adj.set(s, new Set());
-      if (!adj.has(t)) adj.set(t, new Set());
-      adj.get(s).add(t);
-      adj.get(t).add(s);
-    }
-
-    // BFS tree from the start over the view's links (undirected)
-    const parent = new Map([[startKey, null]]);
-    const bfs = [startKey];
-    for (let qi = 0; qi < bfs.length; qi++) {
-      for (const nb of adj.get(bfs[qi]) || []) {
-        if (!parent.has(nb)) { parent.set(nb, bfs[qi]); bfs.push(nb); }
-      }
-    }
-
-    // Keep the start, every present seed and the tree path from seed to start
-    const keep = new Set([startKey]);
-    for (const id of present) {
-      if (!attributeFocusSeeds.has(id)) continue;
-      keep.add(id);
-      let cur = parent.get(id);
-      while (cur != null && !keep.has(cur)) { keep.add(cur); cur = parent.get(cur); }
-    }
-
-    // Final sweep: peel any unattributed leaf that may remain in the kept set
-    const kadj = new Map();
-    for (const id of keep) {
-      const nbs = new Set();
-      for (const nb of adj.get(id) || []) if (keep.has(nb)) nbs.add(nb);
-      kadj.set(id, nbs);
-    }
-    const isRemovableLeaf = (id) =>
-      id !== startKey && !attributeFocusSeeds.has(id) && ((kadj.get(id)?.size || 0) <= 1);
-    const peelQueue = Array.from(keep).filter(isRemovableLeaf);
-    for (let qi = 0; qi < peelQueue.length; qi++) {
-      const id = peelQueue[qi];
-      if (!keep.has(id) || !isRemovableLeaf(id)) continue;
-      keep.delete(id);
-      for (const nb of kadj.get(id) || []) {
-        kadj.get(nb)?.delete(id);
-        if (keep.has(nb) && isRemovableLeaf(nb)) peelQueue.push(nb);
-      }
-      kadj.delete(id);
-    }
-
+    const keep = applyAttributeFocusToScene(nodes, raw.links, [String(startId)]);
     nodes = nodes.filter(n => keep.has(String(n.id)));
   }
 
@@ -253,6 +200,71 @@ export function computeSubgraph(startId, depth, mode) {
     .map(x => ({ source: x.s, target: x.t }));
   
   return { nodes, links, legendOrgs, legendOrgLevels };
+}
+
+/**
+ * Attribute focus on a scene (§9.4/FR-8.10a), scene-agnostic: keep the
+ * roots, every present seed (visibly attributed node, attributeFocusSeeds)
+ * and the BFS-tree connectors from each seed to a root; then peel remaining
+ * unattributed leaves. Leaf peeling alone cannot remove unattributed nodes
+ * sitting on cycles (person-org-manager triangles are everywhere), so the
+ * path marking is the primary mechanism. Both the legacy traversal and the
+ * v2 projection path feed their own node/link sets. Returns the keep set.
+ */
+export function applyAttributeFocusToScene(nodes, links, rootKeys) {
+  const present = new Set(nodes.map(n => String(n.id)));
+  const adj = new Map();
+  for (const l of links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    if (s === t || !present.has(s) || !present.has(t)) continue;
+    if (!adj.has(s)) adj.set(s, new Set());
+    if (!adj.has(t)) adj.set(t, new Set());
+    adj.get(s).add(t);
+    adj.get(t).add(s);
+  }
+
+  // BFS forest from the roots over the scene's links (undirected)
+  const roots = rootKeys.map(String).filter(id => present.has(id));
+  const rootSet = new Set(roots);
+  const parent = new Map(roots.map(r => [r, null]));
+  const bfs = [...roots];
+  for (let qi = 0; qi < bfs.length; qi++) {
+    for (const nb of adj.get(bfs[qi]) || []) {
+      if (!parent.has(nb)) { parent.set(nb, bfs[qi]); bfs.push(nb); }
+    }
+  }
+
+  // Keep the roots, every present seed and the tree path from seed to root
+  const keep = new Set(roots);
+  for (const id of present) {
+    if (!attributeFocusSeeds.has(id)) continue;
+    keep.add(id);
+    let cur = parent.get(id);
+    while (cur != null && !keep.has(cur)) { keep.add(cur); cur = parent.get(cur); }
+  }
+
+  // Final sweep: peel any unattributed leaf that may remain in the kept set
+  const kadj = new Map();
+  for (const id of keep) {
+    const nbs = new Set();
+    for (const nb of adj.get(id) || []) if (keep.has(nb)) nbs.add(nb);
+    kadj.set(id, nbs);
+  }
+  const isRemovableLeaf = (id) =>
+    !rootSet.has(id) && !attributeFocusSeeds.has(id) && ((kadj.get(id)?.size || 0) <= 1);
+  const peelQueue = Array.from(keep).filter(isRemovableLeaf);
+  for (let qi = 0; qi < peelQueue.length; qi++) {
+    const id = peelQueue[qi];
+    if (!keep.has(id) || !isRemovableLeaf(id)) continue;
+    keep.delete(id);
+    for (const nb of kadj.get(id) || []) {
+      kadj.get(nb)?.delete(id);
+      if (keep.has(nb) && isRemovableLeaf(nb)) peelQueue.push(nb);
+    }
+    kadj.delete(id);
+  }
+
+  return keep;
 }
 
 export function recomputeHiddenNodes() {

@@ -109,6 +109,41 @@ test('pseudo mode is fail-closed in the browser (FR-8.5, E48 — AK 27 basis)', 
   }
 });
 
+test('AK 93: legend deselection survives a depth change (FR-8.2a)', async ({ page }) => {
+  // deselect one cluster by clicking its legend row (the checkbox itself is
+  // a hidden styled input)
+  const firstRow = page.locator('#legend .legend-row').first();
+  await firstRow.waitFor();
+  const before = await page.locator('path.cluster').count();
+  await firstRow.click();
+  await page.waitForTimeout(500);
+  const afterDeselect = await page.locator('path.cluster').count();
+  expect(afterDeselect).toBeLessThan(before);
+  // change the depth: the deselection must survive (no auto re-enable)
+  await page.locator('#depthControl .depth-up').click();
+  await page.waitForTimeout(800);
+  expect(await page.locator('path.cluster').count()).toBe(afterDeselect);
+});
+
+test('AK 94: attribute focus prunes the projected scene (FR-8.10a)', async ({ page }) => {
+  const circles = page.locator('g.nodes circle:not(.attribute-circle)');
+  const before = await circles.count();
+  // hide the Team category via its eye toggle, then focus: members whose
+  // only badge is a Team ring must disappear together with their branches
+  const teamRow = page.locator('#attributeLegend .legend-row', { hasText: 'Team' }).first();
+  await teamRow.hover(); // action buttons appear on row hover
+  await teamRow.locator('.legend-icon-btn[title*="ausblenden"]').click({ force: true });
+  await page.locator('#toggleAttributeFocus').click({ force: true });
+  await expect(async () => {
+    const focused = await circles.count();
+    expect(focused).toBeGreaterThan(0);
+    expect(focused).toBeLessThan(before);
+  }).toPass({ timeout: 15_000 });
+  // toggle off restores the scene (poll: enter transition is animated)
+  await page.locator('#toggleAttributeFocus').click({ force: true });
+  await expect(circles).toHaveCount(before, { timeout: 15_000 });
+});
+
 test('AK 89: SVG export in pseudo mode carries no raw tenant value (FR-8.5)', async ({ page }) => {
   // raw values of the fixture tenant: labels, ids, emails, org/team names
   const RAW = ['Vera', 'Max', 'Nina', 'Ben', 'Pia', 'Lea',

@@ -1968,7 +1968,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.163.154';
+const APP_VERSION = '1.164.155';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -5056,63 +5056,10 @@ function computeSubgraph(startId, depth, mode) {
     }
   }
 
-  // Attribute focus: within THIS view keep only the start node, visibly
-  // attributed nodes and the connectors on their BFS-tree paths to the start.
-  // Leaf peeling alone cannot remove unattributed nodes sitting on cycles
-  // (person-org-manager triangles are everywhere), so the path marking is the
-  // primary mechanism; a final leaf sweep double-checks the result.
+  // Attribute focus: within THIS view keep only the roots, visibly
+  // attributed nodes and the connectors on their BFS-tree paths (§9.4).
   if (attributeFocusEnabled) {
-    const startKey = String(startId);
-    const present = new Set(nodes.map(n => String(n.id)));
-    const adj = new Map();
-    for (const l of raw.links) {
-      const s = idOf(l.source), t = idOf(l.target);
-      if (s === t || !present.has(s) || !present.has(t)) continue;
-      if (!adj.has(s)) adj.set(s, new Set());
-      if (!adj.has(t)) adj.set(t, new Set());
-      adj.get(s).add(t);
-      adj.get(t).add(s);
-    }
-
-    // BFS tree from the start over the view's links (undirected)
-    const parent = new Map([[startKey, null]]);
-    const bfs = [startKey];
-    for (let qi = 0; qi < bfs.length; qi++) {
-      for (const nb of adj.get(bfs[qi]) || []) {
-        if (!parent.has(nb)) { parent.set(nb, bfs[qi]); bfs.push(nb); }
-      }
-    }
-
-    // Keep the start, every present seed and the tree path from seed to start
-    const keep = new Set([startKey]);
-    for (const id of present) {
-      if (!attributeFocusSeeds.has(id)) continue;
-      keep.add(id);
-      let cur = parent.get(id);
-      while (cur != null && !keep.has(cur)) { keep.add(cur); cur = parent.get(cur); }
-    }
-
-    // Final sweep: peel any unattributed leaf that may remain in the kept set
-    const kadj = new Map();
-    for (const id of keep) {
-      const nbs = new Set();
-      for (const nb of adj.get(id) || []) if (keep.has(nb)) nbs.add(nb);
-      kadj.set(id, nbs);
-    }
-    const isRemovableLeaf = (id) =>
-      id !== startKey && !attributeFocusSeeds.has(id) && ((kadj.get(id)?.size || 0) <= 1);
-    const peelQueue = Array.from(keep).filter(isRemovableLeaf);
-    for (let qi = 0; qi < peelQueue.length; qi++) {
-      const id = peelQueue[qi];
-      if (!keep.has(id) || !isRemovableLeaf(id)) continue;
-      keep.delete(id);
-      for (const nb of kadj.get(id) || []) {
-        kadj.get(nb)?.delete(id);
-        if (keep.has(nb) && isRemovableLeaf(nb)) peelQueue.push(nb);
-      }
-      kadj.delete(id);
-    }
-
+    const keep = applyAttributeFocusToScene(nodes, raw.links, [String(startId)]);
     nodes = nodes.filter(n => keep.has(String(n.id)));
   }
 
@@ -5124,6 +5071,71 @@ function computeSubgraph(startId, depth, mode) {
     .map(x => ({ source: x.s, target: x.t }));
   
   return { nodes, links, legendOrgs, legendOrgLevels };
+}
+
+/**
+ * Attribute focus on a scene (§9.4/FR-8.10a), scene-agnostic: keep the
+ * roots, every present seed (visibly attributed node, attributeFocusSeeds)
+ * and the BFS-tree connectors from each seed to a root; then peel remaining
+ * unattributed leaves. Leaf peeling alone cannot remove unattributed nodes
+ * sitting on cycles (person-org-manager triangles are everywhere), so the
+ * path marking is the primary mechanism. Both the legacy traversal and the
+ * v2 projection path feed their own node/link sets. Returns the keep set.
+ */
+function applyAttributeFocusToScene(nodes, links, rootKeys) {
+  const present = new Set(nodes.map(n => String(n.id)));
+  const adj = new Map();
+  for (const l of links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    if (s === t || !present.has(s) || !present.has(t)) continue;
+    if (!adj.has(s)) adj.set(s, new Set());
+    if (!adj.has(t)) adj.set(t, new Set());
+    adj.get(s).add(t);
+    adj.get(t).add(s);
+  }
+
+  // BFS forest from the roots over the scene's links (undirected)
+  const roots = rootKeys.map(String).filter(id => present.has(id));
+  const rootSet = new Set(roots);
+  const parent = new Map(roots.map(r => [r, null]));
+  const bfs = [...roots];
+  for (let qi = 0; qi < bfs.length; qi++) {
+    for (const nb of adj.get(bfs[qi]) || []) {
+      if (!parent.has(nb)) { parent.set(nb, bfs[qi]); bfs.push(nb); }
+    }
+  }
+
+  // Keep the roots, every present seed and the tree path from seed to root
+  const keep = new Set(roots);
+  for (const id of present) {
+    if (!attributeFocusSeeds.has(id)) continue;
+    keep.add(id);
+    let cur = parent.get(id);
+    while (cur != null && !keep.has(cur)) { keep.add(cur); cur = parent.get(cur); }
+  }
+
+  // Final sweep: peel any unattributed leaf that may remain in the kept set
+  const kadj = new Map();
+  for (const id of keep) {
+    const nbs = new Set();
+    for (const nb of adj.get(id) || []) if (keep.has(nb)) nbs.add(nb);
+    kadj.set(id, nbs);
+  }
+  const isRemovableLeaf = (id) =>
+    !rootSet.has(id) && !attributeFocusSeeds.has(id) && ((kadj.get(id)?.size || 0) <= 1);
+  const peelQueue = Array.from(keep).filter(isRemovableLeaf);
+  for (let qi = 0; qi < peelQueue.length; qi++) {
+    const id = peelQueue[qi];
+    if (!keep.has(id) || !isRemovableLeaf(id)) continue;
+    keep.delete(id);
+    for (const nb of kadj.get(id) || []) {
+      kadj.get(nb)?.delete(id);
+      if (keep.has(nb) && isRemovableLeaf(nb)) peelQueue.push(nb);
+    }
+    kadj.delete(id);
+  }
+
+  return keep;
 }
 
 function recomputeHiddenNodes() {
@@ -8330,12 +8342,16 @@ function computeHierarchyLevels(nodes, links) {
   
   // Build parent map (manager relationships for persons)
   const managerOf = new Map(); // personId -> managerId
+  const v2 = typeof og2Active === 'function' && og2Active();
   for (const l of links) {
     const s = idOf(l.source), t = idOf(l.target);
     const sNode = byId.get(s), tNode = byId.get(t);
-    // Descent link between drawn graph nodes (source manages target)
     if (drawKindOf(sNode) === 'node' && drawKindOf(tNode) === 'node' && nodeSet.has(s) && nodeSet.has(t)) {
-      managerOf.set(t, s);
+      // Stored edge direction (FR-7.2a): v2 descent edges point subordinate
+      // -> superior (source reports to target); legacy stored manager ->
+      // report. Without the inversion the hierarchy layout is upside down.
+      if (v2) managerOf.set(s, t);
+      else managerOf.set(t, s);
     }
   }
 
@@ -11609,15 +11625,29 @@ function adaptProjection(projection, registry) {
   for (const edge of projection.derivedEdges) routeEdge(edge.source, edge.target, edge.via, true);
 
   // Ring badges (E21): grouped per host under the composite key
-  // "<Type>::<resolved label>" — the same key shape the ring legend and the
-  // category hue strategy use (FR-4.2a: ring color from the type name).
+  // "<Type>::<resolved label>". Colors follow the two-level strategy (E13,
+  // FR-4.2a): the TYPE sets the base hue (clearly distinct between groups),
+  // the label's ordinal within its sorted group adds a small hue/lightness
+  // variation (distinguishable, but visibly the same family). Ordinals come
+  // from the sorted label list, so the palette is deterministic per scene.
   const ringsByHost = new Map();
   const ringGroups = new Map();
+  const resolvedRings = [];
+  const labelsByType = new Map();
   for (const ring of projection.rings) {
     if (!kindOf.has(ring.host)) continue;
     const label = resolveDisplayLabel(nodeTypes[ring.type], ring.stand) ?? ring.node;
+    resolvedRings.push({ ring, label });
+    if (!labelsByType.has(ring.type)) labelsByType.set(ring.type, new Set());
+    labelsByType.get(ring.type).add(label);
+  }
+  const ordinalOf = new Map();
+  for (const [type, labels] of labelsByType) {
+    [...labels].sort().forEach((label, i) => ordinalOf.set(`${type}::${label}`, i));
+  }
+  for (const { ring, label } of resolvedRings) {
     const key = `${ring.type}::${label}`;
-    const color = `hsl(${quantizedHueFromCategory(ring.type)}, 70%, 55%)`;
+    const color = colorForCategoryAttribute(ring.type, label, ordinalOf.get(key) || 0);
     let hostMap = ringsByHost.get(ring.host);
     if (!hostMap) { hostMap = new Map(); ringsByHost.set(ring.host, hostMap); }
     hostMap.set(key, { color, node: ring.node });
@@ -12226,6 +12256,7 @@ function og2SwitchView(name) {
   og2.activeViewName = name;
   og2.runtimeRoots = null;
   og2.runtimeDepth = null;
+  og2.lastScopeOrgs = null; // FR-8.2a: a view switch resets the legend override
   selectedRootIds = [];
   currentSelectedId = null;
   const view = og2ActiveView(og2);
@@ -12311,9 +12342,32 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
     attributeTypes = nextTypes;
   }
 
-  // Cluster scope: hull roots = projected cluster nodes (FR-8.2).
+  // Attribute focus (§9.4/FR-8.10a): prune the projected scene to visibly
+  // attributed nodes, their tree connectors and the roots — the same
+  // semantics as the legacy traversal, applied to the projection output.
+  if (typeof attributeFocusEnabled !== 'undefined' && attributeFocusEnabled) {
+    recomputeAttributeFocusHidden();
+    const focusRoots = ((og2.runtimeRoots && og2.runtimeRoots.length ? og2.runtimeRoots : projection.resolvedRoots) || []).map(String);
+    const keep = applyAttributeFocusToScene(sub.nodes.filter(n => n.kind === 'node'), sub.links, focusRoots);
+    sub.nodes = sub.nodes.filter(n => n.kind !== 'node' || keep.has(String(n.id)));
+    sub.links = sub.links.filter(l => keep.has(String(l.source)) && keep.has(String(l.target)));
+  }
+
+  // Cluster scope: hull roots = projected cluster nodes (FR-8.2). The user's
+  // legend deselection is a runtime override (FR-8.2a): it survives every
+  // parameter change (depth/time/filter/focus) — only clusters NEW to the
+  // scope start visible; a view switch resets the override (FR-7.5).
   const scopeOrgs = new Set(sub.nodes.filter(n => n.kind === 'cluster').map(n => String(n.id)));
-  allowedOrgs = new Set(scopeOrgs);
+  if (!og2.lastScopeOrgs) {
+    allowedOrgs = new Set(scopeOrgs);
+  } else {
+    const next = new Set();
+    for (const id of scopeOrgs) {
+      if (!og2.lastScopeOrgs.has(id) || allowedOrgs.has(id)) next.add(id);
+    }
+    allowedOrgs = next;
+  }
+  og2.lastScopeOrgs = scopeOrgs;
 
   // Truncation hints (E67, FR-8.1/AK 63) — explicit, never silent.
   if (projection.notEvaluable) {

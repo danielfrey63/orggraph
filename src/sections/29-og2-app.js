@@ -5,7 +5,7 @@
 // machinery consumes (§9.2: algorithms stay, type binding becomes
 // declarative — draw kinds follow the render mode, never a type name).
 import { canonicalJson } from './21-og2-util.js';
-import { quantizedHueFromCategory } from './08-color-geometry.js';
+import { colorForCategoryAttribute } from './08-color-geometry.js';
 import { validateViews, visibleTypesOf } from './27-og2-path.js';
 import { projectView, projectDiagnosis, buildLiveIndexes, resolveDisplayLabel } from './28-og2-project.js';
 
@@ -150,15 +150,29 @@ export function adaptProjection(projection, registry) {
   for (const edge of projection.derivedEdges) routeEdge(edge.source, edge.target, edge.via, true);
 
   // Ring badges (E21): grouped per host under the composite key
-  // "<Type>::<resolved label>" — the same key shape the ring legend and the
-  // category hue strategy use (FR-4.2a: ring color from the type name).
+  // "<Type>::<resolved label>". Colors follow the two-level strategy (E13,
+  // FR-4.2a): the TYPE sets the base hue (clearly distinct between groups),
+  // the label's ordinal within its sorted group adds a small hue/lightness
+  // variation (distinguishable, but visibly the same family). Ordinals come
+  // from the sorted label list, so the palette is deterministic per scene.
   const ringsByHost = new Map();
   const ringGroups = new Map();
+  const resolvedRings = [];
+  const labelsByType = new Map();
   for (const ring of projection.rings) {
     if (!kindOf.has(ring.host)) continue;
     const label = resolveDisplayLabel(nodeTypes[ring.type], ring.stand) ?? ring.node;
+    resolvedRings.push({ ring, label });
+    if (!labelsByType.has(ring.type)) labelsByType.set(ring.type, new Set());
+    labelsByType.get(ring.type).add(label);
+  }
+  const ordinalOf = new Map();
+  for (const [type, labels] of labelsByType) {
+    [...labels].sort().forEach((label, i) => ordinalOf.set(`${type}::${label}`, i));
+  }
+  for (const { ring, label } of resolvedRings) {
     const key = `${ring.type}::${label}`;
-    const color = `hsl(${quantizedHueFromCategory(ring.type)}, 70%, 55%)`;
+    const color = colorForCategoryAttribute(ring.type, label, ordinalOf.get(key) || 0);
     let hostMap = ringsByHost.get(ring.host);
     if (!hostMap) { hostMap = new Map(); ringsByHost.set(ring.host, hostMap); }
     hostMap.set(key, { color, node: ring.node });
