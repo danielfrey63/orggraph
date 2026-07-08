@@ -341,3 +341,34 @@ describe('display label resolution (FR-4.2b)', () => {
     expect(resolveDisplayLabel({ labelProp: 'props.mail' }, null)).toBe(undefined);
   });
 });
+
+describe('AK 103 — hidden subtrees are excluded from the projection (FR-8.7/E67)', () => {
+  it('never enters excluded ids: no admission, no expansion, no rings', () => {
+    const res = project(orgStore(), 'Person (<--berichtetAn-- Person, --hatRolle--> Rolle[ring])', {
+      roots: ['p1'], depth: 3, excluded: new Set(['p2', 'p4']),
+    });
+    expect([...res.nodes.keys()].sort()).toEqual(['p1', 'p3']);
+    // p2's subtree (p4) is unreachable; its rings never appear
+    expect(res.rings.map((r) => r.host)).toEqual(['p1']);
+    expect(res.truncated).toBe(false);
+  });
+
+  it('an excluded node no longer burns the node cap (the budget serves the visible scene)', () => {
+    const path = 'Person <--berichtetAn-- Person';
+    const caps = { nodes: 3, edges: 10 };
+    const capped = project(orgStore(), path, { roots: ['p1'], depth: 3, caps });
+    expect(capped.truncated).toBe(true);
+    expect([...capped.nodes.keys()].sort()).toEqual(['p1', 'p2', 'p3']);
+    const freed = project(orgStore(), path, { roots: ['p1'], depth: 3, caps, excluded: new Set(['p3']) });
+    expect([...freed.nodes.keys()].sort()).toEqual(['p1', 'p2', 'p4']);
+    expect(freed.truncated).toBe(false);
+  });
+
+  it('an excluded root contributes nothing; diagnosis projection honours the set too', () => {
+    const res = project(orgStore(), 'Person <--berichtetAn-- Person', { roots: ['p1'], excluded: new Set(['p1']) });
+    expect(res.nodes.size).toBe(0);
+    const diag = projectDiagnosis({ store: orgStore(), roots: ['p1'], depth: 2, excluded: new Set(['p2']) });
+    expect(diag.nodes.has('p2')).toBe(false);
+    expect(diag.nodes.has('p4')).toBe(false); // only reachable through p2
+  });
+});

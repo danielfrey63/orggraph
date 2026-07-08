@@ -1998,7 +1998,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.172.169';
+const APP_VERSION = '1.173.170';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -11292,7 +11292,7 @@ function edgePasses(filters, edge, at) {
 
 // --- View projection (FR-7.1a/FR-7.2/FR-7.3) -------------------------------
 
-// projectView({ store, parsed, roots, depth, asOf, filters, caps }) →
+// projectView({ store, parsed, roots, depth, asOf, filters, caps, excluded }) →
 // { nodes: Map(id → {id, type, render, order, stand}),
 //   edges: [{key, type, source, target}],
 //   derivedEdges: [{source, target, via, provenance: [paths]}],
@@ -11300,7 +11300,9 @@ function edgePasses(filters, edge, at) {
 //   truncated, skipped, cappedBeforeFilter, notEvaluable, autoEmpty,
 //   counters: {visibleNodes, visibleEdges, ringNodes, hiddenVisited} }
 function projectView(options) {
-  const { store, parsed, depth = null, asOf = null, filters = {}, caps = VIEW_CAPS } = options;
+  // `excluded` (FR-8.7/E67): ids of hidden subtrees — the BFS never enters
+  // them, so the cap budget belongs entirely to the visible scene.
+  const { store, parsed, depth = null, asOf = null, filters = {}, caps = VIEW_CAPS, excluded = null } = options;
   const idx = options.idx || buildLiveIndexes(store, asOf, edgeTypesOfPath(parsed));
   const at = idx.at;
 
@@ -11374,6 +11376,7 @@ function projectView(options) {
   const enqueue = (state, cost) => { if (cost === 0) queue.unshift(state); else queue.push(state); };
 
   for (const rootId of [...roots].sort()) {
+    if (excluded && excluded.has(rootId)) continue;
     const identity = idx.nodes.get(rootId);
     if (!identity || identity.type !== parsed.type) continue;
     const render = parsed.render === 'ring:prev' || parsed.render === 'ring:next' ? 'node' : parsed.render;
@@ -11395,6 +11398,7 @@ function projectView(options) {
       for (const edge of list) {
         if (edge.type !== hop.edgeType) continue;
         const otherId = hop.dir === '<--' ? edge.source : edge.target;
+        if (excluded && excluded.has(otherId)) continue;
         const other = idx.nodes.get(otherId);
         if (!other || other.type !== hop.target.type) continue;
 
@@ -11530,7 +11534,7 @@ function projectView(options) {
 // every edge type in BOTH directions, no ordering semantics, hard caps with a
 // visible truncation hint. Without a root nothing is rendered.
 function projectDiagnosis(options) {
-  const { store, roots = [], depth = null, asOf = null, caps = DIAGNOSIS_CAPS } = options;
+  const { store, roots = [], depth = null, asOf = null, caps = DIAGNOSIS_CAPS, excluded = null } = options;
   const idx = options.idx || buildLiveIndexes(store, asOf);
   if (!roots.length) return { nodes: new Map(), edges: [], truncated: false, skipped: 0, needsRoot: true, counters: { visibleNodes: 0, visibleEdges: 0 } };
 
@@ -11540,6 +11544,7 @@ function projectDiagnosis(options) {
   let skipped = 0;
   const queue = [];
   for (const id of [...roots].sort()) {
+    if (excluded && excluded.has(id)) continue;
     const identity = idx.nodes.get(id);
     if (!identity || nodes.has(id)) continue;
     nodes.set(id, { id, type: identity.type, order: 0, stand: recordStandAt(identity, idx.at) });
@@ -11553,6 +11558,7 @@ function projectDiagnosis(options) {
       ...(idx.byTarget.get(state.id) || []).map((e) => ({ edge: e, other: e.source })),
     ];
     for (const { edge, other } of neighbors) {
+      if (excluded && excluded.has(other)) continue;
       const identity = idx.nodes.get(other);
       if (!identity) continue;
       if (!nodes.has(other)) {
@@ -11832,6 +11838,7 @@ function og2Project(state) {
       roots: state.runtimeRoots || [],
       depth: state.runtimeDepth ?? 3,
       asOf: state.asOf,
+      excluded: state.excludedIds || null,
     });
     const nodeTypes = state.registry.nodeTypes || {};
     const nodes = [...projection.nodes.values()].map((n) => ({
@@ -11850,6 +11857,7 @@ function og2Project(state) {
     depth: state.runtimeDepth ?? view.depth ?? null,
     asOf: state.asOf,
     filters: view.filters || {},
+    excluded: state.excludedIds || null,
   });
   const adapted = adaptProjection(projection, state.registry);
   const nodes = [
@@ -12491,6 +12499,20 @@ function og2SyncStockGlobals() {
   hiddenByRoot = hiddenByRoot || new Map();
 }
 
+// Effective hidden ids for the projection (FR-8.7, AK 103): the union of all
+// hidden subtrees MINUS subtrees the user is temporarily showing (legend eye,
+// global toggle). null = nothing to exclude.
+function og2EffectiveHiddenIds() {
+  if (!hiddenByRoot || hiddenByRoot.size === 0) return null;
+  if (typeof allHiddenTemporarilyVisible !== 'undefined' && allHiddenTemporarilyVisible) return null;
+  const out = new Set();
+  for (const [rootId, ids] of hiddenByRoot.entries()) {
+    if (typeof temporarilyVisibleRoots !== 'undefined' && temporarilyVisibleRoots.has(rootId)) continue;
+    for (const id of ids) out.add(String(id));
+  }
+  return out.size ? out : null;
+}
+
 // Does the active view render without a manual root (own roots or __auto__)?
 function og2HasRenderableView() {
   const view = og2 && og2ActiveView(og2);
@@ -12709,12 +12731,16 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
     if (resolved.length) og2.runtimeRoots = resolved;
   }
 
+  // Hidden subtrees (FR-8.7) are EXCLUDED from the projection itself, not
+  // pruned afterwards — the E67 cap budget belongs to the visible scene
+  // (AK 103); temporarily shown subtrees rejoin the projection.
+  og2.excludedIds = og2EffectiveHiddenIds();
   const res = og2.diff ? og2ProjectDiff(og2, og2.diff.t1, og2.diff.t2) : og2Project(og2);
   const projection = res.projection;
   og2.lastDiff = res.diff || null;
 
-  // Leaf filter (FR-8.3, leafProp capability) and hidden subtrees (FR-8.7)
-  // prune the drawn subgraph after projection.
+  // Leaf filter (FR-8.3, leafProp capability) prunes the drawn subgraph
+  // after projection; the excluded check is a safety net (stale contexts).
   const nodeTypes = og2.registry.nodeTypes || {};
   const isLeafHidden = (n) => {
     if (!managementEnabled || n.kind !== 'node') return false;
@@ -12724,13 +12750,15 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
   };
   const dropped = new Set();
   for (const n of res.sub.nodes) {
-    if (hiddenNodes.has(String(n.id)) || isLeafHidden(n)) dropped.add(String(n.id));
+    if ((og2.excludedIds && og2.excludedIds.has(String(n.id))) || isLeafHidden(n)) dropped.add(String(n.id));
   }
   const sub = {
     nodes: res.sub.nodes.filter(n => !dropped.has(String(n.id))),
     links: res.sub.links.filter(l => !dropped.has(String(l.source)) && !dropped.has(String(l.target))),
   };
-  currentHiddenCount = dropped.size;
+  // The footer counts the whole hidden stock (v1 semantics, e.g. "2778"),
+  // plus leaf-filter drops of the current scene.
+  currentHiddenCount = dropped.size + (og2.excludedIds ? og2.excludedIds.size : 0);
 
   // Ring globals for the badge renderer and ring legend (FR-8.2).
   if (res.adapted) {

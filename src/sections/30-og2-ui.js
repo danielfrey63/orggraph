@@ -440,6 +440,20 @@ export function og2SyncStockGlobals() {
   hiddenByRoot = hiddenByRoot || new Map();
 }
 
+// Effective hidden ids for the projection (FR-8.7, AK 103): the union of all
+// hidden subtrees MINUS subtrees the user is temporarily showing (legend eye,
+// global toggle). null = nothing to exclude.
+export function og2EffectiveHiddenIds() {
+  if (!hiddenByRoot || hiddenByRoot.size === 0) return null;
+  if (typeof allHiddenTemporarilyVisible !== 'undefined' && allHiddenTemporarilyVisible) return null;
+  const out = new Set();
+  for (const [rootId, ids] of hiddenByRoot.entries()) {
+    if (typeof temporarilyVisibleRoots !== 'undefined' && temporarilyVisibleRoots.has(rootId)) continue;
+    for (const id of ids) out.add(String(id));
+  }
+  return out.size ? out : null;
+}
+
 // Does the active view render without a manual root (own roots or __auto__)?
 export function og2HasRenderableView() {
   const view = og2 && og2ActiveView(og2);
@@ -658,12 +672,16 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
     if (resolved.length) og2.runtimeRoots = resolved;
   }
 
+  // Hidden subtrees (FR-8.7) are EXCLUDED from the projection itself, not
+  // pruned afterwards — the E67 cap budget belongs to the visible scene
+  // (AK 103); temporarily shown subtrees rejoin the projection.
+  og2.excludedIds = og2EffectiveHiddenIds();
   const res = og2.diff ? og2ProjectDiff(og2, og2.diff.t1, og2.diff.t2) : og2Project(og2);
   const projection = res.projection;
   og2.lastDiff = res.diff || null;
 
-  // Leaf filter (FR-8.3, leafProp capability) and hidden subtrees (FR-8.7)
-  // prune the drawn subgraph after projection.
+  // Leaf filter (FR-8.3, leafProp capability) prunes the drawn subgraph
+  // after projection; the excluded check is a safety net (stale contexts).
   const nodeTypes = og2.registry.nodeTypes || {};
   const isLeafHidden = (n) => {
     if (!managementEnabled || n.kind !== 'node') return false;
@@ -673,13 +691,15 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
   };
   const dropped = new Set();
   for (const n of res.sub.nodes) {
-    if (hiddenNodes.has(String(n.id)) || isLeafHidden(n)) dropped.add(String(n.id));
+    if ((og2.excludedIds && og2.excludedIds.has(String(n.id))) || isLeafHidden(n)) dropped.add(String(n.id));
   }
   const sub = {
     nodes: res.sub.nodes.filter(n => !dropped.has(String(n.id))),
     links: res.sub.links.filter(l => !dropped.has(String(l.source)) && !dropped.has(String(l.target))),
   };
-  currentHiddenCount = dropped.size;
+  // The footer counts the whole hidden stock (v1 semantics, e.g. "2778"),
+  // plus leaf-filter drops of the current scene.
+  currentHiddenCount = dropped.size + (og2.excludedIds ? og2.excludedIds.size : 0);
 
   // Ring globals for the badge renderer and ring legend (FR-8.2).
   if (res.adapted) {

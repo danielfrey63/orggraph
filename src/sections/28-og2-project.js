@@ -118,7 +118,7 @@ function edgePasses(filters, edge, at) {
 
 // --- View projection (FR-7.1a/FR-7.2/FR-7.3) -------------------------------
 
-// projectView({ store, parsed, roots, depth, asOf, filters, caps }) →
+// projectView({ store, parsed, roots, depth, asOf, filters, caps, excluded }) →
 // { nodes: Map(id → {id, type, render, order, stand}),
 //   edges: [{key, type, source, target}],
 //   derivedEdges: [{source, target, via, provenance: [paths]}],
@@ -126,7 +126,9 @@ function edgePasses(filters, edge, at) {
 //   truncated, skipped, cappedBeforeFilter, notEvaluable, autoEmpty,
 //   counters: {visibleNodes, visibleEdges, ringNodes, hiddenVisited} }
 export function projectView(options) {
-  const { store, parsed, depth = null, asOf = null, filters = {}, caps = VIEW_CAPS } = options;
+  // `excluded` (FR-8.7/E67): ids of hidden subtrees — the BFS never enters
+  // them, so the cap budget belongs entirely to the visible scene.
+  const { store, parsed, depth = null, asOf = null, filters = {}, caps = VIEW_CAPS, excluded = null } = options;
   const idx = options.idx || buildLiveIndexes(store, asOf, edgeTypesOfPath(parsed));
   const at = idx.at;
 
@@ -200,6 +202,7 @@ export function projectView(options) {
   const enqueue = (state, cost) => { if (cost === 0) queue.unshift(state); else queue.push(state); };
 
   for (const rootId of [...roots].sort()) {
+    if (excluded && excluded.has(rootId)) continue;
     const identity = idx.nodes.get(rootId);
     if (!identity || identity.type !== parsed.type) continue;
     const render = parsed.render === 'ring:prev' || parsed.render === 'ring:next' ? 'node' : parsed.render;
@@ -221,6 +224,7 @@ export function projectView(options) {
       for (const edge of list) {
         if (edge.type !== hop.edgeType) continue;
         const otherId = hop.dir === '<--' ? edge.source : edge.target;
+        if (excluded && excluded.has(otherId)) continue;
         const other = idx.nodes.get(otherId);
         if (!other || other.type !== hop.target.type) continue;
 
@@ -356,7 +360,7 @@ export function projectView(options) {
 // every edge type in BOTH directions, no ordering semantics, hard caps with a
 // visible truncation hint. Without a root nothing is rendered.
 export function projectDiagnosis(options) {
-  const { store, roots = [], depth = null, asOf = null, caps = DIAGNOSIS_CAPS } = options;
+  const { store, roots = [], depth = null, asOf = null, caps = DIAGNOSIS_CAPS, excluded = null } = options;
   const idx = options.idx || buildLiveIndexes(store, asOf);
   if (!roots.length) return { nodes: new Map(), edges: [], truncated: false, skipped: 0, needsRoot: true, counters: { visibleNodes: 0, visibleEdges: 0 } };
 
@@ -366,6 +370,7 @@ export function projectDiagnosis(options) {
   let skipped = 0;
   const queue = [];
   for (const id of [...roots].sort()) {
+    if (excluded && excluded.has(id)) continue;
     const identity = idx.nodes.get(id);
     if (!identity || nodes.has(id)) continue;
     nodes.set(id, { id, type: identity.type, order: 0, stand: recordStandAt(identity, idx.at) });
@@ -379,6 +384,7 @@ export function projectDiagnosis(options) {
       ...(idx.byTarget.get(state.id) || []).map((e) => ({ edge: e, other: e.source })),
     ];
     for (const { edge, other } of neighbors) {
+      if (excluded && excluded.has(other)) continue;
       const identity = idx.nodes.get(other);
       if (!identity) continue;
       if (!nodes.has(other)) {

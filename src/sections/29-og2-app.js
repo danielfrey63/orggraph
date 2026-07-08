@@ -243,6 +243,7 @@ export function og2Project(state) {
       roots: state.runtimeRoots || [],
       depth: state.runtimeDepth ?? 3,
       asOf: state.asOf,
+      excluded: state.excludedIds || null,
     });
     const nodeTypes = state.registry.nodeTypes || {};
     const nodes = [...projection.nodes.values()].map((n) => ({
@@ -261,6 +262,7 @@ export function og2Project(state) {
     depth: state.runtimeDepth ?? view.depth ?? null,
     asOf: state.asOf,
     filters: view.filters || {},
+    excluded: state.excludedIds || null,
   });
   const adapted = adaptProjection(projection, state.registry);
   const nodes = [
