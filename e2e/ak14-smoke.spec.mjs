@@ -61,7 +61,7 @@ test('AK 97: views legend is the topmost section and switches views (FR-7.5)', a
   const firstSection = page.locator('#legendPane .legend-section').first();
   await expect(firstSection.locator('.legend-title')).toHaveText('Views');
   const rows = page.locator('#viewsLegend .legend-row');
-  await expect(rows).toHaveCount(2);
+  await expect(rows).toHaveCount(3);
   await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Start');
   await rows.filter({ hasText: 'Nur Hierarchie' }).click();
   await expect(page.locator('path.cluster')).toHaveCount(0); // no cluster station in that path
@@ -79,13 +79,13 @@ test('AK 98: save current scene as a named view, survives reload (FR-7.5a)', asy
   await expect(page.locator(NODE_CIRCLES)).toHaveCount(3);
   await page.locator('#viewsSection .legend-header').hover(); // actions appear on hover
   await page.locator('#saveViewBtn').click({ force: true });
-  await expect(page.locator('#viewsLegend .legend-row')).toHaveCount(3);
+  await expect(page.locator('#viewsLegend .legend-row')).toHaveCount(4);
   await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Meine View');
   // persisted in env.VIEWS: still there and still active after a reload
   await page.waitForTimeout(700); // let the state write land (debounced 400ms)
   await page.reload();
   await expect(page.locator(NODE_CIRCLES)).toHaveCount(3, { timeout: 30_000 });
-  await expect(page.locator('#viewsLegend .legend-row')).toHaveCount(3);
+  await expect(page.locator('#viewsLegend .legend-row')).toHaveCount(4);
   await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Meine View');
 });
 
@@ -204,6 +204,24 @@ test('AK 101: view contexts — returning to a view restores its exact scene (FR
   // switch back: Start's context (root Ben) returns — not the view defaults
   await page.locator('#viewsLegend .legend-row').filter({ hasText: 'Start' }).click();
   await expect(page.locator(NODE_CIRCLES)).toHaveCount(1, { timeout: 15_000 });
+});
+
+test('AK 102: env view defaults apply on first entry (FR-7.5b)', async ({ page }) => {
+  const before = await page.locator(NODE_CIRCLES).count(); // Start: 5
+  // Team-Fokus declares defaults: Team category hidden + attribute focus on
+  // -> members whose only ring is a Team badge vanish with their branches
+  await page.locator('#viewsLegend .legend-row').filter({ hasText: 'Team-Fokus' }).click();
+  await expect(async () => {
+    const focused = await page.locator(NODE_CIRCLES).count();
+    expect(focused).toBeGreaterThan(0);
+    expect(focused).toBeLessThan(before);
+  }).toPass({ timeout: 15_000 });
+  const focusBtn = page.locator('#toggleAttributeFocus');
+  await expect(focusBtn).toHaveClass(/active/);
+  // back to Start: its own context is untouched by the defaults of the other view
+  await page.locator('#viewsLegend .legend-row').filter({ hasText: 'Start' }).click();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(before, { timeout: 15_000 });
+  await expect(focusBtn).not.toHaveClass(/active/);
 });
 
 test('AK 89: SVG export in pseudo mode carries no raw tenant value (FR-8.5)', async ({ page }) => {

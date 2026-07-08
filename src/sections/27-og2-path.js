@@ -207,6 +207,34 @@ export function validateView(view, registry) {
     }
   }
 
+  // view defaults (FR-7.5b): declarative start context for a first-time
+  // entered view — same shape as the runtime context. Typos never fail
+  // silently: unknown keys and wrong types reject the view (AK 84 style).
+  if (view.defaults !== undefined) {
+    const d = view.defaults;
+    if (!d || typeof d !== 'object' || Array.isArray(d)) {
+      errors.push('defaults must be an object');
+    } else {
+      const KNOWN = ['attributesOff', 'hiddenCategories', 'attributeFocus', 'clustersOff', 'asOf', 'diff'];
+      for (const key of Object.keys(d)) {
+        if (!KNOWN.includes(key)) errors.push(`unknown defaults key "${key}" (known: ${KNOWN.join(', ')})`);
+      }
+      const isStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+      for (const key of ['attributesOff', 'hiddenCategories', 'clustersOff']) {
+        if (d[key] !== undefined && !isStringArray(d[key])) errors.push(`defaults.${key} must be an array of strings`);
+      }
+      if (d.attributeFocus !== undefined && typeof d.attributeFocus !== 'boolean') {
+        errors.push('defaults.attributeFocus must be a boolean');
+      }
+      if (d.asOf !== undefined && typeof d.asOf !== 'string') {
+        errors.push('defaults.asOf must be a snapshot instant string');
+      }
+      if (d.diff !== undefined && !(d.diff && typeof d.diff === 'object' && typeof d.diff.t1 === 'string' && typeof d.diff.t2 === 'string')) {
+        errors.push('defaults.diff must be an object { t1, t2 } of instant strings');
+      }
+    }
+  }
+
   return { ok: errors.length === 0, errors, parsed };
 }
 

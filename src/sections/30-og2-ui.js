@@ -290,6 +290,7 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
   og2.asOf = null;
   og2.diff = null;
   og2.lastScopeOrgs = null;
+  og2.pendingClustersOff = null;
   selectedRootIds = [];
   currentSelectedId = null;
   og2.pendingAttributesOff = new Set();
@@ -320,6 +321,22 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
     og2.pendingAttributesOff = new Set((ctx.attributesOff || []).map(String));
     hiddenCategories = new Set((ctx.hiddenCategories || []).map(String));
     attributeFocusEnabled = !!ctx.attributeFocus;
+  } else if (view && view.defaults) {
+    // First-time entry with declared env defaults (FR-7.5b): the view starts
+    // in its configured context; a captured runtime context takes over from
+    // the first user change on. Unresolvable parts fall back individually.
+    const d = view.defaults;
+    og2.pendingAttributesOff = new Set((d.attributesOff || []).map(String));
+    hiddenCategories = new Set((d.hiddenCategories || []).map(String));
+    attributeFocusEnabled = !!d.attributeFocus;
+    if (Array.isArray(d.clustersOff) && d.clustersOff.length) {
+      og2.pendingClustersOff = new Set(d.clustersOff.map(String));
+    }
+    const instants = og2TimeInstants(og2);
+    if (d.asOf && instants.includes(d.asOf) && d.asOf !== instants[instants.length - 1]) og2.asOf = d.asOf;
+    if (d.diff && instants.includes(d.diff.t1) && instants.includes(d.diff.t2)) {
+      og2.diff = { t1: d.diff.t1, t2: d.diff.t2 };
+    }
   }
 
   if (Number.isFinite(depth)) {
@@ -709,7 +726,11 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
   // parameter change (depth/time/filter/focus) — only clusters NEW to the
   // scope start visible; a view switch resets the override (FR-7.5).
   const scopeOrgs = new Set(sub.nodes.filter(n => n.kind === 'cluster').map(n => String(n.id)));
-  if (!og2.lastScopeOrgs) {
+  if (og2.pendingClustersOff) {
+    // FR-7.5b: env-declared start deselection for a first-time entered view
+    allowedOrgs = new Set([...scopeOrgs].filter(id => !og2.pendingClustersOff.has(id)));
+    og2.pendingClustersOff = null;
+  } else if (!og2.lastScopeOrgs) {
     allowedOrgs = new Set(scopeOrgs);
   } else {
     const next = new Set();

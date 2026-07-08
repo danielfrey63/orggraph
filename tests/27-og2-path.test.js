@@ -109,6 +109,34 @@ describe('FR-7.1a — registry-aware view validation', () => {
     expect(typeNotInPath.errors.join(' ')).toContain('does not occur in the path');
   });
 
+  it('view defaults are validated: known keys and types pass, typos reject (FR-7.5b, AK 102)', () => {
+    const base = { path: 'Person <--berichtetAn-- Person', roots: ['p1'] };
+    const ok = validateView({
+      ...base,
+      defaults: {
+        attributesOff: ['Rolle::Lead'],
+        hiddenCategories: ['Rolle'],
+        attributeFocus: true,
+        clustersOff: ['o1'],
+        asOf: '2026-01-01T00:00:00Z',
+        diff: { t1: 'a', t2: 'b' },
+      },
+    }, REGISTRY);
+    expect(ok.ok).toBe(true);
+    const unknownKey = validateView({ ...base, defaults: { attributFocus: true } }, REGISTRY);
+    expect(unknownKey.ok).toBe(false);
+    expect(unknownKey.errors.join(' ')).toContain('unknown defaults key "attributFocus"');
+    const wrongType = validateView({ ...base, defaults: { hiddenCategories: 'Team' } }, REGISTRY);
+    expect(wrongType.ok).toBe(false);
+    expect(wrongType.errors.join(' ')).toContain('hiddenCategories must be an array of strings');
+    const badDiff = validateView({ ...base, defaults: { diff: { t1: 'a' } } }, REGISTRY);
+    expect(badDiff.ok).toBe(false);
+    expect(badDiff.errors.join(' ')).toContain('defaults.diff');
+    const notObject = validateView({ ...base, defaults: [] }, REGISTRY);
+    expect(notObject.ok).toBe(false);
+    expect(notObject.errors.join(' ')).toContain('defaults must be an object');
+  });
+
   it('validateViews: invalid views are rejected with reasons; zero valid views detected', () => {
     const { valid, rejected, anyValid } = validateViews({
       Gut: { path: 'Person <--berichtetAn-- Person', roots: ['p1'] },

@@ -13,6 +13,19 @@
         "__auto__"
       ],
       "depth": 6
+    },
+    "Team-Fokus": {
+      "path": "Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster], --hatRolle--> Rolle[ring], --imTeam--> Team[ring])",
+      "roots": [
+        "__auto__"
+      ],
+      "depth": 3,
+      "defaults": {
+        "hiddenCategories": [
+          "Team"
+        ],
+        "attributeFocus": true
+      }
     }
   },
   "REGISTRY_URL": "./registry.json",
