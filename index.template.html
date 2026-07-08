@@ -66,7 +66,7 @@
     <div class="canvas">
       <svg id="graph" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
-    <aside id="legendPane" aria-label="Organisationseinheiten">
+    <aside id="legendPane" aria-label="Legende">
       <div class="legend-section" id="viewsSection" style="display: none;">
         <div class="legend-header">
           <div class="legend-header-layout">
@@ -93,19 +93,19 @@
               <button class="legend-chevron expanded" data-target="legend" aria-label="Ein-/Ausklappen">
                 <!-- SVG wird durch JavaScript gesetzt -->
               </button>
-              <h2 class="legend-title">OEs</h2>
+              <h2 class="legend-title">Cluster</h2>
             </div>
             <div class="legend-actions-area">
               <div class="legend-search-container" data-ignore-header-click="true">
-                <input type="text" id="oeFilter" placeholder="OE filtern..." class="legend-search-input" data-ignore-header-click="true">
-                <button class="legend-icon-btn" id="oeFilterBtn" title="OE filtern" data-ignore-header-click="true">
+                <input type="text" id="oeFilter" placeholder="Cluster filtern..." class="legend-search-input" data-ignore-header-click="true">
+                <button class="legend-icon-btn" id="oeFilterBtn" title="Cluster filtern" data-ignore-header-click="true">
                   <i data-icon="filter"></i>
                 </button>
               </div>
-              <button id="toggleAllOes" class="legend-icon-btn" title="Alle OEs an/abwählen" data-ignore-header-click="true">
+              <button id="toggleAllOes" class="legend-icon-btn" title="Alle Cluster an/abwählen" data-ignore-header-click="true">
                 <i data-icon="checkAll"></i>
               </button>
-              <button id="toggleOesVisibility" class="legend-icon-btn active" title="OEs ausblenden" data-ignore-header-click="true">
+              <button id="toggleOesVisibility" class="legend-icon-btn active" title="Cluster ausblenden" data-ignore-header-click="true">
                 <i data-icon="eye"></i>
               </button>
             </div>
@@ -233,7 +233,7 @@
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.168.160';
+const APP_VERSION = '1.169.166';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 @@APP@@
 </script>

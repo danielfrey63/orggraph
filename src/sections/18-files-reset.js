@@ -319,13 +319,13 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (hasAnySelected) {
         // Mindestens eine OE ist ausgewählt -> Alle abwählen
         allowedOrgs.clear();
-        showTemporaryNotification('Alle OEs abgewählt');
+        showTemporaryNotification('Alle Cluster abgewählt');
       } else {
         // Keine OE ist ausgewählt -> Alle auswählen
         raw.orgs.forEach(o => {
           if (o && o.id) allowedOrgs.add(String(o.id));
         });
-        showTemporaryNotification('Alle OEs ausgewählt');
+        showTemporaryNotification('Alle Cluster ausgewählt');
       }
       
       // Graph und Legende aktualisieren
@@ -438,7 +438,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (!noMatchesMsg) {
           noMatchesMsg = document.createElement('div');
           noMatchesMsg.className = 'no-matches-message';
-          noMatchesMsg.textContent = 'Keine OEs gefunden';
+          noMatchesMsg.textContent = 'Keine Cluster gefunden';
           legend.appendChild(noMatchesMsg);
         }
       } else if (noMatchesMsg) {
