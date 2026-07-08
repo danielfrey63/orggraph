@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import {
   migrateTenant, parseAttributeText, containerNodeOf, resolveIdentifier,
   buildPersonIndex, verifyByImport, toUnmatchedCsv, slug, buildTenantEnv,
+  normalizeRoleValue,
 } from '../../scripts/migrate-legacy.mjs';
 import { validateView } from '../../src/sections/27-og2-path.js';
 
@@ -86,13 +87,45 @@ describe('E72 — container node = category + value', () => {
     const { snapshot } = migrate({ attributes });
     const gremien = snapshot.nodes.filter((n) => n.type === 'Gremium');
     expect(gremien.map((g) => g.label).sort()).toEqual(['CC', 'ERZ PA']);
-    // Coach from AKROS and Coach from ERZ Rollen Rom stay distinct (E72)
+    // Coach from AKROS and Coach from ERZ Rollen Rom are ONE role node (E73:
+    // value-based identity, tenant-wide); the binding context stays on the edge
     const rollen = snapshot.nodes.filter((n) => n.type === 'Rolle');
-    expect(rollen.length).toBe(2);
+    expect(rollen.length).toBe(1);
+    expect(rollen[0].id).toBe('legacy-test:Rolle:coach');
     const hatRolle = snapshot.edges.filter((e) => e.type === 'hatRolle');
     const kontexts = hatRolle.map((e) => e.props.kontext).sort();
     expect(kontexts).toEqual([null, `legacy-test:Firma:${slug('AKROS')}`].sort());
     expect(snapshot.nodes.some((n) => n.type === 'Firma' && n.label === 'AKROS')).toBe(true);
+  });
+});
+
+describe('E73 — role identity is the normalized value, abbreviations stripped', () => {
+  it('strips a trailing bracketed uppercase abbreviation, keeps everything else', () => {
+    expect(normalizeRoleValue('Product Owner (PO)')).toBe('Product Owner');
+    expect(normalizeRoleValue('Entwickler (E)')).toBe('Entwickler');
+    expect(normalizeRoleValue('Projektleiter Leistungsbezüger (PL-LB)')).toBe('Projektleiter Leistungsbezüger');
+    expect(normalizeRoleValue('Business Analyst')).toBe('Business Analyst');
+    // non-abbreviation brackets (not all-caps) are content, not redundancy
+    expect(normalizeRoleValue('Leiter (Betrieb)')).toBe('Leiter (Betrieb)');
+    // a value that IS only an abbreviation stays untouched
+    expect(normalizeRoleValue('(PO)')).toBe('(PO)');
+    expect(normalizeRoleValue('BA')).toBe('BA');
+  });
+
+  it('merges duplicate roles with and without abbreviation into one node and dedupes the fact', () => {
+    const attributes = [
+      { category: 'ERZ Rollen Rom', rows: [{ identifier: 'anna.boss@x.ch', value: 'Product Owner' }] },
+      // same person carries the abbreviated twin from the second list, plus a
+      // solo abbreviated role with no plain twin
+      { category: 'ERZ Rollen Rom', rows: [{ identifier: 'anna.boss@x.ch', value: 'Product Owner (PO)' }, { identifier: 'ben.dev@x.ch', value: 'Architekt (A)' }] },
+    ];
+    const { snapshot } = migrate({ attributes });
+    const rollen = snapshot.nodes.filter((n) => n.type === 'Rolle');
+    expect(rollen.map((r) => r.label).sort()).toEqual(['Architekt', 'Product Owner']);
+    // one merged node -> the duplicate hatRolle fact collapses (same kontext)
+    const annaEdges = snapshot.edges.filter((e) => e.type === 'hatRolle' && e.source === 'legacy-test:p-1');
+    expect(annaEdges.length).toBe(1);
+    expect(annaEdges[0].target).toBe('legacy-test:Rolle:product-owner');
   });
 });
 

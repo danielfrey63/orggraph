@@ -125,6 +125,16 @@ export function resolveIdentifier(identifier, index, mapping) {
 
 // ---------------------------------------------------------------- core
 
+// E73: a trailing bracketed uppercase abbreviation on a role value is a
+// display redundancy of the same role — "Product Owner (PO)" and
+// "Product Owner" are ONE role. Strip it before identity formation; a value
+// that is nothing but an abbreviation stays untouched.
+export function normalizeRoleValue(value) {
+  const val = String(value || '').trim();
+  const stripped = val.replace(/\s*\([A-ZÄÖÜ][A-ZÄÖÜ0-9-]*\)$/u, '').trim();
+  return stripped || val;
+}
+
 // E72: container node identity = category + value; empty value falls back to
 // the category. Returns a stable node (id per E41/E56, source-namespaced).
 export function containerNodeOf(source, type, category, value, categoryProp) {
@@ -202,8 +212,16 @@ export function migrateTenant({ source, cfg, registry, data, attributes, mapping
 
   // Attribute categories per mapping configuration (FR-10.2/10.3, E72).
   const index = buildPersonIndex(data.persons);
+  // Role facts (treatments 'role'/'contextRole', E73): the role concept
+  // space is tenant-wide — the SAME role named by several source lists is
+  // ONE node, so the identity is the normalized value alone (the category
+  // is provenance, never identity). An empty value keeps the E72 category
+  // fallback.
   const applyRoleFact = (personNodeId, category, value, kontextId) => {
-    const rolle = addNode(containerNodeOf(source, 'Rolle', category, value));
+    const val = normalizeRoleValue(value);
+    const rolle = addNode(val
+      ? { id: `${source}:Rolle:${slug(val)}`, type: 'Rolle', label: val, props: {} }
+      : containerNodeOf(source, 'Rolle', category, ''));
     addEdge({ type: 'hatRolle', source: personNodeId, target: rolle.id, props: { kontext: kontextId } });
   };
 
@@ -456,14 +474,20 @@ async function main() {
     writeFileSync(join(outDir, `${source}.unmatched.csv`), toUnmatchedCsv(unmatched));
     writeFileSync(join(outDir, `${source}.report.json`), JSON.stringify(report, null, 2) + '\n');
 
-    // Deliverable tenant env with the start view (FR-7.4).
-    let legacyEnv = null;
-    const legacyEnvPath = join(dir, 'env.json');
-    if (existsSync(legacyEnvPath)) {
-      try { legacyEnv = JSON.parse(readFileSync(legacyEnvPath, 'utf8')); } catch { /* optional */ }
+    // Deliverable tenant env with the start view (FR-7.4). Desired-state: an
+    // existing env is curated (hand-edited views) — never clobber it.
+    const envPath = join(outDir, `${source}.env.json`);
+    if (existsSync(envPath)) {
+      console.log(`env:    ${source}.env.json exists — left untouched (curated)`);
+    } else {
+      let legacyEnv = null;
+      const legacyEnvPath = join(dir, 'env.json');
+      if (existsSync(legacyEnvPath)) {
+        try { legacyEnv = JSON.parse(readFileSync(legacyEnvPath, 'utf8')); } catch { /* optional */ }
+      }
+      const env = buildTenantEnv({ source, registry, snapshot, legacyEnv });
+      writeFileSync(envPath, JSON.stringify(env, null, 2) + '\n');
     }
-    const env = buildTenantEnv({ source, registry, snapshot, legacyEnv });
-    writeFileSync(join(outDir, `${source}.env.json`), JSON.stringify(env, null, 2) + '\n');
 
     console.log(`\n=== ${source} ===`);
     console.log(`input:  ${report.input.persons} persons, ${report.input.orgs} orgs, ${report.input.links} links`);
