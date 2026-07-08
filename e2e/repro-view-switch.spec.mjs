@@ -58,7 +58,7 @@ test('repro: SEM zip -> env update -> view switch roundtrip', async ({ page }) =
   console.log('SCENE 1 (after ZIP boot):', JSON.stringify(s1));
   await page.screenshot({ path: join(OUT, '1-after-zip.png') });
 
-  // 2) drop the edited env (OrgChart + OEChart); re-enable app logging right
+  // 2) drop the edited env (OrgChart + Teams + TeamCluster); re-enable app logging right
   // after the self-reload's script evaluates (debugMode is a top-level let)
   await page.addInitScript(() => {
     const arm = () => { try { debugMode = true; } catch (_) { setTimeout(arm, 200); } };
@@ -78,12 +78,27 @@ test('repro: SEM zip -> env update -> view switch roundtrip', async ({ page }) =
   console.log('SCENE 2 (after env drop):', JSON.stringify(s2));
   await page.screenshot({ path: join(OUT, '2-after-env.png') });
 
-  // 3/4) switch to the NEW view (OEChart)
-  await page.locator('#viewsLegend .legend-row', { hasText: 'OEChart' }).click();
+  // 3) switch to the Teams view: 16 team nodes + 176 members, membership
+  // lines drawn (216 imTeam edges), roles as rings, no hulls
+  await page.locator('#viewsLegend .legend-row', { hasText: 'Teams' }).first().click();
   await page.waitForTimeout(8000);
   const s3 = await sceneStats(page);
-  console.log('SCENE 3 (OEChart):', JSON.stringify(s3));
-  await page.screenshot({ path: join(OUT, '3-oechart.png') });
+  console.log('SCENE 3 (Teams):', JSON.stringify(s3));
+  await page.screenshot({ path: join(OUT, '3-teams.png') });
+  expect(s3.circles).toBe(192);
+  expect(s3.clusters).toBe(0);
+  expect(s3.links).toBe(216);
+
+  // 3b) switch to the TeamCluster view: same scene as hulls — 176 member
+  // circles inside 16 team hulls, membership is containment (no lines)
+  await page.locator('#viewsLegend .legend-row', { hasText: 'TeamCluster' }).click();
+  await page.waitForTimeout(8000);
+  const s3b = await sceneStats(page);
+  console.log('SCENE 3b (TeamCluster):', JSON.stringify(s3b));
+  await page.screenshot({ path: join(OUT, '3b-teamcluster.png') });
+  expect(s3b.circles).toBe(176);
+  expect(s3b.clusters).toBe(16);
+  expect(s3b.links).toBe(0);
 
   // 5) switch BACK to the old view (OrgChart): the view context must return
   // the EXACT previous scene — never the __auto__ full projection (AK 101)
