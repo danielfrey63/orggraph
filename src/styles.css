@@ -1474,10 +1474,13 @@ body.dz-dragging::after {
   background: none;
   padding: 0;
   color: var(--text-muted, #8a93a3);
-  font: inherit;
-  font-size: inherit;
   cursor: pointer;
-  text-decoration: underline dotted;
+  display: inline-flex;
+  align-items: center;
+}
+.footer-reset-btn .ic {
+  width: 14px;
+  height: 14px;
 }
 .footer-reset-btn:hover {
   color: var(--text-strong, #e8ecf2);

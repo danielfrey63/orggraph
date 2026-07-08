@@ -1482,10 +1482,13 @@ body.dz-dragging::after {
   background: none;
   padding: 0;
   color: var(--text-muted, #8a93a3);
-  font: inherit;
-  font-size: inherit;
   cursor: pointer;
-  text-decoration: underline dotted;
+  display: inline-flex;
+  align-items: center;
+}
+.footer-reset-btn .ic {
+  width: 14px;
+  height: 14px;
 }
 .footer-reset-btn:hover {
   color: var(--text-strong, #e8ecf2);
@@ -1998,7 +2001,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.173.170';
+const APP_VERSION = '1.174.171';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -2102,6 +2105,7 @@ const ICON = {
   cloudDownload:`<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
   close:        `<svg ${SVG_ATTR}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
   plus:         `<svg ${SVG_ATTR}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  trash:        `<svg ${SVG_ATTR}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
 };
 
 /** Replace an element's icon (sets data-icon + innerHTML). */
@@ -8369,7 +8373,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     initializeExport();
   }
 
-  // Reset-Schaltfläche für lokal gespeicherte Daten (Footer).
+  // Factory reset (footer, trash icon): clears the WHOLE IndexedDB — every
+  // profile plus the profile list — after confirmation. Distinct from the
+  // profile switcher's ✕, which deletes only the active profile (FR-8.9).
   const footerStats = document.querySelector('.footer-stats');
   if (footerStats && !document.getElementById('resetData')) {
     const sep = document.createElement('span');
@@ -8379,9 +8385,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     resetBtn.id = 'resetData';
     resetBtn.className = 'footer-reset-btn';
     resetBtn.type = 'button';
-    resetBtn.title = 'Lokal gespeicherte Daten löschen und zurücksetzen';
-    resetBtn.textContent = 'Daten zurücksetzen';
-    resetBtn.addEventListener('click', () => { resetAllData(); });
+    resetBtn.title = 'Alle lokalen Daten löschen (sämtliche Profile) und leer neu starten';
+    resetBtn.setAttribute('aria-label', 'Alle lokalen Daten löschen');
+    const resetIcon = document.createElement('i');
+    setIcon(resetIcon, 'trash');
+    resetBtn.appendChild(resetIcon);
+    resetBtn.addEventListener('click', () => {
+      const ok = (typeof confirm === 'function')
+        ? confirm('Alle lokalen Daten löschen? Das entfernt SÄMTLICHE Profile und startet die App leer neu.')
+        : true;
+      if (ok) resetAllData();
+    });
     footerStats.appendChild(sep);
     footerStats.appendChild(resetBtn);
   }

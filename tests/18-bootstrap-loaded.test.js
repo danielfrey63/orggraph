@@ -247,9 +247,17 @@ describe('env-driven bootstrap with loaded data', () => {
     expect(document.getElementById('attributeFileInput')).toBeNull();
   });
 
-  it('creates the footer reset button which clears and reloads', async () => {
+  it('creates the footer reset button (trash icon) which clears everything after confirmation', async () => {
     const resetBtn = document.getElementById('resetData');
     expect(resetBtn).not.toBeNull();
+    expect(resetBtn.querySelector('[data-icon="trash"]')).not.toBeNull();
+    // declining the confirmation must not touch the data
+    globalThis.confirm = () => false;
+    resetBtn.click();
+    await flush();
+    expect(globalThis.idbClear).not.toHaveBeenCalled();
+    // confirming clears the WHOLE IndexedDB and reloads
+    globalThis.confirm = () => true;
     resetBtn.click();
     await flush();
     expect(globalThis.idbClear).toHaveBeenCalled();

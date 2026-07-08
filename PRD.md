@@ -555,7 +555,7 @@ Ergänzend zu §9.4 auf Event-Ebene: Jede bestehende Interaktion ist entweder ü
 | Footer-Status-Klick lädt Datei | **Entfällt** — versteckte Aktion; Import nur Dropzone/Dateidialog | FR-6.7 (E25) |
 | Profil-Switcher `change` | Übernehmen als Tenant-Switcher | FR-8.9 |
 | Profil-«+» öffnet Dropzone für neues Profil | Übernehmen | FR-8.9 |
-| Reset-Button | Übernehmen | §9.1 |
+| Reset-Button | Übernehmen — als **Eimer-Icon** im Footer (Live-Test-Entscheid 2026-07-08): Werksreset über **sämtliche** Profile inkl. Profilliste, immer mit Bestätigungsdialog; bewusst abgegrenzt vom «✕» des Profil-Switchers, das nur das **aktive** Profil löscht (FR-8.9) | §9.1 |
 | Suchfeld `input` (Debounce), `focus`/`blur`/`change`, `keydown` (Enter, Shift+Enter, Pfeile), Resultat-`mousedown` (Auswahl/Shift-Add) | Übernehmen; Dropdown-UX identisch, Suchdomäne = sichtbare Typen über aufgelöstes Label (immer) plus optionale `identifiers` | FR-7.6, FR-8.4 |
 | Tiefen-Stepper `click` / Hidden-Input `change`/`input` | Übernehmen; rendert reaktiv | FR-7.7, FR-8.11 |
 | Richtungs-Toggle `click` | **Entfällt** | E22 |

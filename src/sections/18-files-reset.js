@@ -854,7 +854,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     initializeExport();
   }
 
-  // Reset-Schaltfläche für lokal gespeicherte Daten (Footer).
+  // Factory reset (footer, trash icon): clears the WHOLE IndexedDB — every
+  // profile plus the profile list — after confirmation. Distinct from the
+  // profile switcher's ✕, which deletes only the active profile (FR-8.9).
   const footerStats = document.querySelector('.footer-stats');
   if (footerStats && !document.getElementById('resetData')) {
     const sep = document.createElement('span');
@@ -864,9 +866,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     resetBtn.id = 'resetData';
     resetBtn.className = 'footer-reset-btn';
     resetBtn.type = 'button';
-    resetBtn.title = 'Lokal gespeicherte Daten löschen und zurücksetzen';
-    resetBtn.textContent = 'Daten zurücksetzen';
-    resetBtn.addEventListener('click', () => { resetAllData(); });
+    resetBtn.title = 'Alle lokalen Daten löschen (sämtliche Profile) und leer neu starten';
+    resetBtn.setAttribute('aria-label', 'Alle lokalen Daten löschen');
+    const resetIcon = document.createElement('i');
+    setIcon(resetIcon, 'trash');
+    resetBtn.appendChild(resetIcon);
+    resetBtn.addEventListener('click', () => {
+      const ok = (typeof confirm === 'function')
+        ? confirm('Alle lokalen Daten löschen? Das entfernt SÄMTLICHE Profile und startet die App leer neu.')
+        : true;
+      if (ok) resetAllData();
+    });
     footerStats.appendChild(sep);
     footerStats.appendChild(resetBtn);
   }
