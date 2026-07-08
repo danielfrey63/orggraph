@@ -92,6 +92,22 @@ describe('registry self-consistency (FR-4.1)', () => {
     expect(problems.some((p) => p.includes('identityProp "k"'))).toBe(true);
     expect(problems.some((p) => p.includes('implies target "gone"'))).toBe(true);
   });
+  it('rejects malformed field paths (labelProp, identifiers, leafProp)', () => {
+    const bad = {
+      version: 'x',
+      nodeTypes: {
+        A: { labelProp: 'props..kaputt', identifiers: ['props.ok', 'kein pfad'], leafProp: 'isBasis', props: {} },
+        B: { labelProp: 'label', identifiers: ['id', 'props.email'], leafProp: 'props.isBasis', props: {} },
+      },
+      edgeTypes: {},
+    };
+    const problems = registryConsistencyProblems(bad);
+    expect(problems.some((p) => p.includes('labelProp "props..kaputt"'))).toBe(true);
+    expect(problems.some((p) => p.includes('identifier path "kein pfad"'))).toBe(true);
+    expect(problems.some((p) => p.includes('leafProp "isBasis"'))).toBe(true);
+    // the well-formed twin contributes no problems
+    expect(problems.some((p) => p.includes('node type "B"'))).toBe(false);
+  });
 });
 
 describe('AK 4 — diff: closed / property diff / new identity', () => {

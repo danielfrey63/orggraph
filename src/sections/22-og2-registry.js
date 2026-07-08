@@ -108,7 +108,6 @@ export function registryConsistencyProblems(registry) {
   return problems;
 }
 
-/* v8 ignore start */
 function checkFieldPaths(name, decl, problems) {
   if (decl.labelProp !== undefined && !isWellFormedFieldPath(decl.labelProp)) {
     problems.push(`node type "${name}": labelProp "${decl.labelProp}" is not a well-formed field path`);

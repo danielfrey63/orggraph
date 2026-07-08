@@ -16,12 +16,10 @@ export const BFS_LEVEL_ANIMATION_DELAY_MS = 1000;
 
 // ===== src/utils.js =====
 
-/* v8 ignore start */
 export function setStatus(msg) {
   const el = document.querySelector(STATUS_ID);
   if (el) el.textContent = msg;
 }
-/* v8 ignore stop */
 
 /**
  * Zeigt eine temporäre Benachrichtigung an, ohne den Status zu überschreiben

@@ -9,6 +9,9 @@ import {
   computeClusterPolygon,
   countVisibleAttributeRings,
   cssNumber,
+  ensureTooltip,
+  showTooltip,
+  hideTooltip,
 } from '../src/sections/08-color-geometry.js';
 
 const d3Src = readFileSync('vendor/d3.v7.min.js', 'utf8');
@@ -167,5 +170,23 @@ describe('computeClusterPolygon', () => {
     // p1 has one ring (base 9.5 + 6 + pad = 25.5), p2 none (19.5)
     expect(Math.min(...xs)).toBeCloseTo(-25.5, 6);
     expect(Math.max(...xs)).toBeCloseTo(100 + R, 6);
+  });
+});
+
+describe('cluster tooltip helpers', () => {
+  it('creates the tooltip element once, shows lines at an offset, hides again', () => {
+    document.querySelectorAll('.cluster-tooltip').forEach((el) => el.remove());
+    ensureTooltip();
+    ensureTooltip(); // idempotent — still exactly one element
+    const els = document.querySelectorAll('.cluster-tooltip');
+    expect(els.length).toBe(1);
+    showTooltip(100, 200, ['Team Alpha', '3 Mitglieder']);
+    const el = els[0];
+    expect(el.textContent).toBe('Team Alpha\n3 Mitglieder');
+    expect(el.style.left).toBe('112px');
+    expect(el.style.top).toBe('212px');
+    expect(el.style.display).toBe('block');
+    hideTooltip();
+    expect(el.style.display).toBe('none');
   });
 });

@@ -125,25 +125,19 @@ export function getActiveAncestorChain(oid) {
 
 // Tooltip helpers for overlapping clusters
 let tooltipEl = null;
-/* v8 ignore start */
 export function ensureTooltip() {
   if (tooltipEl) return;
   tooltipEl = document.createElement('div');
   tooltipEl.className = 'cluster-tooltip';
   document.body.appendChild(tooltipEl);
 }
-/* v8 ignore stop */
-/* v8 ignore start */
 export function showTooltip(x, y, lines) {
   tooltipEl.textContent = lines.join('\n');
   tooltipEl.style.left = `${x+12}px`;
   tooltipEl.style.top = `${y+12}px`;
   tooltipEl.style.display = 'block';
 }
-/* v8 ignore stop */
-/* v8 ignore start */
 export function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
-/* v8 ignore stop */
 
 /**
  * Zeigt Zoom-Level im Debug-Modus in der Statusleiste an [SF]

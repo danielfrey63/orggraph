@@ -11,6 +11,7 @@ import {
   MIN_SEARCH_LENGTH,
   MAX_ROOTS,
   BFS_LEVEL_ANIMATION_DELAY_MS,
+  setStatus,
 } from '../src/sections/01-config-status.js';
 
 describe('config constants', () => {
@@ -29,5 +30,15 @@ describe('config constants', () => {
     expect(MIN_SEARCH_LENGTH).toBe(2);
     expect(MAX_ROOTS).toBe(5);
     expect(BFS_LEVEL_ANIMATION_DELAY_MS).toBe(1000);
+  });
+});
+
+describe('setStatus', () => {
+  it('writes the message into the status element and tolerates its absence', () => {
+    document.body.innerHTML = '<span id="status">Bereit</span>';
+    setStatus('Projektion gekappt');
+    expect(document.getElementById('status').textContent).toBe('Projektion gekappt');
+    document.body.innerHTML = '';
+    expect(() => setStatus('ohne Ziel')).not.toThrow();
   });
 });

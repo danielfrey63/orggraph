@@ -53,9 +53,17 @@ let assembled =
   beforeCss + read('src/styles.css') + betweenCssD3 + read('vendor/d3.v7.min.js') + betweenD3App;
 
 const sectionStartLine = new Map(); // section file -> 1-based line in index.html
+let ignoredLines = 0; // content lines inside /* v8 ignore */ blocks (no DA, honest gross denominator)
 for (const f of sections) {
   sectionStartLine.set(f, countLines(assembled) + 1);
-  assembled += stripModuleSyntax(read(`src/sections/${f}`));
+  const src = read(`src/sections/${f}`);
+  let inIgnore = false;
+  for (const line of src.split('\n')) {
+    if (/^\/\* v8 ignore start \*\/$/.test(line)) inIgnore = true;
+    else if (/^\/\* v8 ignore stop \*\/$/.test(line)) inIgnore = false;
+    else if (inIgnore) ignoredLines++;
+  }
+  assembled += stripModuleSyntax(src);
 }
 assembled += afterApp;
 
@@ -103,4 +111,6 @@ const withoutOld = records
   .map((r) => r + 'end_of_record\n')
   .join('');
 writeFileSync(LCOV, withoutOld + indexRecord);
-console.log(`index.html record appended to ${LCOV} (${hit}/${lines.length} lines covered)`);
+const grossTotal = lines.length + ignoredLines;
+const pct = (n, d) => (d ? ((100 * n) / d).toFixed(2) : '0.00');
+console.log(`index.html record appended to ${LCOV} (${hit}/${lines.length} lines covered = ${pct(hit, lines.length)}% net; gross ${hit}/${grossTotal} = ${pct(hit, grossTotal)}% incl. ${ignoredLines} v8-ignored lines)`);
