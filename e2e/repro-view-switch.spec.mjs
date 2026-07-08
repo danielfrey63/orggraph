@@ -1,7 +1,7 @@
 // Repro of the manual live-test sequence (2026-07-08): SEM ZIP -> screenshot
 // -> drop the edited env (new views) -> switch to the new view -> switch back
 // -> compare the scenes. Diagnostic only, not part of the suites.
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base.mjs';
 import { join, dirname } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 

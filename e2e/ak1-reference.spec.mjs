@@ -8,7 +8,7 @@
 // layer exactly and deliberately omits the 7 upward-ancestor orgs (FR-7.4
 // descent semantics). Ring groups: 69 v1 attribute types + 1 E72 fallback
 // container = 70 in the v2 stock.
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base.mjs';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';

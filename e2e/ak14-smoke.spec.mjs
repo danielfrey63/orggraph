@@ -2,7 +2,7 @@
 // every "Übernehmen"/"Neu" interaction exists and reacts; every "Entfällt"
 // element no longer exists. Runs against the v2 boot path (registry via
 // REGISTRY_URL, store seeded from the DATA_URL snapshot).
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base.mjs';
 
 const NODE_CIRCLES = 'g.nodes circle:not(.attribute-circle)';
 

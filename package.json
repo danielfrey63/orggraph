@@ -8,6 +8,8 @@
     "verify": "node verify.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage && node build.js --no-bump && node remap-coverage.js",
+    "coverage:e2e": "node scripts/run-e2e-coverage.mjs",
+    "coverage:full": "npm run test:coverage && npm run coverage:e2e",
     "transform": "node helpers/transform.js",
     "prepare": "git config core.hooksPath .githooks",
     "e2e": "playwright test --project=smoke",

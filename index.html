@@ -2001,7 +2001,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.175.172';
+const APP_VERSION = '1.176.173';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -9201,13 +9201,13 @@ function createTenantStore() {
     snapshots: new Map(),
     // source -> { registeredAt, harvestSpecVersion, moveOutEdgeTypes: Set, specless }
     sourceBook: new Map(),
-    // join grant keys `${newSource} ${nodeType} ${idRulesStamp}` (E69)
+    // join grant keys `${newSource}\0${nodeType}\0${idRulesStamp}` (E69)
     joinGrants: new Set(),
     // persisted open tie-breaker conflicts (FR-5.6)
     conflicts: [],
     // SOURCE_PRECEDENCE: array of source ids, earlier = higher precedence
     precedence: [],
-    // cumulative gate baselines per `${source} ${scopeFp}` (FR-5.7)
+    // cumulative gate baselines per `${source}\0${scopeFp}` (FR-5.7)
     baselines: new Map(),
     options: { IMPORT_CONFIRM_DESTRUCTIVE: false },
   };
@@ -11372,7 +11372,7 @@ function projectView(options) {
   };
 
   const admitDerived = (fromId, toId, viaEdgeType, path) => {
-    const key = `${fromId} ${toId} ${viaEdgeType}`;
+    const key = `${fromId}\0${toId}\0${viaEdgeType}`;
     let entry = derived.get(key);
     if (!entry) {
       if (primaryEdges.size + derived.size >= caps.edges) { truncated = true; skipped++; return; }

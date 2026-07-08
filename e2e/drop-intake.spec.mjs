@@ -5,7 +5,7 @@
 // app's self-reload. Also locks the failure modes that used to end silently:
 // a clean console under file://, a visible hint for an empty drop, and the
 // legacy-v1 env rejection.
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base.mjs';
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';

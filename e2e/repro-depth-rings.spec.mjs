@@ -4,7 +4,7 @@
 // visible persons, Kohorte-I stuck at 5). With hidden subtrees excluded from
 // the projection, depth 4 shows the full uncapped scene: 1585 persons, 152
 // hulls, Kohorte-I 18/19; depth 5 caps honestly at 2000.
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base.mjs';
 import { join, dirname } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 

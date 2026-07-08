@@ -184,7 +184,7 @@ export function projectView(options) {
   };
 
   const admitDerived = (fromId, toId, viaEdgeType, path) => {
-    const key = `${fromId} ${toId} ${viaEdgeType}`;
+    const key = `${fromId}\0${toId}\0${viaEdgeType}`;
     let entry = derived.get(key);
     if (!entry) {
       if (primaryEdges.size + derived.size >= caps.edges) { truncated = true; skipped++; return; }
