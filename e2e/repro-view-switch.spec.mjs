@@ -100,6 +100,17 @@ test('repro: SEM zip -> env update -> view switch roundtrip', async ({ page }) =
   expect(s3b.clusters).toBe(16);
   expect(s3b.links).toBe(0);
 
+  // 3c) switch to the TeamOE view: team nodes + members + role rings, and
+  // the members' OEs as nested hulls (45 direct + 14 parents at depth 3)
+  await page.locator('#viewsLegend .legend-row', { hasText: 'TeamOE' }).click();
+  await page.waitForTimeout(8000);
+  const s3c = await sceneStats(page);
+  console.log('SCENE 3c (TeamOE):', JSON.stringify(s3c));
+  await page.screenshot({ path: join(OUT, '3c-teamoe.png') });
+  expect(s3c.circles).toBe(192);
+  expect(s3c.clusters).toBe(59);
+  expect(s3c.links).toBe(216);
+
   // 5) switch BACK to the old view (OrgChart): the view context must return
   // the EXACT previous scene — never the __auto__ full projection (AK 101)
   await page.locator('#viewsLegend .legend-row', { hasText: 'OrgChart' }).click();
