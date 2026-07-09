@@ -1,13 +1,14 @@
 // Shared Playwright test base: when E2E_COVERAGE=1, Chromium V8 coverage is
 // collected per test (surviving in-page reloads) and dumped as raw JSON to
-// coverage/e2e-raw/, where scripts/merge-e2e-coverage.mjs folds it into the
-// index.html lcov record. Without the env flag this is a zero-cost pass-through.
+// coverage-e2e/ (OUTSIDE coverage/ — vitest wipes that directory on every
+// run), where scripts/merge-e2e-coverage.mjs folds it into the index.html
+// lcov record. Without the env flag this is a zero-cost pass-through.
 import { test as base, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'coverage', 'e2e-raw');
+const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'coverage-e2e');
 const collecting = !!process.env.E2E_COVERAGE;
 let dumpSeq = 0;
 

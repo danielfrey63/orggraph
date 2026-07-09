@@ -10,14 +10,19 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const LCOV = 'coverage/lcov.info';
-const RAW = 'coverage/e2e-raw';
+const RAW = 'coverage-e2e'; // outside coverage/ — vitest wipes that directory
+// --if-present (used by npm run test:coverage): silently skip when there are
+// no or stale e2e dumps instead of failing — the unit numbers stay valid.
+const ifPresent = process.argv.includes('--if-present');
+const bail = (msg) => {
+  console[ifPresent ? 'log' : 'error'](msg);
+  process.exit(ifPresent ? 0 : 1);
+};
 if (!existsSync(LCOV)) {
-  console.error('coverage/lcov.info not found — run `npm run test:coverage` first');
-  process.exit(1);
+  bail('coverage/lcov.info not found — run `npm run test:coverage` first');
 }
 if (!existsSync(RAW)) {
-  console.error(`${RAW} not found — run the e2e suites with E2E_COVERAGE=1 first (npm run coverage:e2e)`);
-  process.exit(1);
+  bail(`e2e coverage not merged (${RAW} missing) — run \`npm run coverage:e2e\` for the combined number`);
 }
 
 const read = (p) => readFileSync(p, 'utf8');
@@ -26,7 +31,12 @@ const countLines = (s) => (s.match(/\n/g) || []).length;
 // reported by the browser can differ from the file — normalize both sides
 // the same way (1 char -> 1 char, offsets stay valid).
 const nulToFffd = (s) => s.replace(/\u0000/g, '�');
-const html = nulToFffd(read('index.html').replace(/\r\n?/g, '\n'));
+// The version bump changes the APP_VERSION literal on every commit, which
+// would invalidate all dumps. Mask the version LENGTH-NEUTRALLY on both
+// sides so dumps survive bumps of equal-length versions (offsets stay valid).
+const maskVersion = (s) => s.replace(/(APP_VERSION = ')[^'\n]*(')/, (m, a, b) => a + '0'.repeat(m.length - a.length - b.length) + b);
+const normalize = (s) => maskVersion(nulToFffd(s.replace(/\r\n?/g, '\n')));
+const html = normalize(read('index.html'));
 
 // App span inside index.html: from the first section's first line to the end
 // of the last section (replayed like remap-coverage.js).
@@ -84,7 +94,7 @@ for (const file of readdirSync(RAW).filter((f) => f.endsWith('.json'))) {
   let entries;
   try { entries = JSON.parse(read(`${RAW}/${file}`)); } catch { continue; }
   for (const entry of entries) {
-    const source = nulToFffd((entry.source || '').replace(/\r\n?/g, '\n'));
+    const source = normalize(entry.source || '');
     if (!source) continue;
     let base = sourceOffsets.get(source);
     if (base === undefined) {
@@ -121,8 +131,7 @@ for (const file of readdirSync(RAW).filter((f) => f.endsWith('.json'))) {
 }
 
 if (e2eDa.size === 0) {
-  console.error('no e2e coverage matched the built index.html — is the build current (node build.js)?');
-  process.exit(1);
+  bail('e2e coverage not merged (dumps are stale for this build, e.g. after a version bump) — run `npm run coverage:e2e` to refresh');
 }
 
 // --- merge into the lcov index.html record ----------------------------------

@@ -9,7 +9,7 @@ if (!existsSync('coverage/lcov.info')) {
   console.error('coverage/lcov.info not found — run `npm run test:coverage` first');
   process.exit(1);
 }
-rmSync('coverage/e2e-raw', { recursive: true, force: true });
+rmSync('coverage-e2e', { recursive: true, force: true });
 
 const projects = process.argv.slice(2);
 const args = ['playwright', 'test', ...(projects.length ? projects.flatMap((p) => ['--project', p]) : ['--project', 'smoke', '--project', 'acceptance'])];

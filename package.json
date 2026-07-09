@@ -7,7 +7,7 @@
     "build": "node build.js",
     "verify": "node verify.js",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage && node build.js --no-bump && node remap-coverage.js",
+    "test:coverage": "vitest run --coverage && node build.js --no-bump && node remap-coverage.js && node scripts/merge-e2e-coverage.mjs --if-present",
     "coverage:e2e": "node scripts/run-e2e-coverage.mjs",
     "coverage:full": "npm run test:coverage && npm run coverage:e2e",
     "transform": "node helpers/transform.js",
