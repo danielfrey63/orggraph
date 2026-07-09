@@ -175,7 +175,7 @@ for (const [htmlLine, hits] of e2eDa) {
   if (!map) { map = new Map(); e2eBySection.set(target.file, map); }
   map.set(target.srcLine, Math.max(map.get(target.srcLine) || 0, hits));
 }
-const sectionsTouched = new Set();
+const sectionsTouched = new Map(); // file -> { before: 'LH/LF', after: 'LH/LF', gain }
 const rewritten = records
   .filter((r) => !/^SF:.*index\.html$/m.test(r))
   .map((record) => {
@@ -183,12 +183,14 @@ const rewritten = records
     const file = sf?.match(/src\/sections\/(.+\.js)$/)?.[1];
     const extra = file && e2eBySection.get(file);
     if (!extra) return record + 'end_of_record\n';
-    sectionsTouched.add(file);
     const da = new Map();
     for (const m of record.matchAll(/^DA:(\d+),(\d+)$/gm)) da.set(Number(m[1]), Number(m[2]));
+    const beforeHit = [...da.values()].filter((v) => v > 0).length;
+    const beforeTotal = da.size;
     for (const [srcLine, hits] of extra) da.set(srcLine, Math.max(da.get(srcLine) || 0, hits));
     const daLines = [...da.keys()].sort((a, b) => a - b);
     const daHit = daLines.filter((l) => da.get(l) > 0).length;
+    sectionsTouched.set(file, { beforeHit, beforeTotal, afterHit: daHit, afterTotal: daLines.length });
     const body = record
       .split('\n')
       .filter((l) => !/^DA:\d+,\d+$/.test(l) && !/^LF:\d+$/.test(l) && !/^LH:\d+$/.test(l) && l !== '')
@@ -201,4 +203,11 @@ writeFileSync(LCOV, rewritten + indexRecord);
 const pct = (n, d) => (d ? ((100 * n) / d).toFixed(2) : '0.00');
 console.log(`index.html record merged with e2e coverage: ${hit}/${lines.length} = ${pct(hit, lines.length)}% combined`);
 console.log(`  unit only was ${unitCovered}/${unitDa.size}; e2e added ${e2eOnlyLines} lines to the denominator, covered ${ignoredNowCovered}/${ignoredHtmlLines.size} previously v8-ignored lines`);
-console.log(`  section records updated with e2e hits: ${sectionsTouched.size}`);
+console.log(`  section records updated with e2e hits: ${sectionsTouched.size} (NOTE: the vitest table/HTML report above stays unit-only — the combined truth lives in lcov.info and the editor gutters)`);
+const gainers = [...sectionsTouched.entries()]
+  .map(([file, s]) => ({ file, ...s, gain: (100 * s.afterHit) / s.afterTotal - (100 * s.beforeHit) / s.beforeTotal }))
+  .filter((s) => s.gain > 0.5)
+  .sort((a, b) => b.gain - a.gain);
+for (const s of gainers.slice(0, 8)) {
+  console.log(`    ${s.file.padEnd(26)} ${pct(s.beforeHit, s.beforeTotal)}% -> ${pct(s.afterHit, s.afterTotal)}%  (+${s.gain.toFixed(1)})`);
+}
