@@ -46,20 +46,22 @@ const [betweenD3App] = afterD3.split('@@APP@@');
 let assembled = beforeCss + read('src/styles.css') + betweenCssD3 + read('vendor/d3.v7.min.js') + betweenD3App;
 const appStart = countLines(assembled) + 1;
 const ignoredHtmlLines = new Set(); // index.html lines inside /* v8 ignore */ blocks
+const htmlLineToSection = new Map(); // index.html line -> { file, srcLine } (back-translation)
 for (const f of sections) {
   const src = read(`src/sections/${f}`);
   const start = countLines(assembled) + 1;
   let kept = 0;
   let inIgnore = false;
-  for (const line of src.split('\n')) {
+  src.split('\n').forEach((line, i) => {
     if (isStrippedLine(line)) {
       if (/^\/\* v8 ignore start \*\/$/.test(line)) inIgnore = true;
       if (/^\/\* v8 ignore stop \*\/$/.test(line)) inIgnore = false;
-      continue;
+      return;
     }
     if (inIgnore) ignoredHtmlLines.add(start + kept);
+    htmlLineToSection.set(start + kept, { file: f, srcLine: i + 1 });
     kept++;
-  }
+  });
   assembled += stripModuleSyntax(src);
 }
 const appEnd = countLines(assembled);
@@ -153,12 +155,41 @@ const indexRecord = [
   'end_of_record',
   '',
 ].join('\n');
-const withoutOld = records
+
+// Back-translate the e2e hits onto the per-section records so editor gutters
+// on src/sections/*.js show the combined truth too (same max() idempotency).
+const e2eBySection = new Map(); // file -> Map(srcLine -> hits)
+for (const [htmlLine, hits] of e2eDa) {
+  const target = htmlLineToSection.get(htmlLine);
+  if (!target) continue;
+  let map = e2eBySection.get(target.file);
+  if (!map) { map = new Map(); e2eBySection.set(target.file, map); }
+  map.set(target.srcLine, Math.max(map.get(target.srcLine) || 0, hits));
+}
+const sectionsTouched = new Set();
+const rewritten = records
   .filter((r) => !/^SF:.*index\.html$/m.test(r))
-  .map((r) => r + 'end_of_record\n')
+  .map((record) => {
+    const sf = record.match(/^SF:(.+)$/m)?.[1]?.replace(/\\/g, '/');
+    const file = sf?.match(/src\/sections\/(.+\.js)$/)?.[1];
+    const extra = file && e2eBySection.get(file);
+    if (!extra) return record + 'end_of_record\n';
+    sectionsTouched.add(file);
+    const da = new Map();
+    for (const m of record.matchAll(/^DA:(\d+),(\d+)$/gm)) da.set(Number(m[1]), Number(m[2]));
+    for (const [srcLine, hits] of extra) da.set(srcLine, Math.max(da.get(srcLine) || 0, hits));
+    const daLines = [...da.keys()].sort((a, b) => a - b);
+    const daHit = daLines.filter((l) => da.get(l) > 0).length;
+    const body = record
+      .split('\n')
+      .filter((l) => !/^DA:\d+,\d+$/.test(l) && !/^LF:\d+$/.test(l) && !/^LH:\d+$/.test(l) && l !== '')
+      .join('\n');
+    return `${body}\n${daLines.map((l) => `DA:${l},${da.get(l)}`).join('\n')}\nLF:${daLines.length}\nLH:${daHit}\nend_of_record\n`;
+  })
   .join('');
-writeFileSync(LCOV, withoutOld + indexRecord);
+writeFileSync(LCOV, rewritten + indexRecord);
 
 const pct = (n, d) => (d ? ((100 * n) / d).toFixed(2) : '0.00');
 console.log(`index.html record merged with e2e coverage: ${hit}/${lines.length} = ${pct(hit, lines.length)}% combined`);
 console.log(`  unit only was ${unitCovered}/${unitDa.size}; e2e added ${e2eOnlyLines} lines to the denominator, covered ${ignoredNowCovered}/${ignoredHtmlLines.size} previously v8-ignored lines`);
+console.log(`  section records updated with e2e hits: ${sectionsTouched.size}`);

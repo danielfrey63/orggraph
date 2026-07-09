@@ -271,3 +271,44 @@ test('time controls active with two stands; slider slices, diff classifies (FR-8
   await page.locator('#diffToggle').click();
   await expect(page.locator('#stats-diff')).toBeHidden();
 });
+
+test('AK 104: node interactions — tooltip, drag, context menu, double-click (FR-8.13)', async ({ page }) => {
+  const circles = page.locator(NODE_CIRCLES);
+  // let the boot simulation settle so positions are stable enough to aim at
+  await page.waitForTimeout(1500);
+
+  // hover: the person tooltip appears (mousemove handler)
+  await circles.first().hover({ force: true });
+  await expect(page.locator('.cluster-tooltip')).toBeVisible();
+
+  // drag: while dragging, the node is pinned to the pointer (fx/fy)
+  const first = circles.first();
+  const before = await first.boundingBox();
+  const cx = before.x + before.width / 2;
+  const cy = before.y + before.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 8, cy + 8); // crosses the drag threshold
+  await page.mouse.move(cx + 120, cy + 80, { steps: 6 });
+  await page.waitForTimeout(300);
+  const during = await first.boundingBox();
+  await page.mouse.up();
+  const dx = during.x + during.width / 2 - (cx + 120);
+  const dy = during.y + during.height / 2 - (cy + 80);
+  expect(Math.hypot(dx, dy)).toBeLessThan(30);
+
+  // context menu on the Ben node: the unified action list opens (FR-8.7);
+  // "Nur direkte Kinder anzeigen" makes Ben the single root at depth 1
+  const ben = page.locator('g.node').filter({ hasText: 'Ben' }).first();
+  await ben.locator('circle.node-circle').click({ button: 'right', force: true });
+  const menu = page.locator('.node-context-menu');
+  await expect(menu).toBeVisible();
+  await menu.getByText('Nur direkte Kinder anzeigen').click();
+  await expect(circles).toHaveCount(1); // nobody reports to Ben
+  await expect(page.locator('#depthControl .depth-value')).toHaveText('1');
+
+  // double-click re-roots on the clicked node and mirrors it in the combo
+  await circles.first().dblclick({ force: true });
+  await expect(page.locator('#comboInput')).toHaveValue(/Ben/);
+  await expect(circles).toHaveCount(1);
+});
