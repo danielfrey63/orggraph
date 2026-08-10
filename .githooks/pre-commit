@@ -7,7 +7,15 @@
 # versioning: it just reads the current APP_VERSION from the template and stamps
 # the single-file deliverable index.html. Bump first, then build, so index.html
 # always carries the freshly bumped version.
+#
+# `bump-version` is the AI-Toolbox launcher on PATH (~/.local/bin, created by
+# `toolbox install`); calling it by name keeps this committed hook portable. If
+# it is not on PATH, fall back to the sibling-repo layout.
 set -e
-sh "$(git rev-parse --show-toplevel)/../ai-toolbox/tools/bump-version.sh" --commit index.template.html
+if command -v bump-version >/dev/null 2>&1; then
+    bump-version --commit index.template.html
+else
+    sh "$(git rev-parse --show-toplevel)/../ai-toolbox/tools/bump-version.sh" --commit index.template.html
+fi
 node build.js
 git add index.template.html index.html
