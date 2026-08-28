@@ -1,0 +1,2 @@
+#!/bin/sh
+toolbox-bump post-commit   # ai-toolbox:versioning-hooks (managed - do not edit)
