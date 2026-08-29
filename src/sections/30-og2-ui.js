@@ -481,7 +481,6 @@ export function og2BuildViewsLegend() {
   };
   const makeRow = (name, { invalid = false, title }) => {
     const { row, left } = createLegendRow({ active: !invalid && name === og2.activeViewName, withRight: false });
-    row.classList.add('view-row');
     if (invalid) row.classList.add('view-row-invalid');
     row.title = title;
     left.appendChild(createLegendChip(name));

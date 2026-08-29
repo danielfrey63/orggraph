@@ -53,6 +53,17 @@ export function createLegendIconButton({ icon, svg, title, className = '', onCli
   return btn;
 }
 
+// Collapse state of a legend subtree: the first <ul> inside the chevron's <li>
+// plus the chevron's own expanded/collapsed class. Single owner of that display
+// toggle — every collapse/expand path (click, collapse-children, collapse-all)
+// routes through here.
+export function setLegendSubtreeCollapsed(chevron, collapsed) {
+  const li = chevron.closest('li');
+  const sub = li && li.querySelector('ul');
+  if (sub) sub.style.display = collapsed ? 'none' : '';
+  chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
+}
+
 // Auf-/Zuklapp-Chevron: toggelt das erste <ul> im umgebenden <li>
 // und meldet den neuen Zustand über onToggle(nowCollapsed)
 export function createLegendChevron({ collapsed = false, onToggle } = {}) {
@@ -66,10 +77,9 @@ export function createLegendChevron({ collapsed = false, onToggle } = {}) {
     const li = chevron.closest('li');
     const sub = li && li.querySelector('ul');
     if (!sub) return;
-    const wasCollapsed = sub.style.display === 'none';
-    sub.style.display = wasCollapsed ? '' : 'none';
-    chevron.className = wasCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
-    if (onToggle) onToggle(!wasCollapsed);
+    const nowCollapsed = sub.style.display !== 'none';
+    setLegendSubtreeCollapsed(chevron, nowCollapsed);
+    if (onToggle) onToggle(nowCollapsed);
   });
   return chevron;
 }
@@ -213,7 +223,6 @@ export function renderOrgLegendNode(oid, depth, options) {
   const hiddenInput = document.createElement('input');
   hiddenInput.type = 'checkbox';
   hiddenInput.id = idAttr;
-  hiddenInput.style.display = 'none';
   hiddenInput.checked = allowedOrgs.has(id);
   row.appendChild(hiddenInput);
 
@@ -294,14 +303,9 @@ export function renderOrgLegendNode(oid, depth, options) {
         
         if (subRoot) {
           Array.from(subRoot.children).forEach(childLi => {
-            const childUl = childLi.querySelector('ul');
-            if (childUl) {
-              childUl.style.display = 'none';
-              const chevron = childLi.querySelector('.legend-tree-chevron');
-              if (chevron) {
-                chevron.className = 'legend-tree-chevron collapsed';
-              }
-            }
+            // A child with a subtree always carries its chevron (see above).
+            const chevron = childLi.querySelector(':scope > .legend-row .legend-tree-chevron');
+            if (chevron) setLegendSubtreeCollapsed(chevron, true);
           });
         }
         
@@ -509,7 +513,7 @@ export function createSubmenuItem(label, handler, { arrow = false, disabled = fa
   if (arrow) {
     const arrowSpan = document.createElement('span');
     arrowSpan.className = 'menu-item-arrow';
-    arrowSpan.textContent = '▶';
+    setIcon(arrowSpan, 'chevronRight');
     item.appendChild(arrowSpan);
   }
   if (handler) item.onclick = handler;

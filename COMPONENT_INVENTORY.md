@@ -14,6 +14,7 @@ Wird vom `component-audit`-Skill gelesen. Definiert, was in diesem Projekt als F
 - `renderOrgLegendNode(node, depth)` (12-legend-org.js) — erzeugt `.legend-row` mit `.legend-row-left` / `.legend-row-right`. Bypass = manuelle Legend-Row-Konstruktion.
 - `createLegendRow({ active, withRight })` (12-legend-org.js) — Row-Skelett `.legend-row` + Areas; gibt `{ row, left, right }` zurück. Bypass = manuelles `createElement` mit `legend-row`-Klassen.
 - `createLegendChevron({ collapsed, onToggle })`, `createLegendTreeSpacer()`, `createLegendDepthSpacer(px)`, `createLegendChip(text, title)`, `createLegendIconButton({ icon|svg, title, className, onClick })` (12-legend-org.js) — Bausteine aller Legend-Rows (OE-, Hidden-, Attribut-, Views-Legende). Bypass = Hand-Konstruktion von `.legend-tree-chevron`, `.legend-tree-spacer`, `.legend-depth-spacer`, `.legend-label-chip` oder `.legend-icon-btn`. Hinweis: State-Mutationen an bestehenden Buttons (className/Icon-Toggle, z.B. 11-graph-core.js, Eye-Toggle in 16) sind KEINE Bypässe.
+- `setLegendSubtreeCollapsed(chevron, collapsed)` (12-legend-org.js) — einziger Besitzer des Auf-/Zuklapp-Zustands eines Legend-Teilbaums (`<ul>`-Display + `expanded`/`collapsed`-Klasse des Chevrons); genutzt vom Chevron-Klick, «nur direkte Kinder» (12) und Collapse-/Expand-All (18). Bypass = `ul.style.display` + Chevron-Klasse von Hand setzen. Ausnahme: der Initialzustand beim Bau der Liste (`itemsUl.style.display` in 16).
 - `createSubmenuItem(label, handler, { arrow, disabled })` / `createCategorySubmenuItem(...)` (12-legend-org.js) — erzeugen `.menu-item`-Einträge (Label-Span, optional `.menu-item-arrow`, optional `.disabled`). Alle Menüeinträge laufen hier durch — auch die `mkItem`/`addItem`-Wrapper in ensureLegendMenu/showNodeMenu. Bypass = manuelle `.menu-item`-Divs.
 - `createComboHint(text, { more })` (10-combo.js) — informative Einträge der Such-Dropdown (`.combo-hint`, `.combo-hint--more`). Bypass = `<li class="combo-hint">` per innerHTML oder createElement.
 - `showTemporaryNotification(msg)` (01-config-status.js) — Singleton-Toast. Bypass = jedes ad-hoc fixed-positionierte Status-Element.
@@ -34,6 +35,7 @@ Wird vom `component-audit`-Skill gelesen. Definiert, was in diesem Projekt als F
 - `.toast` — temporäre Notification; nur `opacity` inline (Fade)
 - `.cluster-tooltip` — Cluster-Tooltip (ensureTooltip); nur `left`/`top`/`display` inline
 - `.no-matches-message` — Leermeldung der OE-Suche
+- `.label`, `.link-label` — Graph-Labels (d3, 14-render.js); Präsentation in CSS, nur `display` inline (Debug-/Sichtbarkeits-Toggle)
 - `.time-controls`, `.profile-switcher`, `.profile-btn`, `.footer-reset-btn`, `.stat-separator` — Footer-Chrome (Template)
 
 ## Bypass patterns (grep recipes)
@@ -53,21 +55,22 @@ Wird vom `component-audit`-Skill gelesen. Definiert, was in diesem Projekt als F
 13. Statische Inline-Werte unter dem Deckmantel «dynamisch»: `\.style\.(cursor|background|margin\w*|padding\w*|zIndex)\s*=` mit Literal — gehört in CSS.
 14. Tote Contract-Klassen: jede Klasse in styles.css ohne Produzenten in Sections oder Template (`grep -o '\.[a-z][a-z0-9-]*' styles.css | sort -u` gegen `grep -rho` über src/sections + index.template.html) — löschen oder verdrahten.
 
-## Known legitimate exceptions (zuletzt hinterfragt 2026-08-29)
+## Known legitimate exceptions (zuletzt hinterfragt 2026-08-29, Runde 2)
 
-- Dynamische Werte bleiben inline — abschliessende Liste: Kontextmenü `left`/`top`/`display` (12), Tooltip `left`/`top`/`display` (08), Toast `opacity` (01), `.attribute-color-dot` `borderColor` (16), `createLegendDepthSpacer` `width` (12), Custom-Properties `--org-fill`/`--org-stroke`/`--attribute-bg` an Legend-Rows. Alles andere unter diesem Label (Cursor, Hintergrund, Abstände, Display-Toggles) ist ein Bypass.
-- Auf-/Zuklappen von Legend-Teilbäumen über `sub.style.display` am `<ul>` (createLegendChevron in 12, Kategorie-Toggle in 16, OE-Suche in 18): State-Toggle an Listen, kein Chrome-Bau; Unit-Tests prüfen `style.display`. Kandidat für eine `.collapsed`-Klasse, aber kein Drift-Risiko.
-- `03-export-dialog.js` verdrahtet das vorgebaute `#exportModal`-Markup — Markup im Template IST das Factory-Muster; gilt nur für das Markup, die Sichtbarkeit läuft über `.open`. Die beiden `createElement('style')` in 03 zielen auf den Export-Klon, nicht auf den Dialog, und laufen durch `buildExportStylesheet`.
-- SVG-Namespace-Erzeugung fürs d3-Rendering (14-render.js; 11-graph-core.js erzeugt kein SVG) ist Canvas-Zeichnung, nicht UI-Chrome — geprüft 2026-08-29: dort werden keine Icons/Buttons/Badges gebaut, Chrome läuft über `setIcon`.
-- `05-dropzone.js` baut das Drop-Panel aus einem Template-String: eine Stelle, in sich geschlossen, alle Klassen in styles.css. Bleibt, bis eine zweite Stelle entsteht.
+- Dynamische Werte bleiben inline — abschliessende Liste: Kontextmenü `left`/`top`/`display` (12), Tooltip `left`/`top`/`display` (08), Toast `opacity` (01), `.attribute-color-dot` `borderColor` (16), `createLegendDepthSpacer` `width` (12), Custom-Properties `--org-fill`/`--org-stroke` (12) und `--attribute-bg`/`--attribute-bg-hover` (16) an Legend-Rows, d3-`.style()`/`.attr()` mit Laufzeitwerten (08, 13, 14). Alles andere unter diesem Label (Cursor, Hintergrund, Abstände, Literal-Farben/-Schriftgrössen, Display-Toggles an Chrome) ist ein Bypass.
+- Auf-/Zuklappen von Legend-Teilbäumen über `ul.style.display` — NUR am `<ul>` und NUR über `setLegendSubtreeCollapsed` (12) bzw. den Initialzustand beim Listenbau (`itemsUl.style.display` in 16); Unit-Tests prüfen `style.display` am `<ul>`. Sichtbarkeit einzelner `<li>` (OE-Filter in 18) läuft über `li.hidden` und fällt NICHT unter diese Ausnahme.
+- `03-export-dialog.js` verdrahtet das vorgebaute `#exportModal`-Markup — Markup im Template IST das Factory-Muster; gilt nur für das Markup, die Sichtbarkeit läuft über `.open`. Das einzige `createElement('style')` in 03 liegt in `buildExportStylesheet` und zielt auf den Export-Klon.
+- SVG-Namespace-Erzeugung fürs d3-Rendering (14-render.js; 11-graph-core.js erzeugt kein SVG) ist Canvas-Zeichnung, nicht UI-Chrome — eingeengt auf Element-Erzeugung und datengetriebene Attribute/Styles; literale Präsentation (Schriftgrösse, Farbe, pointer-events) gehört nach styles.css (`.label`, `.link-label`).
+- `05-dropzone.js` baut das Drop-Panel aus einem Template-String: eine Stelle, in sich geschlossen, alle Klassen in styles.css. Eingeengt auf das Panel-Markup: Icons darin kommen aus `ICON`, der File-Picker wird über `hidden` versteckt.
 - `.no-matches-message` (18-files-reset.js): eine Stelle, Vertragsklasse vorhanden, keine Duplikation.
-- Legacy-Selektor `.collapse-btn` in 19-layout-bootstrap.js (`querySelectorAll('.collapse-btn, .legend-chevron')`) und die zugehörige CSS-Regel: tot, aber harmlos; beim nächsten Umbau der Sektions-Chevrons entfernen.
 
 ## Gestrichen (existiert nicht mehr — nicht erneut eintragen)
 
 - `17-fuzzy-dialog.js` / `.fuzzy-match-*`, `.progress-*`, Drag-Ghost: mit v1 abgebaut (siehe 15-ui-apply-search.js).
-- `.combo-list-floating`, `.combo-list li.no-results`, `.menu-divider`, `.node-context-menu[data-level]`, `.legend-list .twisty`, `.modal-title`: tote Klassen, 2026-08-29 aus styles.css entfernt.
-- Parallele Icon-Getter (`getCheckboxSVG`, `getEyeSVG`, `getSaveSVG`, `getDownloadSVG`, `getCheckAllSVG`, `getChevronSVG`, `updateCheckboxIcon`, `initializeChevronIcons`): 2026-08-29 gelöscht; `setIcon`/`data-icon` sind der einzige Weg.
+- `.combo-list-floating`, `.combo-list li.no-results`, `.menu-divider`, `.node-context-menu[data-level]`, `.legend-list .twisty`, `.modal-title`: tote Klassen, 2026-08-29 (Runde 1) aus styles.css entfernt.
+- Zweite Attribut-Legende-Implementierung `.attribute-tree-*`, `.attribute-eye-btn`, `.attribute-check-all-btn`, `.attribute-tree-checkbox`, `.attribute-legend-item`, `.attribute-name`/`-color`/`-count`/`-toggle`/`-actions`, `.attributes-hidden`, `.legend-checkbox`; totes Menü `.legend-ellipsis*`; Richtungs-Toggle `.direction-*`; `.oe-filter-*`; `.legend-controls`/`.control-group`; `.attribute-category-header .collapse-btn` (samt Selektor in 19); `body > .combo-list`-Reste des Fuzzy-Dialogs: 2026-08-29 (Runde 2) entfernt, ~380 Zeilen. Live sind `.legend-row*`, `.legend-tree-*`, `.legend-icon-btn`, `.node-context-menu`/`.menu-item*`, `.depth-*`, `.legend-search-*`.
+- Parallele Icon-Getter (`getCheckboxSVG`, `getEyeSVG`, `getSaveSVG`, `getDownloadSVG`, `getCheckAllSVG`, `getChevronSVG`, `updateCheckboxIcon`, `initializeChevronIcons`): 2026-08-29 gelöscht; `setIcon`/`data-icon` sind der einzige Weg. Glyph-Icons `+ ✕ ✎ ⧉ ▶ Δ ⬇` ebenfalls (Registry: `plus`, `close`, `edit`, `copy`, `chevronRight`, `diff`, `arrowDown`).
+- `.view-row` (30-og2-ui.js): Klasse ohne CSS-Regel, entfernt; Views-Rows werden über `#viewsLegend .legend-row` gestylt, `.view-row-invalid` bleibt.
 
 ## Recommended verification command
 

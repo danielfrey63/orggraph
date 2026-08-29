@@ -211,7 +211,7 @@ export function ensureOverlay(onFiles) {
   overlay.className = 'dz-overlay';
   overlay.innerHTML = `
     <div class="dz-panel">
-      <div class="dz-icon">⬇</div>
+      <div class="dz-icon">${ICON.arrowDown}</div>
       <h2 class="dz-title">Mandanten-Dateien hierher ziehen</h2>
       <p class="dz-text">
         Benötigt werden <strong>drei Dateien</strong>:<br>
@@ -233,7 +233,7 @@ export function ensureOverlay(onFiles) {
     picker.type = 'file';
     picker.multiple = true;
     picker.accept = '.json,.tsv,.csv,.txt,.zip,application/json,application/zip';
-    picker.style.display = 'none';
+    picker.hidden = true;
     document.body.appendChild(picker);
     picker.addEventListener('change', () => {
       const files = Array.from(picker.files || []);

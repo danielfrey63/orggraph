@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { deflateRawSync } from 'node:zlib';
+import { ICON } from '../src/sections/02-icons.js';
 import {
   isZipName,
   inflateRaw,
@@ -59,6 +60,7 @@ const fireDrag = (type, dataTransfer) => {
 beforeEach(() => {
   document.body.innerHTML = '';
   document.body.className = '';
+  globalThis.ICON = ICON;
   globalThis._overlay = null;
   globalThis._dragDepth = 0;
   globalThis.debugMode = false;

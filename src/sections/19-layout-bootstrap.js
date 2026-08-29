@@ -240,8 +240,8 @@ export function initializeCollapsibleLegends() {
     return false; // Standardmäßig aufgeklappt
   };
   
-  // Alle Schaltflächen und Inhalte initialisieren (alte und neue Buttons)
-  const buttons = document.querySelectorAll('.collapse-btn, .legend-chevron');
+  // Alle Sektions-Chevrons und ihre Inhalte initialisieren
+  const buttons = document.querySelectorAll('.legend-chevron');
   buttons.forEach(btn => {
     const targetId = btn.dataset.target;
     const target = document.getElementById(targetId);

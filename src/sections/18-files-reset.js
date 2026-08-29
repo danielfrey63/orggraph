@@ -186,18 +186,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         
         setTimeout(() => {
           if (attributeLegend) {
-            // Alle Listen ausblenden
-            const allLists = attributeLegend.querySelectorAll('ul ul');
-            allLists.forEach(ul => {
-              ul.style.display = 'none';
-            });
-            
-            // Alle Chevrons auf collapsed setzen
-            const categoryChevrons = attributeLegend.querySelectorAll('.legend-tree-chevron');
-            categoryChevrons.forEach(chev => {
-              chev.classList.remove('expanded');
-              chev.classList.add('collapsed');
-            });
+            attributeLegend.querySelectorAll('.legend-tree-chevron')
+              .forEach(chev => setLegendSubtreeCollapsed(chev, true));
           }
         }, 50);
       } else {
@@ -218,16 +208,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         // 4. Alle Listen und Items einblenden
         setTimeout(() => {
           if (attributeLegend) {
-            const allLists = attributeLegend.querySelectorAll('ul');
-            allLists.forEach(ul => {
-              ul.style.display = 'block';
-            });
-            
-            const categoryChevrons = attributeLegend.querySelectorAll('.legend-tree-chevron');
-            categoryChevrons.forEach(chev => {
-              chev.classList.remove('collapsed');
-              chev.classList.add('expanded');
-            });
+            attributeLegend.querySelectorAll('.legend-tree-chevron')
+              .forEach(chev => setLegendSubtreeCollapsed(chev, false));
           }
         }, 50);
       }
@@ -395,10 +377,10 @@ window.addEventListener("DOMContentLoaded", async () => {
         const match = label.includes(term);
         
         // Setze Sichtbarkeit basierend auf Filter
-        li.style.display = term === '' || match ? '' : 'none';
-        
+        li.hidden = !(term === '' || match);
+
         // Merke, ob mindestens ein Element sichtbar ist
-        if (li.style.display !== 'none') {
+        if (!li.hidden) {
           anyVisible = true;
         }
         
@@ -411,7 +393,7 @@ window.addEventListener("DOMContentLoaded", async () => {
               parent.style.display = '';
               const parentLi = parent.parentElement;
               if (parentLi && parentLi.tagName === 'LI') {
-                parentLi.style.display = '';
+                parentLi.hidden = false;
               }
             }
             parent = parent.parentElement;

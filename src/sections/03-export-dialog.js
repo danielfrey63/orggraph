@@ -224,6 +224,7 @@ function buildExportStylesheet({ withBody = false } = {}) {
       .node-circle { fill: ${cssVar('--node-fill')}; stroke: ${cssVar('--node-stroke')}; stroke-width: ${cssVar('--node-stroke-width')}; }
       .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${cssVar('--cluster-opacity')}; }
       .label { font-size: 8px; fill: #000; }
+      .link-label { font-size: 10px; fill: #666; }
       .attribute-circle { fill: none; opacity: 0.8; }
       ${withBody ? `body { background-color: ${cssVar('--canvas-bg')}; }` : ''}
       .labels-hidden .label { display: none; }

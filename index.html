@@ -383,33 +383,6 @@ input#depth {
   flex-shrink: 0;
 }
 
-/* Checkbox Icons (rechts) */
-.legend-checkbox {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border-radius: 3px;
-  flex-shrink: 0;
-  font-size: 14px;
-}
-
-.legend-checkbox:hover {
-  color: var(--text);
-  background-color: transparent;
-}
-
-.legend-checkbox.checked {
-  color: var(--active-toggle-bg);
-}
-
 /* Label im neuen Format */
 .legend-list .legend-label-chip { 
   display: inline-block; 
@@ -463,232 +436,18 @@ input#depth {
   margin-top: 2px;
 }
 
-/* Attribut-Tree Layout (ähnlich zu OE-Tree) */
-.attribute-tree-row {
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 6px;
-  min-height: 26px;
-  transition: background-color 0.2s ease;
-  position: relative;
-}
-
-.attribute-tree-row:hover {
-  background-color: var(--control-hover);
-}
-
-.attribute-tree-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-
-.attribute-tree-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.attribute-tree-chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border-radius: 3px;
-  flex-shrink: 0;
-  font-size: 16px;
-}
-
-.attribute-tree-chevron:hover {
-  color: var(--text);
-  background-color: transparent;
-}
-
-.attribute-tree-chevron .ic {
-  transition: transform 0.2s ease;
-}
-
-.attribute-tree-chevron.expanded .ic {
-  transform: rotate(0deg);
-}
-
-.attribute-tree-chevron.collapsed .ic {
-  transform: rotate(-90deg);
-}
-
-.attribute-tree-spacer {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-
-.attribute-tree-checkbox {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border-radius: 3px;
-  flex-shrink: 0;
-  font-size: 12px;
-}
-
-.attribute-tree-checkbox:hover {
-  color: var(--text);
-  background-color: transparent;
-}
-
-.attribute-tree-checkbox.checked {
-  color: var(--active-toggle-bg);
-}
-
-/* Check-All Button für Attribut-Kategorien (versteckt, bei Hover sichtbar) */
-.attribute-check-all-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border-radius: 3px;
-  flex-shrink: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.attribute-tree-row:hover .attribute-check-all-btn {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.attribute-check-all-btn:hover {
-  color: var(--text);
-  background-color: transparent;
-  transform: translateY(-1px);
-}
-
-.attribute-check-all-btn {
-  font-size: 14px;
-}
-
-/* Eye-Toggle Button für Attribut-Kategorien (versteckt, bei Hover sichtbar) */
-.attribute-eye-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border-radius: 3px;
-  flex-shrink: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.attribute-tree-row:hover .attribute-eye-btn {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.attribute-eye-btn:hover {
-  color: var(--text);
-  background-color: transparent;
-}
-
-.attribute-eye-btn.hidden {
-  opacity: 0.3;
-}
-
-.attribute-tree-row:hover .attribute-eye-btn.hidden {
-  opacity: 0.3;
-  pointer-events: auto;
-}
-
-.attribute-eye-btn {
-  font-size: 14px;
-}
-
-/* Legacy Support für alte Attribute Collapse-Buttons */
-.attribute-category-header .collapse-btn {
-  display: none; /* Verstecken da durch Chevron ersetzt */
-}
-
 /* Legacy Input-Checkboxes (werden durch Icon-Checkboxes ersetzt) */
 .legend-list input[type="checkbox"] { 
   display: none; /* Verstecken da durch Icon-Checkboxes ersetzt */
 }
 
-/* Spezielle Attribute-Liste mit Tree-Layout */
-.attribute-tree-list {
-  list-style: none;
-  padding-left: 0;
-  margin: 0;
-}
-
-.attribute-tree-list > li {
-  margin: 0;
-}
-
-.attribute-tree-list ul {
-  padding-left: 24px;
-  margin-top: 2px;
-  list-style: none;
-}
 .label { font-size: 8px; fill: var(--text); pointer-events: none; }
+/* Debug link labels (14-render.js); only the display toggle is dynamic */
+.link-label { font-size: 10px; fill: #666; pointer-events: none; }
 .labels-hidden .label { display: none; }
 /* Labels nur für Knoten mit Attributen anzeigen [SF] */
 .labels-attributes-only .label { display: none; }
 .labels-attributes-only .node.has-attributes .label { display: block; }
-
-/* Attribut-Legende und Attribute-Kreise */
-.attribute-toggle {
-  margin-left: auto;
-}
-
-.attribute-toggle:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.attribute-legend-item { 
-  display: flex; 
-  align-items: center; 
-  margin-bottom: 2px; 
-  padding: 2px 4px; 
-  border-radius: 3px; 
-  min-height: 22px;
-}
-
-/* Stil für Attribute-Legende wenn Attribute global ausgeblendet sind */
-.attributes-hidden .attribute-legend-item {
-  opacity: 0.6;
-}
 
 /* Visuelle Anzeige des ausgeblendeten Status im Header */
 #toggleAttributesVisibility:not(.active) svg {
@@ -699,39 +458,11 @@ input#depth {
 #toggleAttributeFocus:not(.active) svg {
   opacity: 0.5;
 }
-.attribute-legend-item:hover { background: var(--control-hover); }
-.attribute-color { 
-  display: inline-block; 
-  width: 14px; 
-  height: 14px; 
-  border-radius: 50%; 
-  margin-right: 6px; 
-  border: 1px solid rgba(0,0,0,0.1); 
-  flex-shrink: 0;
-}
-.attribute-name { 
-  flex: 1; 
-  white-space: nowrap; 
-  overflow: hidden; 
-  text-overflow: ellipsis; 
-  min-width: 0;
-}
-.attribute-toggle { 
-  cursor: pointer; 
-  flex-shrink: 0;
-}
-.attribute-count {
-  font-size: 12px; 
-  color: var(--text-muted); 
-  margin-left: 4px; 
-  flex-shrink: 0;
-}
 
 .btn { padding: 6px 10px; border-radius: 4px; background: var(--control-bg); border: 1px solid var(--control-border); color: var(--text); cursor: pointer; }
 .btn:hover { background: var(--control-hover); }
 
 .attribute-circle { fill: none; opacity: 0.8; }
-.attribute-actions { margin: 8px 0 12px 0; display: flex; gap: 8px; }
 
 /* Toggle Button Styles */
 .toggle-btn {
@@ -764,106 +495,6 @@ input#depth {
 
 .toggle-btn .ic {
   font-size: 18px;
-}
-
-/* Direction Selector - Split Component */
-.direction-split {
-  display: inline-flex;
-  flex-direction: column;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--control-border);
-  border-radius: 6px;
-  position: relative;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-  overflow: hidden;
-  gap: 0;
-}
-
-.direction-half {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 50%;
-  padding: 0;
-  margin: 0;
-  border: 0 !important;
-  border-width: 0 !important;
-  background-color: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  position: relative;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-/* Gerundete Ecken nur außen */
-.direction-half.direction-up {
-  border-radius: 5px 5px 0 0;
-}
-
-.direction-half.direction-down {
-  border-radius: 0 0 5px 5px;
-}
-
-/* Trennlinie zwischen den Hälften mit Pseudo-Element - nur wenn nicht beide aktiv */
-.direction-half.direction-up:not(.active)::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background-color: var(--control-border);
-}
-
-.direction-half.direction-up.active + .direction-half.direction-down:not(.active)::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background-color: var(--control-border);
-}
-
-.direction-half:hover {
-  background-color: var(--control-hover);
-}
-
-.direction-half.active {
-  background-color: var(--active-toggle-bg, #6366f1);
-  color: var(--active-toggle-color, white);
-}
-
-/* Icon Clipping für halbe Darstellung */
-.direction-half .ic {
-  font-size: 20px;
-  line-height: 1;
-  position: relative;
-}
-
-/* Up-Pfeil: Zeige obere Hälfte des Icons - etwas mehr als 50% */
-.direction-up .ic {
-  clip-path: inset(0 0 30% 0);
-  margin-bottom: -13px;
-  transform: translateY(-2px);
-}
-
-/* Down-Pfeil: Zeige untere Hälfte des Icons - etwas mehr als 50% */
-.direction-down .ic {
-  clip-path: inset(30% 0 0 0);
-  margin-top: -13px;
-  transform: translateY(2px);
-}
-
-/* Hover-Effekt für die gesamte Komponente */
-.direction-split:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
 }
 
 /* Konfigurationsparameter */
@@ -995,19 +626,6 @@ input#depth {
   margin-bottom: 0px;
 }
 
-.legend-controls {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  justify-content: flex-end;
-}
-
-/* Gruppierung der Kontrollelemente für einheitliches Layout */
-.control-group {
-  display: flex;
-  align-items: center;
-}
-
 /* Neue Icon-Buttons mit Hover-Verhalten */
 .legend-icon-btn {
   display: inline-flex;
@@ -1066,53 +684,6 @@ input#depth {
 .legend-header:hover .legend-icon-btn.active {
   opacity: 1;
   pointer-events: auto;
-}
-
-/* Ellipsis Dropdown */
-.legend-ellipsis {
-  position: relative;
-}
-
-.legend-ellipsis-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 1000;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  min-width: 160px;
-  padding: 4px 0;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-8px);
-  transition: all 0.2s ease;
-}
-
-.legend-ellipsis.open .legend-ellipsis-dropdown {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-}
-
-.legend-ellipsis-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  color: var(--text);
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.legend-ellipsis-item:hover {
-  background-color: var(--control-hover);
-}
-
-.legend-ellipsis-item .ic {
-  font-size: 16px;
-  color: var(--text-muted);
 }
 
 /* Ausschiebbares Suchfeld */
@@ -1180,57 +751,6 @@ input#depth {
   flex: 0 1 auto; /* Nur nötigen Platz für Text */
   white-space: nowrap;
 }
-
-.oe-filter-container {
-  margin: 0;
-  width: 100%;
-  max-width: none;
-}
-
-
-.oe-filter-input {
-  width: 100%;
-  padding: 3px 8px;
-  border-radius: 4px;
-  border: 1px solid var(--control-border);
-  background-color: var(--input-bg);
-  color: var(--text);
-  font-size: 13px;
-}
-
-/* Progress-Anzeige für lange Suchvorgänge */
-
-/* Combo-Box im Fuzzy-Match-Dialog (identisch zum Hauptfenster) */
-/* Verbesserte Combo-Box im Dialog */
-
-/* Überarbeitete Dropdown-Liste mit maximaler Sichtbarkeit */
-
-/* Besondere Stile für "Keine Übereinstimmung"-Option */
-
-/* Globaler Stil für alle Dropdowns im Dialog, um maximale Sichtbarkeit zu garantieren */
-body > .combo-list {
-  position: fixed !important;
-  z-index: 999999 !important;
-  background: var(--panel-bg) !important;
-  border: 2px solid var(--active-toggle-bg, #6366f1) !important;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3) !important;
-  pointer-events: auto !important;
-  max-height: 320px !important;
-  overflow-y: auto !important;
-  box-sizing: border-box !important; /* Wichtig für korrekte Breitenberechnung */
-  overflow-x: hidden !important;
-  white-space: normal !important;
-}
-
-/* Korrekte Breite für alle Dropdown-Elemente */
-body > .combo-list li {
-  width: 100% !important;
-  box-sizing: border-box !important;
-  white-space: normal !important;
-  word-break: break-word !important;
-}
-
-/* Separator wurde entfernt */
 
 /* Modal dialogs (#exportModal markup and createModal); visibility via .open only */
 .modal {
@@ -1409,9 +929,12 @@ body > .combo-list li {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
 }
 .dz-icon {
-  font-size: 42px;
   line-height: 1;
   opacity: 0.85;
+}
+.dz-icon .ic {
+  width: 42px;
+  height: 42px;
 }
 .dz-title {
   margin: 14px 0 8px;
@@ -1690,8 +1213,12 @@ body.dz-dragging::after {
 }
 
 .menu-item-arrow {
-  font-size: 10px;
+  display: inline-flex;
   margin-left: 8px;
+}
+.menu-item-arrow .ic {
+  width: 10px;
+  height: 10px;
 }
 
 /* Farb-Indikator in der Attribut-Legende (Ring wie im Graphen);
@@ -1903,7 +1430,7 @@ body.dz-dragging::after {
         <span id="timeStamp"></span>
         <select id="diffT1" title="Diff T1"></select>
         <select id="diffT2" title="Diff T2"></select>
-        <button id="diffToggle" class="toggle-btn" title="Diff-Modus T1→T2">Δ</button>
+        <button id="diffToggle" class="toggle-btn" title="Diff-Modus T1→T2"><i data-icon="diff"></i></button>
         <span class="stat-separator">|</span>
       </span>
       <span id="profileSwitcher" class="profile-switcher"></span>
@@ -1975,7 +1502,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.181.178';
+const APP_VERSION = '1.182.179';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -2075,6 +1602,8 @@ const ICON = {
   eye:          `<svg ${SVG_ATTR}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
   eyeClosed:    `<svg ${SVG_ATTR}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
   chevronDown:  `<svg ${SVG_ATTR}><polyline points="6 9 12 15 18 9"/></svg>`,
+  chevronRight: `<svg ${SVG_ATTR}><polyline points="9 6 15 12 9 18"/></svg>`,
+  diff:         `<svg ${SVG_ATTR}><path d="M12 4L3 20h18L12 4z"/></svg>`,
   cloudUpload:  `<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
   cloudDownload:`<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
   close:        `<svg ${SVG_ATTR}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
@@ -2338,6 +1867,7 @@ function buildExportStylesheet({ withBody = false } = {}) {
       .node-circle { fill: ${cssVar('--node-fill')}; stroke: ${cssVar('--node-stroke')}; stroke-width: ${cssVar('--node-stroke-width')}; }
       .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${cssVar('--cluster-opacity')}; }
       .label { font-size: 8px; fill: #000; }
+      .link-label { font-size: 10px; fill: #666; }
       .attribute-circle { fill: none; opacity: 0.8; }
       ${withBody ? `body { background-color: ${cssVar('--canvas-bg')}; }` : ''}
       .labels-hidden .label { display: none; }
@@ -3413,7 +2943,7 @@ function ensureOverlay(onFiles) {
   overlay.className = 'dz-overlay';
   overlay.innerHTML = `
     <div class="dz-panel">
-      <div class="dz-icon">⬇</div>
+      <div class="dz-icon">${ICON.arrowDown}</div>
       <h2 class="dz-title">Mandanten-Dateien hierher ziehen</h2>
       <p class="dz-text">
         Benötigt werden <strong>drei Dateien</strong>:<br>
@@ -3435,7 +2965,7 @@ function ensureOverlay(onFiles) {
     picker.type = 'file';
     picker.multiple = true;
     picker.accept = '.json,.tsv,.csv,.txt,.zip,application/json,application/zip';
-    picker.style.display = 'none';
+    picker.hidden = true;
     document.body.appendChild(picker);
     picker.addEventListener('change', () => {
       const files = Array.from(picker.files || []);
@@ -5443,6 +4973,17 @@ function createLegendIconButton({ icon, svg, title, className = '', onClick } = 
   return btn;
 }
 
+// Collapse state of a legend subtree: the first <ul> inside the chevron's <li>
+// plus the chevron's own expanded/collapsed class. Single owner of that display
+// toggle — every collapse/expand path (click, collapse-children, collapse-all)
+// routes through here.
+function setLegendSubtreeCollapsed(chevron, collapsed) {
+  const li = chevron.closest('li');
+  const sub = li && li.querySelector('ul');
+  if (sub) sub.style.display = collapsed ? 'none' : '';
+  chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
+}
+
 // Auf-/Zuklapp-Chevron: toggelt das erste <ul> im umgebenden <li>
 // und meldet den neuen Zustand über onToggle(nowCollapsed)
 function createLegendChevron({ collapsed = false, onToggle } = {}) {
@@ -5456,10 +4997,9 @@ function createLegendChevron({ collapsed = false, onToggle } = {}) {
     const li = chevron.closest('li');
     const sub = li && li.querySelector('ul');
     if (!sub) return;
-    const wasCollapsed = sub.style.display === 'none';
-    sub.style.display = wasCollapsed ? '' : 'none';
-    chevron.className = wasCollapsed ? 'legend-tree-chevron expanded' : 'legend-tree-chevron collapsed';
-    if (onToggle) onToggle(!wasCollapsed);
+    const nowCollapsed = sub.style.display !== 'none';
+    setLegendSubtreeCollapsed(chevron, nowCollapsed);
+    if (onToggle) onToggle(nowCollapsed);
   });
   return chevron;
 }
@@ -5603,7 +5143,6 @@ function renderOrgLegendNode(oid, depth, options) {
   const hiddenInput = document.createElement('input');
   hiddenInput.type = 'checkbox';
   hiddenInput.id = idAttr;
-  hiddenInput.style.display = 'none';
   hiddenInput.checked = allowedOrgs.has(id);
   row.appendChild(hiddenInput);
 
@@ -5684,14 +5223,9 @@ function renderOrgLegendNode(oid, depth, options) {
         
         if (subRoot) {
           Array.from(subRoot.children).forEach(childLi => {
-            const childUl = childLi.querySelector('ul');
-            if (childUl) {
-              childUl.style.display = 'none';
-              const chevron = childLi.querySelector('.legend-tree-chevron');
-              if (chevron) {
-                chevron.className = 'legend-tree-chevron collapsed';
-              }
-            }
+            // A child with a subtree always carries its chevron (see above).
+            const chevron = childLi.querySelector(':scope > .legend-row .legend-tree-chevron');
+            if (chevron) setLegendSubtreeCollapsed(chevron, true);
           });
         }
         
@@ -5899,7 +5433,7 @@ function createSubmenuItem(label, handler, { arrow = false, disabled = false } =
   if (arrow) {
     const arrowSpan = document.createElement('span');
     arrowSpan.className = 'menu-item-arrow';
-    arrowSpan.textContent = '▶';
+    setIcon(arrowSpan, 'chevronRight');
     item.appendChild(arrowSpan);
   }
   if (handler) item.onclick = handler;
@@ -6511,10 +6045,7 @@ function renderGraph(sub) {
     .attr("class", "link-label")
     .attr("text-anchor", "middle")
     .attr("dy", -3)
-    .style("display", (debugMode && labelsVisible !== 'none') ? "block" : "none")
-    .style("font-size", "10px")
-    .style("fill", "#666")
-    .style("pointer-events", "none");
+    .style("display", (debugMode && labelsVisible !== 'none') ? "block" : "none");
 
   // Nur Graph-Knoten (Draw-Kind 'node') rendern; Cluster werden als Hüllen gezeichnet
   const personNodes = sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node');
@@ -7629,18 +7160,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         
         setTimeout(() => {
           if (attributeLegend) {
-            // Alle Listen ausblenden
-            const allLists = attributeLegend.querySelectorAll('ul ul');
-            allLists.forEach(ul => {
-              ul.style.display = 'none';
-            });
-            
-            // Alle Chevrons auf collapsed setzen
-            const categoryChevrons = attributeLegend.querySelectorAll('.legend-tree-chevron');
-            categoryChevrons.forEach(chev => {
-              chev.classList.remove('expanded');
-              chev.classList.add('collapsed');
-            });
+            attributeLegend.querySelectorAll('.legend-tree-chevron')
+              .forEach(chev => setLegendSubtreeCollapsed(chev, true));
           }
         }, 50);
       } else {
@@ -7661,16 +7182,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         // 4. Alle Listen und Items einblenden
         setTimeout(() => {
           if (attributeLegend) {
-            const allLists = attributeLegend.querySelectorAll('ul');
-            allLists.forEach(ul => {
-              ul.style.display = 'block';
-            });
-            
-            const categoryChevrons = attributeLegend.querySelectorAll('.legend-tree-chevron');
-            categoryChevrons.forEach(chev => {
-              chev.classList.remove('collapsed');
-              chev.classList.add('expanded');
-            });
+            attributeLegend.querySelectorAll('.legend-tree-chevron')
+              .forEach(chev => setLegendSubtreeCollapsed(chev, false));
           }
         }, 50);
       }
@@ -7838,10 +7351,10 @@ window.addEventListener("DOMContentLoaded", async () => {
         const match = label.includes(term);
         
         // Setze Sichtbarkeit basierend auf Filter
-        li.style.display = term === '' || match ? '' : 'none';
-        
+        li.hidden = !(term === '' || match);
+
         // Merke, ob mindestens ein Element sichtbar ist
-        if (li.style.display !== 'none') {
+        if (!li.hidden) {
           anyVisible = true;
         }
         
@@ -7854,7 +7367,7 @@ window.addEventListener("DOMContentLoaded", async () => {
               parent.style.display = '';
               const parentLi = parent.parentElement;
               if (parentLi && parentLi.tagName === 'LI') {
-                parentLi.style.display = '';
+                parentLi.hidden = false;
               }
             }
             parent = parent.parentElement;
@@ -8548,8 +8061,8 @@ function initializeCollapsibleLegends() {
     return false; // Standardmäßig aufgeklappt
   };
   
-  // Alle Schaltflächen und Inhalte initialisieren (alte und neue Buttons)
-  const buttons = document.querySelectorAll('.collapse-btn, .legend-chevron');
+  // Alle Sektions-Chevrons und ihre Inhalte initialisieren
+  const buttons = document.querySelectorAll('.legend-chevron');
   buttons.forEach(btn => {
     const targetId = btn.dataset.target;
     const target = document.getElementById(targetId);
@@ -12448,7 +11961,6 @@ function og2BuildViewsLegend() {
   };
   const makeRow = (name, { invalid = false, title }) => {
     const { row, left } = createLegendRow({ active: !invalid && name === og2.activeViewName, withRight: false });
-    row.classList.add('view-row');
     if (invalid) row.classList.add('view-row-invalid');
     row.title = title;
     left.appendChild(createLegendChip(name));

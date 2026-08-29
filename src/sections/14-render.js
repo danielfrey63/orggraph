@@ -215,10 +215,7 @@ export function renderGraph(sub) {
     .attr("class", "link-label")
     .attr("text-anchor", "middle")
     .attr("dy", -3)
-    .style("display", (debugMode && labelsVisible !== 'none') ? "block" : "none")
-    .style("font-size", "10px")
-    .style("fill", "#666")
-    .style("pointer-events", "none");
+    .style("display", (debugMode && labelsVisible !== 'none') ? "block" : "none");
 
   // Nur Graph-Knoten (Draw-Kind 'node') rendern; Cluster werden als Hüllen gezeichnet
   const personNodes = sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node');

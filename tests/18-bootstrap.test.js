@@ -196,8 +196,8 @@ describe('bootstrap wiring (DOMContentLoaded)', () => {
     filter.value = 'alpha';
     filter.dispatchEvent(new Event('input'));
     const [a, b] = document.querySelectorAll('#legend .legend-list > li');
-    expect(a.style.display).toBe('');
-    expect(b.style.display).toBe('none');
+    expect(a.hidden).toBe(false);
+    expect(b.hidden).toBe(true);
 
     filter.value = 'zzz';
     filter.dispatchEvent(new Event('input'));
