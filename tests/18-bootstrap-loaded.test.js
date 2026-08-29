@@ -38,7 +38,7 @@ const FIXTURE = `
   <button id="toggleSimulation"></button>
   <button id="debugBtn"></button>
   <svg id="graph"></svg>
-  <div class="footer-stats"></div>
+  <div class="footer-stats"><button id="resetData" class="footer-reset-btn"><i data-icon="trash"></i></button></div>
   <div id="legend"></div><div id="attributeLegend"></div><div id="hiddenLegend"></div>
 `;
 
@@ -113,7 +113,6 @@ beforeAll(async () => {
   globalThis.renderFullView = vi.fn();
   globalThis.setActive = vi.fn();
   globalThis.chooseItem = vi.fn();
-  globalThis.initializeChevronIcons = vi.fn();
   globalThis.initializeLegendCollapsedStates = vi.fn();
   globalThis.initializeCollapsibleLegends = vi.fn();
   globalThis.installGlobalDrop = vi.fn();
@@ -247,7 +246,7 @@ describe('env-driven bootstrap with loaded data', () => {
     expect(document.getElementById('attributeFileInput')).toBeNull();
   });
 
-  it('creates the footer reset button (trash icon) which clears everything after confirmation', async () => {
+  it('wires the footer reset button (trash icon) which clears everything after confirmation', async () => {
     const resetBtn = document.getElementById('resetData');
     expect(resetBtn).not.toBeNull();
     expect(resetBtn.querySelector('[data-icon="trash"]')).not.toBeNull();

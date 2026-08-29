@@ -462,7 +462,7 @@ export function updateGlobalHiddenVisibilityButton() {
   if (!btn) return;
   
   const hasHidden = hiddenByRoot.size > 0;
-  btn.style.display = hasHidden ? '' : 'none';
+  btn.hidden = !hasHidden;
   
   if (hasHidden) {
     // Verwende active-Klasse wie bei OEs/Attributen für konsistentes Verhalten

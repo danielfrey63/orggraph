@@ -100,7 +100,6 @@ const setupGlobals = () => {
   globalThis.updateFooterStats = vi.fn();
   globalThis.recomputeHiddenNodes = vi.fn();
   globalThis.collectReportSubtree = vi.fn(() => new Set());
-  globalThis.initializeChevronIcons = vi.fn();
   globalThis.initializeLegendCollapsedStates = vi.fn();
   globalThis.initializeCollapsibleLegends = vi.fn();
   globalThis.installGlobalDrop = vi.fn();

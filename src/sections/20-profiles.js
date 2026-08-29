@@ -6,24 +6,13 @@
 
 /** (Re)build the footer profile switcher from the stored profile list. */
 export async function renderProfileSwitcher() {
-  const host = document.querySelector('.footer-stats');
-  if (!host) return;
+  // The host span is static footer markup in index.template.html.
+  const wrap = document.getElementById('profileSwitcher');
+  if (!wrap) return;
 
   const profiles = await listProfiles();
   const active = await getActiveProfileId();
 
-  let wrap = document.getElementById('profileSwitcher');
-  if (!wrap) {
-    wrap = document.createElement('span');
-    wrap.id = 'profileSwitcher';
-    wrap.className = 'profile-switcher';
-    const sep = document.createElement('span');
-    sep.className = 'stat-separator';
-    sep.textContent = '|';
-    // Place the switcher at the very front of the footer stats.
-    host.insertBefore(sep, host.firstChild);
-    host.insertBefore(wrap, host.firstChild);
-  }
   wrap.innerHTML = '';
 
   const label = document.createElement('label');
@@ -54,24 +43,24 @@ export async function renderProfileSwitcher() {
     b.type = 'button';
     b.className = 'profile-btn';
     b.title = title;
-    b.textContent = icon;
+    setIcon(b, icon);
     b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handler(); });
     wrap.appendChild(b);
     return b;
   };
 
-  mkBtn('+', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
-  mkBtn('✎', 'Aktuelles Profil umbenennen', async () => {
+  mkBtn('plus', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
+  mkBtn('edit', 'Aktuelles Profil umbenennen', async () => {
     const cur = profiles.find(p => p.id === active);
     const name = (typeof prompt === 'function') ? prompt('Profil umbenennen:', cur ? cur.name : active) : null;
     if (name && name.trim()) { await renameProfile(active, name.trim()); await renderProfileSwitcher(); }
   });
-  mkBtn('⧉', 'Aktuelles Profil duplizieren', async () => {
+  mkBtn('copy', 'Aktuelles Profil duplizieren', async () => {
     const cur = profiles.find(p => p.id === active);
     const newId = await duplicateProfile(active, (cur ? cur.name : active) + ' Kopie');
     if (newId) { try { await switchProfile(newId); } catch (_) {} location.reload(); }
   });
-  mkBtn('✕', 'Aktuelles Profil löschen', async () => {
+  mkBtn('close', 'Aktuelles Profil löschen', async () => {
     const cur = profiles.find(p => p.id === active);
     const ok = (typeof confirm === 'function')
       ? confirm(`Profil "${cur ? cur.name : active}" und alle zugehörigen Daten löschen?`)

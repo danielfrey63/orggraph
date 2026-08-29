@@ -1,13 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  getCheckboxSVG,
-  getChevronSVG,
-  getCheckAllSVG,
-  getEyeSVG,
-  getSaveSVG,
-  getDownloadSVG,
-  updateCheckboxIcon,
-  initializeChevronIcons,
   initializeLegendCollapsedStates,
   buildAttributeLegend,
 } from '../src/sections/16-legend-attributes.js';
@@ -33,7 +25,6 @@ beforeEach(() => {
   globalThis.createLegendChip = createLegendChip;
   globalThis.createLegendIconButton = createLegendIconButton;
   globalThis.createLegendChevron = createLegendChevron;
-  globalThis.getChevronSVG = getChevronSVG;
   globalThis.updateAttributeStats = vi.fn();
   globalThis.updateAttributeCircles = vi.fn();
   globalThis.notifyAttributeVisibilityChanged = vi.fn();
@@ -51,41 +42,7 @@ beforeEach(() => {
   globalThis.debugMode = false;
 });
 
-describe('SVG getters', () => {
-  it('map states to the central icon registry', () => {
-    expect(getCheckboxSVG(true)).toBe(ICON.check);
-    expect(getCheckboxSVG(false)).toBe(ICON.close);
-    expect(getChevronSVG()).toBe(ICON.chevronDown);
-    expect(getCheckAllSVG()).toBe(ICON.checkAll);
-    expect(getEyeSVG(false)).toBe(ICON.eye);
-    expect(getEyeSVG(true)).toBe(ICON.eyeClosed);
-    expect(getSaveSVG()).toBe(ICON.save);
-    expect(getDownloadSVG()).toBe(ICON.cloudDownload);
-  });
-});
-
-describe('updateCheckboxIcon', () => {
-  it('adds and removes the checked class with matching icon', () => {
-    const el = document.createElement('span');
-    el.className = 'cb';
-    updateCheckboxIcon(el, true);
-    expect(el.className).toBe('cb checked');
-    expect(el.innerHTML).toContain('points="20 6 9 17 4 12"'); // check icon
-    updateCheckboxIcon(el, false);
-    expect(el.className).toBe('cb');
-    expect(el.querySelectorAll('line')).toHaveLength(2); // close icon
-  });
-});
-
-describe('initializeChevronIcons / initializeLegendCollapsedStates', () => {
-  it('injects the chevron SVG into all legend chevrons', () => {
-    document.body.innerHTML = '<button class="legend-chevron"></button><button class="legend-chevron"></button>';
-    initializeChevronIcons();
-    for (const btn of document.querySelectorAll('.legend-chevron')) {
-      expect(btn.innerHTML).toContain('points="6 9 12 15 18 9"'); // chevron icon
-    }
-  });
-
+describe('initializeLegendCollapsedStates', () => {
   it('applies env-driven collapsed states and skips non-boolean values', () => {
     document.body.innerHTML = `
       <button class="legend-chevron expanded" data-target="legend"></button><div id="legend"></div>

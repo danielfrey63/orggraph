@@ -45,7 +45,7 @@ export function populateCombo(filterText) {
 
   // Require minimum search length for large datasets
   if (term.length > 0 && term.length < MIN_SEARCH_LENGTH) {
-    list.innerHTML = '<li class="combo-hint">Mindestens ' + MIN_SEARCH_LENGTH + ' Zeichen eingeben...</li>';
+    list.replaceChildren(createComboHint(`Mindestens ${MIN_SEARCH_LENGTH} Zeichen eingeben...`));
     list.hidden = false;
     filteredItems = [];
     activeIndex = -1;
@@ -102,14 +102,19 @@ export function populateCombo(filterText) {
   
   // Show "more results" hint if truncated
   if (count >= MAX_DROPDOWN_ITEMS) {
-    const hint = document.createElement('li');
-    hint.className = 'combo-hint combo-hint--more';
-    hint.textContent = `Nur erste ${MAX_DROPDOWN_ITEMS} Ergebnisse angezeigt. Suchbegriff verfeinern...`;
-    frag.appendChild(hint);
+    frag.appendChild(createComboHint(`Nur erste ${MAX_DROPDOWN_ITEMS} Ergebnisse angezeigt. Suchbegriff verfeinern...`, { more: true }));
   }
   
   list.appendChild(frag);
   list.hidden = filteredItems.length === 0;
+}
+
+// Informational entry of the search dropdown (.combo-hint; more = truncation notice)
+export function createComboHint(text, { more = false } = {}) {
+  const li = document.createElement('li');
+  li.className = more ? 'combo-hint combo-hint--more' : 'combo-hint';
+  li.textContent = text;
+  return li;
 }
 
 export function setActive(idx) {

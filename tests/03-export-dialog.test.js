@@ -14,14 +14,14 @@ let downloads;
 
 const FIXTURE = `
   <button id="exportBtn"></button>
-  <div id="exportModal" style="display:none">
+  <div id="exportModal" class="modal">
     <div class="modal-overlay"></div>
     <button class="modal-close-btn"></button>
     <button class="format-btn active" data-format="png"></button>
     <button class="format-btn" data-format="svg"></button>
   </div>
-  <div id="svgOptions" style="display:none"></div>
-  <div id="pngOptions" style="display:block"></div>
+  <div id="svgOptions" hidden></div>
+  <div id="pngOptions"></div>
   <button id="downloadSvg"></button>
   <button id="downloadPng"></button>
   <button class="resolution-preset" data-width="1920" data-height="1080"></button>
@@ -73,13 +73,13 @@ describe('getTimestamp', () => {
 describe('dialog flow', () => {
   it('opens via the export button with the first preset active and closes again', () => {
     document.getElementById('exportBtn').click();
-    expect(modal().style.display).toBe('flex');
+    expect(modal().classList.contains('open')).toBe(true);
     expect(document.querySelectorAll('.resolution-preset')[0].classList.contains('active')).toBe(true);
     document.querySelector('.modal-close-btn').click();
-    expect(modal().style.display).toBe('none');
+    expect(modal().classList.contains('open')).toBe(false);
     showExportDialog();
     document.querySelector('.modal-overlay').click();
-    expect(modal().style.display).toBe('none');
+    expect(modal().classList.contains('open')).toBe(false);
   });
 
   it('switches format options between SVG and PNG', () => {
@@ -87,10 +87,10 @@ describe('dialog flow', () => {
     svgBtn.click();
     expect(svgBtn.classList.contains('active')).toBe(true);
     expect(pngBtn.classList.contains('active')).toBe(false);
-    expect(document.getElementById('svgOptions').style.display).toBe('block');
-    expect(document.getElementById('pngOptions').style.display).toBe('none');
+    expect(document.getElementById('svgOptions').hidden).toBe(false);
+    expect(document.getElementById('pngOptions').hidden).toBe(true);
     pngBtn.click();
-    expect(document.getElementById('pngOptions').style.display).toBe('block');
+    expect(document.getElementById('pngOptions').hidden).toBe(false);
   });
 
   it('presets fill the custom inputs; typing clears the preset state', () => {
@@ -105,7 +105,7 @@ describe('dialog flow', () => {
   it('Escape closes and Enter triggers the export of the active format', () => {
     showExportDialog();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }));
-    expect(modal().style.display).toBe('none');
+    expect(modal().classList.contains('open')).toBe(false);
 
     showExportDialog();
     document.querySelector('[data-format="svg"]').click();
@@ -123,7 +123,7 @@ describe('exportAsSvg', () => {
     expect(blobEntry.blob.content).toContain('.node-circle');
     const link = downloads.find((d) => d.download);
     expect(link.download).toMatch(/^orggraph_export_\d{8}_\d{6}\.svg$/);
-    expect(modal().style.display).toBe('none');
+    expect(modal().classList.contains('open')).toBe(false);
     expect(globalThis.showTemporaryNotification).toHaveBeenCalledWith('SVG-Export erfolgreich!');
   });
 

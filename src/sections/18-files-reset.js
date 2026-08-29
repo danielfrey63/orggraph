@@ -113,9 +113,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   const list = document.querySelector(LIST_COMBO_ID);
   // E25: no hidden footer-status file intake — data enters via the drop
   // zone / file dialog only (FR-6.7).
-  // Initialisiere Chevron-Icons im HTML
-  initializeChevronIcons();
-  
   // Legend-Sektionen aus ENV initialisieren [SF]
   initializeLegendCollapsedStates();
   // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
@@ -424,10 +421,6 @@ window.addEventListener("DOMContentLoaded", async () => {
           const childUl = li.querySelector('ul');
           if (childUl) {
             childUl.style.display = '';
-            const twisty = li.querySelector('.twisty');
-            if (twisty && twisty.textContent === '▸') {
-              twisty.textContent = '▾';
-            }
           }
         }
       });
@@ -857,28 +850,16 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Factory reset (footer, trash icon): clears the WHOLE IndexedDB — every
   // profile plus the profile list — after confirmation. Distinct from the
   // profile switcher's ✕, which deletes only the active profile (FR-8.9).
-  const footerStats = document.querySelector('.footer-stats');
-  if (footerStats && !document.getElementById('resetData')) {
-    const sep = document.createElement('span');
-    sep.className = 'stat-separator';
-    sep.textContent = '|';
-    const resetBtn = document.createElement('button');
-    resetBtn.id = 'resetData';
-    resetBtn.className = 'footer-reset-btn';
-    resetBtn.type = 'button';
-    resetBtn.title = 'Alle lokalen Daten löschen (sämtliche Profile) und leer neu starten';
-    resetBtn.setAttribute('aria-label', 'Alle lokalen Daten löschen');
-    const resetIcon = document.createElement('i');
-    setIcon(resetIcon, 'trash');
-    resetBtn.appendChild(resetIcon);
+  // The button itself is static footer markup in index.template.html.
+  const resetBtn = document.getElementById('resetData');
+  if (resetBtn && !resetBtn.dataset.wired) {
+    resetBtn.dataset.wired = '1';
     resetBtn.addEventListener('click', () => {
       const ok = (typeof confirm === 'function')
         ? confirm('Alle lokalen Daten löschen? Das entfernt SÄMTLICHE Profile und startet die App leer neu.')
         : true;
       if (ok) resetAllData();
     });
-    footerStats.appendChild(sep);
-    footerStats.appendChild(resetBtn);
   }
 });
 

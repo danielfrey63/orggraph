@@ -468,8 +468,8 @@ export function og2BuildViewsLegend() {
   const section = document.getElementById('viewsSection');
   const host = document.getElementById('viewsLegend');
   if (!section || !host) return;
-  if (!og2) { section.style.display = 'none'; return; }
-  section.style.display = '';
+  section.hidden = !og2;
+  if (!og2) return;
   host.innerHTML = '';
   const describe = (name) => {
     const rawDef = og2.env && og2.env.VIEWS ? og2.env.VIEWS[name] : null;
@@ -484,10 +484,7 @@ export function og2BuildViewsLegend() {
     row.classList.add('view-row');
     if (invalid) row.classList.add('view-row-invalid');
     row.title = title;
-    const label = document.createElement('span');
-    label.className = 'legend-label-chip';
-    label.textContent = name;
-    left.appendChild(label);
+    left.appendChild(createLegendChip(name));
     if (!invalid) row.addEventListener('click', () => og2SwitchView(name));
     host.appendChild(row);
   };
@@ -554,27 +551,13 @@ export async function og2SaveCurrentView() {
 // but disabled, with an explaining tooltip (AK 50); default is asOf on the
 // youngest instant.
 export function og2BuildTimeControls() {
-  const host = document.querySelector('.footer-stats');
-  if (!og2 || !host) return;
-  const instants = og2TimeInstants(og2);
-  let wrap = document.getElementById('timeControls');
-  if (!wrap) {
-    wrap = document.createElement('span');
-    wrap.id = 'timeControls';
-    wrap.className = 'time-controls';
-    wrap.innerHTML = '<span>Zeit: </span>'
-      + '<input type="range" id="timeSlider" min="0" max="0" step="1" />'
-      + '<span id="timeStamp"></span>'
-      + '<select id="diffT1" title="Diff T1"></select>'
-      + '<select id="diffT2" title="Diff T2"></select>'
-      + '<button id="diffToggle" class="toggle-btn" title="Diff-Modus T1→T2">Δ</button>';
-    const sep = document.createElement('span');
-    sep.className = 'stat-separator';
-    sep.textContent = '|';
-    // FR-8.6: the time controls lead the footer; the view switch lives in
-    // the views legend since the FR-7.5 revision.
-    host.prepend(sep);
-    host.prepend(wrap);
+  // The controls are static footer markup in index.template.html (FR-8.6: they
+  // lead the footer); this only reveals and wires them once.
+  const wrap = document.getElementById('timeControls');
+  if (!og2 || !wrap) return;
+  wrap.hidden = false;
+  if (!wrap.dataset.wired) {
+    wrap.dataset.wired = '1';
     wrap.querySelector('#timeSlider').addEventListener('input', () => {
       const list = og2TimeInstants(og2);
       const idx = parseInt(wrap.querySelector('#timeSlider').value, 10);

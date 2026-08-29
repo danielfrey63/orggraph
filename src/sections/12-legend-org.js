@@ -60,7 +60,7 @@ export function createLegendChevron({ collapsed = false, onToggle } = {}) {
   chevron.type = 'button';
   chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
   chevron.title = 'Ein-/Ausklappen';
-  chevron.innerHTML = getChevronSVG();
+  setIcon(chevron, 'chevronDown');
   chevron.addEventListener('click', (e) => {
     e.stopPropagation();
     const li = chevron.closest('li');
@@ -209,8 +209,6 @@ export function renderOrgLegendNode(oid, depth, options) {
     updateRowState();
     syncGraphAndLegendColors();
   });
-
-  row.style.cursor = 'pointer';
 
   const hiddenInput = document.createElement('input');
   hiddenInput.type = 'checkbox';
@@ -444,14 +442,7 @@ export function updateLegendChips(rootEl) {
     allowedOrgs = newAllowed;
   }
   // Wenn OEs ausgeblendet sind (oesVisible=false), dann bleibt allowedOrgs leer
-  // For each legend entry (li), ensure chips have transparent background
-  root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
-    const chip = li.querySelector(':scope > .legend-row .legend-label-chip');
-    if (!chip) return;
-    // Immer transparent, damit CSS-Hover funktioniert
-    chip.style.background = 'transparent';
-  });
-} 
+}
 
 export function updateLegendRowColors(rootEl) {
   const root = rootEl || document;

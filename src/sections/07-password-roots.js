@@ -3,23 +3,8 @@ export function showPasswordDialog(onSubmit) {
   const existing = document.getElementById('passwordDialog');
   if (existing) existing.remove();
   
-  // Dialog erstellen — nutzt den .modal-Vertrag aus styles.css (wie #exportModal)
-  const overlay = document.createElement('div');
-  overlay.id = 'passwordDialog';
-  overlay.className = 'modal';
-
-  const backdrop = document.createElement('div');
-  backdrop.className = 'modal-overlay';
-
-  const dialog = document.createElement('div');
-  dialog.className = 'modal-container';
-
-  const content = document.createElement('div');
-  content.className = 'modal-content';
-
-  const title = document.createElement('h3');
-  title.textContent = 'Passwort erforderlich';
-  title.className = 'modal-title';
+  // Dialog über die gemeinsame Modal-Factory (gleicher Vertrag wie #exportModal)
+  const { content, close: closeDialog } = createModal({ id: 'passwordDialog', title: 'Passwort' });
 
   const input = document.createElement('input');
   input.type = 'password';
@@ -40,8 +25,6 @@ export function showPasswordDialog(onSubmit) {
   submitBtn.textContent = 'Bestätigen';
   submitBtn.className = 'btn-primary';
   
-  const closeDialog = () => overlay.remove();
-  
   const trySubmit = () => {
     const pw = input.value;
     if (pw === envConfig?.TOOLBAR_PSEUDO_PASSWORD) {
@@ -49,7 +32,7 @@ export function showPasswordDialog(onSubmit) {
       onSubmit(pw);
     } else {
       errorMsg.textContent = 'Falsches Passwort';
-      input.style.borderColor = '#ef4444';
+      input.classList.add('modal-input--error');
       input.focus();
       input.select();
     }
@@ -61,20 +44,9 @@ export function showPasswordDialog(onSubmit) {
     if (e.key === 'Enter') trySubmit();
     if (e.key === 'Escape') closeDialog();
   });
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay || e.target === backdrop) closeDialog();
-  });
 
-  btnRow.appendChild(cancelBtn);
-  btnRow.appendChild(submitBtn);
-  content.appendChild(title);
-  content.appendChild(input);
-  content.appendChild(errorMsg);
-  content.appendChild(btnRow);
-  dialog.appendChild(content);
-  overlay.appendChild(backdrop);
-  overlay.appendChild(dialog);
-  document.body.appendChild(overlay);
+  btnRow.append(cancelBtn, submitBtn);
+  content.append(input, errorMsg, btnRow);
   
   // Fokus auf Input setzen
   setTimeout(() => input.focus(), 50);

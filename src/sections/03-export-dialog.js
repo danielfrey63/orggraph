@@ -46,7 +46,7 @@ export function initializeExport() {
   // Keyboard-Event-Listener für Enter-Taste
   document.addEventListener('keydown', (e) => {
     // Nur wenn Modal geöffnet ist
-    if (exportModal && exportModal.style.display === 'flex') {
+    if (exportModal && exportModal.classList.contains('open')) {
       if (e.key === 'Enter') {
         e.preventDefault();
         
@@ -78,13 +78,8 @@ export function initializeExport() {
       btn.classList.add('active');
       
       // Optionen anzeigen/verstecken
-      if (format === 'svg') {
-        svgOptionsDiv.style.display = 'block';
-        pngOptionsDiv.style.display = 'none';
-      } else if (format === 'png') {
-        svgOptionsDiv.style.display = 'none';
-        pngOptionsDiv.style.display = 'block';
-      }
+      svgOptionsDiv.hidden = format !== 'svg';
+      pngOptionsDiv.hidden = format !== 'png';
     });
   });
   
@@ -144,7 +139,7 @@ export function initializeExport() {
  */
 export function showExportDialog() {
   if (exportModal) {
-    exportModal.style.display = 'flex';
+    exportModal.classList.add('open');
     
     // Setze die erste Auflösungs-Preset als aktiv
     if (resolutionPresets && resolutionPresets.length > 0) {
@@ -158,8 +153,84 @@ export function showExportDialog() {
  */
 export function hideExportDialog() {
   if (exportModal) {
-    exportModal.style.display = 'none';
+    exportModal.classList.remove('open');
   }
+}
+
+/**
+ * Runtime modal following the #exportModal contract:
+ * .modal.open > .modal-overlay + .modal-container > .modal-header (h2 + ×) + .modal-content.
+ * Returns the root, the content host and close(), which removes the dialog and
+ * reports onClose. Overlay click and the header × close; Escape stays with the
+ * caller (it usually belongs to the focused input).
+ */
+export function createModal({ id, title, onClose } = {}) {
+  const modal = document.createElement('div');
+  if (id) modal.id = id;
+  modal.className = 'modal open';
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  const container = document.createElement('div');
+  container.className = 'modal-container';
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  const heading = document.createElement('h2');
+  heading.textContent = title || '';
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'modal-close-btn';
+  closeBtn.innerHTML = '&times;';
+  header.append(heading, closeBtn);
+  const content = document.createElement('div');
+  content.className = 'modal-content';
+  container.append(header, content);
+  modal.append(overlay, container);
+  const close = () => {
+    if (!modal.isConnected) return;
+    modal.remove();
+    if (onClose) onClose();
+  };
+  closeBtn.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal || e.target === overlay) close(); });
+  document.body.appendChild(modal);
+  return { modal, content, close };
+}
+
+/** Resolved value of a CSS custom property on :root (export clones carry literal values). */
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name);
+
+/**
+ * Export clone of the live graph: sanitized (FR-8.5), namespaced, with the
+ * label-visibility classes carried over so the export matches the screen.
+ */
+function buildExportClone(svgElement) {
+  const svgClone = svgElement.cloneNode(true);
+  sanitizeExportClone(svgClone);
+  svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  for (const cls of ['labels-hidden', 'labels-attributes-only']) {
+    if (svgElement.classList.contains(cls)) svgClone.classList.add(cls);
+  }
+  return svgClone;
+}
+
+/**
+ * Inline stylesheet for an export clone — the graph's CSS variables resolved
+ * to literal values. withBody adds the canvas background (PNG rasterization).
+ */
+function buildExportStylesheet({ withBody = false } = {}) {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = `
+      .link { stroke: ${cssVar('--link-stroke')}; stroke-width: ${cssVar('--link-stroke-width')}; stroke-opacity: ${cssVar('--link-opacity')}; }
+      .node-circle { fill: ${cssVar('--node-fill')}; stroke: ${cssVar('--node-stroke')}; stroke-width: ${cssVar('--node-stroke-width')}; }
+      .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${cssVar('--cluster-opacity')}; }
+      .label { font-size: 8px; fill: #000; }
+      .attribute-circle { fill: none; opacity: 0.8; }
+      ${withBody ? `body { background-color: ${cssVar('--canvas-bg')}; }` : ''}
+      .labels-hidden .label { display: none; }
+      .labels-attributes-only .label { display: none; }
+      .labels-attributes-only .node.has-attributes .label { display: block; }
+    `;
+  return styleElement;
 }
 
 /**
@@ -196,13 +267,8 @@ export function exportAsSvg() {
   }
   
   try {
-    // Klonen des SVG-Elements für den Export
-    const svgClone = svgElement.cloneNode(true);
-    sanitizeExportClone(svgClone);
+    const svgClone = buildExportClone(svgElement);
 
-    // SVG-Attribute für Export setzen
-    svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    
     // Aktuelles ViewBox und Style extrahieren
     const viewBox = svgClone.getAttribute('viewBox');
     const computedStyle = window.getComputedStyle(svgElement);
@@ -214,31 +280,9 @@ export function exportAsSvg() {
     if (!viewBox) {
       svgClone.setAttribute('viewBox', `0 0 ${width} ${height}`);
     }
-    
-    // Labels-Sichtbarkeit übernehmen - prüfe ob das SVG die entsprechenden Klassen hat [SF]
-    const originalSvg = document.querySelector(SVG_ID);
-    if (originalSvg) {
-      if (originalSvg.classList.contains('labels-hidden')) {
-        svgClone.classList.add('labels-hidden');
-      }
-      if (originalSvg.classList.contains('labels-attributes-only')) {
-        svgClone.classList.add('labels-attributes-only');
-      }
-    }
-    
+
     // Farben und Stile als inline CSS einfügen
-    const styleElement = document.createElement('style');
-    styleElement.textContent = `
-      .link { stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--link-stroke')}; stroke-width: ${getComputedStyle(document.documentElement).getPropertyValue('--link-stroke-width')}; stroke-opacity: ${getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')}; }
-      .node-circle { fill: ${getComputedStyle(document.documentElement).getPropertyValue('--node-fill')}; stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--node-stroke')}; stroke-width: ${getComputedStyle(document.documentElement).getPropertyValue('--node-stroke-width')}; }
-      .cluster { fill: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-fill')}; stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-opacity')}; }
-      .label { font-size: 8px; fill: #000; }
-      .attribute-circle { fill: none; opacity: 0.8; }
-      .labels-hidden .label { display: none; }
-      .labels-attributes-only .label { display: none; }
-      .labels-attributes-only .node.has-attributes .label { display: block; }
-    `;
-    svgClone.insertBefore(styleElement, svgClone.firstChild);
+    svgClone.insertBefore(buildExportStylesheet(), svgClone.firstChild);
     
     // SVG in Text umwandeln
     const serializer = new XMLSerializer();
@@ -285,10 +329,7 @@ export function exportAsPng() {
     // Qualitätsfaktor (Pixeldichte) - immer Maximum für beste Qualität
     const quality = 4.0;
     
-    // Aktuellen Inhalt des SVGs klonen und für Export aufbereiten
-    const svgClone = svgElement.cloneNode(true);
-    sanitizeExportClone(svgClone);
-    svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const svgClone = buildExportClone(svgElement);
     
     // Aktuelles ViewBox und Style extrahieren
     const currentViewBox = svgElement.getAttribute('viewBox') || `0 0 ${WIDTH} ${HEIGHT}`;
@@ -297,38 +338,15 @@ export function exportAsPng() {
     svgClone.setAttribute('width', width);
     svgClone.setAttribute('height', height);
     svgClone.setAttribute('viewBox', currentViewBox);
-    
-    // Labels-Sichtbarkeit übernehmen - prüfe ob das SVG die entsprechenden Klassen hat [SF]
-    const originalSvg = document.querySelector(SVG_ID);
-    if (originalSvg) {
-      if (originalSvg.classList.contains('labels-hidden')) {
-        svgClone.classList.add('labels-hidden');
-      }
-      if (originalSvg.classList.contains('labels-attributes-only')) {
-        svgClone.classList.add('labels-attributes-only');
-      }
-    }
-    
+
     // Inline-Styles einfügen
-    const styleElement = document.createElement('style');
-    styleElement.textContent = `
-      .link { stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--link-stroke')}; stroke-width: ${getComputedStyle(document.documentElement).getPropertyValue('--link-stroke-width')}; stroke-opacity: ${getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')}; }
-      .node-circle { fill: ${getComputedStyle(document.documentElement).getPropertyValue('--node-fill')}; stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--node-stroke')}; stroke-width: ${getComputedStyle(document.documentElement).getPropertyValue('--node-stroke-width')}; }
-      .cluster { fill: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-fill')}; stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-opacity')}; }
-      .label { font-size: 8px; fill: #000; }
-      .attribute-circle { fill: none; opacity: 0.8; }
-      body { background-color: ${getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg')}; }
-      .labels-hidden .label { display: none; }
-      .labels-attributes-only .label { display: none; }
-      .labels-attributes-only .node.has-attributes .label { display: block; }
-    `;
-    svgClone.insertBefore(styleElement, svgClone.firstChild);
-    
+    svgClone.insertBefore(buildExportStylesheet({ withBody: true }), svgClone.firstChild);
+
     // Hintergrundfarbe hinzufügen (da SVGs standardmäßig keinen Hintergrund haben)
     const backgroundRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     backgroundRect.setAttribute('width', '100%');
     backgroundRect.setAttribute('height', '100%');
-    backgroundRect.setAttribute('fill', getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg'));
+    backgroundRect.setAttribute('fill', cssVar('--canvas-bg'));
     svgClone.insertBefore(backgroundRect, svgClone.firstChild);
     
     // SVG in Text umwandeln
@@ -347,7 +365,7 @@ export function exportAsPng() {
       canvas.height = height * quality;
       
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg');
+      ctx.fillStyle = cssVar('--canvas-bg');
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
       // Anti-Aliasing aktivieren

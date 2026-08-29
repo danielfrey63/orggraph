@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderProfileSwitcher, openNewProfileDropZone } from '../src/sections/20-profiles.js';
+import { setIcon } from '../src/sections/02-icons.js';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(() => {
   document.body.innerHTML = '<footer class="app-footer"><div class="footer-stats">' +
+    '<span id="profileSwitcher" class="profile-switcher"></span><span class="stat-separator">|</span>' +
     '<span id="status">Bereit</span></div></footer>';
+  globalThis.setIcon = setIcon;
   globalThis.listProfiles = vi.fn(async () => [
     { id: 'default', name: 'Standard' },
     { id: 'hrm', name: 'HRM' },

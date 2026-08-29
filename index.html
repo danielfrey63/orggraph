@@ -7,6 +7,8 @@
   <link rel="icon" href="data:,">
   <style>
 * { box-sizing: border-box; }
+/* The hidden attribute wins over any display rule — show/hide chrome via el.hidden, not inline display */
+[hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg); min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
 body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); background: var(--bg); }
 .app-header, .app-footer { padding: 12px 16px; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); }
@@ -176,15 +178,6 @@ input#depth {
   background: var(--control-hover);
 }
 
-.combo-list-floating {
-  position: fixed;
-  z-index: 99999;
-  display: none;
-}
-.combo-list-floating.open {
-  display: block;
-}
-
 /* Informational list entries (hints, empty results) */
 .combo-list li.combo-hint {
   padding: 8px;
@@ -193,12 +186,6 @@ input#depth {
 }
 .combo-list li.combo-hint--more {
   border-top: 1px solid #e5e7eb;
-}
-.combo-list li.no-results {
-  font-style: italic;
-  color: var(--text-muted);
-  text-align: center;
-  padding: 10px;
 }
 .viewport { display: grid; grid-template-columns: 1fr 320px; gap: 0; overflow: hidden; }
 .canvas { position: relative; overflow: hidden; background: var(--panel-bg); }
@@ -317,11 +304,12 @@ input#depth {
 .legend-list li { display: block; margin-bottom: 1px; }
 
 /* Neues Layout für Legend-List Items */
-.legend-list .legend-row { 
-  display: flex; 
-  align-items: center; 
+.legend-list .legend-row {
+  display: flex;
+  align-items: center;
   width: 100%;
   padding-left: 4px;
+  cursor: pointer;
   border-radius: 3px; 
   transition: background-color 0.2s ease;
   position: relative;
@@ -645,11 +633,6 @@ input#depth {
 
 .attribute-eye-btn {
   font-size: 14px;
-}
-
-/* Legacy Support für alte Twisty-Buttons (werden durch Chevrons ersetzt) */
-.legend-list .twisty { 
-  display: none; /* Verstecken da durch Chevron ersetzt */
 }
 
 /* Legacy Support für alte Attribute Collapse-Buttons */
@@ -1045,9 +1028,15 @@ input#depth {
 }
 
 .legend-header:hover .legend-icon-btn,
-.legend-row:hover .legend-icon-btn {
+.legend-row:hover .legend-icon-btn,
+.legend-icon-btn.visible {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* Stacked double chevron (expand/collapse all) */
+#expandAllAttributes .ic + .ic {
+  margin-top: -8px;
 }
 
 .legend-icon-btn:hover {
@@ -1183,19 +1172,6 @@ input#depth {
   line-height: 1;
 }
 
-/* Ensure ALL Toggle-Icons are hidden by default and only show on hover */
-.legend-icon-btn {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.legend-header:hover .legend-icon-btn,
-.legend-row:hover .legend-icon-btn,
-.legend-icon-btn.visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
 .legend-title {
   font-size: 14px;
   font-weight: 600;
@@ -1256,7 +1232,7 @@ body > .combo-list li {
 
 /* Separator wurde entfernt */
 
-/* Export Dialog Styles */
+/* Modal dialogs (#exportModal markup and createModal); visibility via .open only */
 .modal {
   position: fixed;
   top: 0;
@@ -1264,9 +1240,12 @@ body > .combo-list li {
   right: 0;
   bottom: 0;
   z-index: 2000;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
+}
+.modal.open {
+  display: flex;
 }
 
 .modal-overlay {
@@ -1326,11 +1305,6 @@ body > .combo-list li {
 }
 
 /* Form elements inside modals (shared by dynamically built dialogs) */
-.modal-title {
-  margin: 0 0 16px 0;
-  color: var(--text-strong);
-}
-
 .modal-input {
   width: 100%;
   padding: 8px 12px;
@@ -1340,6 +1314,10 @@ body > .combo-list li {
   color: var(--text);
   font-size: 14px;
   box-sizing: border-box;
+}
+
+.modal-input--error {
+  border-color: #ef4444;
 }
 
 .modal-error {
@@ -1521,6 +1499,8 @@ body.dz-dragging::after {
   border-radius: 4px;
   cursor: pointer;
 }
+.profile-btn { display: inline-flex; align-items: center; }
+.profile-btn .ic { width: 12px; height: 12px; }
 .profile-btn:hover { color: var(--text-strong, #e8ecf2); border-color: var(--text-muted, #8a93a3); }
 
 .export-options {
@@ -1714,26 +1694,6 @@ body.dz-dragging::after {
   margin-left: 8px;
 }
 
-/* Submenüs nutzen höhere z-index Werte */
-.node-context-menu[data-level="2"] {
-  z-index: 2001;
-  min-width: 200px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.node-context-menu[data-level="3"] {
-  z-index: 2002;
-  min-width: 180px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.menu-divider {
-  border-top: 1px solid #374151;
-  margin: 4px 0;
-}
-
 /* Farb-Indikator in der Attribut-Legende (Ring wie im Graphen);
    nur die border-color kommt dynamisch aus JS */
 .attribute-color-dot {
@@ -1834,12 +1794,12 @@ body.dz-dragging::after {
       <svg id="graph" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
     <aside id="legendPane" aria-label="Legende">
-      <div class="legend-section" id="viewsSection" style="display: none;">
+      <div class="legend-section" id="viewsSection" hidden>
         <div class="legend-header">
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
               <button class="legend-chevron expanded" data-target="viewsLegend" aria-label="Ein-/Ausklappen">
-                <!-- SVG wird durch JavaScript gesetzt -->
+                <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title">Views</h2>
             </div>
@@ -1858,7 +1818,7 @@ body.dz-dragging::after {
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
               <button class="legend-chevron expanded" data-target="legend" aria-label="Ein-/Ausklappen">
-                <!-- SVG wird durch JavaScript gesetzt -->
+                <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title">Cluster</h2>
             </div>
@@ -1886,14 +1846,14 @@ body.dz-dragging::after {
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
               <button class="legend-chevron expanded" data-target="attributeContainer" aria-label="Ein-/Ausklappen">
-                <!-- SVG wird durch JavaScript gesetzt -->
+                <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title">Attribute</h2>
             </div>
             <div class="legend-actions-area">
               <button id="expandAllAttributes" class="legend-icon-btn" title="Alle Kategorien expandieren/kollabieren" data-ignore-header-click="true">
                 <i data-icon="chevronDown"></i>
-                <i data-icon="chevronDown" style="margin-top: -8px;"></i>
+                <i data-icon="chevronDown"></i>
               </button>
               <button id="toggleAllAttributes" class="legend-icon-btn" title="Alle Attribute an/abwählen" data-ignore-header-click="true">
                 <i data-icon="checkAll"></i>
@@ -1919,12 +1879,12 @@ body.dz-dragging::after {
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
               <button class="legend-chevron expanded" data-target="hiddenLegend" aria-label="Ein-/Ausklappen">
-                <!-- SVG wird durch JavaScript gesetzt -->
+                <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title" id="hiddenLegendTitle">Ausgeblendet</h2>
             </div>
             <div class="legend-actions-area">
-              <button id="toggleAllHiddenVisibility" class="legend-icon-btn" title="Alle temporär einblenden" data-ignore-header-click="true" style="display: none;">
+              <button id="toggleAllHiddenVisibility" class="legend-icon-btn" title="Alle temporär einblenden" data-ignore-header-click="true" hidden>
                 <i data-icon="eyeClosed"></i>
               </button>
             </div>
@@ -1936,6 +1896,18 @@ body.dz-dragging::after {
   </main>
   <footer class="app-footer">
     <div class="footer-stats">
+      <!-- FR-8.6: time controls lead the footer; revealed by og2BuildTimeControls -->
+      <span id="timeControls" class="time-controls" hidden>
+        <span>Zeit: </span>
+        <input type="range" id="timeSlider" min="0" max="0" step="1" />
+        <span id="timeStamp"></span>
+        <select id="diffT1" title="Diff T1"></select>
+        <select id="diffT2" title="Diff T2"></select>
+        <button id="diffToggle" class="toggle-btn" title="Diff-Modus T1→T2">Δ</button>
+        <span class="stat-separator">|</span>
+      </span>
+      <span id="profileSwitcher" class="profile-switcher"></span>
+      <span class="stat-separator">|</span>
       <span id="status">Bereit</span>
       <span class="stat-separator">|</span>
       <span id="stats-loaded">Geladen: <strong id="stats-nodes-total">0</strong> Knoten, <strong id="stats-links-total">0</strong> Kanten</span>
@@ -1949,10 +1921,12 @@ body.dz-dragging::after {
       <span id="stats-hidden">Ausgeblendet: <strong id="stats-hidden-count">0</strong></span>
       <span id="stats-capped" hidden><span class="stat-separator">|</span> gekappt — mindestens <strong id="stats-capped-count">0</strong> weitere</span>
       <span id="stats-diff" hidden><span class="stat-separator">|</span> Diff: <strong id="stats-diff-new">0</strong> neu, <strong id="stats-diff-removed">0</strong> weg, <strong id="stats-diff-changed">0</strong> geändert</span>
+      <span class="stat-separator">|</span>
+      <button id="resetData" class="footer-reset-btn" type="button" title="Alle lokalen Daten löschen (sämtliche Profile) und leer neu starten" aria-label="Alle lokalen Daten löschen"><i data-icon="trash"></i></button>
     </div>
   </footer>
   <!-- Export Dialog -->
-  <div id="exportModal" class="modal" style="display:none;">
+  <div id="exportModal" class="modal">
     <div class="modal-overlay"></div>
     <div class="modal-container">
       <div class="modal-header">
@@ -1969,7 +1943,7 @@ body.dz-dragging::after {
             </div>
           </div>
           
-          <div id="svgOptions" class="export-option-group" style="display:none;">
+          <div id="svgOptions" class="export-option-group" hidden>
             <button id="downloadSvg" class="export-btn-large">SVG herunterladen</button>
           </div>
           
@@ -2001,7 +1975,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.180.177';
+const APP_VERSION = '1.181.178';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -2105,6 +2079,8 @@ const ICON = {
   cloudDownload:`<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
   close:        `<svg ${SVG_ATTR}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
   plus:         `<svg ${SVG_ATTR}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  edit:         `<svg ${SVG_ATTR}><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 21.5 2 23l1.5-5.5L17 3z"/></svg>`,
+  copy:         `<svg ${SVG_ATTR}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
   trash:        `<svg ${SVG_ATTR}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
 };
 
@@ -2184,7 +2160,7 @@ function initializeExport() {
   // Keyboard-Event-Listener für Enter-Taste
   document.addEventListener('keydown', (e) => {
     // Nur wenn Modal geöffnet ist
-    if (exportModal && exportModal.style.display === 'flex') {
+    if (exportModal && exportModal.classList.contains('open')) {
       if (e.key === 'Enter') {
         e.preventDefault();
         
@@ -2216,13 +2192,8 @@ function initializeExport() {
       btn.classList.add('active');
       
       // Optionen anzeigen/verstecken
-      if (format === 'svg') {
-        svgOptionsDiv.style.display = 'block';
-        pngOptionsDiv.style.display = 'none';
-      } else if (format === 'png') {
-        svgOptionsDiv.style.display = 'none';
-        pngOptionsDiv.style.display = 'block';
-      }
+      svgOptionsDiv.hidden = format !== 'svg';
+      pngOptionsDiv.hidden = format !== 'png';
     });
   });
   
@@ -2282,7 +2253,7 @@ function initializeExport() {
  */
 function showExportDialog() {
   if (exportModal) {
-    exportModal.style.display = 'flex';
+    exportModal.classList.add('open');
     
     // Setze die erste Auflösungs-Preset als aktiv
     if (resolutionPresets && resolutionPresets.length > 0) {
@@ -2296,8 +2267,84 @@ function showExportDialog() {
  */
 function hideExportDialog() {
   if (exportModal) {
-    exportModal.style.display = 'none';
+    exportModal.classList.remove('open');
   }
+}
+
+/**
+ * Runtime modal following the #exportModal contract:
+ * .modal.open > .modal-overlay + .modal-container > .modal-header (h2 + ×) + .modal-content.
+ * Returns the root, the content host and close(), which removes the dialog and
+ * reports onClose. Overlay click and the header × close; Escape stays with the
+ * caller (it usually belongs to the focused input).
+ */
+function createModal({ id, title, onClose } = {}) {
+  const modal = document.createElement('div');
+  if (id) modal.id = id;
+  modal.className = 'modal open';
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  const container = document.createElement('div');
+  container.className = 'modal-container';
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  const heading = document.createElement('h2');
+  heading.textContent = title || '';
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'modal-close-btn';
+  closeBtn.innerHTML = '&times;';
+  header.append(heading, closeBtn);
+  const content = document.createElement('div');
+  content.className = 'modal-content';
+  container.append(header, content);
+  modal.append(overlay, container);
+  const close = () => {
+    if (!modal.isConnected) return;
+    modal.remove();
+    if (onClose) onClose();
+  };
+  closeBtn.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal || e.target === overlay) close(); });
+  document.body.appendChild(modal);
+  return { modal, content, close };
+}
+
+/** Resolved value of a CSS custom property on :root (export clones carry literal values). */
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name);
+
+/**
+ * Export clone of the live graph: sanitized (FR-8.5), namespaced, with the
+ * label-visibility classes carried over so the export matches the screen.
+ */
+function buildExportClone(svgElement) {
+  const svgClone = svgElement.cloneNode(true);
+  sanitizeExportClone(svgClone);
+  svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  for (const cls of ['labels-hidden', 'labels-attributes-only']) {
+    if (svgElement.classList.contains(cls)) svgClone.classList.add(cls);
+  }
+  return svgClone;
+}
+
+/**
+ * Inline stylesheet for an export clone — the graph's CSS variables resolved
+ * to literal values. withBody adds the canvas background (PNG rasterization).
+ */
+function buildExportStylesheet({ withBody = false } = {}) {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = `
+      .link { stroke: ${cssVar('--link-stroke')}; stroke-width: ${cssVar('--link-stroke-width')}; stroke-opacity: ${cssVar('--link-opacity')}; }
+      .node-circle { fill: ${cssVar('--node-fill')}; stroke: ${cssVar('--node-stroke')}; stroke-width: ${cssVar('--node-stroke-width')}; }
+      .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${cssVar('--cluster-opacity')}; }
+      .label { font-size: 8px; fill: #000; }
+      .attribute-circle { fill: none; opacity: 0.8; }
+      ${withBody ? `body { background-color: ${cssVar('--canvas-bg')}; }` : ''}
+      .labels-hidden .label { display: none; }
+      .labels-attributes-only .label { display: none; }
+      .labels-attributes-only .node.has-attributes .label { display: block; }
+    `;
+  return styleElement;
 }
 
 /**
@@ -2334,13 +2381,8 @@ function exportAsSvg() {
   }
   
   try {
-    // Klonen des SVG-Elements für den Export
-    const svgClone = svgElement.cloneNode(true);
-    sanitizeExportClone(svgClone);
+    const svgClone = buildExportClone(svgElement);
 
-    // SVG-Attribute für Export setzen
-    svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    
     // Aktuelles ViewBox und Style extrahieren
     const viewBox = svgClone.getAttribute('viewBox');
     const computedStyle = window.getComputedStyle(svgElement);
@@ -2352,31 +2394,9 @@ function exportAsSvg() {
     if (!viewBox) {
       svgClone.setAttribute('viewBox', `0 0 ${width} ${height}`);
     }
-    
-    // Labels-Sichtbarkeit übernehmen - prüfe ob das SVG die entsprechenden Klassen hat [SF]
-    const originalSvg = document.querySelector(SVG_ID);
-    if (originalSvg) {
-      if (originalSvg.classList.contains('labels-hidden')) {
-        svgClone.classList.add('labels-hidden');
-      }
-      if (originalSvg.classList.contains('labels-attributes-only')) {
-        svgClone.classList.add('labels-attributes-only');
-      }
-    }
-    
+
     // Farben und Stile als inline CSS einfügen
-    const styleElement = document.createElement('style');
-    styleElement.textContent = `
-      .link { stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--link-stroke')}; stroke-width: ${getComputedStyle(document.documentElement).getPropertyValue('--link-stroke-width')}; stroke-opacity: ${getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')}; }
-      .node-circle { fill: ${getComputedStyle(document.documentElement).getPropertyValue('--node-fill')}; stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--node-stroke')}; stroke-width: ${getComputedStyle(document.documentElement).getPropertyValue('--node-stroke-width')}; }
-      .cluster { fill: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-fill')}; stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-opacity')}; }
-      .label { font-size: 8px; fill: #000; }
-      .attribute-circle { fill: none; opacity: 0.8; }
-      .labels-hidden .label { display: none; }
-      .labels-attributes-only .label { display: none; }
-      .labels-attributes-only .node.has-attributes .label { display: block; }
-    `;
-    svgClone.insertBefore(styleElement, svgClone.firstChild);
+    svgClone.insertBefore(buildExportStylesheet(), svgClone.firstChild);
     
     // SVG in Text umwandeln
     const serializer = new XMLSerializer();
@@ -2423,10 +2443,7 @@ function exportAsPng() {
     // Qualitätsfaktor (Pixeldichte) - immer Maximum für beste Qualität
     const quality = 4.0;
     
-    // Aktuellen Inhalt des SVGs klonen und für Export aufbereiten
-    const svgClone = svgElement.cloneNode(true);
-    sanitizeExportClone(svgClone);
-    svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const svgClone = buildExportClone(svgElement);
     
     // Aktuelles ViewBox und Style extrahieren
     const currentViewBox = svgElement.getAttribute('viewBox') || `0 0 ${WIDTH} ${HEIGHT}`;
@@ -2435,38 +2452,15 @@ function exportAsPng() {
     svgClone.setAttribute('width', width);
     svgClone.setAttribute('height', height);
     svgClone.setAttribute('viewBox', currentViewBox);
-    
-    // Labels-Sichtbarkeit übernehmen - prüfe ob das SVG die entsprechenden Klassen hat [SF]
-    const originalSvg = document.querySelector(SVG_ID);
-    if (originalSvg) {
-      if (originalSvg.classList.contains('labels-hidden')) {
-        svgClone.classList.add('labels-hidden');
-      }
-      if (originalSvg.classList.contains('labels-attributes-only')) {
-        svgClone.classList.add('labels-attributes-only');
-      }
-    }
-    
+
     // Inline-Styles einfügen
-    const styleElement = document.createElement('style');
-    styleElement.textContent = `
-      .link { stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--link-stroke')}; stroke-width: ${getComputedStyle(document.documentElement).getPropertyValue('--link-stroke-width')}; stroke-opacity: ${getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')}; }
-      .node-circle { fill: ${getComputedStyle(document.documentElement).getPropertyValue('--node-fill')}; stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--node-stroke')}; stroke-width: ${getComputedStyle(document.documentElement).getPropertyValue('--node-stroke-width')}; }
-      .cluster { fill: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-fill')}; stroke: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${getComputedStyle(document.documentElement).getPropertyValue('--cluster-opacity')}; }
-      .label { font-size: 8px; fill: #000; }
-      .attribute-circle { fill: none; opacity: 0.8; }
-      body { background-color: ${getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg')}; }
-      .labels-hidden .label { display: none; }
-      .labels-attributes-only .label { display: none; }
-      .labels-attributes-only .node.has-attributes .label { display: block; }
-    `;
-    svgClone.insertBefore(styleElement, svgClone.firstChild);
-    
+    svgClone.insertBefore(buildExportStylesheet({ withBody: true }), svgClone.firstChild);
+
     // Hintergrundfarbe hinzufügen (da SVGs standardmäßig keinen Hintergrund haben)
     const backgroundRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     backgroundRect.setAttribute('width', '100%');
     backgroundRect.setAttribute('height', '100%');
-    backgroundRect.setAttribute('fill', getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg'));
+    backgroundRect.setAttribute('fill', cssVar('--canvas-bg'));
     svgClone.insertBefore(backgroundRect, svgClone.firstChild);
     
     // SVG in Text umwandeln
@@ -2485,7 +2479,7 @@ function exportAsPng() {
       canvas.height = height * quality;
       
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg');
+      ctx.fillStyle = cssVar('--canvas-bg');
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
       // Anti-Aliasing aktivieren
@@ -3834,23 +3828,8 @@ function showPasswordDialog(onSubmit) {
   const existing = document.getElementById('passwordDialog');
   if (existing) existing.remove();
   
-  // Dialog erstellen — nutzt den .modal-Vertrag aus styles.css (wie #exportModal)
-  const overlay = document.createElement('div');
-  overlay.id = 'passwordDialog';
-  overlay.className = 'modal';
-
-  const backdrop = document.createElement('div');
-  backdrop.className = 'modal-overlay';
-
-  const dialog = document.createElement('div');
-  dialog.className = 'modal-container';
-
-  const content = document.createElement('div');
-  content.className = 'modal-content';
-
-  const title = document.createElement('h3');
-  title.textContent = 'Passwort erforderlich';
-  title.className = 'modal-title';
+  // Dialog über die gemeinsame Modal-Factory (gleicher Vertrag wie #exportModal)
+  const { content, close: closeDialog } = createModal({ id: 'passwordDialog', title: 'Passwort' });
 
   const input = document.createElement('input');
   input.type = 'password';
@@ -3871,8 +3850,6 @@ function showPasswordDialog(onSubmit) {
   submitBtn.textContent = 'Bestätigen';
   submitBtn.className = 'btn-primary';
   
-  const closeDialog = () => overlay.remove();
-  
   const trySubmit = () => {
     const pw = input.value;
     if (pw === envConfig?.TOOLBAR_PSEUDO_PASSWORD) {
@@ -3880,7 +3857,7 @@ function showPasswordDialog(onSubmit) {
       onSubmit(pw);
     } else {
       errorMsg.textContent = 'Falsches Passwort';
-      input.style.borderColor = '#ef4444';
+      input.classList.add('modal-input--error');
       input.focus();
       input.select();
     }
@@ -3892,20 +3869,9 @@ function showPasswordDialog(onSubmit) {
     if (e.key === 'Enter') trySubmit();
     if (e.key === 'Escape') closeDialog();
   });
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay || e.target === backdrop) closeDialog();
-  });
 
-  btnRow.appendChild(cancelBtn);
-  btnRow.appendChild(submitBtn);
-  content.appendChild(title);
-  content.appendChild(input);
-  content.appendChild(errorMsg);
-  content.appendChild(btnRow);
-  dialog.appendChild(content);
-  overlay.appendChild(backdrop);
-  overlay.appendChild(dialog);
-  document.body.appendChild(overlay);
+  btnRow.append(cancelBtn, submitBtn);
+  content.append(input, errorMsg, btnRow);
   
   // Fokus auf Input setzen
   setTimeout(() => input.focus(), 50);
@@ -4782,7 +4748,7 @@ function populateCombo(filterText) {
 
   // Require minimum search length for large datasets
   if (term.length > 0 && term.length < MIN_SEARCH_LENGTH) {
-    list.innerHTML = '<li class="combo-hint">Mindestens ' + MIN_SEARCH_LENGTH + ' Zeichen eingeben...</li>';
+    list.replaceChildren(createComboHint(`Mindestens ${MIN_SEARCH_LENGTH} Zeichen eingeben...`));
     list.hidden = false;
     filteredItems = [];
     activeIndex = -1;
@@ -4839,14 +4805,19 @@ function populateCombo(filterText) {
   
   // Show "more results" hint if truncated
   if (count >= MAX_DROPDOWN_ITEMS) {
-    const hint = document.createElement('li');
-    hint.className = 'combo-hint combo-hint--more';
-    hint.textContent = `Nur erste ${MAX_DROPDOWN_ITEMS} Ergebnisse angezeigt. Suchbegriff verfeinern...`;
-    frag.appendChild(hint);
+    frag.appendChild(createComboHint(`Nur erste ${MAX_DROPDOWN_ITEMS} Ergebnisse angezeigt. Suchbegriff verfeinern...`, { more: true }));
   }
   
   list.appendChild(frag);
   list.hidden = filteredItems.length === 0;
+}
+
+// Informational entry of the search dropdown (.combo-hint; more = truncation notice)
+function createComboHint(text, { more = false } = {}) {
+  const li = document.createElement('li');
+  li.className = more ? 'combo-hint combo-hint--more' : 'combo-hint';
+  li.textContent = text;
+  return li;
 }
 
 function setActive(idx) {
@@ -5383,7 +5354,7 @@ function updateGlobalHiddenVisibilityButton() {
   if (!btn) return;
   
   const hasHidden = hiddenByRoot.size > 0;
-  btn.style.display = hasHidden ? '' : 'none';
+  btn.hidden = !hasHidden;
   
   if (hasHidden) {
     // Verwende active-Klasse wie bei OEs/Attributen für konsistentes Verhalten
@@ -5479,7 +5450,7 @@ function createLegendChevron({ collapsed = false, onToggle } = {}) {
   chevron.type = 'button';
   chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
   chevron.title = 'Ein-/Ausklappen';
-  chevron.innerHTML = getChevronSVG();
+  setIcon(chevron, 'chevronDown');
   chevron.addEventListener('click', (e) => {
     e.stopPropagation();
     const li = chevron.closest('li');
@@ -5628,8 +5599,6 @@ function renderOrgLegendNode(oid, depth, options) {
     updateRowState();
     syncGraphAndLegendColors();
   });
-
-  row.style.cursor = 'pointer';
 
   const hiddenInput = document.createElement('input');
   hiddenInput.type = 'checkbox';
@@ -5863,14 +5832,7 @@ function updateLegendChips(rootEl) {
     allowedOrgs = newAllowed;
   }
   // Wenn OEs ausgeblendet sind (oesVisible=false), dann bleibt allowedOrgs leer
-  // For each legend entry (li), ensure chips have transparent background
-  root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
-    const chip = li.querySelector(':scope > .legend-row .legend-label-chip');
-    if (!chip) return;
-    // Immer transparent, damit CSS-Hover funktioniert
-    chip.style.background = 'transparent';
-  });
-} 
+}
 
 function updateLegendRowColors(rootEl) {
   const root = rootEl || document;
@@ -7266,44 +7228,6 @@ function applyFromUI(triggerSource = 'unknown', callStack = false) {
 /**
  * Hilfsfunktionen für Icons (zentrale Registry ICON, siehe icons.js)
  */
-function getCheckboxSVG(checked = false) {
-  return checked ? ICON.check : ICON.close;
-}
-
-function getChevronSVG() {
-  return ICON.chevronDown;
-}
-
-function getCheckAllSVG() {
-  return ICON.checkAll;
-}
-
-function getEyeSVG(closed = false) {
-  return closed ? ICON.eyeClosed : ICON.eye;
-}
-
-function getSaveSVG() {
-  return ICON.save;
-}
-
-function getDownloadSVG() {
-  return ICON.cloudDownload;
-}
-
-function updateCheckboxIcon(checkboxElement, checked) {
-  checkboxElement.innerHTML = getCheckboxSVG(checked);
-  checkboxElement.className = checked ? 
-    checkboxElement.className.replace(/\s*checked/, '') + ' checked' : 
-    checkboxElement.className.replace(/\s*checked/, '');
-}
-
-function initializeChevronIcons() {
-  // Aktualisiere alle Chevron-Buttons im HTML mit dem zentralen SVG
-  document.querySelectorAll('.legend-chevron').forEach(chevronBtn => {
-    chevronBtn.innerHTML = getChevronSVG();
-  });
-}
-
 /**
  * Initialisiert die Collapsed-Zustände der Legend-Sektionen aus ENV [SF]
  */
@@ -7632,9 +7556,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   const list = document.querySelector(LIST_COMBO_ID);
   // E25: no hidden footer-status file intake — data enters via the drop
   // zone / file dialog only (FR-6.7).
-  // Initialisiere Chevron-Icons im HTML
-  initializeChevronIcons();
-  
   // Legend-Sektionen aus ENV initialisieren [SF]
   initializeLegendCollapsedStates();
   // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
@@ -7943,10 +7864,6 @@ window.addEventListener("DOMContentLoaded", async () => {
           const childUl = li.querySelector('ul');
           if (childUl) {
             childUl.style.display = '';
-            const twisty = li.querySelector('.twisty');
-            if (twisty && twisty.textContent === '▸') {
-              twisty.textContent = '▾';
-            }
           }
         }
       });
@@ -8376,28 +8293,16 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Factory reset (footer, trash icon): clears the WHOLE IndexedDB — every
   // profile plus the profile list — after confirmation. Distinct from the
   // profile switcher's ✕, which deletes only the active profile (FR-8.9).
-  const footerStats = document.querySelector('.footer-stats');
-  if (footerStats && !document.getElementById('resetData')) {
-    const sep = document.createElement('span');
-    sep.className = 'stat-separator';
-    sep.textContent = '|';
-    const resetBtn = document.createElement('button');
-    resetBtn.id = 'resetData';
-    resetBtn.className = 'footer-reset-btn';
-    resetBtn.type = 'button';
-    resetBtn.title = 'Alle lokalen Daten löschen (sämtliche Profile) und leer neu starten';
-    resetBtn.setAttribute('aria-label', 'Alle lokalen Daten löschen');
-    const resetIcon = document.createElement('i');
-    setIcon(resetIcon, 'trash');
-    resetBtn.appendChild(resetIcon);
+  // The button itself is static footer markup in index.template.html.
+  const resetBtn = document.getElementById('resetData');
+  if (resetBtn && !resetBtn.dataset.wired) {
+    resetBtn.dataset.wired = '1';
     resetBtn.addEventListener('click', () => {
       const ok = (typeof confirm === 'function')
         ? confirm('Alle lokalen Daten löschen? Das entfernt SÄMTLICHE Profile und startet die App leer neu.')
         : true;
       if (ok) resetAllData();
     });
-    footerStats.appendChild(sep);
-    footerStats.appendChild(resetBtn);
   }
 });
 
@@ -8850,24 +8755,13 @@ function initializeCollapsibleLegends() {
 
 /** (Re)build the footer profile switcher from the stored profile list. */
 async function renderProfileSwitcher() {
-  const host = document.querySelector('.footer-stats');
-  if (!host) return;
+  // The host span is static footer markup in index.template.html.
+  const wrap = document.getElementById('profileSwitcher');
+  if (!wrap) return;
 
   const profiles = await listProfiles();
   const active = await getActiveProfileId();
 
-  let wrap = document.getElementById('profileSwitcher');
-  if (!wrap) {
-    wrap = document.createElement('span');
-    wrap.id = 'profileSwitcher';
-    wrap.className = 'profile-switcher';
-    const sep = document.createElement('span');
-    sep.className = 'stat-separator';
-    sep.textContent = '|';
-    // Place the switcher at the very front of the footer stats.
-    host.insertBefore(sep, host.firstChild);
-    host.insertBefore(wrap, host.firstChild);
-  }
   wrap.innerHTML = '';
 
   const label = document.createElement('label');
@@ -8898,24 +8792,24 @@ async function renderProfileSwitcher() {
     b.type = 'button';
     b.className = 'profile-btn';
     b.title = title;
-    b.textContent = icon;
+    setIcon(b, icon);
     b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handler(); });
     wrap.appendChild(b);
     return b;
   };
 
-  mkBtn('+', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
-  mkBtn('✎', 'Aktuelles Profil umbenennen', async () => {
+  mkBtn('plus', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
+  mkBtn('edit', 'Aktuelles Profil umbenennen', async () => {
     const cur = profiles.find(p => p.id === active);
     const name = (typeof prompt === 'function') ? prompt('Profil umbenennen:', cur ? cur.name : active) : null;
     if (name && name.trim()) { await renameProfile(active, name.trim()); await renderProfileSwitcher(); }
   });
-  mkBtn('⧉', 'Aktuelles Profil duplizieren', async () => {
+  mkBtn('copy', 'Aktuelles Profil duplizieren', async () => {
     const cur = profiles.find(p => p.id === active);
     const newId = await duplicateProfile(active, (cur ? cur.name : active) + ' Kopie');
     if (newId) { try { await switchProfile(newId); } catch (_) {} location.reload(); }
   });
-  mkBtn('✕', 'Aktuelles Profil löschen', async () => {
+  mkBtn('close', 'Aktuelles Profil löschen', async () => {
     const cur = profiles.find(p => p.id === active);
     const ok = (typeof confirm === 'function')
       ? confirm(`Profil "${cur ? cur.name : active}" und alle zugehörigen Daten löschen?`)
@@ -12541,8 +12435,8 @@ function og2BuildViewsLegend() {
   const section = document.getElementById('viewsSection');
   const host = document.getElementById('viewsLegend');
   if (!section || !host) return;
-  if (!og2) { section.style.display = 'none'; return; }
-  section.style.display = '';
+  section.hidden = !og2;
+  if (!og2) return;
   host.innerHTML = '';
   const describe = (name) => {
     const rawDef = og2.env && og2.env.VIEWS ? og2.env.VIEWS[name] : null;
@@ -12557,10 +12451,7 @@ function og2BuildViewsLegend() {
     row.classList.add('view-row');
     if (invalid) row.classList.add('view-row-invalid');
     row.title = title;
-    const label = document.createElement('span');
-    label.className = 'legend-label-chip';
-    label.textContent = name;
-    left.appendChild(label);
+    left.appendChild(createLegendChip(name));
     if (!invalid) row.addEventListener('click', () => og2SwitchView(name));
     host.appendChild(row);
   };
@@ -12627,27 +12518,13 @@ async function og2SaveCurrentView() {
 // but disabled, with an explaining tooltip (AK 50); default is asOf on the
 // youngest instant.
 function og2BuildTimeControls() {
-  const host = document.querySelector('.footer-stats');
-  if (!og2 || !host) return;
-  const instants = og2TimeInstants(og2);
-  let wrap = document.getElementById('timeControls');
-  if (!wrap) {
-    wrap = document.createElement('span');
-    wrap.id = 'timeControls';
-    wrap.className = 'time-controls';
-    wrap.innerHTML = '<span>Zeit: </span>'
-      + '<input type="range" id="timeSlider" min="0" max="0" step="1" />'
-      + '<span id="timeStamp"></span>'
-      + '<select id="diffT1" title="Diff T1"></select>'
-      + '<select id="diffT2" title="Diff T2"></select>'
-      + '<button id="diffToggle" class="toggle-btn" title="Diff-Modus T1→T2">Δ</button>';
-    const sep = document.createElement('span');
-    sep.className = 'stat-separator';
-    sep.textContent = '|';
-    // FR-8.6: the time controls lead the footer; the view switch lives in
-    // the views legend since the FR-7.5 revision.
-    host.prepend(sep);
-    host.prepend(wrap);
+  // The controls are static footer markup in index.template.html (FR-8.6: they
+  // lead the footer); this only reveals and wires them once.
+  const wrap = document.getElementById('timeControls');
+  if (!og2 || !wrap) return;
+  wrap.hidden = false;
+  if (!wrap.dataset.wired) {
+    wrap.dataset.wired = '1';
     wrap.querySelector('#timeSlider').addEventListener('input', () => {
       const list = og2TimeInstants(og2);
       const idx = parseInt(wrap.querySelector('#timeSlider').value, 10);

@@ -55,14 +55,14 @@ describe('updateGlobalHiddenVisibilityButton', () => {
 
   it('hides the button when nothing is hidden', () => {
     updateGlobalHiddenVisibilityButton();
-    expect(document.getElementById('toggleAllHiddenVisibility').style.display).toBe('none');
+    expect(document.getElementById('toggleAllHiddenVisibility').hidden).toBe(true);
   });
 
   it('shows and styles the button according to the global toggle', () => {
     globalThis.hiddenByRoot = new Map([['r1', new Set(['x'])]]);
     updateGlobalHiddenVisibilityButton();
     const btn = document.getElementById('toggleAllHiddenVisibility');
-    expect(btn.style.display).toBe('');
+    expect(btn.hidden).toBe(false);
     expect(btn.className).toBe('legend-icon-btn');
     expect(btn.title).toBe('Alle temporär einblenden');
 

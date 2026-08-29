@@ -67,12 +67,12 @@
       <svg id="graph" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
     <aside id="legendPane" aria-label="Legende">
-      <div class="legend-section" id="viewsSection" style="display: none;">
+      <div class="legend-section" id="viewsSection" hidden>
         <div class="legend-header">
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
               <button class="legend-chevron expanded" data-target="viewsLegend" aria-label="Ein-/Ausklappen">
-                <!-- SVG wird durch JavaScript gesetzt -->
+                <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title">Views</h2>
             </div>
@@ -91,7 +91,7 @@
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
               <button class="legend-chevron expanded" data-target="legend" aria-label="Ein-/Ausklappen">
-                <!-- SVG wird durch JavaScript gesetzt -->
+                <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title">Cluster</h2>
             </div>
@@ -119,14 +119,14 @@
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
               <button class="legend-chevron expanded" data-target="attributeContainer" aria-label="Ein-/Ausklappen">
-                <!-- SVG wird durch JavaScript gesetzt -->
+                <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title">Attribute</h2>
             </div>
             <div class="legend-actions-area">
               <button id="expandAllAttributes" class="legend-icon-btn" title="Alle Kategorien expandieren/kollabieren" data-ignore-header-click="true">
                 <i data-icon="chevronDown"></i>
-                <i data-icon="chevronDown" style="margin-top: -8px;"></i>
+                <i data-icon="chevronDown"></i>
               </button>
               <button id="toggleAllAttributes" class="legend-icon-btn" title="Alle Attribute an/abwählen" data-ignore-header-click="true">
                 <i data-icon="checkAll"></i>
@@ -152,12 +152,12 @@
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
               <button class="legend-chevron expanded" data-target="hiddenLegend" aria-label="Ein-/Ausklappen">
-                <!-- SVG wird durch JavaScript gesetzt -->
+                <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title" id="hiddenLegendTitle">Ausgeblendet</h2>
             </div>
             <div class="legend-actions-area">
-              <button id="toggleAllHiddenVisibility" class="legend-icon-btn" title="Alle temporär einblenden" data-ignore-header-click="true" style="display: none;">
+              <button id="toggleAllHiddenVisibility" class="legend-icon-btn" title="Alle temporär einblenden" data-ignore-header-click="true" hidden>
                 <i data-icon="eyeClosed"></i>
               </button>
             </div>
@@ -169,6 +169,18 @@
   </main>
   <footer class="app-footer">
     <div class="footer-stats">
+      <!-- FR-8.6: time controls lead the footer; revealed by og2BuildTimeControls -->
+      <span id="timeControls" class="time-controls" hidden>
+        <span>Zeit: </span>
+        <input type="range" id="timeSlider" min="0" max="0" step="1" />
+        <span id="timeStamp"></span>
+        <select id="diffT1" title="Diff T1"></select>
+        <select id="diffT2" title="Diff T2"></select>
+        <button id="diffToggle" class="toggle-btn" title="Diff-Modus T1→T2">Δ</button>
+        <span class="stat-separator">|</span>
+      </span>
+      <span id="profileSwitcher" class="profile-switcher"></span>
+      <span class="stat-separator">|</span>
       <span id="status">Bereit</span>
       <span class="stat-separator">|</span>
       <span id="stats-loaded">Geladen: <strong id="stats-nodes-total">0</strong> Knoten, <strong id="stats-links-total">0</strong> Kanten</span>
@@ -182,10 +194,12 @@
       <span id="stats-hidden">Ausgeblendet: <strong id="stats-hidden-count">0</strong></span>
       <span id="stats-capped" hidden><span class="stat-separator">|</span> gekappt — mindestens <strong id="stats-capped-count">0</strong> weitere</span>
       <span id="stats-diff" hidden><span class="stat-separator">|</span> Diff: <strong id="stats-diff-new">0</strong> neu, <strong id="stats-diff-removed">0</strong> weg, <strong id="stats-diff-changed">0</strong> geändert</span>
+      <span class="stat-separator">|</span>
+      <button id="resetData" class="footer-reset-btn" type="button" title="Alle lokalen Daten löschen (sämtliche Profile) und leer neu starten" aria-label="Alle lokalen Daten löschen"><i data-icon="trash"></i></button>
     </div>
   </footer>
   <!-- Export Dialog -->
-  <div id="exportModal" class="modal" style="display:none;">
+  <div id="exportModal" class="modal">
     <div class="modal-overlay"></div>
     <div class="modal-container">
       <div class="modal-header">
@@ -202,7 +216,7 @@
             </div>
           </div>
           
-          <div id="svgOptions" class="export-option-group" style="display:none;">
+          <div id="svgOptions" class="export-option-group" hidden>
             <button id="downloadSvg" class="export-btn-large">SVG herunterladen</button>
           </div>
           
@@ -233,7 +247,7 @@
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.180.177';
+const APP_VERSION = '1.181.178';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 @@APP@@
 </script>

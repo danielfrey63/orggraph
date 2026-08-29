@@ -10,7 +10,6 @@ import {
   collectSubtree,
 } from '../src/sections/12-legend-org.js';
 import { getDisplayLabel } from '../src/sections/06-pseudo-labels.js';
-import { getChevronSVG } from '../src/sections/16-legend-attributes.js';
 import { colorForOrg } from '../src/sections/08-color-geometry.js';
 import { setIcon, ICON } from '../src/sections/02-icons.js';
 import { idOf, drawKindOf } from '../src/sections/09-data-load.js';
@@ -48,7 +47,6 @@ beforeEach(() => {
   globalThis.idOf = idOf;
   globalThis.drawKindOf = drawKindOf;
   globalThis.getDisplayLabel = getDisplayLabel;
-  globalThis.getChevronSVG = getChevronSVG;
   globalThis.colorForOrg = colorForOrg;
   globalThis.pseudonymizationEnabled = false;
   globalThis.pseudoData = null;
@@ -187,8 +185,6 @@ describe('updateLegendChips / updateLegendRowColors', () => {
     document.querySelector('#org_o2').checked = true;
     updateLegendChips();
     expect(Array.from(globalThis.allowedOrgs)).toEqual(['o2']);
-    const chip = liFor('o2').querySelector('.legend-label-chip');
-    expect(chip.style.background).toBe('transparent');
   });
 
   it('leaves allowedOrgs untouched while OEs are hidden', () => {

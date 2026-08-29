@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { showPasswordDialog } from '../src/sections/07-password-roots.js';
+import { createModal } from '../src/sections/03-export-dialog.js';
 
 beforeEach(() => {
   document.body.innerHTML = '';
+  globalThis.createModal = createModal;
   globalThis.envConfig = { TOOLBAR_PSEUDO_PASSWORD: 'geheim' };
 });
 
@@ -35,7 +37,7 @@ describe('showPasswordDialog', () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(dialog()).not.toBeNull();
     expect(dialog().textContent).toContain('Falsches Passwort');
-    expect(input().style.borderColor).toBe('rgb(239, 68, 68)'); // jsdom normalizes #ef4444
+    expect(input().classList.contains('modal-input--error')).toBe(true);
   });
 
   it('submits via Enter key', () => {

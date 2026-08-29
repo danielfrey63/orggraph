@@ -1,4 +1,6 @@
 * { box-sizing: border-box; }
+/* The hidden attribute wins over any display rule — show/hide chrome via el.hidden, not inline display */
+[hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg); min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
 body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); background: var(--bg); }
 .app-header, .app-footer { padding: 12px 16px; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); }
@@ -168,15 +170,6 @@ input#depth {
   background: var(--control-hover);
 }
 
-.combo-list-floating {
-  position: fixed;
-  z-index: 99999;
-  display: none;
-}
-.combo-list-floating.open {
-  display: block;
-}
-
 /* Informational list entries (hints, empty results) */
 .combo-list li.combo-hint {
   padding: 8px;
@@ -185,12 +178,6 @@ input#depth {
 }
 .combo-list li.combo-hint--more {
   border-top: 1px solid #e5e7eb;
-}
-.combo-list li.no-results {
-  font-style: italic;
-  color: var(--text-muted);
-  text-align: center;
-  padding: 10px;
 }
 .viewport { display: grid; grid-template-columns: 1fr 320px; gap: 0; overflow: hidden; }
 .canvas { position: relative; overflow: hidden; background: var(--panel-bg); }
@@ -309,11 +296,12 @@ input#depth {
 .legend-list li { display: block; margin-bottom: 1px; }
 
 /* Neues Layout für Legend-List Items */
-.legend-list .legend-row { 
-  display: flex; 
-  align-items: center; 
+.legend-list .legend-row {
+  display: flex;
+  align-items: center;
   width: 100%;
   padding-left: 4px;
+  cursor: pointer;
   border-radius: 3px; 
   transition: background-color 0.2s ease;
   position: relative;
@@ -637,11 +625,6 @@ input#depth {
 
 .attribute-eye-btn {
   font-size: 14px;
-}
-
-/* Legacy Support für alte Twisty-Buttons (werden durch Chevrons ersetzt) */
-.legend-list .twisty { 
-  display: none; /* Verstecken da durch Chevron ersetzt */
 }
 
 /* Legacy Support für alte Attribute Collapse-Buttons */
@@ -1037,9 +1020,15 @@ input#depth {
 }
 
 .legend-header:hover .legend-icon-btn,
-.legend-row:hover .legend-icon-btn {
+.legend-row:hover .legend-icon-btn,
+.legend-icon-btn.visible {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* Stacked double chevron (expand/collapse all) */
+#expandAllAttributes .ic + .ic {
+  margin-top: -8px;
 }
 
 .legend-icon-btn:hover {
@@ -1175,19 +1164,6 @@ input#depth {
   line-height: 1;
 }
 
-/* Ensure ALL Toggle-Icons are hidden by default and only show on hover */
-.legend-icon-btn {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.legend-header:hover .legend-icon-btn,
-.legend-row:hover .legend-icon-btn,
-.legend-icon-btn.visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
 .legend-title {
   font-size: 14px;
   font-weight: 600;
@@ -1248,7 +1224,7 @@ body > .combo-list li {
 
 /* Separator wurde entfernt */
 
-/* Export Dialog Styles */
+/* Modal dialogs (#exportModal markup and createModal); visibility via .open only */
 .modal {
   position: fixed;
   top: 0;
@@ -1256,9 +1232,12 @@ body > .combo-list li {
   right: 0;
   bottom: 0;
   z-index: 2000;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
+}
+.modal.open {
+  display: flex;
 }
 
 .modal-overlay {
@@ -1318,11 +1297,6 @@ body > .combo-list li {
 }
 
 /* Form elements inside modals (shared by dynamically built dialogs) */
-.modal-title {
-  margin: 0 0 16px 0;
-  color: var(--text-strong);
-}
-
 .modal-input {
   width: 100%;
   padding: 8px 12px;
@@ -1332,6 +1306,10 @@ body > .combo-list li {
   color: var(--text);
   font-size: 14px;
   box-sizing: border-box;
+}
+
+.modal-input--error {
+  border-color: #ef4444;
 }
 
 .modal-error {
@@ -1513,6 +1491,8 @@ body.dz-dragging::after {
   border-radius: 4px;
   cursor: pointer;
 }
+.profile-btn { display: inline-flex; align-items: center; }
+.profile-btn .ic { width: 12px; height: 12px; }
 .profile-btn:hover { color: var(--text-strong, #e8ecf2); border-color: var(--text-muted, #8a93a3); }
 
 .export-options {
@@ -1704,26 +1684,6 @@ body.dz-dragging::after {
 .menu-item-arrow {
   font-size: 10px;
   margin-left: 8px;
-}
-
-/* Submenüs nutzen höhere z-index Werte */
-.node-context-menu[data-level="2"] {
-  z-index: 2001;
-  min-width: 200px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.node-context-menu[data-level="3"] {
-  z-index: 2002;
-  min-width: 180px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.menu-divider {
-  border-top: 1px solid #374151;
-  margin: 4px 0;
 }
 
 /* Farb-Indikator in der Attribut-Legende (Ring wie im Graphen);
