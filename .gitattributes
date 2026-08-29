@@ -5,3 +5,7 @@
 # Keep the immutable baseline and vendored minified code byte-exact.
 reference/** -text
 vendor/** -text
+
+# Build output: its APP_VERSION is stamped by build.js from index.template.html,
+# so the AI-Toolbox bumper must not treat it as an artifact of its own.
+index.html -bump
