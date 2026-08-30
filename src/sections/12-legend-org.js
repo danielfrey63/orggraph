@@ -76,8 +76,8 @@ export function createLegendIconButton({ icon, title, className = '', onClick, d
 
 // Exklusiv-Auswahl in einer Button-Gruppe: genau das übergebene Element trägt
 // active, alle anderen verlieren es (el = null leert die Gruppe).
-export function setExclusiveActive(group, el) {
-  for (const item of group) item.classList.toggle('active', item === el);
+export function setExclusiveActive(group, el, { className = 'active' } = {}) {
+  for (const item of group) item.classList.toggle(className, item === el);
 }
 
 // Aktiv-Zustand einer bestehenden Legend-Row; Gegenstück zum active-Flag,
@@ -246,9 +246,8 @@ export function renderOrgLegendNode(oid, depth, options) {
 
   const li = document.createElement('li');
   li.dataset.oid = id;
-  const node = byId.get(id);
+    const node = byId.get(id);
   const lbl = getDisplayLabel(node, depth);
-  const idAttr = `org_${id}`;
 
   const { row, left } = createLegendRow();
 
@@ -292,13 +291,7 @@ export function renderOrgLegendNode(oid, depth, options) {
     syncGraphAndLegendColors();
   });
 
-  const hiddenInput = document.createElement('input');
-  hiddenInput.type = 'checkbox';
-  hiddenInput.id = idAttr;
-  hiddenInput.checked = allowedOrgs.has(id);
-  row.appendChild(hiddenInput);
-
-  li.appendChild(row);
+    li.appendChild(row);
 
   if (kids.length) {
     const sub = document.createElement('ul');
@@ -327,15 +320,13 @@ export function renderOrgLegendNode(oid, depth, options) {
     const directChildrenIds = new Set();
     const allDescendantIds = new Set();
     
-    if (subRoot) {
+        if (subRoot) {
       Array.from(subRoot.children).forEach(childLi => {
-        const childCb = childLi.querySelector('input[id^="org_"]');
-        if (childCb) {
-          const childId = childCb.id.replace('org_', '');
-          directChildrenIds.add(childId);
+        if (childLi.dataset.oid) {
+          directChildrenIds.add(childLi.dataset.oid);
+          allDescendantIds.add(childLi.dataset.oid);
         }
-        const allCbs = childLi.querySelectorAll('input[id^="org_"]');
-        allCbs.forEach(cb => allDescendantIds.add(cb.id.replace('org_', '')));
+        childLi.querySelectorAll('li[data-oid]').forEach(el => allDescendantIds.add(el.dataset.oid));
       });
     }
     
@@ -362,13 +353,7 @@ export function renderOrgLegendNode(oid, depth, options) {
       },
       onRemoveRoot: () => { removeRoot(String(id)); applyFromUI('legendRemoveRoot'); },
       onOnlyDirectChildren: () => {
-        allDescendantIds.forEach(cid => {
-          allowedOrgs.delete(cid);
-          if (subRoot) {
-            const cb = subRoot.querySelector(`#org_${cid}`);
-            if (cb) cb.checked = false;
-          }
-        });
+                allDescendantIds.forEach(cid => allowedOrgs.delete(cid));
         
         allowedOrgs.add(id);
         directChildrenIds.forEach(cid => allowedOrgs.add(cid));
@@ -508,12 +493,12 @@ export function applyLegendScope(scope) {
 export function updateLegendChips(rootEl) {
   const root = rootEl || document;
   
-  // Mit Checkboxen synchronisieren, außer wenn OEs absichtlich ausgeblendet wurden
+    // Restrict the selection to the rendered legend; skipped while OEs are
+  // deliberately hidden (allowedOrgs stays empty then).
   if (oesVisible) {
-    // OEs sind sichtbar, normale Synchronisierung
     const newAllowed = new Set();
-    root.querySelectorAll('.legend-list input[id^="org_"]').forEach(cb => { 
-      if (cb.checked) newAllowed.add(cb.id.replace('org_','')); 
+    root.querySelectorAll('.legend-list li[data-oid]').forEach(li => {
+      if (allowedOrgs.has(li.dataset.oid)) newAllowed.add(li.dataset.oid);
     });
     allowedOrgs = newAllowed;
   }
@@ -522,21 +507,17 @@ export function updateLegendChips(rootEl) {
 
 export function updateLegendRowColors(rootEl) {
   const root = rootEl || document;
-  root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
+    root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
     const row = li.querySelector(':scope > .legend-row');
-    const cb = li.querySelector(':scope > .legend-row input[id^="org_"]');
-    if (!row || !cb) return;
-    const oid = cb.id.replace('org_','');
+    const oid = li.dataset.oid;
+    if (!row || !oid) return;
     const { stroke, fill } = colorForOrg(oid);
-    
-    // Synchronisiere Hidden Input mit allowedOrgs
-    cb.checked = allowedOrgs.has(oid);
-    
+
     // Setze Farben immer als CSS-Custom-Properties (für Hover-Effekt bei inaktiven Rows)
     row.style.setProperty('--org-fill', fill);
     row.style.setProperty('--org-stroke', stroke);
-    
-        setLegendRowActive(row, cb.checked && allowedOrgs.has(oid));
+
+    setLegendRowActive(row, allowedOrgs.has(oid));
   });
 }
 

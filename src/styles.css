@@ -428,11 +428,6 @@ input#depth {
   margin-top: 2px;
 }
 
-/* Legacy Input-Checkboxes (werden durch Icon-Checkboxes ersetzt) */
-.legend-list input[type="checkbox"] { 
-  display: none; /* Verstecken da durch Icon-Checkboxes ersetzt */
-}
-
 .label { font-size: var(--label-font-size); fill: var(--label-fill); pointer-events: none; }
 /* Debug link labels (14-render.js); only the display toggle is dynamic */
 .link-label { font-size: var(--link-label-font-size); fill: var(--link-label-fill); text-anchor: middle; pointer-events: none; }
@@ -502,7 +497,8 @@ input#depth {
   --overlay-dark-fg: #fff;
       --overlay-dark-hover: #1f2937;
   --z-popover: 1000;
-  --z-overlay: 2000;
+    --z-overlay: 2000;
+  --overlay-scrim: rgba(0, 0, 0, 0.7);
   --dz-overlay-bg: rgba(15, 18, 24, 0.72);
   --dz-panel-bg: rgba(30, 35, 45, 0.96);
   --dz-panel-fg: #e8ecf2;
@@ -523,7 +519,8 @@ input#depth {
     --node-hover-tolerance: 6;
   --legend-depth-step: 16;
   --cluster-hull-tension: 0.75;
-    --sim-settle-ms: 100;
+      --sim-settle-ms: 100;
+  --legend-settle-ms: 50;
   --viewport-fit-ms: 300;
   --hull-escape-width-factor: 0.2;
   --zoom-min: 0.2;
@@ -791,7 +788,7 @@ input#depth {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
+    background-color: var(--overlay-scrim);
   backdrop-filter: blur(4px);
 }
 

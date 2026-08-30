@@ -183,9 +183,9 @@ describe('buildScopedOrgLegend / applyLegendScope', () => {
 });
 
 describe('updateLegendChips / updateLegendRowColors', () => {
-  it('syncs allowedOrgs from checkboxes while OEs are visible', () => {
+    it('prunes allowedOrgs to the rendered legend while OEs are visible', () => {
     buildOrgLegend();
-    document.querySelector('#org_o2').checked = true;
+    globalThis.allowedOrgs = new Set(['o2', 'ghost']);
     updateLegendChips();
     expect(Array.from(globalThis.allowedOrgs)).toEqual(['o2']);
   });
@@ -206,8 +206,7 @@ describe('updateLegendChips / updateLegendRowColors', () => {
     const inactiveRow = liFor('o3').querySelector('.legend-row');
     expect(activeRow.classList.contains('active')).toBe(true);
     expect(inactiveRow.classList.contains('active')).toBe(false);
-    expect(activeRow.style.getPropertyValue('--org-stroke')).toMatch(/^hsla\(/);
-    expect(document.querySelector('#org_o2').checked).toBe(true);
+        expect(activeRow.style.getPropertyValue('--org-stroke')).toMatch(/^hsla\(/);
   });
 });
 

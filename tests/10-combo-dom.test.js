@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { matchesWordPrefixes, populateCombo, setActive, chooseItem } from '../src/sections/10-combo.js';
+import { setExclusiveActive } from '../src/sections/12-legend-org.js';
+
+globalThis.setExclusiveActive = setExclusiveActive;
 import { getDisplayLabel } from '../src/sections/06-pseudo-labels.js';
 import {
   INPUT_COMBO_ID, LIST_COMBO_ID, MIN_SEARCH_LENGTH, MAX_DROPDOWN_ITEMS,

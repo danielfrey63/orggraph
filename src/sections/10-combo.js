@@ -121,9 +121,7 @@ export function setActive(idx) {
   const list = document.querySelector(LIST_COMBO_ID);
   if (!list) return;
   const items = Array.from(list.children);
-  items.forEach((el, i) => {
-    if (i === idx) el.classList.add('is-active'); else el.classList.remove('is-active');
-  });
+    setExclusiveActive(items, items[idx] ?? null, { className: 'is-active' });
   activeIndex = idx;
   if (idx >= 0 && items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
 }

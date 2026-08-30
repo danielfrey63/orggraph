@@ -81,10 +81,6 @@ export function computeHierarchyLevels(nodes, links) {
   return levels;
 }
 
-/**
- * Einziger Schreiber des Tiefen-Widgets: Input-Wert, Anzeige-Text, Tooltip und
- * Puls-Animation wechseln gemeinsam; Grenzen kommen aus den min/max-Attributen.
- */
 // Grenzen des Tiefen-Widgets aus den min/max-Attributen des Inputs.
 function depthBounds(depthInput) {
   return {
@@ -93,6 +89,10 @@ function depthBounds(depthInput) {
   };
 }
 
+/**
+ * Einziger Schreiber des Tiefen-Widgets: Input-Wert, Anzeige-Text, Tooltip und
+ * Puls-Animation wechseln gemeinsam; Grenzen kommen aus den min/max-Attributen.
+ */
 export function setDepth(value, { pulse = true } = {}) {
   const depthControl = document.getElementById('depthControl');
   const depthInput = document.getElementById('depth');
@@ -414,7 +414,7 @@ export function initializeCollapsibleLegends() {
     });
 
     // Initiale Anzeige setzen
-    const initialValue = parseInt(depthInput.value, 10);
-    setDepth(isNaN(initialValue) ? 2 : initialValue, { pulse: false });
+        const initialValue = parseInt(depthInput.value, 10);
+    setDepth(isNaN(initialValue) ? (parseInt(depthInput.defaultValue, 10) || 0) : initialValue, { pulse: false });
   }
 }

@@ -80,15 +80,9 @@ export function initializeExport() {
     });
   });
   
-  // Event-Listener für Auflösungs-Presets
+    // Event-Listener für Auflösungs-Presets
   resolutionPresets.forEach(preset => {
-    preset.addEventListener('click', () => {
-            setExclusiveActive(resolutionPresets, preset);
-      
-      // Werte auf Eingabefelder übertragen
-      customWidthInput.value = preset.dataset.width;
-      customHeightInput.value = preset.dataset.height;
-    });
+    preset.addEventListener('click', () => setExportResolution(preset));
   });
   
   // Event-Listener für Custom-Resolution-Eingabefelder
@@ -129,15 +123,27 @@ export function initializeExport() {
 }
 
 /**
+ * Einziger Schreiber der Auflösungs-Auswahl: Preset-Markierung und beide
+ * Eingabefelder wechseln gemeinsam.
+ */
+function setExportResolution(preset) {
+  setExclusiveActive(resolutionPresets, preset);
+  if (preset) {
+    customWidthInput.value = preset.dataset.width;
+    customHeightInput.value = preset.dataset.height;
+  }
+}
+
+/**
  * Zeigt den Export-Dialog an
  */
 export function showExportDialog() {
   if (exportModal) {
     exportModal.classList.add('open');
-    
-        // Setze die erste Auflösungs-Preset als aktiv (und leere alle anderen)
+
+    // Reset auf das Standard-Preset (Markierung UND Eingabefelder)
     if (resolutionPresets && resolutionPresets.length > 0) {
-      setExclusiveActive(resolutionPresets, resolutionPresets[0]);
+      setExportResolution(resolutionPresets[0]);
     }
   }
 }
@@ -323,8 +329,8 @@ export function exportAsPng() {
   
   try {
     // Auflösung aus Eingabefeldern abrufen
-    const width = parseInt(customWidthInput.value, 10) || 1200;
-    const height = parseInt(customHeightInput.value, 10) || 800;
+        const width = parseInt(customWidthInput.value, 10) || WIDTH;
+    const height = parseInt(customHeightInput.value, 10) || HEIGHT;
     
     // Qualitätsfaktor (Pixeldichte) - immer Maximum für beste Qualität
     const quality = 4.0;

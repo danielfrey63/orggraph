@@ -187,9 +187,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         setTimeout(() => {
           if (attributeLegend) {
             attributeLegend.querySelectorAll('.legend-tree-chevron')
-              .forEach(chev => setLegendSubtreeCollapsed(chev, true));
+                            .forEach(chev => setLegendSubtreeCollapsed(chev, true));
           }
-        }, 50);
+        }, cssNumber('--legend-settle-ms'));
       } else {
         // EXPANDIEREN: Alle Kategorien expandieren
         // 1. Legende selbst expandieren (falls kollabiert)
@@ -207,9 +207,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         setTimeout(() => {
           if (attributeLegend) {
             attributeLegend.querySelectorAll('.legend-tree-chevron')
-              .forEach(chev => setLegendSubtreeCollapsed(chev, false));
+                            .forEach(chev => setLegendSubtreeCollapsed(chev, false));
           }
-        }, 50);
+        }, cssNumber('--legend-settle-ms'));
       }
     });
   }

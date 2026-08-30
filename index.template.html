@@ -237,8 +237,8 @@
             
             <h3>Benutzerdefiniert</h3>
             <div class="custom-resolution-inline">
-              <input type="number" id="customWidth" value="1200" min="100" max="10000">
-              <input type="number" id="customHeight" value="800" min="100" max="10000">
+              <input type="number" id="customWidth" min="100" max="10000">
+              <input type="number" id="customHeight" min="100" max="10000">
             </div>
             
             <button id="downloadPng" class="export-btn-large">PNG herunterladen</button>
@@ -253,7 +253,7 @@
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.186.183';
+const APP_VERSION = '1.187.184';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 @@APP@@
 </script>

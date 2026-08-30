@@ -436,11 +436,6 @@ input#depth {
   margin-top: 2px;
 }
 
-/* Legacy Input-Checkboxes (werden durch Icon-Checkboxes ersetzt) */
-.legend-list input[type="checkbox"] { 
-  display: none; /* Verstecken da durch Icon-Checkboxes ersetzt */
-}
-
 .label { font-size: var(--label-font-size); fill: var(--label-fill); pointer-events: none; }
 /* Debug link labels (14-render.js); only the display toggle is dynamic */
 .link-label { font-size: var(--link-label-font-size); fill: var(--link-label-fill); text-anchor: middle; pointer-events: none; }
@@ -510,7 +505,8 @@ input#depth {
   --overlay-dark-fg: #fff;
       --overlay-dark-hover: #1f2937;
   --z-popover: 1000;
-  --z-overlay: 2000;
+    --z-overlay: 2000;
+  --overlay-scrim: rgba(0, 0, 0, 0.7);
   --dz-overlay-bg: rgba(15, 18, 24, 0.72);
   --dz-panel-bg: rgba(30, 35, 45, 0.96);
   --dz-panel-fg: #e8ecf2;
@@ -531,7 +527,8 @@ input#depth {
     --node-hover-tolerance: 6;
   --legend-depth-step: 16;
   --cluster-hull-tension: 0.75;
-    --sim-settle-ms: 100;
+      --sim-settle-ms: 100;
+  --legend-settle-ms: 50;
   --viewport-fit-ms: 300;
   --hull-escape-width-factor: 0.2;
   --zoom-min: 0.2;
@@ -799,7 +796,7 @@ input#depth {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
+    background-color: var(--overlay-scrim);
   backdrop-filter: blur(4px);
 }
 
@@ -1516,8 +1513,8 @@ body.dz-dragging::after {
             
             <h3>Benutzerdefiniert</h3>
             <div class="custom-resolution-inline">
-              <input type="number" id="customWidth" value="1200" min="100" max="10000">
-              <input type="number" id="customHeight" value="800" min="100" max="10000">
+              <input type="number" id="customWidth" min="100" max="10000">
+              <input type="number" id="customHeight" min="100" max="10000">
             </div>
             
             <button id="downloadPng" class="export-btn-large">PNG herunterladen</button>
@@ -1533,7 +1530,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.186.183';
+const APP_VERSION = '1.187.184';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -1756,15 +1753,9 @@ function initializeExport() {
     });
   });
   
-  // Event-Listener für Auflösungs-Presets
+    // Event-Listener für Auflösungs-Presets
   resolutionPresets.forEach(preset => {
-    preset.addEventListener('click', () => {
-            setExclusiveActive(resolutionPresets, preset);
-      
-      // Werte auf Eingabefelder übertragen
-      customWidthInput.value = preset.dataset.width;
-      customHeightInput.value = preset.dataset.height;
-    });
+    preset.addEventListener('click', () => setExportResolution(preset));
   });
   
   // Event-Listener für Custom-Resolution-Eingabefelder
@@ -1805,15 +1796,27 @@ function initializeExport() {
 }
 
 /**
+ * Einziger Schreiber der Auflösungs-Auswahl: Preset-Markierung und beide
+ * Eingabefelder wechseln gemeinsam.
+ */
+function setExportResolution(preset) {
+  setExclusiveActive(resolutionPresets, preset);
+  if (preset) {
+    customWidthInput.value = preset.dataset.width;
+    customHeightInput.value = preset.dataset.height;
+  }
+}
+
+/**
  * Zeigt den Export-Dialog an
  */
 function showExportDialog() {
   if (exportModal) {
     exportModal.classList.add('open');
-    
-        // Setze die erste Auflösungs-Preset als aktiv (und leere alle anderen)
+
+    // Reset auf das Standard-Preset (Markierung UND Eingabefelder)
     if (resolutionPresets && resolutionPresets.length > 0) {
-      setExclusiveActive(resolutionPresets, resolutionPresets[0]);
+      setExportResolution(resolutionPresets[0]);
     }
   }
 }
@@ -1999,8 +2002,8 @@ function exportAsPng() {
   
   try {
     // Auflösung aus Eingabefeldern abrufen
-    const width = parseInt(customWidthInput.value, 10) || 1200;
-    const height = parseInt(customHeightInput.value, 10) || 800;
+        const width = parseInt(customWidthInput.value, 10) || WIDTH;
+    const height = parseInt(customHeightInput.value, 10) || HEIGHT;
     
     // Qualitätsfaktor (Pixeldichte) - immer Maximum für beste Qualität
     const quality = 4.0;
@@ -3520,7 +3523,8 @@ const CSS_NUMBER_DEFAULTS = {
     '--node-hover-tolerance': 6,
   '--legend-depth-step': 16,
   '--cluster-hull-tension': 0.75,
-    '--sim-settle-ms': 100,
+      '--sim-settle-ms': 100,
+  '--legend-settle-ms': 50,
   '--viewport-fit-ms': 300,
   '--hull-escape-width-factor': 0.2,
   '--zoom-min': 0.2,
@@ -4469,9 +4473,7 @@ function setActive(idx) {
   const list = document.querySelector(LIST_COMBO_ID);
   if (!list) return;
   const items = Array.from(list.children);
-  items.forEach((el, i) => {
-    if (i === idx) el.classList.add('is-active'); else el.classList.remove('is-active');
-  });
+    setExclusiveActive(items, items[idx] ?? null, { className: 'is-active' });
   activeIndex = idx;
   if (idx >= 0 && items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
 }
@@ -5112,8 +5114,8 @@ function createLegendIconButton({ icon, title, className = '', onClick, dimmed }
 
 // Exklusiv-Auswahl in einer Button-Gruppe: genau das übergebene Element trägt
 // active, alle anderen verlieren es (el = null leert die Gruppe).
-function setExclusiveActive(group, el) {
-  for (const item of group) item.classList.toggle('active', item === el);
+function setExclusiveActive(group, el, { className = 'active' } = {}) {
+  for (const item of group) item.classList.toggle(className, item === el);
 }
 
 // Aktiv-Zustand einer bestehenden Legend-Row; Gegenstück zum active-Flag,
@@ -5282,9 +5284,8 @@ function renderOrgLegendNode(oid, depth, options) {
 
   const li = document.createElement('li');
   li.dataset.oid = id;
-  const node = byId.get(id);
+    const node = byId.get(id);
   const lbl = getDisplayLabel(node, depth);
-  const idAttr = `org_${id}`;
 
   const { row, left } = createLegendRow();
 
@@ -5328,13 +5329,7 @@ function renderOrgLegendNode(oid, depth, options) {
     syncGraphAndLegendColors();
   });
 
-  const hiddenInput = document.createElement('input');
-  hiddenInput.type = 'checkbox';
-  hiddenInput.id = idAttr;
-  hiddenInput.checked = allowedOrgs.has(id);
-  row.appendChild(hiddenInput);
-
-  li.appendChild(row);
+    li.appendChild(row);
 
   if (kids.length) {
     const sub = document.createElement('ul');
@@ -5363,15 +5358,13 @@ function renderOrgLegendNode(oid, depth, options) {
     const directChildrenIds = new Set();
     const allDescendantIds = new Set();
     
-    if (subRoot) {
+        if (subRoot) {
       Array.from(subRoot.children).forEach(childLi => {
-        const childCb = childLi.querySelector('input[id^="org_"]');
-        if (childCb) {
-          const childId = childCb.id.replace('org_', '');
-          directChildrenIds.add(childId);
+        if (childLi.dataset.oid) {
+          directChildrenIds.add(childLi.dataset.oid);
+          allDescendantIds.add(childLi.dataset.oid);
         }
-        const allCbs = childLi.querySelectorAll('input[id^="org_"]');
-        allCbs.forEach(cb => allDescendantIds.add(cb.id.replace('org_', '')));
+        childLi.querySelectorAll('li[data-oid]').forEach(el => allDescendantIds.add(el.dataset.oid));
       });
     }
     
@@ -5398,13 +5391,7 @@ function renderOrgLegendNode(oid, depth, options) {
       },
       onRemoveRoot: () => { removeRoot(String(id)); applyFromUI('legendRemoveRoot'); },
       onOnlyDirectChildren: () => {
-        allDescendantIds.forEach(cid => {
-          allowedOrgs.delete(cid);
-          if (subRoot) {
-            const cb = subRoot.querySelector(`#org_${cid}`);
-            if (cb) cb.checked = false;
-          }
-        });
+                allDescendantIds.forEach(cid => allowedOrgs.delete(cid));
         
         allowedOrgs.add(id);
         directChildrenIds.forEach(cid => allowedOrgs.add(cid));
@@ -5544,12 +5531,12 @@ function applyLegendScope(scope) {
 function updateLegendChips(rootEl) {
   const root = rootEl || document;
   
-  // Mit Checkboxen synchronisieren, außer wenn OEs absichtlich ausgeblendet wurden
+    // Restrict the selection to the rendered legend; skipped while OEs are
+  // deliberately hidden (allowedOrgs stays empty then).
   if (oesVisible) {
-    // OEs sind sichtbar, normale Synchronisierung
     const newAllowed = new Set();
-    root.querySelectorAll('.legend-list input[id^="org_"]').forEach(cb => { 
-      if (cb.checked) newAllowed.add(cb.id.replace('org_','')); 
+    root.querySelectorAll('.legend-list li[data-oid]').forEach(li => {
+      if (allowedOrgs.has(li.dataset.oid)) newAllowed.add(li.dataset.oid);
     });
     allowedOrgs = newAllowed;
   }
@@ -5558,21 +5545,17 @@ function updateLegendChips(rootEl) {
 
 function updateLegendRowColors(rootEl) {
   const root = rootEl || document;
-  root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
+    root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
     const row = li.querySelector(':scope > .legend-row');
-    const cb = li.querySelector(':scope > .legend-row input[id^="org_"]');
-    if (!row || !cb) return;
-    const oid = cb.id.replace('org_','');
+    const oid = li.dataset.oid;
+    if (!row || !oid) return;
     const { stroke, fill } = colorForOrg(oid);
-    
-    // Synchronisiere Hidden Input mit allowedOrgs
-    cb.checked = allowedOrgs.has(oid);
-    
+
     // Setze Farben immer als CSS-Custom-Properties (für Hover-Effekt bei inaktiven Rows)
     row.style.setProperty('--org-fill', fill);
     row.style.setProperty('--org-stroke', stroke);
-    
-        setLegendRowActive(row, cb.checked && allowedOrgs.has(oid));
+
+    setLegendRowActive(row, allowedOrgs.has(oid));
   });
 }
 
@@ -7244,9 +7227,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         setTimeout(() => {
           if (attributeLegend) {
             attributeLegend.querySelectorAll('.legend-tree-chevron')
-              .forEach(chev => setLegendSubtreeCollapsed(chev, true));
+                            .forEach(chev => setLegendSubtreeCollapsed(chev, true));
           }
-        }, 50);
+        }, cssNumber('--legend-settle-ms'));
       } else {
         // EXPANDIEREN: Alle Kategorien expandieren
         // 1. Legende selbst expandieren (falls kollabiert)
@@ -7264,9 +7247,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         setTimeout(() => {
           if (attributeLegend) {
             attributeLegend.querySelectorAll('.legend-tree-chevron')
-              .forEach(chev => setLegendSubtreeCollapsed(chev, false));
+                            .forEach(chev => setLegendSubtreeCollapsed(chev, false));
           }
-        }, 50);
+        }, cssNumber('--legend-settle-ms'));
       }
     });
   }
@@ -7951,10 +7934,6 @@ function computeHierarchyLevels(nodes, links) {
   return levels;
 }
 
-/**
- * Einziger Schreiber des Tiefen-Widgets: Input-Wert, Anzeige-Text, Tooltip und
- * Puls-Animation wechseln gemeinsam; Grenzen kommen aus den min/max-Attributen.
- */
 // Grenzen des Tiefen-Widgets aus den min/max-Attributen des Inputs.
 function depthBounds(depthInput) {
   return {
@@ -7963,6 +7942,10 @@ function depthBounds(depthInput) {
   };
 }
 
+/**
+ * Einziger Schreiber des Tiefen-Widgets: Input-Wert, Anzeige-Text, Tooltip und
+ * Puls-Animation wechseln gemeinsam; Grenzen kommen aus den min/max-Attributen.
+ */
 function setDepth(value, { pulse = true } = {}) {
   const depthControl = document.getElementById('depthControl');
   const depthInput = document.getElementById('depth');
@@ -8284,8 +8267,8 @@ function initializeCollapsibleLegends() {
     });
 
     // Initiale Anzeige setzen
-    const initialValue = parseInt(depthInput.value, 10);
-    setDepth(isNaN(initialValue) ? 2 : initialValue, { pulse: false });
+        const initialValue = parseInt(depthInput.value, 10);
+    setDepth(isNaN(initialValue) ? (parseInt(depthInput.defaultValue, 10) || 0) : initialValue, { pulse: false });
   }
 }
 // ========== Profile switcher (parallel configurations) ==========
