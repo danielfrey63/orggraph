@@ -131,7 +131,7 @@ export function buildAttributeLegend() {
       itemRow.style.setProperty('--attribute-bg-hover', transparentHoverBg);
 
       // Tiefe-Spacer für Einrückung (16px wie bei OEs), dann Spacer statt Chevron
-      itemLeftArea.appendChild(createLegendDepthSpacer(16));
+      itemLeftArea.appendChild(createLegendDepthSpacer(1));
       itemLeftArea.appendChild(createLegendTreeSpacer());
 
       // Farb-Indikator (nur Border, wie Attribut-Ringe im Graphen)

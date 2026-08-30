@@ -16,11 +16,11 @@ export function createLegendRow({ active = false, withRight = true } = {}) {
   return { row, left, right };
 }
 
-// Einrückung pro Baum-Tiefe
-export function createLegendDepthSpacer(widthPx) {
+// Einrückung pro Baum-Tiefe: der 16px-Schritt gehört dem Spacer, nicht den Aufrufern
+export function createLegendDepthSpacer(depth) {
   const spacer = document.createElement('div');
   spacer.className = 'legend-depth-spacer';
-  spacer.style.width = `${widthPx}px`;
+  spacer.style.width = `${Math.max(0, Number(depth) || 0) * 16}px`;
   return spacer;
 }
 
@@ -222,7 +222,7 @@ export function renderOrgLegendNode(oid, depth, options) {
 
   const { row, left } = createLegendRow();
 
-  left.appendChild(createLegendDepthSpacer(Math.max(0, Number(depth) || 0) * 16));
+  left.appendChild(createLegendDepthSpacer(depth));
 
   const rawChildren = Array.from((childrenProvider && childrenProvider(id)) || []);
   const kids = scopeSet

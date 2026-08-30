@@ -488,7 +488,7 @@ input#depth {
 
 .toggle-btn.active {
   background-color: var(--active-toggle-bg);
-  color: var(--active-toggle-color, white);
+  color: var(--active-toggle-color);
   border-color: transparent;
   box-shadow: 0 2px 5px rgba(99,102,241,0.4);
 }
@@ -501,13 +501,7 @@ input#depth {
 :root {
   color-scheme: light dark;
   
-  /* Layout & Dimensionen */
-  --canvas-width: 1200px;
-  --canvas-height: 800px;
-  --max-dropdown-items: 100;
-  --min-search-length: 2;
-  
-  /* Theming & Farben */
+    /* Theming & Farben */
   --bg: #f8fafc;
   --panel-bg: #f1f5f9;
   --panel-border: #e2e8f0;
@@ -524,7 +518,8 @@ input#depth {
   --canvas-bg: #ffffff;
 
   /* Graph-Elemente */
-  --node-radius: 8;
+    --node-radius: 8;
+  --label-x-offset: 10;
   --node-fill: #4F46E5;
   --node-fill-top-level: #e0e7ff;
   --node-fill-mid-level: #818cf8;
@@ -561,27 +556,19 @@ input#depth {
   /* Simulation-Parameter */
   --link-distance: 20;
   --link-strength: 0.7;
-  --charge-strength: -250;
-  --collide-radius: 15;
+    --charge-strength: -250;
   --collide-padding: 6;
-  --collide-strength: 0.7;
+  --collide-strength: 0.8;
   --center-strength: 0.05;
   --alpha-decay: 0.05;
   --velocity-decay: 0.5;
   
   /* Layout-Optionen */
   --level-height: 200;
-  --level-force-strength: 0.25;
+  --level-force-strength: 0.5;
   --radial-force: 0.15;
   --radial-gap: 120;
-  --radial-base: 0;
-  
-  /* Standard-Einstellungen */
-  --default-layout-mode: 'force';
-  --default-data-preference: 'auto';
-  --default-management-enabled: 1;
-  --default-autofit-enabled: 1;
-  --default-labels-visible: 1;
+    --radial-base: 0;
 }
 
 /* Dunkelmodus */
@@ -3490,7 +3477,12 @@ const CSS_NUMBER_DEFAULTS = {
   '--velocity-decay': 0.5,
   '--radial-force': 0.15,
   '--radial-gap': 120,
-  '--radial-base': 0,
+    '--radial-base': 0,
+  '--center-strength': 0.05,
+  '--collide-strength': 0.8,
+  '--level-height': 200,
+  '--level-force-strength': 0.5,
+  '--label-x-offset': 10,
 };
 
 function cssNumber(varName, fallback) {
@@ -3506,7 +3498,9 @@ const CSS_COLOR_DEFAULTS = {
   '--node-fill': '#4F46E5',
   '--node-fill-top-level': '#e0e7ff',
   '--node-fill-mid-level': '#818cf8',
-  '--node-fill-low-level': '#4F46E5',
+    '--node-fill-low-level': '#4F46E5',
+  '--node-with-attributes-fill': '#000000',
+  '--node-with-attributes-stroke': '#4682b4',
 };
 
 // Resolved string value of a CSS custom property on :root. Single owner of
@@ -3965,9 +3959,8 @@ function updateAttributeCircles() {
   const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
   // Farbe und Stil für Knoten mit Attributen
-  const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
-  const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke)';
-  const nodeWithAttributesStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
+    const nodeWithAttributesFill = cssVar('--node-with-attributes-fill');
+  const nodeWithAttributesStroke = cssVar('--node-with-attributes-stroke');
   
   // Transparenz für Knoten ohne Attribute
   const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity');
@@ -4011,7 +4004,7 @@ function updateAttributeCircles() {
     
     // Labels auf Standard-Position zurücksetzen
     nodes.selectAll('text.label')
-      .attr('x', 10);
+      .attr('x', cssNumber('--label-x-offset'));
     
     applyRootStyling();
     return;
@@ -4035,7 +4028,7 @@ function updateAttributeCircles() {
   
   // Labels auf Standard-Position zurücksetzen (werden später für Knoten mit Attributen angepasst)
   nodes.selectAll('text.label')
-    .attr('x', 10);
+    .attr('x', cssNumber('--label-x-offset'));
   
   // Neue Attribut-Kreise hinzufügen und Knoten mit Attributen identifizieren
   nodes.each(function(d) {
@@ -4070,7 +4063,7 @@ function updateAttributeCircles() {
         nodeGroup.select('circle.node-circle')
           .style('fill', nodeWithAttributesFill)
           .style('stroke', nodeWithAttributesStroke)
-          .style('stroke-width', nodeWithAttributesStrokeWidth);
+          .style('stroke-width', nodeStrokeWidth);
         
         // Berechne äußersten Radius für Label-Positionierung
         const attrCount = activeNodeAttrs.length;
@@ -4104,7 +4097,7 @@ function updateAttributeCircles() {
     // Label-Position basierend auf dem äußersten Radius anpassen
     // Füge einen kleinen Abstand hinzu (z.B. 3 Pixel)
     const labelOffset = 3;
-    const labelPos = (outerMostRadius === nodeRadius) ? 10 : (outerMostRadius + labelOffset);
+    const labelPos = (outerMostRadius === nodeRadius) ? cssNumber('--label-x-offset') : (outerMostRadius + labelOffset);
     nodeGroup.select('text.label')
       .attr('x', labelPos);
   });
@@ -5005,11 +4998,11 @@ function createLegendRow({ active = false, withRight = true } = {}) {
   return { row, left, right };
 }
 
-// Einrückung pro Baum-Tiefe
-function createLegendDepthSpacer(widthPx) {
+// Einrückung pro Baum-Tiefe: der 16px-Schritt gehört dem Spacer, nicht den Aufrufern
+function createLegendDepthSpacer(depth) {
   const spacer = document.createElement('div');
   spacer.className = 'legend-depth-spacer';
-  spacer.style.width = `${widthPx}px`;
+  spacer.style.width = `${Math.max(0, Number(depth) || 0) * 16}px`;
   return spacer;
 }
 
@@ -5211,7 +5204,7 @@ function renderOrgLegendNode(oid, depth, options) {
 
   const { row, left } = createLegendRow();
 
-  left.appendChild(createLegendDepthSpacer(Math.max(0, Number(depth) || 0) * 16));
+  left.appendChild(createLegendDepthSpacer(depth));
 
   const rawChildren = Array.from((childrenProvider && childrenProvider(id)) || []);
   const kids = scopeSet
@@ -5847,7 +5840,7 @@ function createSimulation(nodes, links) {
     .force("link", d3.forceLink(links).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
     .force("charge", d3.forceManyBody().strength(chargeStrength))
     // Schwächere Center-Force für mehr Stabilität mit radialem Layout
-    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
+    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(cssNumber('--center-strength')))
     .force("collide", d3.forceCollide().radius(d => {
       // Kollisionsradius basierend auf Attribut-Kreisen berechnen
       const circleGap = cssNumber('--attribute-circle-gap');
@@ -5862,7 +5855,7 @@ function createSimulation(nodes, links) {
         ? (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth))
         : 0;
       return nodeRadius + collidePadding + outerExtra;
-    }).strength(0.8)) // Stärkere Kollisionsvermeidung
+    }).strength(cssNumber('--collide-strength'))) // Stärkere Kollisionsvermeidung
     .alphaDecay(alphaDecay)
     .velocityDecay(velocityDecay);
 }
@@ -6203,7 +6196,7 @@ function renderGraph(sub) {
     .style("fill", d => getNodeFillByLevel(d));
   nodeEnter.append("text")
     .text(d => debugMode ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})` : getDisplayLabel(d))
-    .attr("x", 10)
+    .attr("x", cssNumber('--label-x-offset'))
     .attr("y", 4)
     .attr("class", "label");
     
@@ -6953,7 +6946,7 @@ function buildAttributeLegend() {
       itemRow.style.setProperty('--attribute-bg-hover', transparentHoverBg);
 
       // Tiefe-Spacer für Einrückung (16px wie bei OEs), dann Spacer statt Chevron
-      itemLeftArea.appendChild(createLegendDepthSpacer(16));
+      itemLeftArea.appendChild(createLegendDepthSpacer(1));
       itemLeftArea.appendChild(createLegendTreeSpacer());
 
       // Farb-Indikator (nur Border, wie Attribut-Ringe im Graphen)
@@ -7901,8 +7894,8 @@ function computeHierarchyLevels(nodes, links) {
  */
 function configureLayout(nodes, links, simulation, mode) {
   // Spezifische Parameter für Hierarchie-Layout
-  const LEVEL_HEIGHT = 200; // Vertikaler Abstand zwischen Hierarchie-Ebenen
-  const LEVEL_FORCE_STRENGTH = 0.5; // Stärke der vertikalen Anziehungskraft
+    const LEVEL_HEIGHT = cssNumber('--level-height'); // Vertikaler Abstand zwischen Hierarchie-Ebenen
+  const LEVEL_FORCE_STRENGTH = cssNumber('--level-force-strength'); // Stärke der vertikalen Anziehungskraft
   
   // Manager-Parent-Map aufbauen für radiales Layout
   const pMap = new Map();

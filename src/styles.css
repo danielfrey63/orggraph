@@ -480,7 +480,7 @@ input#depth {
 
 .toggle-btn.active {
   background-color: var(--active-toggle-bg);
-  color: var(--active-toggle-color, white);
+  color: var(--active-toggle-color);
   border-color: transparent;
   box-shadow: 0 2px 5px rgba(99,102,241,0.4);
 }
@@ -493,13 +493,7 @@ input#depth {
 :root {
   color-scheme: light dark;
   
-  /* Layout & Dimensionen */
-  --canvas-width: 1200px;
-  --canvas-height: 800px;
-  --max-dropdown-items: 100;
-  --min-search-length: 2;
-  
-  /* Theming & Farben */
+    /* Theming & Farben */
   --bg: #f8fafc;
   --panel-bg: #f1f5f9;
   --panel-border: #e2e8f0;
@@ -516,7 +510,8 @@ input#depth {
   --canvas-bg: #ffffff;
 
   /* Graph-Elemente */
-  --node-radius: 8;
+    --node-radius: 8;
+  --label-x-offset: 10;
   --node-fill: #4F46E5;
   --node-fill-top-level: #e0e7ff;
   --node-fill-mid-level: #818cf8;
@@ -553,27 +548,19 @@ input#depth {
   /* Simulation-Parameter */
   --link-distance: 20;
   --link-strength: 0.7;
-  --charge-strength: -250;
-  --collide-radius: 15;
+    --charge-strength: -250;
   --collide-padding: 6;
-  --collide-strength: 0.7;
+  --collide-strength: 0.8;
   --center-strength: 0.05;
   --alpha-decay: 0.05;
   --velocity-decay: 0.5;
   
   /* Layout-Optionen */
   --level-height: 200;
-  --level-force-strength: 0.25;
+  --level-force-strength: 0.5;
   --radial-force: 0.15;
   --radial-gap: 120;
-  --radial-base: 0;
-  
-  /* Standard-Einstellungen */
-  --default-layout-mode: 'force';
-  --default-data-preference: 'auto';
-  --default-management-enabled: 1;
-  --default-autofit-enabled: 1;
-  --default-labels-visible: 1;
+    --radial-base: 0;
 }
 
 /* Dunkelmodus */

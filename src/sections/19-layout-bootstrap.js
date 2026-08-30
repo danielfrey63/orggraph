@@ -86,8 +86,8 @@ export function computeHierarchyLevels(nodes, links) {
  */
 export function configureLayout(nodes, links, simulation, mode) {
   // Spezifische Parameter für Hierarchie-Layout
-  const LEVEL_HEIGHT = 200; // Vertikaler Abstand zwischen Hierarchie-Ebenen
-  const LEVEL_FORCE_STRENGTH = 0.5; // Stärke der vertikalen Anziehungskraft
+    const LEVEL_HEIGHT = cssNumber('--level-height'); // Vertikaler Abstand zwischen Hierarchie-Ebenen
+  const LEVEL_FORCE_STRENGTH = cssNumber('--level-force-strength'); // Stärke der vertikalen Anziehungskraft
   
   // Manager-Parent-Map aufbauen für radiales Layout
   const pMap = new Map();

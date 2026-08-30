@@ -252,7 +252,7 @@ export function renderGraph(sub) {
     .style("fill", d => getNodeFillByLevel(d));
   nodeEnter.append("text")
     .text(d => debugMode ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})` : getDisplayLabel(d))
-    .attr("x", 10)
+    .attr("x", cssNumber('--label-x-offset'))
     .attr("y", 4)
     .attr("class", "label");
     

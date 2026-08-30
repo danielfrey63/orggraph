@@ -20,7 +20,12 @@ export const CSS_NUMBER_DEFAULTS = {
   '--velocity-decay': 0.5,
   '--radial-force': 0.15,
   '--radial-gap': 120,
-  '--radial-base': 0,
+    '--radial-base': 0,
+  '--center-strength': 0.05,
+  '--collide-strength': 0.8,
+  '--level-height': 200,
+  '--level-force-strength': 0.5,
+  '--label-x-offset': 10,
 };
 
 export function cssNumber(varName, fallback) {
@@ -36,7 +41,9 @@ export const CSS_COLOR_DEFAULTS = {
   '--node-fill': '#4F46E5',
   '--node-fill-top-level': '#e0e7ff',
   '--node-fill-mid-level': '#818cf8',
-  '--node-fill-low-level': '#4F46E5',
+    '--node-fill-low-level': '#4F46E5',
+  '--node-with-attributes-fill': '#000000',
+  '--node-with-attributes-stroke': '#4682b4',
 };
 
 // Resolved string value of a CSS custom property on :root. Single owner of
@@ -495,9 +502,8 @@ export function updateAttributeCircles() {
   const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
   // Farbe und Stil für Knoten mit Attributen
-  const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
-  const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke)';
-  const nodeWithAttributesStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
+    const nodeWithAttributesFill = cssVar('--node-with-attributes-fill');
+  const nodeWithAttributesStroke = cssVar('--node-with-attributes-stroke');
   
   // Transparenz für Knoten ohne Attribute
   const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity');
@@ -541,7 +547,7 @@ export function updateAttributeCircles() {
     
     // Labels auf Standard-Position zurücksetzen
     nodes.selectAll('text.label')
-      .attr('x', 10);
+      .attr('x', cssNumber('--label-x-offset'));
     
     applyRootStyling();
     return;
@@ -565,7 +571,7 @@ export function updateAttributeCircles() {
   
   // Labels auf Standard-Position zurücksetzen (werden später für Knoten mit Attributen angepasst)
   nodes.selectAll('text.label')
-    .attr('x', 10);
+    .attr('x', cssNumber('--label-x-offset'));
   
   // Neue Attribut-Kreise hinzufügen und Knoten mit Attributen identifizieren
   nodes.each(function(d) {
@@ -600,7 +606,7 @@ export function updateAttributeCircles() {
         nodeGroup.select('circle.node-circle')
           .style('fill', nodeWithAttributesFill)
           .style('stroke', nodeWithAttributesStroke)
-          .style('stroke-width', nodeWithAttributesStrokeWidth);
+          .style('stroke-width', nodeStrokeWidth);
         
         // Berechne äußersten Radius für Label-Positionierung
         const attrCount = activeNodeAttrs.length;
@@ -634,7 +640,7 @@ export function updateAttributeCircles() {
     // Label-Position basierend auf dem äußersten Radius anpassen
     // Füge einen kleinen Abstand hinzu (z.B. 3 Pixel)
     const labelOffset = 3;
-    const labelPos = (outerMostRadius === nodeRadius) ? 10 : (outerMostRadius + labelOffset);
+    const labelPos = (outerMostRadius === nodeRadius) ? cssNumber('--label-x-offset') : (outerMostRadius + labelOffset);
     nodeGroup.select('text.label')
       .attr('x', labelPos);
   });

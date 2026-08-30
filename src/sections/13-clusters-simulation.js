@@ -242,7 +242,7 @@ export function createSimulation(nodes, links) {
     .force("link", d3.forceLink(links).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
     .force("charge", d3.forceManyBody().strength(chargeStrength))
     // Schwächere Center-Force für mehr Stabilität mit radialem Layout
-    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
+    .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(cssNumber('--center-strength')))
     .force("collide", d3.forceCollide().radius(d => {
       // Kollisionsradius basierend auf Attribut-Kreisen berechnen
       const circleGap = cssNumber('--attribute-circle-gap');
@@ -257,7 +257,7 @@ export function createSimulation(nodes, links) {
         ? (nodeStrokeWidth / 2) + (attrCount * (circleGap + circleWidth))
         : 0;
       return nodeRadius + collidePadding + outerExtra;
-    }).strength(0.8)) // Stärkere Kollisionsvermeidung
+    }).strength(cssNumber('--collide-strength'))) // Stärkere Kollisionsvermeidung
     .alphaDecay(alphaDecay)
     .velocityDecay(velocityDecay);
 }
