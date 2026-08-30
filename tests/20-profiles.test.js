@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderProfileSwitcher, openNewProfileDropZone } from '../src/sections/20-profiles.js';
 import { setIcon } from '../src/sections/02-icons.js';
+import { createIconButton } from '../src/sections/12-legend-org.js';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -9,6 +10,7 @@ beforeEach(() => {
     '<span id="profileSwitcher" class="profile-switcher"></span><span class="stat-separator">|</span>' +
     '<span id="status">Bereit</span></div></footer>';
   globalThis.setIcon = setIcon;
+  globalThis.createIconButton = createIconButton;
   globalThis.listProfiles = vi.fn(async () => [
     { id: 'default', name: 'Standard' },
     { id: 'hrm', name: 'HRM' },

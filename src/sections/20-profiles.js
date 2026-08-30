@@ -38,16 +38,9 @@ export async function renderProfileSwitcher() {
   });
   wrap.appendChild(select);
 
-  const mkBtn = (icon, title, handler) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'profile-btn';
-    b.title = title;
-    setIcon(b, icon);
-    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handler(); });
-    wrap.appendChild(b);
-    return b;
-  };
+  // Icon buttons share the createIconButton primitive (12-legend-org.js)
+  const mkBtn = (icon, title, handler) =>
+    wrap.appendChild(createIconButton({ icon, title, className: 'profile-btn', onClick: handler }));
 
   mkBtn('plus', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
   mkBtn('edit', 'Aktuelles Profil umbenennen', async () => {

@@ -469,8 +469,7 @@ export function updateGlobalHiddenVisibilityButton() {
     btn.className = allHiddenTemporarilyVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
     btn.title = allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden';
     // Icon aktualisieren
-    const icon = btn.querySelector('[data-icon]');
-    if (icon) setIcon(icon, allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed');
+    setIcon(btn, allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed');
   }
 }
 

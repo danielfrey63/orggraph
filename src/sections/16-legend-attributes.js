@@ -1,27 +1,4 @@
 /**
- * Initialisiert die Collapsed-Zustände der Legend-Sektionen aus ENV [SF]
- */
-export function initializeLegendCollapsedStates() {
-  const sections = [
-    { key: 'LEGEND_OES_COLLAPSED', target: 'legend' },
-    { key: 'LEGEND_ATTRIBUTES_COLLAPSED', target: 'attributeContainer' },
-    { key: 'LEGEND_HIDDEN_COLLAPSED', target: 'hiddenLegend' }
-  ];
-  
-  for (const { key, target } of sections) {
-    const shouldCollapse = envConfig?.[key];
-    if (typeof shouldCollapse !== 'boolean') continue;
-    
-    const chevronBtn = document.querySelector(`.legend-chevron[data-target="${target}"]`);
-    const content = document.getElementById(target);
-    
-    if (chevronBtn && content) {
-      setLegendSectionCollapsed(chevronBtn, content, shouldCollapse);
-    }
-  }
-}
-
-/**
  * Erstellt die Attribut-Legende mit einheitlichem legend-row Layout (wie OEs)
  */
 export function buildAttributeLegend() {

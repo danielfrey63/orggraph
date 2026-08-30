@@ -1,73 +1,69 @@
-export function refreshClusters() {
-  if (!clusterLayer) return;
-  
-  // Early exit: Keine Cluster zeichnen wenn keine OEs ausgewählt sind [PA][SF]
-  if (allowedOrgs.size === 0) {
-    clusterLayer.selectAll('path.cluster').remove();
-    clusterPolygons.clear();
-    return;
-  }
-  
-  const pad = cssNumber('--cluster-pad', 12);
+// Shared hull renderer for both simulation flavours: cluster mode
+// (refreshClusters below) and render mode (the tick handler in 14) pass their
+// own layer, visible-person set and simulation-node lookup. Single owner of
+// the member collection, hull geometry and the path.cluster data join.
+export function renderClusterHulls(layer, personIds, simNodeById, pad) {
+  if (!layer) return;
   const membersByOrg = new Map();
-  
-  if (!raw || !Array.isArray(raw.orgs) || !Array.isArray(raw.links)) return;
-  const orgIds = new Set(raw.orgs.map(o => String(o.id)));
 
-  // Cache: für jedes OE alle Nachfahren inkl. sich selbst
-  const descendantsCache = new Map();
-  const getDescendants = (root) => {
-    const key = String(root);
-    if (descendantsCache.has(key)) return descendantsCache.get(key);
-    const res = new Set([key]);
-    const q = [key];
-    while (q.length) {
-      const cur = q.shift();
-      const kids = orgChildren.get(cur);
-      if (!kids) continue;
-      for (const k of kids) {
-        if (!res.has(k)) {
-          res.add(k);
-          q.push(k);
+  if (allowedOrgs.size > 0 && raw && Array.isArray(raw.orgs) && Array.isArray(raw.links)) {
+    const orgIds = new Set(raw.orgs.map(o => String(o.id)));
+
+    // Cache: für jedes OE alle Nachfahren inkl. sich selbst
+    const descendantsCache = new Map();
+    const getDescendants = (root) => {
+      const key = String(root);
+      if (descendantsCache.has(key)) return descendantsCache.get(key);
+      const res = new Set([key]);
+      const q = [key];
+      while (q.length) {
+        const cur = q.shift();
+        const kids = orgChildren.get(cur);
+        if (!kids) continue;
+        for (const k of kids) {
+          if (!res.has(k)) {
+            res.add(k);
+            q.push(k);
+          }
         }
       }
-    }
-    descendantsCache.set(key, res);
-    return res;
-  };
+      descendantsCache.set(key, res);
+      return res;
+    };
 
-  // Mapping: jede OE -> Menge aktiver Wurzel-OEs, deren Unterbaum sie angehört
-  const rootForOrg = new Map();
-  for (const root of allowedOrgs) {
-    const rootId = String(root);
-    if (!orgIds.has(rootId)) continue;
-    const desc = getDescendants(rootId);
-    for (const oid of desc) {
-      if (!rootForOrg.has(oid)) rootForOrg.set(oid, new Set());
-      rootForOrg.get(oid).add(rootId);
+    // Mapping: jede OE -> Menge aktiver Wurzel-OEs, deren Unterbaum sie angehört
+    const rootForOrg = new Map();
+    for (const root of allowedOrgs) {
+      const rootId = String(root);
+      if (!orgIds.has(rootId)) continue;
+      const desc = getDescendants(rootId);
+      for (const oid of desc) {
+        if (!rootForOrg.has(oid)) rootForOrg.set(oid, new Set());
+        rootForOrg.get(oid).add(rootId);
+      }
+    }
+
+    // Personen den Clustern der Wurzel-OEs ihrer Basis-OEs zuordnen
+    for (const l of raw.links) {
+      if (!l) continue;
+      const s = idOf(l.source), t = idOf(l.target);
+      if (!personIds.has(s)) continue;
+      if (!orgIds.has(t)) continue;
+      const roots = rootForOrg.get(t);
+      if (!roots || roots.size === 0) continue;
+      const nd = simNodeById.get(s);
+      if (!nd || nd.x == null || nd.y == null) continue;
+      for (const rid of roots) {
+        if (!membersByOrg.has(rid)) membersByOrg.set(rid, []);
+        membersByOrg.get(rid).push(nd);
+      }
     }
   }
 
-  // Personen den Clustern der Wurzel-OEs ihrer Basis-OEs zuordnen
-  for (const l of raw.links) {
-    if (!l) continue;
-    const s = idOf(l.source), t = idOf(l.target);
-    if (!clusterPersonIds.has(s)) continue;
-    if (!orgIds.has(t)) continue;
-    const roots = rootForOrg.get(t);
-    if (!roots || roots.size === 0) continue;
-    const nd = clusterSimById.get(s);
-    if (!nd || nd.x == null || nd.y == null) continue;
-    for (const rid of roots) {
-      if (!membersByOrg.has(rid)) membersByOrg.set(rid, []);
-      membersByOrg.get(rid).push(nd);
-    }
-  }
-  
   const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }))
     .sort((a,b) => (orgDepth(a.oid) - orgDepth(b.oid)) || String(a.oid).localeCompare(String(b.oid)));
-    
-  const paths = clusterLayer.selectAll('path.cluster').data(clusterData, d => d.oid);
+
+  const paths = layer.selectAll('path.cluster').data(clusterData, d => d.oid);
   paths.enter().append('path').attr('class','cluster').merge(paths)
     .each(function(d){
       const poly = computeClusterPolygon(d.nodes, pad);
@@ -83,15 +79,29 @@ export function refreshClusters() {
   paths.exit().remove();
 }
 
+export function refreshClusters() {
+  if (!clusterLayer) return;
+
+  // Early exit: Keine Cluster zeichnen wenn keine OEs ausgewählt sind [PA][SF]
+  if (allowedOrgs.size === 0) {
+    clusterLayer.selectAll('path.cluster').remove();
+    clusterPolygons.clear();
+    return;
+  }
+
+  if (!raw || !Array.isArray(raw.orgs) || !Array.isArray(raw.links)) return;
+  renderClusterHulls(clusterLayer, clusterPersonIds, clusterSimById, cssNumber('--cluster-pad'));
+}
+
 /**
  * CSS-derived constants for getNodeOuterRadius. Hoist this out of per-node
  * loops (cluster polygons recompute on every simulation tick) so
  * getComputedStyle is not hit once per node.
  */
 export function nodeOuterRadiusMetrics() {
-  const base = cssNumber('--node-radius', 8) + cssNumber('--node-stroke-width', 3) / 2;
+  const base = cssNumber('--node-radius') + cssNumber('--node-stroke-width') / 2;
   const ringStep = attributesVisible
-    ? cssNumber('--attribute-circle-gap', 4) + cssNumber('--attribute-circle-stroke-width', 2)
+    ? cssNumber('--attribute-circle-gap') + cssNumber('--attribute-circle-stroke-width')
     : 0;
   return { base, ringStep };
 }
@@ -219,14 +229,14 @@ export function radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes,
  */
 export function createSimulation(nodes, links) {
   // Force-Simulation-Parameter
-  const linkDistance = cssNumber('--link-distance', 60);
-  const linkStrength = cssNumber('--link-strength', 0.4);
-  const chargeStrength = cssNumber('--charge-strength', -200);
-  const alphaDecay = cssNumber('--alpha-decay', 0.0228);
-  const velocityDecay = cssNumber('--velocity-decay', 0.4);
-  const nodeRadius = cssNumber('--node-radius', 8);
-  const collidePadding = cssNumber('--collide-padding', 6);
-  const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
+  const linkDistance = cssNumber('--link-distance');
+  const linkStrength = cssNumber('--link-strength');
+  const chargeStrength = cssNumber('--charge-strength');
+  const alphaDecay = cssNumber('--alpha-decay');
+  const velocityDecay = cssNumber('--velocity-decay');
+  const nodeRadius = cssNumber('--node-radius');
+  const collidePadding = cssNumber('--collide-padding');
+  const nodeStrokeWidth = cssNumber('--node-stroke-width');
 
   return d3.forceSimulation(nodes)
     .force("link", d3.forceLink(links).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
@@ -235,8 +245,8 @@ export function createSimulation(nodes, links) {
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
     .force("collide", d3.forceCollide().radius(d => {
       // Kollisionsradius basierend auf Attribut-Kreisen berechnen
-      const circleGap = cssNumber('--attribute-circle-gap', 4);
-      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+      const circleGap = cssNumber('--attribute-circle-gap');
+      const circleWidth = cssNumber('--attribute-circle-stroke-width');
 
       // Only rings that are actually drawn (active + category visible) count
       const attrCount = countVisibleAttributeRings(d.id);

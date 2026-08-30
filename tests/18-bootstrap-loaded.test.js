@@ -113,7 +113,6 @@ beforeAll(async () => {
   globalThis.renderFullView = vi.fn();
   globalThis.setActive = vi.fn();
   globalThis.chooseItem = vi.fn();
-  globalThis.initializeLegendCollapsedStates = vi.fn();
   globalThis.initializeCollapsibleLegends = vi.fn();
   globalThis.installGlobalDrop = vi.fn();
   globalThis.showDropZone = vi.fn();

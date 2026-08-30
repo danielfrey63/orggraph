@@ -125,8 +125,8 @@ describe('cssNumber', () => {
 });
 
 describe('computeClusterPolygon', () => {
-  // base radius (8 + 3/2 stroke) + pad 10, no rings visible
-  const R = 19.5;
+  // base radius (8 + 1/2 stroke) + pad 10, no rings visible
+  const R = 18.5;
 
   it('returns an empty polygon for no nodes', () => {
     expect(computeClusterPolygon([], 10)).toEqual([]);
@@ -155,9 +155,9 @@ describe('computeClusterPolygon', () => {
     globalThis.personAttributes = new Map([['p1', new Map([['A', '1'], ['B', '1']])]]);
     globalThis.activeAttributes = new Set(['A', 'B']);
     const poly = computeClusterPolygon([{ id: 'p1', x: 0, y: 0 }], 10);
-    // base 9.5 + 2 rings * (gap 4 + width 2) + pad 10
+    // base 8.5 + 2 rings * (gap 1 + width 4) + pad 10
     for (const [x, y] of poly) {
-      expect(Math.hypot(x, y)).toBeCloseTo(31.5, 6);
+      expect(Math.hypot(x, y)).toBeCloseTo(28.5, 6);
     }
   });
 
@@ -167,8 +167,8 @@ describe('computeClusterPolygon', () => {
     globalThis.activeAttributes = new Set(['A']);
     const poly = computeClusterPolygon([{ id: 'p1', x: 0, y: 0 }, { id: 'p2', x: 100, y: 0 }], 10);
     const xs = poly.map((p) => p[0]);
-    // p1 has one ring (base 9.5 + 6 + pad = 25.5), p2 none (19.5)
-    expect(Math.min(...xs)).toBeCloseTo(-25.5, 6);
+    // p1 has one ring (base 8.5 + 5 + pad = 23.5), p2 none (18.5)
+    expect(Math.min(...xs)).toBeCloseTo(-23.5, 6);
     expect(Math.max(...xs)).toBeCloseTo(100 + R, 6);
   });
 });

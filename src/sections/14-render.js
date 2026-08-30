@@ -146,8 +146,8 @@ export function renderGraph(sub) {
   if (defs.empty()) {
     defs = svg.append("defs");
   }
-  const arrowLen = cssNumber('--arrow-length', 10);
-  const linkStroke = cssNumber('--link-stroke-width', 3);
+  const arrowLen = cssNumber('--arrow-length');
+  const linkStroke = cssNumber('--link-stroke-width');
   let arrow = defs.select("marker#arrow");
   if (arrow.empty()) {
     arrow = defs.append("marker").attr("id", "arrow");
@@ -211,7 +211,6 @@ export function renderGraph(sub) {
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
     .join("text")
     .attr("class", "link-label")
-    .attr("text-anchor", "middle")
     .attr("dy", -3)
     .style("display", (debugMode && labelsVisible !== 'none') ? "block" : "none");
 
@@ -242,11 +241,11 @@ export function renderGraph(sub) {
     .attr("class", d => `node${d.diffClass ? ' ' + d.diffClass : ''}`);
 
   // Styling-Parameter
-  const nodeRadius = cssNumber('--node-radius', 8);
-  const collidePadding = cssNumber('--collide-padding', 6);
-  const circleGap = cssNumber('--attribute-circle-gap', 2);
-  const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
+  const nodeRadius = cssNumber('--node-radius');
+  const collidePadding = cssNumber('--collide-padding');
+  const circleGap = cssNumber('--attribute-circle-gap');
+  const circleWidth = cssNumber('--attribute-circle-stroke-width');
+  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
   // Hauptkreis und Label nur für neue Knoten hinzufügen
   const nodeEnter = node.filter(function() { return this.childElementCount === 0; });
@@ -314,7 +313,7 @@ export function renderGraph(sub) {
       } else {
         // Sekundärer Root: Außerhalb der Hülle der bereits positionierten Knoten
         const alreadyPositioned = personNodes.filter(n => positioned.has(String(n.id)));
-        const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius', 8) * 1.5); // baseRadius * 1.5 approximated
+        const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius') * 1.5); // baseRadius * 1.5 approximated
         rootX = pos.x;
         rootY = pos.y;
       }
@@ -411,7 +410,7 @@ export function renderGraph(sub) {
       const rootNode = personNodes.find(n => String(n.id) === rootId);
       if (!rootNode) continue;
       const alreadyPositioned = personNodes.filter(n => positioned.has(String(n.id)));
-      const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius', 8) * 1.5);
+      const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius') * 1.5);
       rootNode.x = pos.x;
       rootNode.y = pos.y;
       positioned.add(rootId);
@@ -544,7 +543,7 @@ export function renderGraph(sub) {
 
   // Tick-Handler für Animation
   simulation.on("tick", () => {
-    const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
+    const nodeStrokeWidth = cssNumber('--node-stroke-width');
     const nodeOuter = nodeRadius + (nodeStrokeWidth / 2);
     
     // Funktion zur Berechnung des äussersten Attributring-Radius für einen Knoten
@@ -554,9 +553,9 @@ export function renderGraph(sub) {
         return nodeRadius;
       }
       
-      const circleGap = cssNumber('--attribute-circle-gap', 2);
-      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-      const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
+      const circleGap = cssNumber('--attribute-circle-gap');
+      const circleWidth = cssNumber('--attribute-circle-stroke-width');
+      const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
 
       // Only rings that are actually drawn (active + category visible) count
       const attrCount = countVisibleAttributeRings(d.id);
@@ -614,93 +613,18 @@ export function renderGraph(sub) {
         return Math.round(dist) + 'px';
       });
 
-    // Cluster (OE-Hüllen) aktualisieren
-    const pad = cssNumber('--cluster-pad', 12);
-    const membersByOrg = new Map();
-
-    if (raw && Array.isArray(raw.orgs) && Array.isArray(raw.links)) {
-      const orgIds = new Set(raw.orgs.map(o => String(o.id)));
-
-      // Cache: für jedes OE alle Nachfahren inkl. sich selbst auf Basis der globalen orgChildren
-      const descendantsCache = new Map();
-      const getDescendants = (root) => {
-        const key = String(root);
-        if (descendantsCache.has(key)) return descendantsCache.get(key);
-        const res = new Set([key]);
-        const q = [key];
-        while (q.length) {
-          const cur = q.shift();
-          const kids = orgChildren.get(cur);
-          if (!kids) continue;
-          for (const k of kids) {
-            if (!res.has(k)) {
-              res.add(k);
-              q.push(k);
-            }
-          }
-        }
-        descendantsCache.set(key, res);
-        return res;
-      };
-
-      // Mapping: jede OE -> Menge aktiver Wurzel-OEs, deren Unterbaum sie angehört
-      const rootForOrg = new Map();
-      for (const rootOid of allowedOrgs) {
-        const rootId = String(rootOid);
-        if (!orgIds.has(rootId)) continue;
-        const desc = getDescendants(rootId);
-        for (const oid of desc) {
-          if (!rootForOrg.has(oid)) rootForOrg.set(oid, new Set());
-          rootForOrg.get(oid).add(rootId);
-        }
-      }
-
-      // Personen den Clustern der Wurzel-OEs ihrer Basis-OEs zuordnen
-      for (const l of raw.links) {
-        if (!l) continue;
-        const s = idOf(l.source), t = idOf(l.target);
-        if (!personIdsInSub.has(s)) continue;
-        if (!orgIds.has(t)) continue;
-        const roots = rootForOrg.get(t);
-        if (!roots || roots.size === 0) continue;
-        const nd = simById.get(s);
-        if (!nd || nd.x == null || nd.y == null) continue;
-        for (const rid of roots) {
-          if (!membersByOrg.has(rid)) membersByOrg.set(rid, []);
-          membersByOrg.get(rid).push(nd);
-        }
-      }
-    }
-
-    // Cluster-Pfade aktualisieren
-    const clusterData = Array.from(membersByOrg.entries())
-      .map(([oid, arr]) => ({ oid, nodes: arr }))
-      .sort((a,b) => (orgDepth(a.oid) - orgDepth(b.oid)) || String(a.oid).localeCompare(String(b.oid)));
-      
-    const paths = gClusters.selectAll('path.cluster').data(clusterData, d => d.oid);
-    paths.enter().append('path').attr('class','cluster').merge(paths)
-      .each(function(d){
-        const poly = computeClusterPolygon(d.nodes, pad);
-        clusterPolygons.set(d.oid, poly);
-        const { stroke, fill } = colorForOrg(d.oid);
-        const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
-        d3.select(this)
-          .attr('d', line(poly))
-          .style('fill', fill)
-          .style('stroke', stroke);
-      })
-      .order();
-    paths.exit().remove();
+    // Cluster (OE-Hüllen) aktualisieren — shared hull renderer in 13
+    renderClusterHulls(gClusters, personIdsInSub, simById, cssNumber('--cluster-pad'));
   });
   
   // No auto-fit after simulation ends
   simulation.on('end', () => {});
 
   // Optionales radiales Layout
-  const radialForceStrength = cssNumber('--radial-force', 0);
+  const radialForceStrength = cssNumber('--radial-force');
   if (radialForceStrength > 0) {
-    const radialGap = cssNumber('--radial-gap', 100);
-    const radialBase = cssNumber('--radial-base', 0);
+    const radialGap = cssNumber('--radial-gap');
+    const radialBase = cssNumber('--radial-base');
     simulation.force(
       "radial",
       d3.forceRadial(

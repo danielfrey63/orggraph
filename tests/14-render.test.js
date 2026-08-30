@@ -30,6 +30,7 @@ beforeEach(() => {
   globalThis.idOf = idOf;
   globalThis.drawKindOf = drawKindOf;
   globalThis.cssNumber = cssNumber;
+  globalThis.renderClusterHulls = sim13.renderClusterHulls;
   globalThis.getNodeFillByLevel = getNodeFillByLevel;
   globalThis.SVG_ID = SVG_ID;
   globalThis.WIDTH = WIDTH;

@@ -1,7 +1,33 @@
+// Single source of the JS-side design-token fallbacks. Mirrors :root in
+// styles.css; it only takes effect where no stylesheet is loaded (unit
+// tests), so keeping the two in sync keeps tests on production values.
+export const CSS_NUMBER_DEFAULTS = {
+  '--node-radius': 8,
+  '--node-stroke-width': 1,
+  '--link-stroke-width': 2,
+  '--link-opacity': 0.5,
+  '--arrow-length': 8,
+  '--cluster-pad': 10,
+  '--attribute-circle-gap': 1,
+  '--attribute-circle-stroke-width': 4,
+  '--node-with-attributes-stroke-width': 6,
+  '--nodes-without-attributes-opacity': 0.2,
+  '--link-distance': 20,
+  '--link-strength': 0.7,
+  '--charge-strength': -250,
+  '--collide-padding': 6,
+  '--alpha-decay': 0.05,
+  '--velocity-decay': 0.5,
+  '--radial-force': 0.15,
+  '--radial-gap': 120,
+  '--radial-base': 0,
+};
+
 export function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
   const n = parseFloat(v);
-  return Number.isFinite(n) ? n : fallback;
+  if (Number.isFinite(n)) return n;
+  return fallback !== undefined ? fallback : (CSS_NUMBER_DEFAULTS[varName] ?? 0);
 }
 
 // Farb-Hilfen: gleiche Kategorie -> ähnliche Farben, Kategorien klar unterscheidbar
@@ -252,7 +278,7 @@ export function handleClusterHover(event, svgSel) {
   const [mx, my] = d3.pointer(event, svgSel.node());
   const p = currentZoomTransform.invert([mx, my]);
   
-  const r = cssNumber('--node-radius', 8) + 6;
+  const r = cssNumber('--node-radius') + 6;
   let nodeLabel = null;
   let personId = null;
   
@@ -445,18 +471,18 @@ export function updateAttributeCircles() {
   // Wenn nicht, prüfen wir, ob überhaupt ein Subgraph existiert
   
   // Styling-Parameter
-  const nodeRadius = cssNumber('--node-radius', 3);
-  const circleGap = cssNumber('--attribute-circle-gap', 1);
-  const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 2);
+  const nodeRadius = cssNumber('--node-radius');
+  const circleGap = cssNumber('--attribute-circle-gap');
+  const circleWidth = cssNumber('--attribute-circle-stroke-width');
+  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
   // Farbe und Stil für Knoten mit Attributen
   const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
   const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke, #4682b4)';
-  const nodeWithAttributesStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
+  const nodeWithAttributesStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
   // Transparenz für Knoten ohne Attribute
-  const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity', 0.2);
+  const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity');
   
   // Alle Knoten im SVG auswählen
   const nodes = d3.selectAll(SVG_ID + ' .node');
@@ -490,7 +516,7 @@ export function updateAttributeCircles() {
       .style('fill', d => getNodeFillByLevel(d))
       .style('stroke', null)
       .style('stroke-width', null)
-      .style('opacity', 1);
+      .style('opacity', null);
     
     // has-attributes Klasse entfernen [SF]
     nodes.classed('has-attributes', false);
@@ -514,7 +540,7 @@ export function updateAttributeCircles() {
     .style('fill', d => getNodeFillByLevel(d))
     .style('stroke', null)
     .style('stroke-width', null)
-    .style('opacity', 1);
+    .style('opacity', null);
   
   // has-attributes Klasse zurücksetzen (wird in der Schleife neu gesetzt) [SF]
   nodes.classed('has-attributes', false);

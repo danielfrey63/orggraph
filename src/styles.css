@@ -433,9 +433,9 @@ input#depth {
   display: none; /* Verstecken da durch Icon-Checkboxes ersetzt */
 }
 
-.label { font-size: 8px; fill: var(--text); pointer-events: none; }
+.label { font-size: var(--label-font-size); fill: var(--label-fill); pointer-events: none; }
 /* Debug link labels (14-render.js); only the display toggle is dynamic */
-.link-label { font-size: 10px; fill: #666; pointer-events: none; }
+.link-label { font-size: var(--link-label-font-size); fill: var(--link-label-fill); text-anchor: middle; pointer-events: none; }
 .labels-hidden .label { display: none; }
 /* Labels nur für Knoten mit Attributen anzeigen [SF] */
 .labels-attributes-only .label { display: none; }
@@ -454,7 +454,7 @@ input#depth {
 .btn { padding: 6px 10px; border-radius: 4px; background: var(--control-bg); border: 1px solid var(--control-border); color: var(--text); cursor: pointer; }
 .btn:hover { background: var(--control-hover); }
 
-.attribute-circle { fill: none; opacity: 0.8; }
+.attribute-circle { fill: none; opacity: var(--attribute-circle-opacity); }
 
 /* Toggle Button Styles */
 .toggle-btn {
@@ -536,6 +536,12 @@ input#depth {
   --node-with-attributes-stroke-width: 6;
   --nodes-without-attributes-opacity: 0.2;
   --root-node-fill: #86efac;
+  --label-font-size: 8px;
+  --label-fill: var(--text);
+  --link-label-font-size: 10px;
+  --link-label-fill: #666;
+  --attribute-circle-opacity: 0.8;
+  --cluster-stroke-width: 1.5;
 
   /* Simulation-Parameter */
   --link-distance: 20;
@@ -617,7 +623,7 @@ input#depth {
   fill: var(--cluster-fill);
   stroke: var(--cluster-stroke);
   opacity: var(--cluster-opacity);
-  stroke-width: 1.5;
+  stroke-width: var(--cluster-stroke-width);
   pointer-events: auto;
 }
 
@@ -653,11 +659,6 @@ input#depth {
 .legend-icon-btn.visible {
   opacity: 1;
   pointer-events: auto;
-}
-
-/* Stacked double chevron (expand/collapse all) */
-#expandAllAttributes .ic + .ic {
-  margin-top: -8px;
 }
 
 .legend-icon-btn:hover {
@@ -731,19 +732,6 @@ input#depth {
 .legend-search-input:focus {
   border-color: var(--active-toggle-bg);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-}
-
-/* Doppel-Chevron für Expand-All Button */
-#expandAllAttributes {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-#expandAllAttributes .ic {
-  line-height: 1;
 }
 
 .legend-title {

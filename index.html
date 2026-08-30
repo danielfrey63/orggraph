@@ -441,9 +441,9 @@ input#depth {
   display: none; /* Verstecken da durch Icon-Checkboxes ersetzt */
 }
 
-.label { font-size: 8px; fill: var(--text); pointer-events: none; }
+.label { font-size: var(--label-font-size); fill: var(--label-fill); pointer-events: none; }
 /* Debug link labels (14-render.js); only the display toggle is dynamic */
-.link-label { font-size: 10px; fill: #666; pointer-events: none; }
+.link-label { font-size: var(--link-label-font-size); fill: var(--link-label-fill); text-anchor: middle; pointer-events: none; }
 .labels-hidden .label { display: none; }
 /* Labels nur für Knoten mit Attributen anzeigen [SF] */
 .labels-attributes-only .label { display: none; }
@@ -462,7 +462,7 @@ input#depth {
 .btn { padding: 6px 10px; border-radius: 4px; background: var(--control-bg); border: 1px solid var(--control-border); color: var(--text); cursor: pointer; }
 .btn:hover { background: var(--control-hover); }
 
-.attribute-circle { fill: none; opacity: 0.8; }
+.attribute-circle { fill: none; opacity: var(--attribute-circle-opacity); }
 
 /* Toggle Button Styles */
 .toggle-btn {
@@ -544,6 +544,12 @@ input#depth {
   --node-with-attributes-stroke-width: 6;
   --nodes-without-attributes-opacity: 0.2;
   --root-node-fill: #86efac;
+  --label-font-size: 8px;
+  --label-fill: var(--text);
+  --link-label-font-size: 10px;
+  --link-label-fill: #666;
+  --attribute-circle-opacity: 0.8;
+  --cluster-stroke-width: 1.5;
 
   /* Simulation-Parameter */
   --link-distance: 20;
@@ -625,7 +631,7 @@ input#depth {
   fill: var(--cluster-fill);
   stroke: var(--cluster-stroke);
   opacity: var(--cluster-opacity);
-  stroke-width: 1.5;
+  stroke-width: var(--cluster-stroke-width);
   pointer-events: auto;
 }
 
@@ -661,11 +667,6 @@ input#depth {
 .legend-icon-btn.visible {
   opacity: 1;
   pointer-events: auto;
-}
-
-/* Stacked double chevron (expand/collapse all) */
-#expandAllAttributes .ic + .ic {
-  margin-top: -8px;
 }
 
 .legend-icon-btn:hover {
@@ -739,19 +740,6 @@ input#depth {
 .legend-search-input:focus {
   border-color: var(--active-toggle-bg);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-}
-
-/* Doppel-Chevron für Expand-All Button */
-#expandAllAttributes {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-#expandAllAttributes .ic {
-  line-height: 1;
 }
 
 .legend-title {
@@ -1393,8 +1381,7 @@ body.dz-dragging::after {
             </div>
             <div class="legend-actions-area">
               <button id="expandAllAttributes" class="legend-icon-btn" title="Alle Kategorien expandieren/kollabieren" data-ignore-header-click="true">
-                <i data-icon="chevronDown"></i>
-                <i data-icon="chevronDown"></i>
+                <i data-icon="expandAll"></i>
               </button>
               <button id="toggleAllAttributes" class="legend-icon-btn" title="Alle Attribute an/abwählen" data-ignore-header-click="true">
                 <i data-icon="checkAll"></i>
@@ -1516,7 +1503,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.183.180';
+const APP_VERSION = '1.184.181';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -1617,6 +1604,7 @@ const ICON = {
   eyeClosed:    `<svg ${SVG_ATTR}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
   chevronDown:  `<svg ${SVG_ATTR}><polyline points="6 9 12 15 18 9"/></svg>`,
   chevronRight: `<svg ${SVG_ATTR}><polyline points="9 6 15 12 9 18"/></svg>`,
+  expandAll:    `<svg ${SVG_ATTR}><polyline points="6 6 12 12 18 6"/><polyline points="6 13 12 19 18 13"/></svg>`,
   diff:         `<svg ${SVG_ATTR}><path d="M12 4L3 20h18L12 4z"/></svg>`,
   cloudUpload:  `<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
   cloudDownload:`<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
@@ -1630,8 +1618,14 @@ const ICON = {
 /** Replace an element's icon (sets data-icon + innerHTML). */
 function setIcon(el, name) {
   if (!el) return;
-  el.dataset.icon = name;
-  el.innerHTML = ICON[name] || '';
+  // Resolve the icon host: the element itself when it already carries the
+  // icon, otherwise a nested <i data-icon> from static template markup —
+  // callers never need to know which flavour of button they hold.
+  const host = (el.hasAttribute && el.hasAttribute('data-icon'))
+    ? el
+    : (el.querySelector && el.querySelector('[data-icon]')) || el;
+  host.dataset.icon = name;
+  host.innerHTML = ICON[name] || '';
 }
 
 /** Inject SVGs into every [data-icon] element under `root` (idempotent). */
@@ -1880,10 +1874,10 @@ function buildExportStylesheet({ withBody = false } = {}) {
       .link { stroke: ${cssVar('--link-stroke')}; stroke-width: ${cssVar('--link-stroke-width')}; stroke-opacity: ${cssVar('--link-opacity')}; }
       #arrow path { fill: ${cssVar('--link-stroke')}; fill-opacity: ${cssVar('--link-opacity')}; }
       .node-circle { fill: ${cssVar('--node-fill')}; stroke: ${cssVar('--node-stroke')}; stroke-width: ${cssVar('--node-stroke-width')}; }
-      .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${cssVar('--cluster-opacity')}; }
-      .label { font-size: 8px; fill: #000; }
-      .link-label { font-size: 10px; fill: #666; }
-      .attribute-circle { fill: none; opacity: 0.8; }
+      .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: ${cssVar('--cluster-stroke-width')}; opacity: ${cssVar('--cluster-opacity')}; }
+      .label { font-size: ${cssVar('--label-font-size')}; fill: ${cssVar('--label-fill')}; }
+      .link-label { font-size: ${cssVar('--link-label-font-size')}; fill: ${cssVar('--link-label-fill')}; text-anchor: middle; }
+      .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; }
       ${withBody ? `body { background-color: ${cssVar('--canvas-bg')}; }` : ''}
       .labels-hidden .label { display: none; }
       .labels-attributes-only .label { display: none; }
@@ -3459,10 +3453,36 @@ function removeRoot(id){
   selectedRootIds = selectedRootIds.filter(x => x !== s);
 }
 
+// Single source of the JS-side design-token fallbacks. Mirrors :root in
+// styles.css; it only takes effect where no stylesheet is loaded (unit
+// tests), so keeping the two in sync keeps tests on production values.
+const CSS_NUMBER_DEFAULTS = {
+  '--node-radius': 8,
+  '--node-stroke-width': 1,
+  '--link-stroke-width': 2,
+  '--link-opacity': 0.5,
+  '--arrow-length': 8,
+  '--cluster-pad': 10,
+  '--attribute-circle-gap': 1,
+  '--attribute-circle-stroke-width': 4,
+  '--node-with-attributes-stroke-width': 6,
+  '--nodes-without-attributes-opacity': 0.2,
+  '--link-distance': 20,
+  '--link-strength': 0.7,
+  '--charge-strength': -250,
+  '--collide-padding': 6,
+  '--alpha-decay': 0.05,
+  '--velocity-decay': 0.5,
+  '--radial-force': 0.15,
+  '--radial-gap': 120,
+  '--radial-base': 0,
+};
+
 function cssNumber(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName);
   const n = parseFloat(v);
-  return Number.isFinite(n) ? n : fallback;
+  if (Number.isFinite(n)) return n;
+  return fallback !== undefined ? fallback : (CSS_NUMBER_DEFAULTS[varName] ?? 0);
 }
 
 // Farb-Hilfen: gleiche Kategorie -> ähnliche Farben, Kategorien klar unterscheidbar
@@ -3713,7 +3733,7 @@ function handleClusterHover(event, svgSel) {
   const [mx, my] = d3.pointer(event, svgSel.node());
   const p = currentZoomTransform.invert([mx, my]);
   
-  const r = cssNumber('--node-radius', 8) + 6;
+  const r = cssNumber('--node-radius') + 6;
   let nodeLabel = null;
   let personId = null;
   
@@ -3906,18 +3926,18 @@ function updateAttributeCircles() {
   // Wenn nicht, prüfen wir, ob überhaupt ein Subgraph existiert
   
   // Styling-Parameter
-  const nodeRadius = cssNumber('--node-radius', 3);
-  const circleGap = cssNumber('--attribute-circle-gap', 1);
-  const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 2);
+  const nodeRadius = cssNumber('--node-radius');
+  const circleGap = cssNumber('--attribute-circle-gap');
+  const circleWidth = cssNumber('--attribute-circle-stroke-width');
+  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
   // Farbe und Stil für Knoten mit Attributen
   const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
   const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke, #4682b4)';
-  const nodeWithAttributesStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
+  const nodeWithAttributesStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
   // Transparenz für Knoten ohne Attribute
-  const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity', 0.2);
+  const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity');
   
   // Alle Knoten im SVG auswählen
   const nodes = d3.selectAll(SVG_ID + ' .node');
@@ -3951,7 +3971,7 @@ function updateAttributeCircles() {
       .style('fill', d => getNodeFillByLevel(d))
       .style('stroke', null)
       .style('stroke-width', null)
-      .style('opacity', 1);
+      .style('opacity', null);
     
     // has-attributes Klasse entfernen [SF]
     nodes.classed('has-attributes', false);
@@ -3975,7 +3995,7 @@ function updateAttributeCircles() {
     .style('fill', d => getNodeFillByLevel(d))
     .style('stroke', null)
     .style('stroke-width', null)
-    .style('opacity', 1);
+    .style('opacity', null);
   
   // has-attributes Klasse zurücksetzen (wird in der Schleife neu gesetzt) [SF]
   nodes.classed('has-attributes', false);
@@ -4906,8 +4926,7 @@ function updateGlobalHiddenVisibilityButton() {
     btn.className = allHiddenTemporarilyVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
     btn.title = allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden';
     // Icon aktualisieren
-    const icon = btn.querySelector('[data-icon]');
-    if (icon) setIcon(icon, allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed');
+    setIcon(btn, allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed');
   }
 }
 
@@ -4976,15 +4995,25 @@ function createLegendChip(text, title) {
 }
 
 // Aktions-Button rechts in der Row; onClick bekommt stopPropagation
-function createLegendIconButton({ icon, svg, title, className = '', onClick } = {}) {
+// Minimal icon-button primitive shared by every icon-button flavour
+// (legend buttons below, profile switcher in 20).
+function createIconButton({ icon, svg, title, className = '', onClick } = {}) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = className ? `legend-icon-btn ${className}` : 'legend-icon-btn';
+  if (className) btn.className = className;
   if (title) btn.title = title;
   if (icon) setIcon(btn, icon);
   else if (svg) btn.innerHTML = svg;
+  if (onClick) btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onClick(e); });
+  return btn;
+}
+
+function createLegendIconButton({ icon, svg, title, className = '', onClick } = {}) {
+  const btn = createIconButton({
+    icon, svg, title, onClick,
+    className: className ? `legend-icon-btn ${className}` : 'legend-icon-btn',
+  });
   btn.setAttribute('data-ignore-header-click', 'true');
-  if (onClick) btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(e); });
   return btn;
 }
 
@@ -5519,76 +5548,72 @@ function showNodeMenu(x, y, actionsOrOnHide) {
 }
 
 
-function refreshClusters() {
-  if (!clusterLayer) return;
-  
-  // Early exit: Keine Cluster zeichnen wenn keine OEs ausgewählt sind [PA][SF]
-  if (allowedOrgs.size === 0) {
-    clusterLayer.selectAll('path.cluster').remove();
-    clusterPolygons.clear();
-    return;
-  }
-  
-  const pad = cssNumber('--cluster-pad', 12);
+// Shared hull renderer for both simulation flavours: cluster mode
+// (refreshClusters below) and render mode (the tick handler in 14) pass their
+// own layer, visible-person set and simulation-node lookup. Single owner of
+// the member collection, hull geometry and the path.cluster data join.
+function renderClusterHulls(layer, personIds, simNodeById, pad) {
+  if (!layer) return;
   const membersByOrg = new Map();
-  
-  if (!raw || !Array.isArray(raw.orgs) || !Array.isArray(raw.links)) return;
-  const orgIds = new Set(raw.orgs.map(o => String(o.id)));
 
-  // Cache: für jedes OE alle Nachfahren inkl. sich selbst
-  const descendantsCache = new Map();
-  const getDescendants = (root) => {
-    const key = String(root);
-    if (descendantsCache.has(key)) return descendantsCache.get(key);
-    const res = new Set([key]);
-    const q = [key];
-    while (q.length) {
-      const cur = q.shift();
-      const kids = orgChildren.get(cur);
-      if (!kids) continue;
-      for (const k of kids) {
-        if (!res.has(k)) {
-          res.add(k);
-          q.push(k);
+  if (allowedOrgs.size > 0 && raw && Array.isArray(raw.orgs) && Array.isArray(raw.links)) {
+    const orgIds = new Set(raw.orgs.map(o => String(o.id)));
+
+    // Cache: für jedes OE alle Nachfahren inkl. sich selbst
+    const descendantsCache = new Map();
+    const getDescendants = (root) => {
+      const key = String(root);
+      if (descendantsCache.has(key)) return descendantsCache.get(key);
+      const res = new Set([key]);
+      const q = [key];
+      while (q.length) {
+        const cur = q.shift();
+        const kids = orgChildren.get(cur);
+        if (!kids) continue;
+        for (const k of kids) {
+          if (!res.has(k)) {
+            res.add(k);
+            q.push(k);
+          }
         }
       }
-    }
-    descendantsCache.set(key, res);
-    return res;
-  };
+      descendantsCache.set(key, res);
+      return res;
+    };
 
-  // Mapping: jede OE -> Menge aktiver Wurzel-OEs, deren Unterbaum sie angehört
-  const rootForOrg = new Map();
-  for (const root of allowedOrgs) {
-    const rootId = String(root);
-    if (!orgIds.has(rootId)) continue;
-    const desc = getDescendants(rootId);
-    for (const oid of desc) {
-      if (!rootForOrg.has(oid)) rootForOrg.set(oid, new Set());
-      rootForOrg.get(oid).add(rootId);
+    // Mapping: jede OE -> Menge aktiver Wurzel-OEs, deren Unterbaum sie angehört
+    const rootForOrg = new Map();
+    for (const root of allowedOrgs) {
+      const rootId = String(root);
+      if (!orgIds.has(rootId)) continue;
+      const desc = getDescendants(rootId);
+      for (const oid of desc) {
+        if (!rootForOrg.has(oid)) rootForOrg.set(oid, new Set());
+        rootForOrg.get(oid).add(rootId);
+      }
+    }
+
+    // Personen den Clustern der Wurzel-OEs ihrer Basis-OEs zuordnen
+    for (const l of raw.links) {
+      if (!l) continue;
+      const s = idOf(l.source), t = idOf(l.target);
+      if (!personIds.has(s)) continue;
+      if (!orgIds.has(t)) continue;
+      const roots = rootForOrg.get(t);
+      if (!roots || roots.size === 0) continue;
+      const nd = simNodeById.get(s);
+      if (!nd || nd.x == null || nd.y == null) continue;
+      for (const rid of roots) {
+        if (!membersByOrg.has(rid)) membersByOrg.set(rid, []);
+        membersByOrg.get(rid).push(nd);
+      }
     }
   }
 
-  // Personen den Clustern der Wurzel-OEs ihrer Basis-OEs zuordnen
-  for (const l of raw.links) {
-    if (!l) continue;
-    const s = idOf(l.source), t = idOf(l.target);
-    if (!clusterPersonIds.has(s)) continue;
-    if (!orgIds.has(t)) continue;
-    const roots = rootForOrg.get(t);
-    if (!roots || roots.size === 0) continue;
-    const nd = clusterSimById.get(s);
-    if (!nd || nd.x == null || nd.y == null) continue;
-    for (const rid of roots) {
-      if (!membersByOrg.has(rid)) membersByOrg.set(rid, []);
-      membersByOrg.get(rid).push(nd);
-    }
-  }
-  
   const clusterData = Array.from(membersByOrg.entries()).map(([oid, arr]) => ({ oid, nodes: arr }))
     .sort((a,b) => (orgDepth(a.oid) - orgDepth(b.oid)) || String(a.oid).localeCompare(String(b.oid)));
-    
-  const paths = clusterLayer.selectAll('path.cluster').data(clusterData, d => d.oid);
+
+  const paths = layer.selectAll('path.cluster').data(clusterData, d => d.oid);
   paths.enter().append('path').attr('class','cluster').merge(paths)
     .each(function(d){
       const poly = computeClusterPolygon(d.nodes, pad);
@@ -5604,15 +5629,29 @@ function refreshClusters() {
   paths.exit().remove();
 }
 
+function refreshClusters() {
+  if (!clusterLayer) return;
+
+  // Early exit: Keine Cluster zeichnen wenn keine OEs ausgewählt sind [PA][SF]
+  if (allowedOrgs.size === 0) {
+    clusterLayer.selectAll('path.cluster').remove();
+    clusterPolygons.clear();
+    return;
+  }
+
+  if (!raw || !Array.isArray(raw.orgs) || !Array.isArray(raw.links)) return;
+  renderClusterHulls(clusterLayer, clusterPersonIds, clusterSimById, cssNumber('--cluster-pad'));
+}
+
 /**
  * CSS-derived constants for getNodeOuterRadius. Hoist this out of per-node
  * loops (cluster polygons recompute on every simulation tick) so
  * getComputedStyle is not hit once per node.
  */
 function nodeOuterRadiusMetrics() {
-  const base = cssNumber('--node-radius', 8) + cssNumber('--node-stroke-width', 3) / 2;
+  const base = cssNumber('--node-radius') + cssNumber('--node-stroke-width') / 2;
   const ringStep = attributesVisible
-    ? cssNumber('--attribute-circle-gap', 4) + cssNumber('--attribute-circle-stroke-width', 2)
+    ? cssNumber('--attribute-circle-gap') + cssNumber('--attribute-circle-stroke-width')
     : 0;
   return { base, ringStep };
 }
@@ -5740,14 +5779,14 @@ function radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positi
  */
 function createSimulation(nodes, links) {
   // Force-Simulation-Parameter
-  const linkDistance = cssNumber('--link-distance', 60);
-  const linkStrength = cssNumber('--link-strength', 0.4);
-  const chargeStrength = cssNumber('--charge-strength', -200);
-  const alphaDecay = cssNumber('--alpha-decay', 0.0228);
-  const velocityDecay = cssNumber('--velocity-decay', 0.4);
-  const nodeRadius = cssNumber('--node-radius', 8);
-  const collidePadding = cssNumber('--collide-padding', 6);
-  const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
+  const linkDistance = cssNumber('--link-distance');
+  const linkStrength = cssNumber('--link-strength');
+  const chargeStrength = cssNumber('--charge-strength');
+  const alphaDecay = cssNumber('--alpha-decay');
+  const velocityDecay = cssNumber('--velocity-decay');
+  const nodeRadius = cssNumber('--node-radius');
+  const collidePadding = cssNumber('--collide-padding');
+  const nodeStrokeWidth = cssNumber('--node-stroke-width');
 
   return d3.forceSimulation(nodes)
     .force("link", d3.forceLink(links).id(d => String(d.id)).distance(linkDistance).strength(linkStrength))
@@ -5756,8 +5795,8 @@ function createSimulation(nodes, links) {
     .force("center", d3.forceCenter(WIDTH / 2, HEIGHT / 2).strength(0.05))
     .force("collide", d3.forceCollide().radius(d => {
       // Kollisionsradius basierend auf Attribut-Kreisen berechnen
-      const circleGap = cssNumber('--attribute-circle-gap', 4);
-      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
+      const circleGap = cssNumber('--attribute-circle-gap');
+      const circleWidth = cssNumber('--attribute-circle-stroke-width');
 
       // Only rings that are actually drawn (active + category visible) count
       const attrCount = countVisibleAttributeRings(d.id);
@@ -6003,8 +6042,8 @@ function renderGraph(sub) {
   if (defs.empty()) {
     defs = svg.append("defs");
   }
-  const arrowLen = cssNumber('--arrow-length', 10);
-  const linkStroke = cssNumber('--link-stroke-width', 3);
+  const arrowLen = cssNumber('--arrow-length');
+  const linkStroke = cssNumber('--link-stroke-width');
   let arrow = defs.select("marker#arrow");
   if (arrow.empty()) {
     arrow = defs.append("marker").attr("id", "arrow");
@@ -6068,7 +6107,6 @@ function renderGraph(sub) {
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
     .join("text")
     .attr("class", "link-label")
-    .attr("text-anchor", "middle")
     .attr("dy", -3)
     .style("display", (debugMode && labelsVisible !== 'none') ? "block" : "none");
 
@@ -6099,11 +6137,11 @@ function renderGraph(sub) {
     .attr("class", d => `node${d.diffClass ? ' ' + d.diffClass : ''}`);
 
   // Styling-Parameter
-  const nodeRadius = cssNumber('--node-radius', 8);
-  const collidePadding = cssNumber('--collide-padding', 6);
-  const circleGap = cssNumber('--attribute-circle-gap', 2);
-  const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
+  const nodeRadius = cssNumber('--node-radius');
+  const collidePadding = cssNumber('--collide-padding');
+  const circleGap = cssNumber('--attribute-circle-gap');
+  const circleWidth = cssNumber('--attribute-circle-stroke-width');
+  const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
   // Hauptkreis und Label nur für neue Knoten hinzufügen
   const nodeEnter = node.filter(function() { return this.childElementCount === 0; });
@@ -6171,7 +6209,7 @@ function renderGraph(sub) {
       } else {
         // Sekundärer Root: Außerhalb der Hülle der bereits positionierten Knoten
         const alreadyPositioned = personNodes.filter(n => positioned.has(String(n.id)));
-        const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius', 8) * 1.5); // baseRadius * 1.5 approximated
+        const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius') * 1.5); // baseRadius * 1.5 approximated
         rootX = pos.x;
         rootY = pos.y;
       }
@@ -6268,7 +6306,7 @@ function renderGraph(sub) {
       const rootNode = personNodes.find(n => String(n.id) === rootId);
       if (!rootNode) continue;
       const alreadyPositioned = personNodes.filter(n => positioned.has(String(n.id)));
-      const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius', 8) * 1.5);
+      const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius') * 1.5);
       rootNode.x = pos.x;
       rootNode.y = pos.y;
       positioned.add(rootId);
@@ -6401,7 +6439,7 @@ function renderGraph(sub) {
 
   // Tick-Handler für Animation
   simulation.on("tick", () => {
-    const nodeStrokeWidth = cssNumber('--node-stroke-width', 3);
+    const nodeStrokeWidth = cssNumber('--node-stroke-width');
     const nodeOuter = nodeRadius + (nodeStrokeWidth / 2);
     
     // Funktion zur Berechnung des äussersten Attributring-Radius für einen Knoten
@@ -6411,9 +6449,9 @@ function renderGraph(sub) {
         return nodeRadius;
       }
       
-      const circleGap = cssNumber('--attribute-circle-gap', 2);
-      const circleWidth = cssNumber('--attribute-circle-stroke-width', 2);
-      const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width', 3);
+      const circleGap = cssNumber('--attribute-circle-gap');
+      const circleWidth = cssNumber('--attribute-circle-stroke-width');
+      const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
 
       // Only rings that are actually drawn (active + category visible) count
       const attrCount = countVisibleAttributeRings(d.id);
@@ -6471,93 +6509,18 @@ function renderGraph(sub) {
         return Math.round(dist) + 'px';
       });
 
-    // Cluster (OE-Hüllen) aktualisieren
-    const pad = cssNumber('--cluster-pad', 12);
-    const membersByOrg = new Map();
-
-    if (raw && Array.isArray(raw.orgs) && Array.isArray(raw.links)) {
-      const orgIds = new Set(raw.orgs.map(o => String(o.id)));
-
-      // Cache: für jedes OE alle Nachfahren inkl. sich selbst auf Basis der globalen orgChildren
-      const descendantsCache = new Map();
-      const getDescendants = (root) => {
-        const key = String(root);
-        if (descendantsCache.has(key)) return descendantsCache.get(key);
-        const res = new Set([key]);
-        const q = [key];
-        while (q.length) {
-          const cur = q.shift();
-          const kids = orgChildren.get(cur);
-          if (!kids) continue;
-          for (const k of kids) {
-            if (!res.has(k)) {
-              res.add(k);
-              q.push(k);
-            }
-          }
-        }
-        descendantsCache.set(key, res);
-        return res;
-      };
-
-      // Mapping: jede OE -> Menge aktiver Wurzel-OEs, deren Unterbaum sie angehört
-      const rootForOrg = new Map();
-      for (const rootOid of allowedOrgs) {
-        const rootId = String(rootOid);
-        if (!orgIds.has(rootId)) continue;
-        const desc = getDescendants(rootId);
-        for (const oid of desc) {
-          if (!rootForOrg.has(oid)) rootForOrg.set(oid, new Set());
-          rootForOrg.get(oid).add(rootId);
-        }
-      }
-
-      // Personen den Clustern der Wurzel-OEs ihrer Basis-OEs zuordnen
-      for (const l of raw.links) {
-        if (!l) continue;
-        const s = idOf(l.source), t = idOf(l.target);
-        if (!personIdsInSub.has(s)) continue;
-        if (!orgIds.has(t)) continue;
-        const roots = rootForOrg.get(t);
-        if (!roots || roots.size === 0) continue;
-        const nd = simById.get(s);
-        if (!nd || nd.x == null || nd.y == null) continue;
-        for (const rid of roots) {
-          if (!membersByOrg.has(rid)) membersByOrg.set(rid, []);
-          membersByOrg.get(rid).push(nd);
-        }
-      }
-    }
-
-    // Cluster-Pfade aktualisieren
-    const clusterData = Array.from(membersByOrg.entries())
-      .map(([oid, arr]) => ({ oid, nodes: arr }))
-      .sort((a,b) => (orgDepth(a.oid) - orgDepth(b.oid)) || String(a.oid).localeCompare(String(b.oid)));
-      
-    const paths = gClusters.selectAll('path.cluster').data(clusterData, d => d.oid);
-    paths.enter().append('path').attr('class','cluster').merge(paths)
-      .each(function(d){
-        const poly = computeClusterPolygon(d.nodes, pad);
-        clusterPolygons.set(d.oid, poly);
-        const { stroke, fill } = colorForOrg(d.oid);
-        const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
-        d3.select(this)
-          .attr('d', line(poly))
-          .style('fill', fill)
-          .style('stroke', stroke);
-      })
-      .order();
-    paths.exit().remove();
+    // Cluster (OE-Hüllen) aktualisieren — shared hull renderer in 13
+    renderClusterHulls(gClusters, personIdsInSub, simById, cssNumber('--cluster-pad'));
   });
   
   // No auto-fit after simulation ends
   simulation.on('end', () => {});
 
   // Optionales radiales Layout
-  const radialForceStrength = cssNumber('--radial-force', 0);
+  const radialForceStrength = cssNumber('--radial-force');
   if (radialForceStrength > 0) {
-    const radialGap = cssNumber('--radial-gap', 100);
-    const radialBase = cssNumber('--radial-base', 0);
+    const radialGap = cssNumber('--radial-gap');
+    const radialBase = cssNumber('--radial-base');
     simulation.force(
       "radial",
       d3.forceRadial(
@@ -6780,29 +6743,6 @@ function applyFromUI(triggerSource = 'unknown', callStack = false) {
 /**
  * Hilfsfunktionen für Icons (zentrale Registry ICON, siehe icons.js)
  */
-/**
- * Initialisiert die Collapsed-Zustände der Legend-Sektionen aus ENV [SF]
- */
-function initializeLegendCollapsedStates() {
-  const sections = [
-    { key: 'LEGEND_OES_COLLAPSED', target: 'legend' },
-    { key: 'LEGEND_ATTRIBUTES_COLLAPSED', target: 'attributeContainer' },
-    { key: 'LEGEND_HIDDEN_COLLAPSED', target: 'hiddenLegend' }
-  ];
-  
-  for (const { key, target } of sections) {
-    const shouldCollapse = envConfig?.[key];
-    if (typeof shouldCollapse !== 'boolean') continue;
-    
-    const chevronBtn = document.querySelector(`.legend-chevron[data-target="${target}"]`);
-    const content = document.getElementById(target);
-    
-    if (chevronBtn && content) {
-      setLegendSectionCollapsed(chevronBtn, content, shouldCollapse);
-    }
-  }
-}
-
 /**
  * Erstellt die Attribut-Legende mit einheitlichem legend-row Layout (wie OEs)
  */
@@ -7100,8 +7040,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const list = document.querySelector(LIST_COMBO_ID);
   // E25: no hidden footer-status file intake — data enters via the drop
   // zone / file dialog only (FR-6.7).
-  // Legend-Sektionen aus ENV initialisieren [SF]
-  initializeLegendCollapsedStates();
+  // Legend sections: ENV defaults flow through loadCollapseState in 19 [SF]
   // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
   try { document.addEventListener('contextmenu', (e) => e.preventDefault()); } catch {}
   // "Anzeigen" button removed (E23): rendering reacts to every parameter
@@ -7118,8 +7057,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       oesVisible = oeVisibilityBtn.classList.contains('active');
       
       // Icon wechseln zwischen eye und eye-closed
-      const icon = oeVisibilityBtn.querySelector('[data-icon]');
-      if (icon) setIcon(icon, oesVisible ? 'eye' : 'eyeClosed');
+      setIcon(oeVisibilityBtn, oesVisible ? 'eye' : 'eyeClosed');
       
       if (oesVisible) {
         // OEs einblenden - gespeicherte Auswahl wiederherstellen
@@ -7217,8 +7155,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Icon initial korrekt setzen (eye vs. eye-closed)
-    const initialIcon = attributesVisibilityBtn.querySelector('[data-icon]');
-    if (initialIcon) setIcon(initialIcon, attributesVisible ? 'eye' : 'eyeClosed');
+    setIcon(attributesVisibilityBtn, attributesVisible ? 'eye' : 'eyeClosed');
     
     attributesVisibilityBtn.addEventListener('click', (e) => {
       // Stop bubbling to the section header: setIcon replaces the clicked SVG,
@@ -7249,8 +7186,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
       
       // Icon wechseln zwischen eye und eye-closed
-      const icon = attributesVisibilityBtn.querySelector('[data-icon]');
-      if (icon) setIcon(icon, attributesVisible ? 'eye' : 'eyeClosed');
+      setIcon(attributesVisibilityBtn, attributesVisible ? 'eye' : 'eyeClosed');
       
       // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:
       // - activeAttributes (bleiben wie sie sind)
@@ -7457,23 +7393,20 @@ window.addEventListener("DOMContentLoaded", async () => {
    * Aktualisiert das Icon des Label-Toggle-Buttons basierend auf dem Zustand [SF]
    */
   function updateLabelToggleIcon(btn) {
-    const icon = btn.querySelector('[data-icon]');
-    if (!icon) return;
-
     // Icon + Button-Zustand basierend auf labelsVisible setzen
     switch (labelsVisible) {
       case 'all':
-        setIcon(icon, 'tag');
+        setIcon(btn, 'tag');
         btn.classList.add('active');
         btn.title = 'Alle Labels anzeigen';
         break;
       case 'attributes':
-        setIcon(icon, 'property');
+        setIcon(btn, 'property');
         btn.classList.add('active');
         btn.title = 'Nur Attribut-Labels anzeigen';
         break;
       case 'none':
-        setIcon(icon, 'eyeClosed');
+        setIcon(btn, 'eyeClosed');
         btn.classList.remove('active');
         btn.title = 'Labels ausgeblendet';
         break;
@@ -8059,17 +7992,26 @@ function initializeCollapsibleLegends() {
     }
   };
   
-  // Laden des Klappzustands aus localStorage, wenn verfügbar
+  // ENV defaults (LEGEND_*_COLLAPSED) per section; persisted state wins [SF]
+  const ENV_COLLAPSE_DEFAULTS = {
+    legend: 'LEGEND_OES_COLLAPSED',
+    attributeContainer: 'LEGEND_ATTRIBUTES_COLLAPSED',
+    hiddenLegend: 'LEGEND_HIDDEN_COLLAPSED',
+  };
+
+  // Collapse state: localStorage first, then the ENV default, then expanded.
+  // Single init owner — a separate ENV initializer would be overwritten here.
   const loadCollapseState = (id) => {
     try {
       if (typeof localStorage !== 'undefined') {
         const saved = localStorage.getItem(`orggraph_collapsed_${id}`);
-        return saved === '1';
+        if (saved !== null) return saved === '1';
       }
     } catch (e) {
       console.warn('Konnte Zustand nicht laden:', e);
     }
-    return false; // Standardmäßig aufgeklappt
+    const envKey = ENV_COLLAPSE_DEFAULTS[id];
+    return !!(envKey && typeof envConfig !== 'undefined' && envConfig && envConfig[envKey] === true);
   };
   
   // Alle Sektions-Chevrons und ihre Inhalte initialisieren
@@ -8277,16 +8219,9 @@ async function renderProfileSwitcher() {
   });
   wrap.appendChild(select);
 
-  const mkBtn = (icon, title, handler) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'profile-btn';
-    b.title = title;
-    setIcon(b, icon);
-    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handler(); });
-    wrap.appendChild(b);
-    return b;
-  };
+  // Icon buttons share the createIconButton primitive (12-legend-org.js)
+  const mkBtn = (icon, title, handler) =>
+    wrap.appendChild(createIconButton({ icon, title, className: 'profile-btn', onClick: handler }));
 
   mkBtn('plus', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
   mkBtn('edit', 'Aktuelles Profil umbenennen', async () => {

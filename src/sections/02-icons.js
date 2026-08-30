@@ -23,6 +23,7 @@ export const ICON = {
   eyeClosed:    `<svg ${SVG_ATTR}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
   chevronDown:  `<svg ${SVG_ATTR}><polyline points="6 9 12 15 18 9"/></svg>`,
   chevronRight: `<svg ${SVG_ATTR}><polyline points="9 6 15 12 9 18"/></svg>`,
+  expandAll:    `<svg ${SVG_ATTR}><polyline points="6 6 12 12 18 6"/><polyline points="6 13 12 19 18 13"/></svg>`,
   diff:         `<svg ${SVG_ATTR}><path d="M12 4L3 20h18L12 4z"/></svg>`,
   cloudUpload:  `<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
   cloudDownload:`<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
@@ -36,8 +37,14 @@ export const ICON = {
 /** Replace an element's icon (sets data-icon + innerHTML). */
 export function setIcon(el, name) {
   if (!el) return;
-  el.dataset.icon = name;
-  el.innerHTML = ICON[name] || '';
+  // Resolve the icon host: the element itself when it already carries the
+  // icon, otherwise a nested <i data-icon> from static template markup —
+  // callers never need to know which flavour of button they hold.
+  const host = (el.hasAttribute && el.hasAttribute('data-icon'))
+    ? el
+    : (el.querySelector && el.querySelector('[data-icon]')) || el;
+  host.dataset.icon = name;
+  host.innerHTML = ICON[name] || '';
 }
 
 /** Inject SVGs into every [data-icon] element under `root` (idempotent). */

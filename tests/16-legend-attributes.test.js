@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  initializeLegendCollapsedStates,
   buildAttributeLegend,
 } from '../src/sections/16-legend-attributes.js';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
@@ -42,24 +41,6 @@ beforeEach(() => {
   globalThis.categorySourceFiles = new Map();
   globalThis.envConfig = null;
   globalThis.debugMode = false;
-});
-
-describe('initializeLegendCollapsedStates', () => {
-  it('applies env-driven collapsed states and skips non-boolean values', () => {
-    document.body.innerHTML = `
-      <button class="legend-chevron expanded" data-target="legend"></button><div id="legend"></div>
-      <button class="legend-chevron collapsed" data-target="attributeContainer"></button><div id="attributeContainer" class="collapsed"></div>
-      <button class="legend-chevron expanded" data-target="hiddenLegend"></button><div id="hiddenLegend"></div>`;
-    globalThis.envConfig = {
-      LEGEND_OES_COLLAPSED: true,
-      LEGEND_ATTRIBUTES_COLLAPSED: false,
-      LEGEND_HIDDEN_COLLAPSED: 'nope',
-    };
-    initializeLegendCollapsedStates();
-    expect(document.getElementById('legend').classList.contains('collapsed')).toBe(true);
-    expect(document.getElementById('attributeContainer').classList.contains('collapsed')).toBe(false);
-    expect(document.querySelector('[data-target="hiddenLegend"]').className).toBe('legend-chevron expanded');
-  });
 });
 
 describe('buildAttributeLegend', () => {

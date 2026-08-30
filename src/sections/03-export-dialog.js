@@ -223,10 +223,10 @@ function buildExportStylesheet({ withBody = false } = {}) {
       .link { stroke: ${cssVar('--link-stroke')}; stroke-width: ${cssVar('--link-stroke-width')}; stroke-opacity: ${cssVar('--link-opacity')}; }
       #arrow path { fill: ${cssVar('--link-stroke')}; fill-opacity: ${cssVar('--link-opacity')}; }
       .node-circle { fill: ${cssVar('--node-fill')}; stroke: ${cssVar('--node-stroke')}; stroke-width: ${cssVar('--node-stroke-width')}; }
-      .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${cssVar('--cluster-opacity')}; }
-      .label { font-size: 8px; fill: #000; }
-      .link-label { font-size: 10px; fill: #666; }
-      .attribute-circle { fill: none; opacity: 0.8; }
+      .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: ${cssVar('--cluster-stroke-width')}; opacity: ${cssVar('--cluster-opacity')}; }
+      .label { font-size: ${cssVar('--label-font-size')}; fill: ${cssVar('--label-fill')}; }
+      .link-label { font-size: ${cssVar('--link-label-font-size')}; fill: ${cssVar('--link-label-fill')}; text-anchor: middle; }
+      .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; }
       ${withBody ? `body { background-color: ${cssVar('--canvas-bg')}; }` : ''}
       .labels-hidden .label { display: none; }
       .labels-attributes-only .label { display: none; }

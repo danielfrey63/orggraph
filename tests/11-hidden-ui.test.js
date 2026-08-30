@@ -70,7 +70,7 @@ describe('updateGlobalHiddenVisibilityButton', () => {
     updateGlobalHiddenVisibilityButton();
     expect(btn.className).toBe('legend-icon-btn active');
     expect(btn.title).toBe('Alle temporär ausblenden');
-    expect(globalThis.setIcon).toHaveBeenCalledWith(btn.querySelector('[data-icon]'), 'eye');
+    expect(globalThis.setIcon).toHaveBeenCalledWith(btn, 'eye');
   });
 });
 

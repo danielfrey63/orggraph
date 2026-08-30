@@ -227,17 +227,26 @@ export function initializeCollapsibleLegends() {
     }
   };
   
-  // Laden des Klappzustands aus localStorage, wenn verfügbar
+  // ENV defaults (LEGEND_*_COLLAPSED) per section; persisted state wins [SF]
+  const ENV_COLLAPSE_DEFAULTS = {
+    legend: 'LEGEND_OES_COLLAPSED',
+    attributeContainer: 'LEGEND_ATTRIBUTES_COLLAPSED',
+    hiddenLegend: 'LEGEND_HIDDEN_COLLAPSED',
+  };
+
+  // Collapse state: localStorage first, then the ENV default, then expanded.
+  // Single init owner — a separate ENV initializer would be overwritten here.
   const loadCollapseState = (id) => {
     try {
       if (typeof localStorage !== 'undefined') {
         const saved = localStorage.getItem(`orggraph_collapsed_${id}`);
-        return saved === '1';
+        if (saved !== null) return saved === '1';
       }
     } catch (e) {
       console.warn('Konnte Zustand nicht laden:', e);
     }
-    return false; // Standardmäßig aufgeklappt
+    const envKey = ENV_COLLAPSE_DEFAULTS[id];
+    return !!(envKey && typeof envConfig !== 'undefined' && envConfig && envConfig[envKey] === true);
   };
   
   // Alle Sektions-Chevrons und ihre Inhalte initialisieren

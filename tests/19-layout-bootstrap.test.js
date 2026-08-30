@@ -30,6 +30,7 @@ globalThis.localStorage = {
 beforeEach(() => {
   document.body.innerHTML = '';
   globalThis.localStorage.clear();
+  globalThis.envConfig = null;
   globalThis.d3 = d3;
   globalThis.idOf = idOf;
   globalThis.drawKindOf = drawKindOf;
@@ -204,6 +205,19 @@ describe('initializeCollapsibleLegends', () => {
     initializeCollapsibleLegends();
     expect(document.getElementById('legend').classList.contains('collapsed')).toBe(true);
     expect(document.querySelector('.legend-chevron').classList.contains('collapsed')).toBe(true);
+  });
+
+  it('falls back to the ENV default when nothing is persisted; persisted wins', () => {
+    globalThis.envConfig = { LEGEND_OES_COLLAPSED: true };
+    setupDom();
+    initializeCollapsibleLegends();
+    expect(document.getElementById('legend').classList.contains('collapsed')).toBe(true);
+    expect(document.querySelector('.legend-chevron').classList.contains('collapsed')).toBe(true);
+
+    localStorage.setItem('orggraph_collapsed_legend', '0');
+    setupDom();
+    initializeCollapsibleLegends();
+    expect(document.getElementById('legend').classList.contains('collapsed')).toBe(false);
   });
 
   it('header clicks toggle too, but ignore opted-out elements', () => {

@@ -41,15 +41,25 @@ export function createLegendChip(text, title) {
 }
 
 // Aktions-Button rechts in der Row; onClick bekommt stopPropagation
-export function createLegendIconButton({ icon, svg, title, className = '', onClick } = {}) {
+// Minimal icon-button primitive shared by every icon-button flavour
+// (legend buttons below, profile switcher in 20).
+export function createIconButton({ icon, svg, title, className = '', onClick } = {}) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = className ? `legend-icon-btn ${className}` : 'legend-icon-btn';
+  if (className) btn.className = className;
   if (title) btn.title = title;
   if (icon) setIcon(btn, icon);
   else if (svg) btn.innerHTML = svg;
+  if (onClick) btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onClick(e); });
+  return btn;
+}
+
+export function createLegendIconButton({ icon, svg, title, className = '', onClick } = {}) {
+  const btn = createIconButton({
+    icon, svg, title, onClick,
+    className: className ? `legend-icon-btn ${className}` : 'legend-icon-btn',
+  });
   btn.setAttribute('data-ignore-header-click', 'true');
-  if (onClick) btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(e); });
   return btn;
 }
 

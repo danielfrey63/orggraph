@@ -82,14 +82,14 @@ describe('refreshClusters', () => {
 describe('getNodeOuterRadius', () => {
   it('uses base radius plus half stroke without attributes', () => {
     globalThis.attributesVisible = false;
-    expect(mod.getNodeOuterRadius({ id: 'p1' })).toBeCloseTo(8 + 1.5);
+    expect(mod.getNodeOuterRadius({ id: 'p1' })).toBeCloseTo(8 + 0.5);
   });
 
   it('adds one ring per active attribute', () => {
     globalThis.personAttributes = new Map([['p1', new Map([['A', '1'], ['B', '1']])]]);
     globalThis.activeAttributes = new Set(['A']);
     // 8 + 1.5 + 1 * (4 + 2)
-    expect(mod.getNodeOuterRadius({ id: 'p1' })).toBeCloseTo(15.5);
+    expect(mod.getNodeOuterRadius({ id: 'p1' })).toBeCloseTo(13.5);
   });
 
   it('ignores rings whose category is hidden via the eye toggle', () => {
@@ -97,7 +97,7 @@ describe('getNodeOuterRadius', () => {
     globalThis.activeAttributes = new Set(['Team::A', 'Rolle::B']);
     globalThis.hiddenCategories = new Set(['Rolle']);
     // only the Team ring is drawn, so only it counts
-    expect(mod.getNodeOuterRadius({ id: 'p1' })).toBeCloseTo(15.5);
+    expect(mod.getNodeOuterRadius({ id: 'p1' })).toBeCloseTo(13.5);
   });
 });
 

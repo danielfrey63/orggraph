@@ -113,8 +113,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const list = document.querySelector(LIST_COMBO_ID);
   // E25: no hidden footer-status file intake — data enters via the drop
   // zone / file dialog only (FR-6.7).
-  // Legend-Sektionen aus ENV initialisieren [SF]
-  initializeLegendCollapsedStates();
+  // Legend sections: ENV defaults flow through loadCollapseState in 19 [SF]
   // Unterdrücke das Browser-Kontextmenü global, wir zeigen eigene Menüs
   try { document.addEventListener('contextmenu', (e) => e.preventDefault()); } catch {}
   // "Anzeigen" button removed (E23): rendering reacts to every parameter
@@ -131,8 +130,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       oesVisible = oeVisibilityBtn.classList.contains('active');
       
       // Icon wechseln zwischen eye und eye-closed
-      const icon = oeVisibilityBtn.querySelector('[data-icon]');
-      if (icon) setIcon(icon, oesVisible ? 'eye' : 'eyeClosed');
+      setIcon(oeVisibilityBtn, oesVisible ? 'eye' : 'eyeClosed');
       
       if (oesVisible) {
         // OEs einblenden - gespeicherte Auswahl wiederherstellen
@@ -230,8 +228,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Icon initial korrekt setzen (eye vs. eye-closed)
-    const initialIcon = attributesVisibilityBtn.querySelector('[data-icon]');
-    if (initialIcon) setIcon(initialIcon, attributesVisible ? 'eye' : 'eyeClosed');
+    setIcon(attributesVisibilityBtn, attributesVisible ? 'eye' : 'eyeClosed');
     
     attributesVisibilityBtn.addEventListener('click', (e) => {
       // Stop bubbling to the section header: setIcon replaces the clicked SVG,
@@ -262,8 +259,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
       
       // Icon wechseln zwischen eye und eye-closed
-      const icon = attributesVisibilityBtn.querySelector('[data-icon]');
-      if (icon) setIcon(icon, attributesVisible ? 'eye' : 'eyeClosed');
+      setIcon(attributesVisibilityBtn, attributesVisible ? 'eye' : 'eyeClosed');
       
       // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:
       // - activeAttributes (bleiben wie sie sind)
@@ -470,23 +466,20 @@ window.addEventListener("DOMContentLoaded", async () => {
    * Aktualisiert das Icon des Label-Toggle-Buttons basierend auf dem Zustand [SF]
    */
   function updateLabelToggleIcon(btn) {
-    const icon = btn.querySelector('[data-icon]');
-    if (!icon) return;
-
     // Icon + Button-Zustand basierend auf labelsVisible setzen
     switch (labelsVisible) {
       case 'all':
-        setIcon(icon, 'tag');
+        setIcon(btn, 'tag');
         btn.classList.add('active');
         btn.title = 'Alle Labels anzeigen';
         break;
       case 'attributes':
-        setIcon(icon, 'property');
+        setIcon(btn, 'property');
         btn.classList.add('active');
         btn.title = 'Nur Attribut-Labels anzeigen';
         break;
       case 'none':
-        setIcon(icon, 'eyeClosed');
+        setIcon(btn, 'eyeClosed');
         btn.classList.remove('active');
         btn.title = 'Labels ausgeblendet';
         break;
