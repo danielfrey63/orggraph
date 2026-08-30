@@ -349,7 +349,7 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
     }
   }
   const focusBtn = document.getElementById('toggleAttributeFocus');
-    if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled });
+      if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled, dimmed: !attributeFocusEnabled });
 }
 
 // og2-owned restore parts; unresolvable pieces fall back individually.
@@ -610,7 +610,7 @@ export function og2SyncTimeControls() {
   };
   fill(t1Sel, og2.diff ? og2.diff.t1 : instants[0]);
   fill(t2Sel, og2.diff ? og2.diff.t2 : instants[instants.length - 1]);
-  toggle.classList.toggle('active', !!og2.diff);
+    setIconButtonState(toggle, { active: !!og2.diff });
 }
 
 // Switch the active view (FR-7.5b): capture the leaving view's runtime

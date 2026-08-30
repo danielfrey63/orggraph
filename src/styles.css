@@ -101,7 +101,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 /* Animation bei Wertänderung */
 .depth-control.changed .depth-value {
-  animation: depthValuePulse 0.3s ease;
+  animation: depthValuePulse calc(var(--depth-pulse-ms) * 1ms) ease;
 }
 
 @keyframes depthValuePulse {
@@ -441,16 +441,6 @@ input#depth {
 .labels-attributes-only .label { display: none; }
 .labels-attributes-only .node.has-attributes .label { display: block; }
 
-/* Visuelle Anzeige des ausgeblendeten Status im Header */
-#toggleAttributesVisibility:not(.active) svg {
-  opacity: 0.5;
-}
-
-/* Attribut-Fokus-Toggle: gedimmt solange der Modus aus ist */
-#toggleAttributeFocus:not(.active) svg {
-  opacity: 0.5;
-}
-
 .btn { padding: 6px 10px; border-radius: 4px; background: var(--control-bg); border: 1px solid var(--control-border); color: var(--text); cursor: pointer; }
 .btn:hover { background: var(--control-hover); }
 
@@ -520,7 +510,9 @@ input#depth {
   --label-ring-gap: 3;
     --link-label-dy: -3;
   --tooltip-cursor-offset: 12;
-  --toast-fade-ms: 300;
+    --toast-fade-ms: 300;
+  --depth-pulse-ms: 300;
+  --node-hover-tolerance: 6;
   --node-fill: #4F46E5;
   --node-fill-top-level: #e0e7ff;
   --node-fill-mid-level: #818cf8;
@@ -565,10 +557,18 @@ input#depth {
   --cluster-jitter: 30;
   --cluster-ring-radius-factor: 0.35;
   --alpha-decay: 0.05;
-  --velocity-decay: 0.5;
+    --velocity-decay: 0.5;
+  --sim-idle-alpha: 0.15;
+  --sim-reheat-alpha-soft: 0.1;
+  --sim-reheat-alpha: 0.3;
+  --sim-update-alpha: 0.5;
+  --sim-restart-alpha: 1;
+  --sim-drag-alpha-target: 0.3;
   
   /* Layout-Optionen */
-  --level-height: 200;
+    --level-height: 200;
+  --level-top-offset: 100;
+  --hierarchy-jitter: 100;
   --level-force-strength: 0.5;
   --radial-force: 0.15;
   --radial-gap: 120;

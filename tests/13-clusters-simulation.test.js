@@ -122,8 +122,8 @@ describe('positionNodesInCircle', () => {
 
 describe('findPositionOutsideHull', () => {
   it('falls back to a viewport offset without nodes', () => {
-    expect(mod.findPositionOutsideHull([])).toEqual({ x: WIDTH / 2 + 200, y: HEIGHT / 2 });
-    expect(mod.findPositionOutsideHull([{ x: NaN, y: NaN }])).toEqual({ x: WIDTH / 2 + 200, y: HEIGHT / 2 });
+    expect(mod.findPositionOutsideHull([], 200)).toEqual({ x: WIDTH / 2 + 200, y: HEIGHT / 2 });
+    expect(mod.findPositionOutsideHull([{ x: NaN, y: NaN }], 200)).toEqual({ x: WIDTH / 2 + 200, y: HEIGHT / 2 });
   });
 
   it('places the new root right of the bounding box', () => {

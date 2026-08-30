@@ -37,7 +37,17 @@ export const CSS_NUMBER_DEFAULTS = {
   '--radial-fallback-radius': 40,
   '--root-spacing-radius-factor': 1.5,
   '--tooltip-cursor-offset': 12,
-  '--toast-fade-ms': 300,
+    '--toast-fade-ms': 300,
+  '--depth-pulse-ms': 300,
+  '--node-hover-tolerance': 6,
+  '--sim-idle-alpha': 0.15,
+  '--sim-reheat-alpha-soft': 0.1,
+  '--sim-reheat-alpha': 0.3,
+  '--sim-update-alpha': 0.5,
+  '--sim-restart-alpha': 1,
+  '--sim-drag-alpha-target': 0.3,
+  '--level-top-offset': 100,
+  '--hierarchy-jitter': 100,
   '--cluster-stroke-width': 1.5,
   '--cluster-opacity': 1,
   '--attribute-circle-opacity': 0.8,
@@ -339,7 +349,7 @@ export function handleClusterHover(event, svgSel) {
   const [mx, my] = d3.pointer(event, svgSel.node());
   const p = currentZoomTransform.invert([mx, my]);
   
-  const r = cssNumber('--node-radius') + 6;
+  const r = cssNumber('--node-radius') + cssNumber('--node-hover-tolerance');
   let nodeLabel = null;
   let personId = null;
   

@@ -109,7 +109,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 /* Animation bei Wertänderung */
 .depth-control.changed .depth-value {
-  animation: depthValuePulse 0.3s ease;
+  animation: depthValuePulse calc(var(--depth-pulse-ms) * 1ms) ease;
 }
 
 @keyframes depthValuePulse {
@@ -449,16 +449,6 @@ input#depth {
 .labels-attributes-only .label { display: none; }
 .labels-attributes-only .node.has-attributes .label { display: block; }
 
-/* Visuelle Anzeige des ausgeblendeten Status im Header */
-#toggleAttributesVisibility:not(.active) svg {
-  opacity: 0.5;
-}
-
-/* Attribut-Fokus-Toggle: gedimmt solange der Modus aus ist */
-#toggleAttributeFocus:not(.active) svg {
-  opacity: 0.5;
-}
-
 .btn { padding: 6px 10px; border-radius: 4px; background: var(--control-bg); border: 1px solid var(--control-border); color: var(--text); cursor: pointer; }
 .btn:hover { background: var(--control-hover); }
 
@@ -528,7 +518,9 @@ input#depth {
   --label-ring-gap: 3;
     --link-label-dy: -3;
   --tooltip-cursor-offset: 12;
-  --toast-fade-ms: 300;
+    --toast-fade-ms: 300;
+  --depth-pulse-ms: 300;
+  --node-hover-tolerance: 6;
   --node-fill: #4F46E5;
   --node-fill-top-level: #e0e7ff;
   --node-fill-mid-level: #818cf8;
@@ -573,10 +565,18 @@ input#depth {
   --cluster-jitter: 30;
   --cluster-ring-radius-factor: 0.35;
   --alpha-decay: 0.05;
-  --velocity-decay: 0.5;
+    --velocity-decay: 0.5;
+  --sim-idle-alpha: 0.15;
+  --sim-reheat-alpha-soft: 0.1;
+  --sim-reheat-alpha: 0.3;
+  --sim-update-alpha: 0.5;
+  --sim-restart-alpha: 1;
+  --sim-drag-alpha-target: 0.3;
   
   /* Layout-Optionen */
-  --level-height: 200;
+    --level-height: 200;
+  --level-top-offset: 100;
+  --hierarchy-jitter: 100;
   --level-force-strength: 0.5;
   --radial-force: 0.15;
   --radial-gap: 120;
@@ -3513,7 +3513,17 @@ const CSS_NUMBER_DEFAULTS = {
   '--radial-fallback-radius': 40,
   '--root-spacing-radius-factor': 1.5,
   '--tooltip-cursor-offset': 12,
-  '--toast-fade-ms': 300,
+    '--toast-fade-ms': 300,
+  '--depth-pulse-ms': 300,
+  '--node-hover-tolerance': 6,
+  '--sim-idle-alpha': 0.15,
+  '--sim-reheat-alpha-soft': 0.1,
+  '--sim-reheat-alpha': 0.3,
+  '--sim-update-alpha': 0.5,
+  '--sim-restart-alpha': 1,
+  '--sim-drag-alpha-target': 0.3,
+  '--level-top-offset': 100,
+  '--hierarchy-jitter': 100,
   '--cluster-stroke-width': 1.5,
   '--cluster-opacity': 1,
   '--attribute-circle-opacity': 0.8,
@@ -3815,7 +3825,7 @@ function handleClusterHover(event, svgSel) {
   const [mx, my] = d3.pointer(event, svgSel.node());
   const p = currentZoomTransform.invert([mx, my]);
   
-  const r = cssNumber('--node-radius') + 6;
+  const r = cssNumber('--node-radius') + cssNumber('--node-hover-tolerance');
   let nodeLabel = null;
   let personId = null;
   
@@ -5780,7 +5790,7 @@ function positionNodesInCircle(nodes, centerX, centerY, radius, startAngle = 0) 
 /**
  * Findet eine Position außerhalb der konvexen Hülle für einen sekundären Root
  */
-function findPositionOutsideHull(existingNodes, margin = 200) {
+function findPositionOutsideHull(existingNodes, margin) {
   if (existingNodes.length === 0) {
     return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
   }
@@ -5908,8 +5918,8 @@ function keepSimulationRunning() {
   if (!continuousSimulation || !currentSimulation) return;
   
   // Alpha auf niedrigem Level halten für sanfte, kontinuierliche Bewegung
-  if (currentSimulation.alpha() < 0.1) {
-    currentSimulation.alpha(0.15).restart();
+    if (currentSimulation.alpha() < cssNumber('--sim-reheat-alpha-soft')) {
+    currentSimulation.alpha(cssNumber('--sim-idle-alpha')).restart();
   }
   
   // Nächsten Frame planen
@@ -6520,7 +6530,7 @@ function renderGraph(sub) {
     if (linkForce && typeof linkForce.links === 'function') {
       linkForce.links(linksPP);
     }
-    simulation.alpha(0.5).restart();
+    simulation.alpha(cssNumber('--sim-update-alpha')).restart();
   } else {
     simulation = createSimulation(personNodes, linksPP);
   }
@@ -6622,7 +6632,7 @@ function renderGraph(sub) {
   // Drag-Handler
   const drag = d3.drag()
     .on("start", (event, d) => {
-      if (!event.active) simulation.alphaTarget(0.3).restart();
+      if (!event.active) simulation.alphaTarget(cssNumber('--sim-drag-alpha-target')).restart();
       d.fx = d.x; d.fy = d.y;
     })
     .on("drag", (event, d) => {
@@ -6697,7 +6707,7 @@ function renderGraph(sub) {
   configureLayout(personNodes, linksPP, simulation, currentLayoutMode);
 
   // Simulation neu starten, um Positionsänderungen (Teardown) auszugleichen
-  simulation.alpha(0.3).restart();
+  simulation.alpha(cssNumber('--sim-reheat-alpha')).restart();
   
   // Kontinuierliche Animation fortsetzen, falls aktiviert [SF]
   if (continuousSimulation) {
@@ -7154,8 +7164,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     oeVisibilityBtn.addEventListener('click', () => {
             // Toggle Button-Status (active-Klasse, Icon und Titel gemeinsam)
       oesVisible = !oeVisibilityBtn.classList.contains('active');
-      setLegendIconButtonState(oeVisibilityBtn, {
+            setLegendIconButtonState(oeVisibilityBtn, {
         active: oesVisible,
+        dimmed: !oesVisible,
         icon: oesVisible ? 'eye' : 'eyeClosed',
         title: oesVisible ? 'Cluster ausblenden' : 'Cluster einblenden',
       });
@@ -7175,8 +7186,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       // NUR den Graph aktualisieren ohne UI-Elemente zu beeinflussen
       refreshClusters();
       
-      // Simulation neu anstoßen, damit sich Kräfte ausbalancieren
-      if (currentSimulation) currentSimulation.alpha(0.1).restart();
+            // Simulation neu anstoßen, damit sich Kräfte ausbalancieren
+      if (currentSimulation) currentSimulation.alpha(cssNumber('--sim-reheat-alpha-soft')).restart();
     });
   }
   
@@ -7254,9 +7265,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
     }
 
-    // Anfangszustand konsistent setzen (active-Klasse + eye vs. eye-closed)
+        // Anfangszustand konsistent setzen (active-Klasse + eye vs. eye-closed)
     setLegendIconButtonState(attributesVisibilityBtn, {
       active: attributesVisible,
+      dimmed: !attributesVisible,
       icon: attributesVisible ? 'eye' : 'eyeClosed',
     });
     
@@ -7284,10 +7296,11 @@ window.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-            // Toggle Button-Status (active-Klasse und Icon gemeinsam)
+                  // Toggle Button-Status (active-Klasse und Icon gemeinsam)
       attributesVisible = !attributesVisibilityBtn.classList.contains('active');
       setLegendIconButtonState(attributesVisibilityBtn, {
         active: attributesVisible,
+        dimmed: !attributesVisible,
         icon: attributesVisible ? 'eye' : 'eyeClosed',
       });
       
@@ -7300,8 +7313,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       updateAttributeCircles();
       
       // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
-      if (currentSimulation) {
-        currentSimulation.alpha(0.1).restart();
+            if (currentSimulation) {
+        currentSimulation.alpha(cssNumber('--sim-reheat-alpha-soft')).restart();
         // Nach kurzer Zeit wieder stoppen
         setTimeout(() => {
           if (currentSimulation) currentSimulation.alpha(0);
@@ -7366,12 +7379,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Attribut-Fokus: prune nodes without visible attributes in self or below
-  const attributeFocusBtn = document.getElementById('toggleAttributeFocus');
+    const attributeFocusBtn = document.getElementById('toggleAttributeFocus');
   if (attributeFocusBtn) {
+    // Anfangszustand: gedimmt solange der Modus aus ist
+    setLegendIconButtonState(attributeFocusBtn, { dimmed: !attributeFocusBtn.classList.contains('active') });
     attributeFocusBtn.addEventListener('click', (e) => {
       e.stopPropagation();
             attributeFocusEnabled = !attributeFocusBtn.classList.contains('active');
-      setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusEnabled });
+            setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusEnabled, dimmed: !attributeFocusEnabled });
       if (attributeFocusEnabled) {
         recomputeAttributeFocusHidden();
       } else {
@@ -7453,15 +7468,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       ? envConfig.TOOLBAR_MANAGEMENT_ACTIVE
       : null;
 
-    if (envMgmtOnly != null) {
+        if (envMgmtOnly != null) {
       managementEnabled = !!envMgmtOnly;
-      if (!managementEnabled) mgmt.classList.remove('active');
     } else {
       managementEnabled = mgmt.classList.contains('active');
     }
+    setIconButtonState(mgmt, { active: managementEnabled });
     mgmt.addEventListener('click', () => {
-      mgmt.classList.toggle('active');
-      managementEnabled = mgmt.classList.contains('active');
+      managementEnabled = !mgmt.classList.contains('active');
+      setIconButtonState(mgmt, { active: managementEnabled });
       applyFromUI('toggleManagement');
     });
   }
@@ -7575,18 +7590,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   const simToggleBtn = document.querySelector('#toggleSimulation');
   if (simToggleBtn) {
     // Anfangszustand aus ENV lesen
-    if (envConfig && typeof envConfig.TOOLBAR_SIMULATION_ACTIVE === 'boolean') {
+        if (envConfig && typeof envConfig.TOOLBAR_SIMULATION_ACTIVE === 'boolean') {
       continuousSimulation = envConfig.TOOLBAR_SIMULATION_ACTIVE;
-      if (continuousSimulation) {
-        simToggleBtn.classList.add('active');
-      } else {
-        simToggleBtn.classList.remove('active');
-      }
+      setIconButtonState(simToggleBtn, { active: continuousSimulation });
     }
-    
+
     simToggleBtn.addEventListener('click', () => {
-      simToggleBtn.classList.toggle('active');
-      continuousSimulation = simToggleBtn.classList.contains('active');
+      continuousSimulation = !simToggleBtn.classList.contains('active');
+      setIconButtonState(simToggleBtn, { active: continuousSimulation });
       
       if (continuousSimulation && currentSimulation) {
         // Simulation dauerhaft am Laufen halten
@@ -7600,12 +7611,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Toggle für Pseudonymisierung [SF]
   const pseudoBtn = document.querySelector('#togglePseudonymization');
   if (pseudoBtn) {
-    // Synchronisiere Button-Status mit dem geladenen pseudonymizationEnabled
-    if (pseudonymizationEnabled) {
-      pseudoBtn.classList.add('active');
-    } else {
-      pseudoBtn.classList.remove('active');
-    }
+        // Synchronisiere Button-Status mit dem geladenen pseudonymizationEnabled
+    setIconButtonState(pseudoBtn, { active: pseudonymizationEnabled });
     
     pseudoBtn.addEventListener('click', () => {
       const wasEnabled = pseudonymizationEnabled;
@@ -7615,9 +7622,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (!willEnable && envConfig?.TOOLBAR_PSEUDO_PASSWORD) {
         showPasswordDialog((password) => {
           if (password === envConfig.TOOLBAR_PSEUDO_PASSWORD) {
-            // Passwort korrekt - De-Pseudonymisierung durchführen
-            pseudoBtn.classList.remove('active');
+                        // Passwort korrekt - De-Pseudonymisierung durchführen
             pseudonymizationEnabled = false;
+            setIconButtonState(pseudoBtn, { active: false });
             refreshAllLabels();
             showTemporaryNotification('Pseudonymisierung deaktiviert');
             Logger.log('[Pseudo] Pseudonymisierung deaktiviert');
@@ -7627,8 +7634,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         return; // Warten auf Dialog-Callback
       }
       
-      pseudoBtn.classList.toggle('active');
-      pseudonymizationEnabled = pseudoBtn.classList.contains('active');
+            pseudonymizationEnabled = !pseudoBtn.classList.contains('active');
+      setIconButtonState(pseudoBtn, { active: pseudonymizationEnabled });
       
       // Alle Labels aktualisieren
       refreshAllLabels();
@@ -7641,14 +7648,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   
   const debugBtn = document.querySelector('#debugBtn');
   if (debugBtn) {
-    // Synchronisiere Button-Status mit dem bereits geladenen debugMode (aus loadEnvConfig)
-    if (debugMode) {
-      debugBtn.classList.add('active');
-    }
-    
+        // Synchronisiere Button-Status mit dem bereits geladenen debugMode (aus loadEnvConfig)
+    setIconButtonState(debugBtn, { active: debugMode });
+
     debugBtn.addEventListener('click', () => {
-      debugBtn.classList.toggle('active');
-      debugMode = debugBtn.classList.contains('active');
+      debugMode = !debugBtn.classList.contains('active');
+      setIconButtonState(debugBtn, { active: debugMode });
       Logger.log(`[Debug] Debug mode toggled to: ${debugMode}`);
       
       // Aktualisiere Labels und Link-Labels sofort [SF]
@@ -7688,17 +7693,18 @@ window.addEventListener("DOMContentLoaded", async () => {
       ? envConfig.TOOLBAR_HIERARCHY_ACTIVE
       : null;
 
-    if (envHierLayout != null) {
+        if (envHierLayout != null) {
       const hierEnabled = !!envHierLayout;
-      if (!hierEnabled) hier.classList.remove('active');
+      setIconButtonState(hier, { active: hierEnabled });
       currentLayoutMode = hierEnabled ? 'hierarchy' : 'force';
     } else {
       currentLayoutMode = hier.classList.contains('active') ? 'hierarchy' : 'force';
     }
-    
+
     hier.addEventListener('click', () => {
-      hier.classList.toggle('active');
-      currentLayoutMode = hier.classList.contains('active') ? 'hierarchy' : 'force';
+      const hierEnabled = !hier.classList.contains('active');
+      setIconButtonState(hier, { active: hierEnabled });
+      currentLayoutMode = hierEnabled ? 'hierarchy' : 'force';
       if (currentSimulation) switchLayout(currentLayoutMode, currentSimulation);
     });
   }
@@ -7960,13 +7966,13 @@ function configureLayout(nodes, links, simulation, mode) {
     const sortedLevels = Array.from(new Set(Array.from(hierarchyLevels.values()))).sort((a, b) => a - b);
     const levelToY = new Map();
     sortedLevels.forEach((level, idx) => {
-      levelToY.set(level, 100 + idx * LEVEL_HEIGHT);
+      levelToY.set(level, cssNumber('--level-top-offset') + idx * LEVEL_HEIGHT);
     });
     
     // Knoten vorpositionieren für besseren Start [SF]
     nodes.forEach(n => {
       if (!Number.isFinite(n.x)) {
-        n.x = WIDTH/2 + (Math.random() - 0.5) * 100;
+        n.x = WIDTH/2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
       }
       if (!Number.isFinite(n.y)) {
         const level = hierarchyLevels.get(String(n.id)) ?? 0;
@@ -8037,8 +8043,8 @@ function configureLayout(nodes, links, simulation, mode) {
       }).strength(CLUSTER_FORCE_STRENGTH));
   }
   
-  // Simulation neustarten [SF]
-  simulation.alpha(1).restart();
+    // Simulation neustarten [SF]
+  simulation.alpha(cssNumber('--sim-restart-alpha')).restart();
 }
 
 /**
@@ -8203,7 +8209,7 @@ function initializeCollapsibleLegends() {
       
       // Animation triggern
       depthControl.classList.add('changed');
-      setTimeout(() => depthControl.classList.remove('changed'), 300);
+      setTimeout(() => depthControl.classList.remove('changed'), cssNumber('--depth-pulse-ms'));
       
       // Tooltip aktualisieren
       const plural = value === 1 ? 'Ebene' : 'Ebenen';
@@ -11819,7 +11825,7 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
     }
   }
   const focusBtn = document.getElementById('toggleAttributeFocus');
-    if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled });
+      if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled, dimmed: !attributeFocusEnabled });
 }
 
 // og2-owned restore parts; unresolvable pieces fall back individually.
@@ -12080,7 +12086,7 @@ function og2SyncTimeControls() {
   };
   fill(t1Sel, og2.diff ? og2.diff.t1 : instants[0]);
   fill(t2Sel, og2.diff ? og2.diff.t2 : instants[instants.length - 1]);
-  toggle.classList.toggle('active', !!og2.diff);
+    setIconButtonState(toggle, { active: !!og2.diff });
 }
 
 // Switch the active view (FR-7.5b): capture the leaving view's runtime

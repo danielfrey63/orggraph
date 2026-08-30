@@ -141,7 +141,7 @@ export function positionNodesInCircle(nodes, centerX, centerY, radius, startAngl
 /**
  * Findet eine Position außerhalb der konvexen Hülle für einen sekundären Root
  */
-export function findPositionOutsideHull(existingNodes, margin = 200) {
+export function findPositionOutsideHull(existingNodes, margin) {
   if (existingNodes.length === 0) {
     return { x: WIDTH / 2 + margin, y: HEIGHT / 2 };
   }
@@ -269,8 +269,8 @@ export function keepSimulationRunning() {
   if (!continuousSimulation || !currentSimulation) return;
   
   // Alpha auf niedrigem Level halten für sanfte, kontinuierliche Bewegung
-  if (currentSimulation.alpha() < 0.1) {
-    currentSimulation.alpha(0.15).restart();
+    if (currentSimulation.alpha() < cssNumber('--sim-reheat-alpha-soft')) {
+    currentSimulation.alpha(cssNumber('--sim-idle-alpha')).restart();
   }
   
   // Nächsten Frame planen

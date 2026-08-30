@@ -116,13 +116,13 @@ export function configureLayout(nodes, links, simulation, mode) {
     const sortedLevels = Array.from(new Set(Array.from(hierarchyLevels.values()))).sort((a, b) => a - b);
     const levelToY = new Map();
     sortedLevels.forEach((level, idx) => {
-      levelToY.set(level, 100 + idx * LEVEL_HEIGHT);
+      levelToY.set(level, cssNumber('--level-top-offset') + idx * LEVEL_HEIGHT);
     });
     
     // Knoten vorpositionieren für besseren Start [SF]
     nodes.forEach(n => {
       if (!Number.isFinite(n.x)) {
-        n.x = WIDTH/2 + (Math.random() - 0.5) * 100;
+        n.x = WIDTH/2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
       }
       if (!Number.isFinite(n.y)) {
         const level = hierarchyLevels.get(String(n.id)) ?? 0;
@@ -193,8 +193,8 @@ export function configureLayout(nodes, links, simulation, mode) {
       }).strength(CLUSTER_FORCE_STRENGTH));
   }
   
-  // Simulation neustarten [SF]
-  simulation.alpha(1).restart();
+    // Simulation neustarten [SF]
+  simulation.alpha(cssNumber('--sim-restart-alpha')).restart();
 }
 
 /**
@@ -359,7 +359,7 @@ export function initializeCollapsibleLegends() {
       
       // Animation triggern
       depthControl.classList.add('changed');
-      setTimeout(() => depthControl.classList.remove('changed'), 300);
+      setTimeout(() => depthControl.classList.remove('changed'), cssNumber('--depth-pulse-ms'));
       
       // Tooltip aktualisieren
       const plural = value === 1 ? 'Ebene' : 'Ebenen';

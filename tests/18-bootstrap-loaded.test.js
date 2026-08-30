@@ -226,6 +226,10 @@ describe('env-driven bootstrap with loaded data', () => {
 
   it('hierarchy toggle switches the layout on the running simulation', () => {
     const btn = document.getElementById('toggleHierarchy');
+    // ENV sync: TOOLBAR_HIERARCHY_ACTIVE trues up the button state at init
+    expect(btn.classList.contains('active')).toBe(true);
+    btn.click();
+    expect(globalThis.switchLayout).toHaveBeenCalledWith('force', globalThis.currentSimulation);
     btn.click();
     expect(globalThis.switchLayout).toHaveBeenCalledWith('hierarchy', globalThis.currentSimulation);
   });

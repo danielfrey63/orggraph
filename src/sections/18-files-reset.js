@@ -127,8 +127,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     oeVisibilityBtn.addEventListener('click', () => {
             // Toggle Button-Status (active-Klasse, Icon und Titel gemeinsam)
       oesVisible = !oeVisibilityBtn.classList.contains('active');
-      setLegendIconButtonState(oeVisibilityBtn, {
+            setLegendIconButtonState(oeVisibilityBtn, {
         active: oesVisible,
+        dimmed: !oesVisible,
         icon: oesVisible ? 'eye' : 'eyeClosed',
         title: oesVisible ? 'Cluster ausblenden' : 'Cluster einblenden',
       });
@@ -148,8 +149,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       // NUR den Graph aktualisieren ohne UI-Elemente zu beeinflussen
       refreshClusters();
       
-      // Simulation neu anstoßen, damit sich Kräfte ausbalancieren
-      if (currentSimulation) currentSimulation.alpha(0.1).restart();
+            // Simulation neu anstoßen, damit sich Kräfte ausbalancieren
+      if (currentSimulation) currentSimulation.alpha(cssNumber('--sim-reheat-alpha-soft')).restart();
     });
   }
   
@@ -227,9 +228,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
     }
 
-    // Anfangszustand konsistent setzen (active-Klasse + eye vs. eye-closed)
+        // Anfangszustand konsistent setzen (active-Klasse + eye vs. eye-closed)
     setLegendIconButtonState(attributesVisibilityBtn, {
       active: attributesVisible,
+      dimmed: !attributesVisible,
       icon: attributesVisible ? 'eye' : 'eyeClosed',
     });
     
@@ -257,10 +259,11 @@ window.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-            // Toggle Button-Status (active-Klasse und Icon gemeinsam)
+                  // Toggle Button-Status (active-Klasse und Icon gemeinsam)
       attributesVisible = !attributesVisibilityBtn.classList.contains('active');
       setLegendIconButtonState(attributesVisibilityBtn, {
         active: attributesVisible,
+        dimmed: !attributesVisible,
         icon: attributesVisible ? 'eye' : 'eyeClosed',
       });
       
@@ -273,8 +276,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       updateAttributeCircles();
       
       // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
-      if (currentSimulation) {
-        currentSimulation.alpha(0.1).restart();
+            if (currentSimulation) {
+        currentSimulation.alpha(cssNumber('--sim-reheat-alpha-soft')).restart();
         // Nach kurzer Zeit wieder stoppen
         setTimeout(() => {
           if (currentSimulation) currentSimulation.alpha(0);
@@ -339,12 +342,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Attribut-Fokus: prune nodes without visible attributes in self or below
-  const attributeFocusBtn = document.getElementById('toggleAttributeFocus');
+    const attributeFocusBtn = document.getElementById('toggleAttributeFocus');
   if (attributeFocusBtn) {
+    // Anfangszustand: gedimmt solange der Modus aus ist
+    setLegendIconButtonState(attributeFocusBtn, { dimmed: !attributeFocusBtn.classList.contains('active') });
     attributeFocusBtn.addEventListener('click', (e) => {
       e.stopPropagation();
             attributeFocusEnabled = !attributeFocusBtn.classList.contains('active');
-      setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusEnabled });
+            setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusEnabled, dimmed: !attributeFocusEnabled });
       if (attributeFocusEnabled) {
         recomputeAttributeFocusHidden();
       } else {
@@ -426,15 +431,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       ? envConfig.TOOLBAR_MANAGEMENT_ACTIVE
       : null;
 
-    if (envMgmtOnly != null) {
+        if (envMgmtOnly != null) {
       managementEnabled = !!envMgmtOnly;
-      if (!managementEnabled) mgmt.classList.remove('active');
     } else {
       managementEnabled = mgmt.classList.contains('active');
     }
+    setIconButtonState(mgmt, { active: managementEnabled });
     mgmt.addEventListener('click', () => {
-      mgmt.classList.toggle('active');
-      managementEnabled = mgmt.classList.contains('active');
+      managementEnabled = !mgmt.classList.contains('active');
+      setIconButtonState(mgmt, { active: managementEnabled });
       applyFromUI('toggleManagement');
     });
   }
@@ -548,18 +553,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   const simToggleBtn = document.querySelector('#toggleSimulation');
   if (simToggleBtn) {
     // Anfangszustand aus ENV lesen
-    if (envConfig && typeof envConfig.TOOLBAR_SIMULATION_ACTIVE === 'boolean') {
+        if (envConfig && typeof envConfig.TOOLBAR_SIMULATION_ACTIVE === 'boolean') {
       continuousSimulation = envConfig.TOOLBAR_SIMULATION_ACTIVE;
-      if (continuousSimulation) {
-        simToggleBtn.classList.add('active');
-      } else {
-        simToggleBtn.classList.remove('active');
-      }
+      setIconButtonState(simToggleBtn, { active: continuousSimulation });
     }
-    
+
     simToggleBtn.addEventListener('click', () => {
-      simToggleBtn.classList.toggle('active');
-      continuousSimulation = simToggleBtn.classList.contains('active');
+      continuousSimulation = !simToggleBtn.classList.contains('active');
+      setIconButtonState(simToggleBtn, { active: continuousSimulation });
       
       if (continuousSimulation && currentSimulation) {
         // Simulation dauerhaft am Laufen halten
@@ -573,12 +574,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Toggle für Pseudonymisierung [SF]
   const pseudoBtn = document.querySelector('#togglePseudonymization');
   if (pseudoBtn) {
-    // Synchronisiere Button-Status mit dem geladenen pseudonymizationEnabled
-    if (pseudonymizationEnabled) {
-      pseudoBtn.classList.add('active');
-    } else {
-      pseudoBtn.classList.remove('active');
-    }
+        // Synchronisiere Button-Status mit dem geladenen pseudonymizationEnabled
+    setIconButtonState(pseudoBtn, { active: pseudonymizationEnabled });
     
     pseudoBtn.addEventListener('click', () => {
       const wasEnabled = pseudonymizationEnabled;
@@ -588,9 +585,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (!willEnable && envConfig?.TOOLBAR_PSEUDO_PASSWORD) {
         showPasswordDialog((password) => {
           if (password === envConfig.TOOLBAR_PSEUDO_PASSWORD) {
-            // Passwort korrekt - De-Pseudonymisierung durchführen
-            pseudoBtn.classList.remove('active');
+                        // Passwort korrekt - De-Pseudonymisierung durchführen
             pseudonymizationEnabled = false;
+            setIconButtonState(pseudoBtn, { active: false });
             refreshAllLabels();
             showTemporaryNotification('Pseudonymisierung deaktiviert');
             Logger.log('[Pseudo] Pseudonymisierung deaktiviert');
@@ -600,8 +597,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         return; // Warten auf Dialog-Callback
       }
       
-      pseudoBtn.classList.toggle('active');
-      pseudonymizationEnabled = pseudoBtn.classList.contains('active');
+            pseudonymizationEnabled = !pseudoBtn.classList.contains('active');
+      setIconButtonState(pseudoBtn, { active: pseudonymizationEnabled });
       
       // Alle Labels aktualisieren
       refreshAllLabels();
@@ -614,14 +611,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   
   const debugBtn = document.querySelector('#debugBtn');
   if (debugBtn) {
-    // Synchronisiere Button-Status mit dem bereits geladenen debugMode (aus loadEnvConfig)
-    if (debugMode) {
-      debugBtn.classList.add('active');
-    }
-    
+        // Synchronisiere Button-Status mit dem bereits geladenen debugMode (aus loadEnvConfig)
+    setIconButtonState(debugBtn, { active: debugMode });
+
     debugBtn.addEventListener('click', () => {
-      debugBtn.classList.toggle('active');
-      debugMode = debugBtn.classList.contains('active');
+      debugMode = !debugBtn.classList.contains('active');
+      setIconButtonState(debugBtn, { active: debugMode });
       Logger.log(`[Debug] Debug mode toggled to: ${debugMode}`);
       
       // Aktualisiere Labels und Link-Labels sofort [SF]
@@ -661,17 +656,18 @@ window.addEventListener("DOMContentLoaded", async () => {
       ? envConfig.TOOLBAR_HIERARCHY_ACTIVE
       : null;
 
-    if (envHierLayout != null) {
+        if (envHierLayout != null) {
       const hierEnabled = !!envHierLayout;
-      if (!hierEnabled) hier.classList.remove('active');
+      setIconButtonState(hier, { active: hierEnabled });
       currentLayoutMode = hierEnabled ? 'hierarchy' : 'force';
     } else {
       currentLayoutMode = hier.classList.contains('active') ? 'hierarchy' : 'force';
     }
-    
+
     hier.addEventListener('click', () => {
-      hier.classList.toggle('active');
-      currentLayoutMode = hier.classList.contains('active') ? 'hierarchy' : 'force';
+      const hierEnabled = !hier.classList.contains('active');
+      setIconButtonState(hier, { active: hierEnabled });
+      currentLayoutMode = hierEnabled ? 'hierarchy' : 'force';
       if (currentSimulation) switchLayout(currentLayoutMode, currentSimulation);
     });
   }

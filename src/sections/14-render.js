@@ -535,7 +535,7 @@ export function renderGraph(sub) {
     if (linkForce && typeof linkForce.links === 'function') {
       linkForce.links(linksPP);
     }
-    simulation.alpha(0.5).restart();
+    simulation.alpha(cssNumber('--sim-update-alpha')).restart();
   } else {
     simulation = createSimulation(personNodes, linksPP);
   }
@@ -637,7 +637,7 @@ export function renderGraph(sub) {
   // Drag-Handler
   const drag = d3.drag()
     .on("start", (event, d) => {
-      if (!event.active) simulation.alphaTarget(0.3).restart();
+      if (!event.active) simulation.alphaTarget(cssNumber('--sim-drag-alpha-target')).restart();
       d.fx = d.x; d.fy = d.y;
     })
     .on("drag", (event, d) => {
@@ -712,7 +712,7 @@ export function renderGraph(sub) {
   configureLayout(personNodes, linksPP, simulation, currentLayoutMode);
 
   // Simulation neu starten, um Positionsänderungen (Teardown) auszugleichen
-  simulation.alpha(0.3).restart();
+  simulation.alpha(cssNumber('--sim-reheat-alpha')).restart();
   
   // Kontinuierliche Animation fortsetzen, falls aktiviert [SF]
   if (continuousSimulation) {
