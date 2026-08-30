@@ -23,7 +23,7 @@
         <button class="depth-half depth-up" data-action="increase" title="Tiefe erhöhen"></button>
         <div class="depth-display">
           <i data-icon="layers"></i>
-          <span class="depth-value">2</span>
+          <span class="depth-value"></span>
         </div>
         <button class="depth-half depth-down" data-action="decrease" title="Tiefe verringern"></button>
       </div>
@@ -54,11 +54,11 @@
       </button>
     </div>
     
-    <button id="togglePseudonymization" class="toggle-btn active" aria-label="Pseudonymisierung" title="Pseudonymisierung ein/aus">
+    <button id="togglePseudonymization" class="toggle-btn toggle-btn--detached active" aria-label="Pseudonymisierung" title="Pseudonymisierung ein/aus">
       <i data-icon="shield"></i>
     </button>
     
-    <button id="debugBtn" class="toggle-btn" aria-label="Debug-Modus" title="Debug: Koordinaten & Abstände anzeigen">
+    <button id="debugBtn" class="toggle-btn toggle-btn--detached" aria-label="Debug-Modus" title="Debug: Koordinaten & Abstände anzeigen">
       <i data-icon="bug"></i>
     </button>
   </header>
@@ -253,7 +253,7 @@
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.187.184';
+const APP_VERSION = '1.188.185';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 @@APP@@
 </script>

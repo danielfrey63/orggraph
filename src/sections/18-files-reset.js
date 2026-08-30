@@ -519,7 +519,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     input.addEventListener('input', () => {
       currentSelectedId = null;
       if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = setTimeout(() => populateCombo(input.value), 150);
+      searchDebounceTimer = setTimeout(() => populateCombo(input.value), cssNumber('--combo-debounce-ms'));
     });
     
     input.addEventListener('keydown', (e) => {
@@ -639,8 +639,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Auto-apply on depth change and direction change
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
   if (depthEl) {
-    if (envConfig?.TOOLBAR_DEPTH_DEFAULT != null) {
-      depthEl.value = envConfig.TOOLBAR_DEPTH_DEFAULT;
+        if (envConfig?.TOOLBAR_DEPTH_DEFAULT != null) {
+      setDepth(envConfig.TOOLBAR_DEPTH_DEFAULT, { pulse: false });
     }
     depthEl.addEventListener('change', applyFromUI);
     depthEl.addEventListener('input', applyFromUI);

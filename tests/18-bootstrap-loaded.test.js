@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
+import { cssNumber } from '../src/sections/08-color-geometry.js';
 import { setIconButtonState, setLegendIconButtonState } from '../src/sections/12-legend-org.js';
+import { setDepth } from '../src/sections/19-layout-bootstrap.js';
 import { setLabelVisibility } from '../src/sections/14-render.js';
 import {
   INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, INPUT_DEPTH_ID, SVG_ID,
@@ -28,6 +30,7 @@ const ENV = {
 const FIXTURE = `
   <input id="comboInput"><ul id="comboList" hidden></ul>
   <div id="status"></div><button id="apply"></button>
+    <div id="depthControl"><span class="depth-value"></span></div>
   <input id="depth" value="2">
   <div id="directionToggle">
     <span class="direction-up"></span><span class="direction-down active"></span>
@@ -51,7 +54,9 @@ beforeAll(async () => {
   globalThis.d3 = d3Mod.exports;
   globalThis.ICON = ICON;
     globalThis.setIcon = setIcon;
-    globalThis.setIconButtonState = setIconButtonState;
+  globalThis.cssNumber = cssNumber;
+      globalThis.setIconButtonState = setIconButtonState;
+  globalThis.setDepth = setDepth;
   globalThis.setLegendIconButtonState = setLegendIconButtonState;
   globalThis.INPUT_COMBO_ID = INPUT_COMBO_ID;
   globalThis.LIST_COMBO_ID = LIST_COMBO_ID;

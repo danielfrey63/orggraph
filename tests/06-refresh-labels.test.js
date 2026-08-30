@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { refreshAllLabels } from '../src/sections/06-pseudo-labels.js';
-import { legendChipText } from '../src/sections/12-legend-org.js';
+import { legendChipText, setLegendChipText } from '../src/sections/12-legend-org.js';
 
 globalThis.legendChipText = legendChipText;
+globalThis.setLegendChipText = setLegendChipText;
 import { orgDepth } from '../src/sections/08-color-geometry.js';
 import { INPUT_COMBO_ID } from '../src/sections/01-config-status.js';
 

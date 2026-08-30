@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { showPasswordDialog } from '../src/sections/07-password-roots.js';
 import { createModal } from '../src/sections/03-export-dialog.js';
+import { cssNumber } from '../src/sections/08-color-geometry.js';
 import { setIcon } from '../src/sections/02-icons.js';
 
 beforeEach(() => {
   document.body.innerHTML = '';
-  globalThis.createModal = createModal;
+    globalThis.createModal = createModal;
+  globalThis.cssNumber = cssNumber;
   globalThis.setIcon = setIcon;
   globalThis.envConfig = { TOOLBAR_PSEUDO_PASSWORD: 'geheim' };
 });

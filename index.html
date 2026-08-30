@@ -22,8 +22,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .app-header h1 { margin: 0; font-size: 18px; color: var(--text-strong); flex-shrink: 0; }
 .app-header h1 .app-version { font-size: 11px; font-weight: 400; color: var(--text-muted); vertical-align: middle; }
 .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1; }
-#togglePseudonymization { margin-left: 12px; }
-#debugBtn { margin-left: 12px; }
+.toggle-btn--detached { margin-left: 12px; }
 .controls label { display: inline-flex; gap: 6px; align-items: center; }
 .controls input, .controls select, .controls button { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--control-border); background: var(--control-bg); color: var(--text); }
 
@@ -44,7 +43,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 .depth-control:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color) 15%, transparent);
 }
 
 /* Zentrale Anzeige mit Icon und Wert - MUSS ZUERST kommen für z-index */
@@ -117,18 +116,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   50% { transform: scale(1.2); }
 }
 
-/* Tiefe-Eingabefeld (versteckt, aber funktional) */
-input#depth {
-  width: 48px;
-  height: 32px;
-  border-radius: 6px;
-  text-align: center;
-  font-size: 14px;
-  font-weight: 500;
-  background-color: var(--control-bg);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  border: none;
-}
 .controls button { padding: 6px 6px; cursor: pointer; }
 .controls button:hover { background: var(--control-hover); }
 .controls fieldset { border: 1px solid var(--panel-border); background: transparent; padding: 6px 10px; border-radius: 8px; display: inline-flex; gap: 8px; align-items: center; }
@@ -163,7 +150,7 @@ input#depth {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   color: var(--text);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--shadow-color) 12%, transparent);
   max-height: 280px;
   overflow: auto;
   min-width: 100%;
@@ -208,22 +195,17 @@ input#depth {
   border-top: 1px solid var(--panel-border);
 }
 
-.legend-header { 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center; 
-  cursor: pointer; 
+.legend-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
   user-select: none;
   border-radius: 0;
   transition: background-color 0.2s ease;
   position: relative;
-  background-color: rgba(0, 0, 0, 0.03);
-}
-
-@media (prefers-color-scheme: dark) {
-  .legend-header {
-    background-color: rgba(255, 255, 255, 0.03);
-  }
+  border-bottom: 1px solid var(--panel-border);
+  background-color: color-mix(in srgb, var(--text) 3%, transparent);
 }
 
 .legend-header:hover { 
@@ -468,7 +450,7 @@ input#depth {
 .toggle-btn:hover {
   background-color: var(--control-hover);
   transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color) 15%, transparent);
 }
 
 .toggle-btn.active {
@@ -506,7 +488,8 @@ input#depth {
       --overlay-dark-hover: #1f2937;
   --z-popover: 1000;
     --z-overlay: 2000;
-  --overlay-scrim: rgba(0, 0, 0, 0.7);
+    --overlay-scrim: rgba(0, 0, 0, 0.7);
+  --shadow-color: #000000;
   --dz-overlay-bg: rgba(15, 18, 24, 0.72);
   --dz-panel-bg: rgba(30, 35, 45, 0.96);
   --dz-panel-fg: #e8ecf2;
@@ -528,7 +511,8 @@ input#depth {
   --legend-depth-step: 16;
   --cluster-hull-tension: 0.75;
       --sim-settle-ms: 100;
-  --legend-settle-ms: 50;
+    --legend-settle-ms: 50;
+  --combo-debounce-ms: 150;
   --viewport-fit-ms: 300;
   --hull-escape-width-factor: 0.2;
   --zoom-min: 0.2;
@@ -656,14 +640,6 @@ input#depth {
   opacity: var(--cluster-opacity);
   stroke-width: var(--cluster-stroke-width);
   pointer-events: auto;
-}
-
-.legend-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--panel-border);
-  margin-bottom: 0px;
 }
 
 /* Neue Icon-Buttons mit Hover-Verhalten */
@@ -803,7 +779,7 @@ input#depth {
 .modal-container {
   background-color: var(--panel-bg);
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--shadow-color) 40%, transparent);
   width: 90%;
   max-width: 300px;
   max-height: 90vh;
@@ -905,7 +881,7 @@ input#depth {
   white-space: pre;
   display: none;
   max-width: 400px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--shadow-color) 30%, transparent);
   line-height: 1.4;
 }
 
@@ -926,7 +902,7 @@ input#depth {
   color: var(--panel-bg);
   padding: 8px 16px;
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--shadow-color) 25%, transparent);
   z-index: var(--z-popover);
       opacity: 0;
   transition: opacity calc(var(--toast-fade-ms) * 1ms) ease;
@@ -959,7 +935,7 @@ input#depth {
     background: var(--dz-panel-bg);
   color: var(--dz-panel-fg);
   text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 20px 60px color-mix(in srgb, var(--shadow-color) 45%, transparent);
 }
 .dz-icon {
   line-height: 1;
@@ -1206,7 +1182,7 @@ body.dz-dragging::after {
   border-radius: 6px;
   padding: 0px 3px;
   min-width: 160px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow-color) 20%, transparent);
   z-index: var(--z-overlay);
   display: none;
 }
@@ -1276,7 +1252,7 @@ body.dz-dragging::after {
 .time-controls { display: inline-flex; align-items: center; gap: 6px; }
 .time-controls input[type="range"] { width: 110px; }
 .time-controls select { max-width: 130px; }
-.time-controls #diffToggle { padding: 0 6px; line-height: 1.4; }
+.time-controls .toggle-btn { padding: 0 6px; line-height: 1.4; }
 
 /* Views legend (FR-7.5): topmost sidebar section, one row per view */
 #viewsLegend .legend-row { padding: 3px 6px; }
@@ -1299,7 +1275,7 @@ body.dz-dragging::after {
         <button class="depth-half depth-up" data-action="increase" title="Tiefe erhöhen"></button>
         <div class="depth-display">
           <i data-icon="layers"></i>
-          <span class="depth-value">2</span>
+          <span class="depth-value"></span>
         </div>
         <button class="depth-half depth-down" data-action="decrease" title="Tiefe verringern"></button>
       </div>
@@ -1330,11 +1306,11 @@ body.dz-dragging::after {
       </button>
     </div>
     
-    <button id="togglePseudonymization" class="toggle-btn active" aria-label="Pseudonymisierung" title="Pseudonymisierung ein/aus">
+    <button id="togglePseudonymization" class="toggle-btn toggle-btn--detached active" aria-label="Pseudonymisierung" title="Pseudonymisierung ein/aus">
       <i data-icon="shield"></i>
     </button>
     
-    <button id="debugBtn" class="toggle-btn" aria-label="Debug-Modus" title="Debug: Koordinaten & Abstände anzeigen">
+    <button id="debugBtn" class="toggle-btn toggle-btn--detached" aria-label="Debug-Modus" title="Debug: Koordinaten & Abstände anzeigen">
       <i data-icon="bug"></i>
     </button>
   </header>
@@ -1530,7 +1506,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.187.184';
+const APP_VERSION = '1.188.185';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -3349,8 +3325,7 @@ function refreshAllLabels() {
       const node = byId.get(li.dataset.oid);
       if (node) {
         const label = getDisplayLabel(node, orgDepth(li.dataset.oid));
-        chip.textContent = label;
-        chip.title = label;
+                setLegendChipText(chip, label, label);
       }
     }
   });
@@ -3364,8 +3339,7 @@ function refreshAllLabels() {
       const setIds = hiddenByRoot.get(rootId);
       const count = setIds ? setIds.size : 0;
             const label = getDisplayLabel(node);
-      chip.textContent = legendChipText(label, count);
-      chip.title = label;
+            setLegendChipText(chip, legendChipText(label, count), label);
     }
   });
   
@@ -3439,7 +3413,7 @@ function showPasswordDialog(onSubmit) {
   content.append(input, errorMsg, btnRow);
   
   // Fokus auf Input setzen
-  setTimeout(() => input.focus(), 50);
+    setTimeout(() => input.focus(), cssNumber('--legend-settle-ms'));
 }
 
 // ========== Ende Pseudonymisierung ==========
@@ -3524,7 +3498,8 @@ const CSS_NUMBER_DEFAULTS = {
   '--legend-depth-step': 16,
   '--cluster-hull-tension': 0.75,
       '--sim-settle-ms': 100,
-  '--legend-settle-ms': 50,
+    '--legend-settle-ms': 50,
+  '--combo-debounce-ms': 150,
   '--viewport-fit-ms': 300,
   '--hull-escape-width-factor': 0.2,
   '--zoom-min': 0.2,
@@ -5081,11 +5056,16 @@ function legendChipTitle(label, count) {
   return `${label} - ${count} Einträge`;
 }
 
+// Text/tooltip pair of a chip — always changes together (construction + refresh).
+function setLegendChipText(chip, text, title) {
+  chip.textContent = text;
+  if (title) chip.title = title;
+}
+
 function createLegendChip(text, title) {
   const chip = document.createElement('span');
   chip.className = 'legend-label-chip';
-  chip.textContent = text;
-  if (title) chip.title = title;
+  setLegendChipText(chip, text, title);
   return chip;
 }
 
@@ -6995,7 +6975,8 @@ function buildAttributeLegend() {
         active: activeAttributes.has(it.key),
         withRight: false,
       });
-            itemRow.setAttribute('data-attribute-color', it.color);
+                  // presence flag only — the value lives in --attribute-color below
+      itemRow.setAttribute('data-attribute-color', '');
 
       // Attribut-Farbe als Custom-Property; die Transparenz mischt CSS per
       // color-mix (wie bei den OE-Rows), unabhängig vom Farbformat
@@ -7559,7 +7540,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     input.addEventListener('input', () => {
       currentSelectedId = null;
       if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = setTimeout(() => populateCombo(input.value), 150);
+      searchDebounceTimer = setTimeout(() => populateCombo(input.value), cssNumber('--combo-debounce-ms'));
     });
     
     input.addEventListener('keydown', (e) => {
@@ -7679,8 +7660,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Auto-apply on depth change and direction change
   const depthEl = document.querySelector(INPUT_DEPTH_ID);
   if (depthEl) {
-    if (envConfig?.TOOLBAR_DEPTH_DEFAULT != null) {
-      depthEl.value = envConfig.TOOLBAR_DEPTH_DEFAULT;
+        if (envConfig?.TOOLBAR_DEPTH_DEFAULT != null) {
+      setDepth(envConfig.TOOLBAR_DEPTH_DEFAULT, { pulse: false });
     }
     depthEl.addEventListener('change', applyFromUI);
     depthEl.addEventListener('input', applyFromUI);

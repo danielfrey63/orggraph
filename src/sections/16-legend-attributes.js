@@ -122,7 +122,8 @@ export function buildAttributeLegend() {
         active: activeAttributes.has(it.key),
         withRight: false,
       });
-            itemRow.setAttribute('data-attribute-color', it.color);
+                  // presence flag only — the value lives in --attribute-color below
+      itemRow.setAttribute('data-attribute-color', '');
 
       // Attribut-Farbe als Custom-Property; die Transparenz mischt CSS per
       // color-mix (wie bei den OE-Rows), unabhängig vom Farbformat

@@ -43,11 +43,16 @@ export function legendChipTitle(label, count) {
   return `${label} - ${count} Einträge`;
 }
 
+// Text/tooltip pair of a chip — always changes together (construction + refresh).
+export function setLegendChipText(chip, text, title) {
+  chip.textContent = text;
+  if (title) chip.title = title;
+}
+
 export function createLegendChip(text, title) {
   const chip = document.createElement('span');
   chip.className = 'legend-label-chip';
-  chip.textContent = text;
-  if (title) chip.title = title;
+  setLegendChipText(chip, text, title);
   return chip;
 }
 

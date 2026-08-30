@@ -49,7 +49,7 @@ export function showPasswordDialog(onSubmit) {
   content.append(input, errorMsg, btnRow);
   
   // Fokus auf Input setzen
-  setTimeout(() => input.focus(), 50);
+    setTimeout(() => input.focus(), cssNumber('--legend-settle-ms'));
 }
 
 // ========== Ende Pseudonymisierung ==========

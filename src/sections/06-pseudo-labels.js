@@ -177,8 +177,7 @@ export function refreshAllLabels() {
       const node = byId.get(li.dataset.oid);
       if (node) {
         const label = getDisplayLabel(node, orgDepth(li.dataset.oid));
-        chip.textContent = label;
-        chip.title = label;
+                setLegendChipText(chip, label, label);
       }
     }
   });
@@ -192,8 +191,7 @@ export function refreshAllLabels() {
       const setIds = hiddenByRoot.get(rootId);
       const count = setIds ? setIds.size : 0;
             const label = getDisplayLabel(node);
-      chip.textContent = legendChipText(label, count);
-      chip.title = label;
+            setLegendChipText(chip, legendChipText(label, count), label);
     }
   });
   
