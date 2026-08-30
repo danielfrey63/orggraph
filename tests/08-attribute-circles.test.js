@@ -66,9 +66,9 @@ describe('updateAttributeCircles', () => {
     globalThis.activeAttributes = new Set(['Team::Coach']);
     globalThis.attributeTypes = new Map([['Team::Coach', 'red']]);
     updateAttributeCircles();
-    expect(nodeGroup('p2').classList.contains('has-attributes')).toBe(false);
-    const p2Circle = nodeGroup('p2').querySelector('circle.node-circle');
-    expect(Number(p2Circle.style.opacity)).toBeLessThan(1);
+        expect(nodeGroup('p2').classList.contains('has-attributes')).toBe(false);
+    expect(nodeGroup('p2').classList.contains('attr-dimmed')).toBe(true);
+    expect(nodeGroup('p1').classList.contains('attr-dimmed')).toBe(false);
   });
 
   it('skips attributes of hidden categories', () => {

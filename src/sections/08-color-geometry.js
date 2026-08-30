@@ -64,7 +64,12 @@ export const CSS_NUMBER_DEFAULTS = {
   '--attr-lightness': 50,
   '--attr-lightness-alt-boost': 5,
   '--cluster-hull-samples': 12,
-  '--export-pixel-density': 4,
+    '--export-pixel-density': 4,
+  '--node-fill-level-break-1': 0.33,
+  '--node-fill-level-break-2': 0.67,
+  '--attr-local-hue-cycle': 6,
+  '--attr-lightness-alt-cycle': 2,
+  '--bfs-level-delay-ms': 1000,
   '--viewport-fit-ms': 300,
   '--hull-escape-width-factor': 0.2,
   '--zoom-min': 0.2,
@@ -153,10 +158,10 @@ export function colorForRainbowPosition(index, total) {
 
 export function colorForCategoryAttribute(category, attrName, ordinal) {
   const baseHue = quantizedHueFromCategory(category);
-    const localShift = (ordinal % 6) * cssNumber('--attr-local-hue-step'); // kleine Variation innerhalb der Kategorie
+      const localShift = (ordinal % cssNumber('--attr-local-hue-cycle')) * cssNumber('--attr-local-hue-step'); // kleine Variation innerhalb der Kategorie
   const hue = (baseHue + localShift) % 360;
   const sat = cssNumber('--attr-saturation');
-  const light = cssNumber('--attr-lightness') + ((ordinal % 2) ? cssNumber('--attr-lightness-alt-boost') : 0); // leichte Helligkeitsvariation
+  const light = cssNumber('--attr-lightness') + ((ordinal % cssNumber('--attr-lightness-alt-cycle')) ? cssNumber('--attr-lightness-alt-boost') : 0); // leichte Helligkeitsvariation
   return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
@@ -187,9 +192,9 @@ export function getNodeFillByLevel(node) {
   const lowLevelColor = cssVar('--node-fill-low-level');
   
   // Whle Farbe basierend auf normalisierter Ebene
-  if (normalizedLevel <= 0.33) {
+    if (normalizedLevel <= cssNumber('--node-fill-level-break-1')) {
     return topLevelColor;
-  } else if (normalizedLevel <= 0.67) {
+    } else if (normalizedLevel <= cssNumber('--node-fill-level-break-2')) {
     return midLevelColor;
   } else {
     return lowLevelColor;
@@ -558,14 +563,7 @@ export function updateAttributeCircles() {
   const circleWidth = cssNumber('--attribute-circle-stroke-width');
   const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
-  // Farbe und Stil für Knoten mit Attributen
-    const nodeWithAttributesFill = cssVar('--node-with-attributes-fill');
-  const nodeWithAttributesStroke = cssVar('--node-with-attributes-stroke');
-  
-  // Transparenz für Knoten ohne Attribute
-  const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity');
-  
-  // Alle Knoten im SVG auswählen
+    // Alle Knoten im SVG auswählen
   const nodes = d3.selectAll(SVG_ID + ' .node');
   
   const applyRootStyling = () => {
@@ -600,7 +598,7 @@ export function updateAttributeCircles() {
       .style('opacity', null);
     
     // has-attributes Klasse entfernen [SF]
-    nodes.classed('has-attributes', false);
+    nodes.classed('has-attributes', false).classed('attr-dimmed', false);
     
     // Labels auf Standard-Position zurücksetzen
     nodes.selectAll('text.label')
@@ -624,7 +622,7 @@ export function updateAttributeCircles() {
     .style('opacity', null);
   
   // has-attributes Klasse zurücksetzen (wird in der Schleife neu gesetzt) [SF]
-  nodes.classed('has-attributes', false);
+  nodes.classed('has-attributes', false).classed('attr-dimmed', false);
   
   // Labels auf Standard-Position zurücksetzen (werden später für Knoten mit Attributen angepasst)
   nodes.selectAll('text.label')
@@ -659,11 +657,10 @@ export function updateAttributeCircles() {
         // Klasse für CSS-basierte Label-Sichtbarkeit setzen [SF]
         nodeGroup.classed('has-attributes', true);
         
-        // Haupt-Knoten mit spezieller Darstellung für Knoten mit Attributen
-        nodeGroup.select('circle.node-circle')
-          .style('fill', nodeWithAttributesFill)
-          .style('stroke', nodeWithAttributesStroke)
-          .style('stroke-width', nodeStrokeWidth);
+                // Presentation lives in styles.css (.node.has-attributes .node-circle)
+        // and the export stylesheet; the inline level fill is cleared so the
+        // class rules win. Roots keep their fill via :not(.is-root).
+        nodeGroup.select('circle.node-circle').style('fill', null);
         
         // Berechne äußersten Radius für Label-Positionierung
         const attrCount = activeNodeAttrs.length;
@@ -689,8 +686,7 @@ export function updateAttributeCircles() {
           .attr("r", attrRadius)
           .attr("class", "attribute-circle")
           .attr("data-attribute", attrName)
-          .style("stroke", attrColor)
-          .style("stroke-width", circleWidth);
+                    .style("stroke", attrColor);
       });
     }
     
@@ -710,9 +706,8 @@ export function updateAttributeCircles() {
       const nodeGroup = d3.select(this);
       
       // Wenn dieser Knoten nicht in der Liste der Knoten mit aktiven Attributen ist
-      if (!nodesWithActiveAttributesIds.has(personId)) {
-        nodeGroup.select('circle.node-circle')
-          .style('opacity', nodesWithoutAttributesOpacity);
+            if (!nodesWithActiveAttributesIds.has(personId)) {
+        nodeGroup.classed('attr-dimmed', true);
       }
     });
   }

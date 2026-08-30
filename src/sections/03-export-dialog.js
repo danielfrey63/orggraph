@@ -211,8 +211,9 @@ function buildExportClone(svgElement) {
   const backgroundRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
   backgroundRect.setAttribute('width', '100%');
   backgroundRect.setAttribute('height', '100%');
-  backgroundRect.setAttribute('fill', cssVar('--canvas-bg'));
+    backgroundRect.setAttribute('fill', cssVar('--canvas-bg'));
   svgClone.insertBefore(backgroundRect, svgClone.firstChild);
+  svgClone.insertBefore(buildExportStylesheet(), svgClone.firstChild);
   return svgClone;
 }
 
@@ -229,7 +230,10 @@ function buildExportStylesheet() {
       .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: ${cssVar('--cluster-stroke-width')}; opacity: ${cssVar('--cluster-opacity')}; }
       .label { font-size: ${cssVar('--label-font-size')}; fill: ${cssVar('--label-fill')}; }
       .link-label { font-size: ${cssVar('--link-label-font-size')}; fill: ${cssVar('--link-label-fill')}; text-anchor: middle; }
-      .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; }
+            .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; stroke-width: ${cssVar('--attribute-circle-stroke-width')}; }
+      .node.has-attributes .node-circle { stroke: ${cssVar('--node-with-attributes-stroke')}; stroke-width: ${cssVar('--node-with-attributes-stroke-width')}; }
+      .node.has-attributes .node-circle:not(.is-root) { fill: ${cssVar('--node-with-attributes-fill')}; }
+      .node.attr-dimmed .node-circle:not(.is-root) { opacity: ${cssVar('--nodes-without-attributes-opacity')}; }
       .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; opacity: 1; }
       .node.diff-new circle { stroke: ${cssVar('--diff-new-stroke')}; stroke-width: 3px; }
       .node.diff-changed circle { stroke: ${cssVar('--diff-changed-stroke')}; stroke-width: 3px; }
@@ -292,10 +296,7 @@ export function exportAsSvg() {
       svgClone.setAttribute('viewBox', `0 0 ${width} ${height}`);
     }
 
-    // Farben und Stile als inline CSS einfügen
-    svgClone.insertBefore(buildExportStylesheet(), svgClone.firstChild);
-    
-    // SVG in Text umwandeln
+        // SVG in Text umwandeln
     const serializer = new XMLSerializer();
     let svgString = serializer.serializeToString(svgClone);
     
@@ -350,10 +351,7 @@ export function exportAsPng() {
     svgClone.setAttribute('height', height);
     svgClone.setAttribute('viewBox', currentViewBox);
 
-    // Inline-Styles einfügen
-        svgClone.insertBefore(buildExportStylesheet(), svgClone.firstChild);
-    
-    // SVG in Text umwandeln
+        // SVG in Text umwandeln
     const serializer = new XMLSerializer();
     const svgString = serializer.serializeToString(svgClone);
     

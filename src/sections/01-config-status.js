@@ -11,7 +11,6 @@ export const HEIGHT = 800;
 export const MAX_DROPDOWN_ITEMS = 100;
 export const MIN_SEARCH_LENGTH = 2;
 export const MAX_ROOTS = 5;
-export const BFS_LEVEL_ANIMATION_DELAY_MS = 1000;
 
 
 // ===== src/utils.js =====

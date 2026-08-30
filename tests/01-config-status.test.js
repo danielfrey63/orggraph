@@ -10,7 +10,6 @@ import {
   MAX_DROPDOWN_ITEMS,
   MIN_SEARCH_LENGTH,
   MAX_ROOTS,
-  BFS_LEVEL_ANIMATION_DELAY_MS,
   setStatus,
 } from '../src/sections/01-config-status.js';
 
@@ -29,8 +28,7 @@ describe('config constants', () => {
     expect(MAX_DROPDOWN_ITEMS).toBe(100);
     expect(MIN_SEARCH_LENGTH).toBe(2);
     expect(MAX_ROOTS).toBe(5);
-    expect(BFS_LEVEL_ANIMATION_DELAY_MS).toBe(1000);
-  });
+    });
 });
 
 describe('setStatus', () => {

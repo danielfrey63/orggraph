@@ -72,7 +72,7 @@ export async function transitionGraph(oldSub, newSub, roots, transitionId) {
       const currentLinks = getLinksForNodes(currentNodes);
       
       renderGraph({ nodes: currentNodes, links: currentLinks });
-      await new Promise(r => setTimeout(r, BFS_LEVEL_ANIMATION_DELAY_MS));
+      await new Promise(r => setTimeout(r, cssNumber('--bfs-level-delay-ms')));
     }
     Logger.log(`[Timing] End: transitionGraph-${transitionId}.teardown`);
   }
@@ -114,7 +114,7 @@ export async function transitionGraph(oldSub, newSub, roots, transitionId) {
       const currentLinks = getLinksForNodes(currentNodes);
       
       renderGraph({ nodes: currentNodes, links: currentLinks });
-      await new Promise(r => setTimeout(r, BFS_LEVEL_ANIMATION_DELAY_MS));
+      await new Promise(r => setTimeout(r, cssNumber('--bfs-level-delay-ms')));
     }
     Logger.log(`[Timing] End: transitionGraph-${transitionId}.buildup`);
   }
@@ -133,6 +133,18 @@ export async function transitionGraph(oldSub, newSub, roots, transitionId) {
 /**
  * Rendert den Graphen basierend auf dem berechneten Subgraphen
  */
+// Select-or-append for the graph's singleton layers/defs: renderGraph runs
+// incrementally, so every structural element exists exactly once.
+function ensureLayer(parent, selector) {
+  const sel = parent.select(selector);
+  if (!sel.empty()) return sel;
+  const m = selector.match(/^([a-z]+)(?:([.#])([\w-]+))?$/);
+  const created = parent.append(m[1]);
+  if (m[2] === '.') created.attr('class', m[3]);
+  else if (m[2] === '#') created.attr('id', m[3]);
+  return created;
+}
+
 export function renderGraph(sub) {
   // Aktuellen Zoom-Zustand speichern
   const savedZoomTransform = currentZoomTransform;
@@ -142,16 +154,10 @@ export function renderGraph(sub) {
   svg.attr("viewBox", [0, 0, WIDTH, HEIGHT]);
 
   // Pfeilspitzen-Definitionen (einmalig anlegen/aktualisieren)
-  let defs = svg.select("defs");
-  if (defs.empty()) {
-    defs = svg.append("defs");
-  }
+    const defs = ensureLayer(svg, "defs");
   const arrowLen = cssNumber('--arrow-length');
   const linkStroke = cssNumber('--link-stroke-width');
-  let arrow = defs.select("marker#arrow");
-  if (arrow.empty()) {
-    arrow = defs.append("marker").attr("id", "arrow");
-  }
+    const arrow = ensureLayer(defs, "marker#arrow");
   arrow
     .attr("viewBox", "0 0 10 10")
     .attr("refX", 0)
@@ -160,35 +166,23 @@ export function renderGraph(sub) {
     .attr("markerHeight", arrowLen + linkStroke)
     .attr("markerUnits", "userSpaceOnUse")
     .attr("orient", "auto-start-reverse");
-  let arrowPath = arrow.select("path");
-  if (arrowPath.empty()) {
-    arrowPath = arrow.append("path");
-  }
+    const arrowPath = ensureLayer(arrow, "path");
   // Presentation lives in styles.css (#arrow path) and the export stylesheet
   arrowPath.attr("d", "M 0 0 L 10 5 L 0 10 z");
 
   // Zoom-Container (einmalig)
-  let gZoom = svg.select("g.zoom-layer");
-  if (gZoom.empty()) {
-    gZoom = svg.append("g").attr("class", "zoom-layer");
-  }
+    const gZoom = ensureLayer(svg, "g.zoom-layer");
 
   // Nur Verbindungen zwischen gezeichneten Graph-Knoten anzeigen (§9.2)
   const personIdsInSub = new Set(sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node').map(n => String(n.id)));
   const linksPP = sub.links.filter(l => personIdsInSub.has(idOf(l.source)) && personIdsInSub.has(idOf(l.target)));
 
   // Cluster-Ebene (hinter Links und Knoten)
-  let gClusters = gZoom.select("g.clusters");
-  if (gClusters.empty()) {
-    gClusters = gZoom.append("g").attr("class", "clusters");
-  }
+    const gClusters = ensureLayer(gZoom, "g.clusters");
   clusterLayer = gClusters;
 
   // Verbindungen rendern (inkrementell)
-  let linkGroup = gZoom.select("g.links");
-  if (linkGroup.empty()) {
-    linkGroup = gZoom.append("g").attr("class", "links");
-  }
+    const linkGroup = ensureLayer(gZoom, "g.links");
   const link = linkGroup
     .selectAll("line")
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
@@ -202,10 +196,7 @@ export function renderGraph(sub) {
     .call(applyDiffClasses);
 
   // Debug-Link-Labels (optional)
-  let linkLabelGroup = gZoom.select("g.link-labels");
-  if (linkLabelGroup.empty()) {
-    linkLabelGroup = gZoom.append("g").attr("class", "link-labels");
-  }
+    const linkLabelGroup = ensureLayer(gZoom, "g.link-labels");
   const linkLabel = linkLabelGroup
     .selectAll("text")
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
@@ -221,10 +212,7 @@ export function renderGraph(sub) {
   simAllById = new Map(personNodes.map(d => [String(d.id), d]));
   
   // Knoten erstellen (inkrementell)
-  let nodeGroup = gZoom.select("g.nodes");
-  if (nodeGroup.empty()) {
-    nodeGroup = gZoom.append("g").attr("class", "nodes");
-  }
+    const nodeGroup = ensureLayer(gZoom, "g.nodes");
   const node = nodeGroup
     .selectAll("g.node")
     .data(personNodes, d => String(d.id))

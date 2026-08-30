@@ -474,18 +474,22 @@ export function og2BuildViewsLegend() {
     if (rawDef.depth != null) parts.push(`Tiefe ${rawDef.depth}`);
     return parts.join(' — ') || name;
   };
+    const ul = createLegendList();
   const makeRow = (name, { invalid = false, title }) => {
     const { row, left } = createLegendRow({ active: !invalid && name === og2.activeViewName, withRight: false });
     if (invalid) row.classList.add('view-row-invalid');
     row.title = title;
     left.appendChild(createLegendChip(name));
     if (!invalid) row.addEventListener('click', () => og2SwitchView(name));
-    host.appendChild(row);
+    const li = document.createElement('li');
+    li.appendChild(row);
+    ul.appendChild(li);
   };
   for (const name of Object.keys(og2.views)) makeRow(name, { title: describe(name) });
   for (const [name, reasons] of Object.entries(og2.rejectedViews || {})) {
     makeRow(name, { invalid: true, title: `Ungültig: ${(reasons || []).join('; ')}` });
   }
+  host.appendChild(ul);
   const saveBtn = document.getElementById('saveViewBtn');
   if (saveBtn && !saveBtn.dataset.og2Wired) {
     saveBtn.dataset.og2Wired = '1';

@@ -76,13 +76,14 @@ export function createIconButton({ icon, title, className = '', onClick } = {}) 
   return btn;
 }
 
-export function createLegendIconButton({ icon, title, className = '', onClick, dimmed } = {}) {
+export function createLegendIconButton({ icon, title, className = '', onClick, dimmed, active } = {}) {
   const btn = createIconButton({
     icon, title, onClick,
     className: className ? `legend-icon-btn ${className}` : 'legend-icon-btn',
   });
-    btn.setAttribute('data-ignore-header-click', 'true');
+  btn.setAttribute('data-ignore-header-click', 'true');
   if (typeof dimmed === 'boolean') setLegendIconButtonState(btn, { dimmed });
+  if (typeof active === 'boolean') setLegendIconButtonState(btn, { active });
   return btn;
 }
 
@@ -209,7 +210,7 @@ export function buildHiddenLegend() {
     const eyeBtn = createLegendIconButton({
       icon: isVisible ? 'eye' : 'eyeClosed',
       title: isVisible ? 'Temporär ausblenden' : 'Temporär einblenden',
-      className: isVisible ? 'active' : '',
+            active: isVisible,
       onClick: () => toggleHiddenRootVisibility(root),
     });
     eyeBtn.dataset.rootId = root;

@@ -2,9 +2,11 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vite
 import { readFileSync } from 'node:fs';
 import { idOf, drawKindOf } from '../src/sections/09-data-load.js';
 import { cssNumber, getNodeFillByLevel, countVisibleAttributeRings } from '../src/sections/08-color-geometry.js';
+
+const BFS_DELAY = cssNumber('--bfs-level-delay-ms');
 import { setDepth } from '../src/sections/19-layout-bootstrap.js';
 import {
-  SVG_ID, WIDTH, HEIGHT, BFS_LEVEL_ANIMATION_DELAY_MS,
+    SVG_ID, WIDTH, HEIGHT,
 } from '../src/sections/01-config-status.js';
 
 const d3Src = readFileSync('vendor/d3.v7.min.js', 'utf8');
@@ -37,7 +39,6 @@ beforeEach(() => {
   globalThis.SVG_ID = SVG_ID;
   globalThis.WIDTH = WIDTH;
   globalThis.HEIGHT = HEIGHT;
-  globalThis.BFS_LEVEL_ANIMATION_DELAY_MS = BFS_LEVEL_ANIMATION_DELAY_MS;
   globalThis.byId = new Map([
     ['p1', { id: 'p1', label: 'Boss', type: 'person' }],
     ['p2', { id: 'p2', label: 'Dev', type: 'person' }],
@@ -156,8 +157,8 @@ describe('transitionGraph', () => {
     const newSub = SUB(['p1', 'p3'], [{ source: 'p1', target: 'p3' }]);
     globalThis.lastTransitionId = 7;
     const done = mod.transitionGraph(oldSub, newSub, ['p1'], 7);
-    await vi.advanceTimersByTimeAsync(BFS_LEVEL_ANIMATION_DELAY_MS); // teardown level
-    await vi.advanceTimersByTimeAsync(BFS_LEVEL_ANIMATION_DELAY_MS); // buildup level
+    await vi.advanceTimersByTimeAsync(BFS_DELAY); // teardown level
+    await vi.advanceTimersByTimeAsync(BFS_DELAY); // buildup level
     await done;
     vi.useRealTimers();
     expect(nodeIds()).toEqual(['p1', 'p3']);
@@ -170,7 +171,7 @@ describe('transitionGraph', () => {
     globalThis.lastTransitionId = 7;
     const done = mod.transitionGraph(oldSub, newSub, ['p1'], 7);
     globalThis.lastTransitionId = 8; // newer transition arrives
-    await vi.advanceTimersByTimeAsync(BFS_LEVEL_ANIMATION_DELAY_MS * 3);
+    await vi.advanceTimersByTimeAsync(BFS_DELAY * 3);
     await done;
     vi.useRealTimers();
     expect(nodeIds()).not.toEqual(['p1', 'p3']); // final render skipped
@@ -187,7 +188,7 @@ describe('transitionGraph', () => {
     vi.useFakeTimers();
     globalThis.lastTransitionId = 10;
     const done = mod.transitionGraph(null, SUB(['p1', 'p2'], [{ source: 'p1', target: 'p2' }]), ['p1'], 10);
-    await vi.advanceTimersByTimeAsync(BFS_LEVEL_ANIMATION_DELAY_MS * 2);
+    await vi.advanceTimersByTimeAsync(BFS_DELAY * 2);
     await done;
     vi.useRealTimers();
     expect(nodeIds()).toEqual(['p1', 'p2']);

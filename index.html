@@ -62,13 +62,14 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 }
 
 /* Unsichtbare Klickflächen UNTER der Anzeige */
-.depth-half {
+.controls .depth-half {
   position: absolute;
   width: 100%;
   height: 50%;
   padding: 0;
   margin: 0;
-    border: none !important;
+  border: none;
+  border-radius: 0;
   background-color: transparent;
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -80,12 +81,10 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 .depth-half.depth-up {
   top: 0;
-  border-radius: 0;
 }
 
 .depth-half.depth-down {
   bottom: 0;
-  border-radius: 0;
 }
 
 .depth-half:hover {
@@ -183,8 +182,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 [data-icon] { display: inline-flex; align-items: center; justify-content: center; }
 .ic { width: 1em; height: 1em; font-size: 16px; display: inline-block; flex: 0 0 auto; vertical-align: -0.125em; background: none; }
 #legendPane { border-left: 1px solid var(--panel-border); padding: 0px; overflow: auto; background: var(--panel-bg); color: var(--text); width: 320px; }
-#legendPane h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-muted); }
-
 /* Kollabierbare Legenden - Neues Design */
 .legend-section { margin-bottom: 0px; }
 .legend-section:last-child { margin-bottom: 0; }
@@ -263,25 +260,14 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   transition: transform 0.2s ease;
 }
 
-.legend-chevron.expanded .ic {
-  transform: rotate(0deg);
-}
-
 .legend-chevron.collapsed .ic {
   transform: rotate(-90deg);
-}
-
-.legend-content {
-  overflow: hidden;
-  transition: max-height 0.3s ease-out;
-  max-height: 2000px; /* Groß genug, um Inhalt zu zeigen */
 }
 
 .legend-content.collapsed {
   display: none;
 }
 .legend-list, .legend-list ul { list-style: none; padding-left: 0; margin: 0; }
-.legend-list > li { margin: 0; }
 .legend-list li { display: block; margin-bottom: 1px; }
 
 /* Basis-Layout aller Legend-Rows (OE-/Hidden-/Attribut-/Views-Legende) */
@@ -341,10 +327,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   transition: transform 0.2s ease;
 }
 
-.legend-tree-chevron.expanded .ic {
-  transform: rotate(0deg);
-}
-
 .legend-tree-chevron.collapsed .ic {
   transform: rotate(-90deg);
 }
@@ -363,8 +345,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 /* Label-Chip: unscoped Basis für alle Legend-Rows (Sidebar + Views) */
 .legend-label-chip { 
-  display: inline-block; 
-  background-color: transparent;
+    display: inline-block;
   white-space: nowrap; 
   overflow: hidden; 
   text-overflow: ellipsis; 
@@ -407,7 +388,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 /* Verschachtelte Liste mit Einrückung */
 .legend-list ul {
-  padding-left: 0;
   margin-top: 2px;
 }
 
@@ -422,7 +402,20 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .btn { padding: 6px 10px; border-radius: 4px; background: var(--control-bg); border: 1px solid var(--control-border); color: var(--text); cursor: pointer; }
 .btn:hover { background: var(--control-hover); }
 
-.attribute-circle { fill: none; opacity: var(--attribute-circle-opacity); }
+.attribute-circle { fill: none; opacity: var(--attribute-circle-opacity); stroke-width: var(--attribute-circle-stroke-width); }
+
+/* Nodes with active attribute rings (class set in 08). Roots keep their
+   configured fill/opacity, hence :not(.is-root) on those two rules. */
+.node.has-attributes .node-circle {
+  stroke: var(--node-with-attributes-stroke);
+  stroke-width: var(--node-with-attributes-stroke-width);
+}
+.node.has-attributes .node-circle:not(.is-root) {
+  fill: var(--node-with-attributes-fill);
+}
+.node.attr-dimmed .node-circle:not(.is-root) {
+  opacity: var(--nodes-without-attributes-opacity);
+}
 
 /* Toggle Button Styles */
 .toggle-btn {
@@ -525,7 +518,12 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   --attr-lightness: 50;
   --attr-lightness-alt-boost: 5;
   --cluster-hull-samples: 12;
-  --export-pixel-density: 4;
+    --export-pixel-density: 4;
+  --node-fill-level-break-1: 0.33;
+  --node-fill-level-break-2: 0.67;
+  --attr-local-hue-cycle: 6;
+  --attr-lightness-alt-cycle: 2;
+  --bfs-level-delay-ms: 1000;
   --viewport-fit-ms: 300;
   --hull-escape-width-factor: 0.2;
   --zoom-min: 0.2;
@@ -1191,8 +1189,7 @@ body.dz-dragging::after {
   position: relative;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  background: transparent;
+    align-items: center;
   transition: background 0.15s ease;
 }
 
@@ -1512,7 +1509,6 @@ const HEIGHT = 800;
 const MAX_DROPDOWN_ITEMS = 100;
 const MIN_SEARCH_LENGTH = 2;
 const MAX_ROOTS = 5;
-const BFS_LEVEL_ANIMATION_DELAY_MS = 1000;
 
 
 // ===== src/utils.js =====
@@ -1851,8 +1847,9 @@ function buildExportClone(svgElement) {
   const backgroundRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
   backgroundRect.setAttribute('width', '100%');
   backgroundRect.setAttribute('height', '100%');
-  backgroundRect.setAttribute('fill', cssVar('--canvas-bg'));
+    backgroundRect.setAttribute('fill', cssVar('--canvas-bg'));
   svgClone.insertBefore(backgroundRect, svgClone.firstChild);
+  svgClone.insertBefore(buildExportStylesheet(), svgClone.firstChild);
   return svgClone;
 }
 
@@ -1869,7 +1866,10 @@ function buildExportStylesheet() {
       .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: ${cssVar('--cluster-stroke-width')}; opacity: ${cssVar('--cluster-opacity')}; }
       .label { font-size: ${cssVar('--label-font-size')}; fill: ${cssVar('--label-fill')}; }
       .link-label { font-size: ${cssVar('--link-label-font-size')}; fill: ${cssVar('--link-label-fill')}; text-anchor: middle; }
-      .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; }
+            .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; stroke-width: ${cssVar('--attribute-circle-stroke-width')}; }
+      .node.has-attributes .node-circle { stroke: ${cssVar('--node-with-attributes-stroke')}; stroke-width: ${cssVar('--node-with-attributes-stroke-width')}; }
+      .node.has-attributes .node-circle:not(.is-root) { fill: ${cssVar('--node-with-attributes-fill')}; }
+      .node.attr-dimmed .node-circle:not(.is-root) { opacity: ${cssVar('--nodes-without-attributes-opacity')}; }
       .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; opacity: 1; }
       .node.diff-new circle { stroke: ${cssVar('--diff-new-stroke')}; stroke-width: 3px; }
       .node.diff-changed circle { stroke: ${cssVar('--diff-changed-stroke')}; stroke-width: 3px; }
@@ -1932,10 +1932,7 @@ function exportAsSvg() {
       svgClone.setAttribute('viewBox', `0 0 ${width} ${height}`);
     }
 
-    // Farben und Stile als inline CSS einfügen
-    svgClone.insertBefore(buildExportStylesheet(), svgClone.firstChild);
-    
-    // SVG in Text umwandeln
+        // SVG in Text umwandeln
     const serializer = new XMLSerializer();
     let svgString = serializer.serializeToString(svgClone);
     
@@ -1990,10 +1987,7 @@ function exportAsPng() {
     svgClone.setAttribute('height', height);
     svgClone.setAttribute('viewBox', currentViewBox);
 
-    // Inline-Styles einfügen
-        svgClone.insertBefore(buildExportStylesheet(), svgClone.firstChild);
-    
-    // SVG in Text umwandeln
+        // SVG in Text umwandeln
     const serializer = new XMLSerializer();
     const svgString = serializer.serializeToString(svgClone);
     
@@ -3506,7 +3500,12 @@ const CSS_NUMBER_DEFAULTS = {
   '--attr-lightness': 50,
   '--attr-lightness-alt-boost': 5,
   '--cluster-hull-samples': 12,
-  '--export-pixel-density': 4,
+    '--export-pixel-density': 4,
+  '--node-fill-level-break-1': 0.33,
+  '--node-fill-level-break-2': 0.67,
+  '--attr-local-hue-cycle': 6,
+  '--attr-lightness-alt-cycle': 2,
+  '--bfs-level-delay-ms': 1000,
   '--viewport-fit-ms': 300,
   '--hull-escape-width-factor': 0.2,
   '--zoom-min': 0.2,
@@ -3595,10 +3594,10 @@ function colorForRainbowPosition(index, total) {
 
 function colorForCategoryAttribute(category, attrName, ordinal) {
   const baseHue = quantizedHueFromCategory(category);
-    const localShift = (ordinal % 6) * cssNumber('--attr-local-hue-step'); // kleine Variation innerhalb der Kategorie
+      const localShift = (ordinal % cssNumber('--attr-local-hue-cycle')) * cssNumber('--attr-local-hue-step'); // kleine Variation innerhalb der Kategorie
   const hue = (baseHue + localShift) % 360;
   const sat = cssNumber('--attr-saturation');
-  const light = cssNumber('--attr-lightness') + ((ordinal % 2) ? cssNumber('--attr-lightness-alt-boost') : 0); // leichte Helligkeitsvariation
+  const light = cssNumber('--attr-lightness') + ((ordinal % cssNumber('--attr-lightness-alt-cycle')) ? cssNumber('--attr-lightness-alt-boost') : 0); // leichte Helligkeitsvariation
   return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
@@ -3629,9 +3628,9 @@ function getNodeFillByLevel(node) {
   const lowLevelColor = cssVar('--node-fill-low-level');
   
   // Whle Farbe basierend auf normalisierter Ebene
-  if (normalizedLevel <= 0.33) {
+    if (normalizedLevel <= cssNumber('--node-fill-level-break-1')) {
     return topLevelColor;
-  } else if (normalizedLevel <= 0.67) {
+    } else if (normalizedLevel <= cssNumber('--node-fill-level-break-2')) {
     return midLevelColor;
   } else {
     return lowLevelColor;
@@ -4000,14 +3999,7 @@ function updateAttributeCircles() {
   const circleWidth = cssNumber('--attribute-circle-stroke-width');
   const nodeStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
-  // Farbe und Stil für Knoten mit Attributen
-    const nodeWithAttributesFill = cssVar('--node-with-attributes-fill');
-  const nodeWithAttributesStroke = cssVar('--node-with-attributes-stroke');
-  
-  // Transparenz für Knoten ohne Attribute
-  const nodesWithoutAttributesOpacity = cssNumber('--nodes-without-attributes-opacity');
-  
-  // Alle Knoten im SVG auswählen
+    // Alle Knoten im SVG auswählen
   const nodes = d3.selectAll(SVG_ID + ' .node');
   
   const applyRootStyling = () => {
@@ -4042,7 +4034,7 @@ function updateAttributeCircles() {
       .style('opacity', null);
     
     // has-attributes Klasse entfernen [SF]
-    nodes.classed('has-attributes', false);
+    nodes.classed('has-attributes', false).classed('attr-dimmed', false);
     
     // Labels auf Standard-Position zurücksetzen
     nodes.selectAll('text.label')
@@ -4066,7 +4058,7 @@ function updateAttributeCircles() {
     .style('opacity', null);
   
   // has-attributes Klasse zurücksetzen (wird in der Schleife neu gesetzt) [SF]
-  nodes.classed('has-attributes', false);
+  nodes.classed('has-attributes', false).classed('attr-dimmed', false);
   
   // Labels auf Standard-Position zurücksetzen (werden später für Knoten mit Attributen angepasst)
   nodes.selectAll('text.label')
@@ -4101,11 +4093,10 @@ function updateAttributeCircles() {
         // Klasse für CSS-basierte Label-Sichtbarkeit setzen [SF]
         nodeGroup.classed('has-attributes', true);
         
-        // Haupt-Knoten mit spezieller Darstellung für Knoten mit Attributen
-        nodeGroup.select('circle.node-circle')
-          .style('fill', nodeWithAttributesFill)
-          .style('stroke', nodeWithAttributesStroke)
-          .style('stroke-width', nodeStrokeWidth);
+                // Presentation lives in styles.css (.node.has-attributes .node-circle)
+        // and the export stylesheet; the inline level fill is cleared so the
+        // class rules win. Roots keep their fill via :not(.is-root).
+        nodeGroup.select('circle.node-circle').style('fill', null);
         
         // Berechne äußersten Radius für Label-Positionierung
         const attrCount = activeNodeAttrs.length;
@@ -4131,8 +4122,7 @@ function updateAttributeCircles() {
           .attr("r", attrRadius)
           .attr("class", "attribute-circle")
           .attr("data-attribute", attrName)
-          .style("stroke", attrColor)
-          .style("stroke-width", circleWidth);
+                    .style("stroke", attrColor);
       });
     }
     
@@ -4152,9 +4142,8 @@ function updateAttributeCircles() {
       const nodeGroup = d3.select(this);
       
       // Wenn dieser Knoten nicht in der Liste der Knoten mit aktiven Attributen ist
-      if (!nodesWithActiveAttributesIds.has(personId)) {
-        nodeGroup.select('circle.node-circle')
-          .style('opacity', nodesWithoutAttributesOpacity);
+            if (!nodesWithActiveAttributesIds.has(personId)) {
+        nodeGroup.classed('attr-dimmed', true);
       }
     });
   }
@@ -5098,13 +5087,14 @@ function createIconButton({ icon, title, className = '', onClick } = {}) {
   return btn;
 }
 
-function createLegendIconButton({ icon, title, className = '', onClick, dimmed } = {}) {
+function createLegendIconButton({ icon, title, className = '', onClick, dimmed, active } = {}) {
   const btn = createIconButton({
     icon, title, onClick,
     className: className ? `legend-icon-btn ${className}` : 'legend-icon-btn',
   });
-    btn.setAttribute('data-ignore-header-click', 'true');
+  btn.setAttribute('data-ignore-header-click', 'true');
   if (typeof dimmed === 'boolean') setLegendIconButtonState(btn, { dimmed });
+  if (typeof active === 'boolean') setLegendIconButtonState(btn, { active });
   return btn;
 }
 
@@ -5231,7 +5221,7 @@ function buildHiddenLegend() {
     const eyeBtn = createLegendIconButton({
       icon: isVisible ? 'eye' : 'eyeClosed',
       title: isVisible ? 'Temporär ausblenden' : 'Temporär einblenden',
-      className: isVisible ? 'active' : '',
+            active: isVisible,
       onClick: () => toggleHiddenRootVisibility(root),
     });
     eyeBtn.dataset.rootId = root;
@@ -6067,7 +6057,7 @@ async function transitionGraph(oldSub, newSub, roots, transitionId) {
       const currentLinks = getLinksForNodes(currentNodes);
       
       renderGraph({ nodes: currentNodes, links: currentLinks });
-      await new Promise(r => setTimeout(r, BFS_LEVEL_ANIMATION_DELAY_MS));
+      await new Promise(r => setTimeout(r, cssNumber('--bfs-level-delay-ms')));
     }
     Logger.log(`[Timing] End: transitionGraph-${transitionId}.teardown`);
   }
@@ -6109,7 +6099,7 @@ async function transitionGraph(oldSub, newSub, roots, transitionId) {
       const currentLinks = getLinksForNodes(currentNodes);
       
       renderGraph({ nodes: currentNodes, links: currentLinks });
-      await new Promise(r => setTimeout(r, BFS_LEVEL_ANIMATION_DELAY_MS));
+      await new Promise(r => setTimeout(r, cssNumber('--bfs-level-delay-ms')));
     }
     Logger.log(`[Timing] End: transitionGraph-${transitionId}.buildup`);
   }
@@ -6128,6 +6118,18 @@ async function transitionGraph(oldSub, newSub, roots, transitionId) {
 /**
  * Rendert den Graphen basierend auf dem berechneten Subgraphen
  */
+// Select-or-append for the graph's singleton layers/defs: renderGraph runs
+// incrementally, so every structural element exists exactly once.
+function ensureLayer(parent, selector) {
+  const sel = parent.select(selector);
+  if (!sel.empty()) return sel;
+  const m = selector.match(/^([a-z]+)(?:([.#])([\w-]+))?$/);
+  const created = parent.append(m[1]);
+  if (m[2] === '.') created.attr('class', m[3]);
+  else if (m[2] === '#') created.attr('id', m[3]);
+  return created;
+}
+
 function renderGraph(sub) {
   // Aktuellen Zoom-Zustand speichern
   const savedZoomTransform = currentZoomTransform;
@@ -6137,16 +6139,10 @@ function renderGraph(sub) {
   svg.attr("viewBox", [0, 0, WIDTH, HEIGHT]);
 
   // Pfeilspitzen-Definitionen (einmalig anlegen/aktualisieren)
-  let defs = svg.select("defs");
-  if (defs.empty()) {
-    defs = svg.append("defs");
-  }
+    const defs = ensureLayer(svg, "defs");
   const arrowLen = cssNumber('--arrow-length');
   const linkStroke = cssNumber('--link-stroke-width');
-  let arrow = defs.select("marker#arrow");
-  if (arrow.empty()) {
-    arrow = defs.append("marker").attr("id", "arrow");
-  }
+    const arrow = ensureLayer(defs, "marker#arrow");
   arrow
     .attr("viewBox", "0 0 10 10")
     .attr("refX", 0)
@@ -6155,35 +6151,23 @@ function renderGraph(sub) {
     .attr("markerHeight", arrowLen + linkStroke)
     .attr("markerUnits", "userSpaceOnUse")
     .attr("orient", "auto-start-reverse");
-  let arrowPath = arrow.select("path");
-  if (arrowPath.empty()) {
-    arrowPath = arrow.append("path");
-  }
+    const arrowPath = ensureLayer(arrow, "path");
   // Presentation lives in styles.css (#arrow path) and the export stylesheet
   arrowPath.attr("d", "M 0 0 L 10 5 L 0 10 z");
 
   // Zoom-Container (einmalig)
-  let gZoom = svg.select("g.zoom-layer");
-  if (gZoom.empty()) {
-    gZoom = svg.append("g").attr("class", "zoom-layer");
-  }
+    const gZoom = ensureLayer(svg, "g.zoom-layer");
 
   // Nur Verbindungen zwischen gezeichneten Graph-Knoten anzeigen (§9.2)
   const personIdsInSub = new Set(sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node').map(n => String(n.id)));
   const linksPP = sub.links.filter(l => personIdsInSub.has(idOf(l.source)) && personIdsInSub.has(idOf(l.target)));
 
   // Cluster-Ebene (hinter Links und Knoten)
-  let gClusters = gZoom.select("g.clusters");
-  if (gClusters.empty()) {
-    gClusters = gZoom.append("g").attr("class", "clusters");
-  }
+    const gClusters = ensureLayer(gZoom, "g.clusters");
   clusterLayer = gClusters;
 
   // Verbindungen rendern (inkrementell)
-  let linkGroup = gZoom.select("g.links");
-  if (linkGroup.empty()) {
-    linkGroup = gZoom.append("g").attr("class", "links");
-  }
+    const linkGroup = ensureLayer(gZoom, "g.links");
   const link = linkGroup
     .selectAll("line")
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
@@ -6197,10 +6181,7 @@ function renderGraph(sub) {
     .call(applyDiffClasses);
 
   // Debug-Link-Labels (optional)
-  let linkLabelGroup = gZoom.select("g.link-labels");
-  if (linkLabelGroup.empty()) {
-    linkLabelGroup = gZoom.append("g").attr("class", "link-labels");
-  }
+    const linkLabelGroup = ensureLayer(gZoom, "g.link-labels");
   const linkLabel = linkLabelGroup
     .selectAll("text")
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
@@ -6216,10 +6197,7 @@ function renderGraph(sub) {
   simAllById = new Map(personNodes.map(d => [String(d.id), d]));
   
   // Knoten erstellen (inkrementell)
-  let nodeGroup = gZoom.select("g.nodes");
-  if (nodeGroup.empty()) {
-    nodeGroup = gZoom.append("g").attr("class", "nodes");
-  }
+    const nodeGroup = ensureLayer(gZoom, "g.nodes");
   const node = nodeGroup
     .selectAll("g.node")
     .data(personNodes, d => String(d.id))
@@ -11953,18 +11931,22 @@ function og2BuildViewsLegend() {
     if (rawDef.depth != null) parts.push(`Tiefe ${rawDef.depth}`);
     return parts.join(' — ') || name;
   };
+    const ul = createLegendList();
   const makeRow = (name, { invalid = false, title }) => {
     const { row, left } = createLegendRow({ active: !invalid && name === og2.activeViewName, withRight: false });
     if (invalid) row.classList.add('view-row-invalid');
     row.title = title;
     left.appendChild(createLegendChip(name));
     if (!invalid) row.addEventListener('click', () => og2SwitchView(name));
-    host.appendChild(row);
+    const li = document.createElement('li');
+    li.appendChild(row);
+    ul.appendChild(li);
   };
   for (const name of Object.keys(og2.views)) makeRow(name, { title: describe(name) });
   for (const [name, reasons] of Object.entries(og2.rejectedViews || {})) {
     makeRow(name, { invalid: true, title: `Ungültig: ${(reasons || []).join('; ')}` });
   }
+  host.appendChild(ul);
   const saveBtn = document.getElementById('saveViewBtn');
   if (saveBtn && !saveBtn.dataset.og2Wired) {
     saveBtn.dataset.og2Wired = '1';

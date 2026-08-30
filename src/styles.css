@@ -54,13 +54,14 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 }
 
 /* Unsichtbare Klickflächen UNTER der Anzeige */
-.depth-half {
+.controls .depth-half {
   position: absolute;
   width: 100%;
   height: 50%;
   padding: 0;
   margin: 0;
-    border: none !important;
+  border: none;
+  border-radius: 0;
   background-color: transparent;
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -72,12 +73,10 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 .depth-half.depth-up {
   top: 0;
-  border-radius: 0;
 }
 
 .depth-half.depth-down {
   bottom: 0;
-  border-radius: 0;
 }
 
 .depth-half:hover {
@@ -175,8 +174,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 [data-icon] { display: inline-flex; align-items: center; justify-content: center; }
 .ic { width: 1em; height: 1em; font-size: 16px; display: inline-block; flex: 0 0 auto; vertical-align: -0.125em; background: none; }
 #legendPane { border-left: 1px solid var(--panel-border); padding: 0px; overflow: auto; background: var(--panel-bg); color: var(--text); width: 320px; }
-#legendPane h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-muted); }
-
 /* Kollabierbare Legenden - Neues Design */
 .legend-section { margin-bottom: 0px; }
 .legend-section:last-child { margin-bottom: 0; }
@@ -255,25 +252,14 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   transition: transform 0.2s ease;
 }
 
-.legend-chevron.expanded .ic {
-  transform: rotate(0deg);
-}
-
 .legend-chevron.collapsed .ic {
   transform: rotate(-90deg);
-}
-
-.legend-content {
-  overflow: hidden;
-  transition: max-height 0.3s ease-out;
-  max-height: 2000px; /* Groß genug, um Inhalt zu zeigen */
 }
 
 .legend-content.collapsed {
   display: none;
 }
 .legend-list, .legend-list ul { list-style: none; padding-left: 0; margin: 0; }
-.legend-list > li { margin: 0; }
 .legend-list li { display: block; margin-bottom: 1px; }
 
 /* Basis-Layout aller Legend-Rows (OE-/Hidden-/Attribut-/Views-Legende) */
@@ -333,10 +319,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   transition: transform 0.2s ease;
 }
 
-.legend-tree-chevron.expanded .ic {
-  transform: rotate(0deg);
-}
-
 .legend-tree-chevron.collapsed .ic {
   transform: rotate(-90deg);
 }
@@ -355,8 +337,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 /* Label-Chip: unscoped Basis für alle Legend-Rows (Sidebar + Views) */
 .legend-label-chip { 
-  display: inline-block; 
-  background-color: transparent;
+    display: inline-block;
   white-space: nowrap; 
   overflow: hidden; 
   text-overflow: ellipsis; 
@@ -399,7 +380,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 /* Verschachtelte Liste mit Einrückung */
 .legend-list ul {
-  padding-left: 0;
   margin-top: 2px;
 }
 
@@ -414,7 +394,20 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .btn { padding: 6px 10px; border-radius: 4px; background: var(--control-bg); border: 1px solid var(--control-border); color: var(--text); cursor: pointer; }
 .btn:hover { background: var(--control-hover); }
 
-.attribute-circle { fill: none; opacity: var(--attribute-circle-opacity); }
+.attribute-circle { fill: none; opacity: var(--attribute-circle-opacity); stroke-width: var(--attribute-circle-stroke-width); }
+
+/* Nodes with active attribute rings (class set in 08). Roots keep their
+   configured fill/opacity, hence :not(.is-root) on those two rules. */
+.node.has-attributes .node-circle {
+  stroke: var(--node-with-attributes-stroke);
+  stroke-width: var(--node-with-attributes-stroke-width);
+}
+.node.has-attributes .node-circle:not(.is-root) {
+  fill: var(--node-with-attributes-fill);
+}
+.node.attr-dimmed .node-circle:not(.is-root) {
+  opacity: var(--nodes-without-attributes-opacity);
+}
 
 /* Toggle Button Styles */
 .toggle-btn {
@@ -517,7 +510,12 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   --attr-lightness: 50;
   --attr-lightness-alt-boost: 5;
   --cluster-hull-samples: 12;
-  --export-pixel-density: 4;
+    --export-pixel-density: 4;
+  --node-fill-level-break-1: 0.33;
+  --node-fill-level-break-2: 0.67;
+  --attr-local-hue-cycle: 6;
+  --attr-lightness-alt-cycle: 2;
+  --bfs-level-delay-ms: 1000;
   --viewport-fit-ms: 300;
   --hull-escape-width-factor: 0.2;
   --zoom-min: 0.2;
@@ -1183,8 +1181,7 @@ body.dz-dragging::after {
   position: relative;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  background: transparent;
+    align-items: center;
   transition: background 0.15s ease;
 }
 
