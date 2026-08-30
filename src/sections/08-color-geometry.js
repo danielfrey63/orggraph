@@ -30,6 +30,24 @@ export function cssNumber(varName, fallback) {
   return fallback !== undefined ? fallback : (CSS_NUMBER_DEFAULTS[varName] ?? 0);
 }
 
+// Color companion of CSS_NUMBER_DEFAULTS: mirrors the :root light palette in
+// styles.css; only applies without a loaded stylesheet (unit tests).
+export const CSS_COLOR_DEFAULTS = {
+  '--node-fill': '#4F46E5',
+  '--node-fill-top-level': '#e0e7ff',
+  '--node-fill-mid-level': '#818cf8',
+  '--node-fill-low-level': '#4F46E5',
+};
+
+// Resolved string value of a CSS custom property on :root. Single owner of
+// the getComputedStyle+fallback pattern — the export stylesheet (03) and the
+// level-fill lookups below all go through here.
+export function cssVar(varName, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  if (v) return v;
+  return fallback !== undefined ? fallback : (CSS_COLOR_DEFAULTS[varName] ?? '');
+}
+
 // Farb-Hilfen: gleiche Kategorie -> ähnliche Farben, Kategorien klar unterscheidbar
 export const categoryHueCache = new Map();
 export function quantizedHueFromCategory(category) {
@@ -68,7 +86,7 @@ export function colorForCategoryAttribute(category, attrName, ordinal) {
  */
 export function getNodeFillByLevel(node) {
   if (!node || node.type !== 'person') {
-    return getComputedStyle(document.documentElement).getPropertyValue('--node-fill') || '#4F46E5';
+    return cssVar('--node-fill');
   }
   
   const level = node.level || 0;
@@ -76,24 +94,24 @@ export function getNodeFillByLevel(node) {
   
   // Wenn keine Hierarchie-Informationen verfügbar, Standardfarbe verwenden
   if (maxLevel === 0 || hierarchyLevels.size === 0) {
-    return getComputedStyle(document.documentElement).getPropertyValue('--node-fill') || '#4F46E5';
+    return cssVar('--node-fill');
   }
   
   // Normalisierte Ebene (0 = top, 1 = bottom)
   const normalizedLevel = maxLevel > 0 ? level / maxLevel : 0;
   
   // Hole die Gradient-Farben aus CSS-Variablen
-  const topLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-top-level') || '#e0e7ff';
-  const midLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-mid-level') || '#818cf8';
-  const lowLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-low-level') || '#4F46E5';
+  const topLevelColor = cssVar('--node-fill-top-level');
+  const midLevelColor = cssVar('--node-fill-mid-level');
+  const lowLevelColor = cssVar('--node-fill-low-level');
   
   // Whle Farbe basierend auf normalisierter Ebene
   if (normalizedLevel <= 0.33) {
-    return topLevelColor.trim();
+    return topLevelColor;
   } else if (normalizedLevel <= 0.67) {
-    return midLevelColor.trim();
+    return midLevelColor;
   } else {
-    return lowLevelColor.trim();
+    return lowLevelColor;
   }
 }
 
@@ -478,7 +496,7 @@ export function updateAttributeCircles() {
   
   // Farbe und Stil für Knoten mit Attributen
   const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
-  const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke, #4682b4)';
+  const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke)';
   const nodeWithAttributesStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
   // Transparenz für Knoten ohne Attribute

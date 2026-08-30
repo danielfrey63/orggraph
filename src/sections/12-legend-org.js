@@ -67,10 +67,10 @@ export function createLegendIconButton({ icon, svg, title, className = '', onCli
 // toggled instead of re-composing the base class string; icon and title
 // swap together. Sole owner of post-construction icon-button state
 // (eye toggles in 11 and 16).
-export function setLegendIconButtonState(btn, { icon, title, active, hidden } = {}) {
+export function setLegendIconButtonState(btn, { icon, title, active, dimmed } = {}) {
   if (!btn) return;
   if (typeof active === 'boolean') btn.classList.toggle('active', active);
-  if (typeof hidden === 'boolean') btn.classList.toggle('hidden', hidden);
+  if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
   if (title != null) btn.title = title;
   if (icon) setIcon(btn, icon);
 }
@@ -79,11 +79,19 @@ export function setLegendIconButtonState(btn, { icon, title, active, hidden } = 
 // plus the chevron's own expanded/collapsed class. Single owner of that display
 // toggle — every collapse/expand path (click, collapse-children, collapse-all)
 // routes through here.
+// Chevron modifier state shared by construction (createLegendChevron) and the
+// subtree setter below — classes are toggled, the base string never rebuilt.
+function applyLegendChevronState(chevron, collapsed) {
+  chevron.classList.add('legend-tree-chevron');
+  chevron.classList.toggle('collapsed', collapsed);
+  chevron.classList.toggle('expanded', !collapsed);
+}
+
 export function setLegendSubtreeCollapsed(chevron, collapsed) {
   const li = chevron.closest('li');
   const sub = li && li.querySelector('ul');
   if (sub) sub.style.display = collapsed ? 'none' : '';
-  chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
+  applyLegendChevronState(chevron, collapsed);
 }
 
 // Collapse state of a sidebar legend *section*: the content element's
@@ -103,7 +111,7 @@ export function setLegendSectionCollapsed(chevronBtn, contentEl, collapsed) {
 export function createLegendChevron({ collapsed = false, onToggle } = {}) {
   const chevron = document.createElement('button');
   chevron.type = 'button';
-  chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
+  applyLegendChevronState(chevron, collapsed);
   chevron.title = 'Ein-/Ausklappen';
   setIcon(chevron, 'chevronDown');
   chevron.addEventListener('click', (e) => {

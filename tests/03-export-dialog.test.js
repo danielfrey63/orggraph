@@ -9,6 +9,8 @@ import {
   sanitizeExportClone,
 } from '../src/sections/03-export-dialog.js';
 import { SVG_ID, WIDTH, HEIGHT } from '../src/sections/01-config-status.js';
+import { cssVar } from '../src/sections/08-color-geometry.js';
+import { LABEL_VISIBILITY_CLASSES } from '../src/sections/14-render.js';
 
 let downloads;
 
@@ -37,6 +39,8 @@ beforeEach(() => {
   document.body.innerHTML = FIXTURE;
   downloads = [];
   globalThis.SVG_ID = SVG_ID;
+  globalThis.cssVar = cssVar;
+  globalThis.LABEL_VISIBILITY_CLASSES = LABEL_VISIBILITY_CLASSES;
   globalThis.WIDTH = WIDTH;
   globalThis.HEIGHT = HEIGHT;
   globalThis.showTemporaryNotification = vi.fn();

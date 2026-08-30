@@ -199,7 +199,7 @@ export function renderGraph(sub) {
       update => update.attr("marker-end", "url(#arrow)"), // Ensure marker stays
       exit => exit.remove()
     )
-    .attr("class", d => `link${d.diffClass ? ' ' + d.diffClass : ''}`);
+    .call(applyDiffClasses);
 
   // Debug-Link-Labels (optional)
   let linkLabelGroup = gZoom.select("g.link-labels");
@@ -237,7 +237,7 @@ export function renderGraph(sub) {
       exit => exit.remove()
     )
     // Diff mode (§5/FR-8.6): added/removed/changed classification per node.
-    .attr("class", d => `node${d.diffClass ? ' ' + d.diffClass : ''}`);
+    .call(applyDiffClasses);
 
   // Styling-Parameter
   const nodeRadius = cssNumber('--node-radius');
@@ -730,4 +730,17 @@ export function setLabelVisibility(mode) {
   svg.classed('labels-hidden', mode === 'none');
   svg.classed('labels-attributes-only', mode === 'attributes');
   svg.selectAll('.link-label').style('display', (debugMode && mode !== 'none') ? null : 'none');
+}
+
+// The two SVG-level label-visibility classes; setLabelVisibility (above) owns
+// them, buildExportClone (03) copies them onto the export clone.
+export const LABEL_VISIBILITY_CLASSES = ['labels-hidden', 'labels-attributes-only'];
+
+// Diff mode (§5/FR-8.6): apply the classification classes additively so that
+// classes owned elsewhere (e.g. has-attributes from 08) survive re-renders —
+// a full class-attribute rewrite would silently wipe them.
+function applyDiffClasses(sel) {
+  sel.classed('diff-new', d => d.diffClass === 'diff-new')
+    .classed('diff-changed', d => d.diffClass === 'diff-changed')
+    .classed('diff-removed', d => d.diffClass === 'diff-removed');
 }

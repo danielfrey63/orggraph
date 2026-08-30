@@ -181,11 +181,11 @@ input#depth {
 /* Informational list entries (hints, empty results) */
 .combo-list li.combo-hint {
   padding: 8px;
-  color: #666;
+  color: var(--text-muted);
   font-style: italic;
 }
 .combo-list li.combo-hint--more {
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--control-border);
 }
 .viewport { display: grid; grid-template-columns: 1fr 320px; gap: 0; overflow: hidden; }
 .canvas { position: relative; overflow: hidden; background: var(--panel-bg); }
@@ -397,14 +397,14 @@ input#depth {
 /* Aktive Row-States für klickbare Baumelemente */
 .legend-row.active {
   background-color: var(--org-fill, var(--active-toggle-bg));
-  color: white;
+  color: var(--active-toggle-color);
   border-left: 3px solid var(--org-stroke, var(--active-toggle-bg));
   padding-left: 1px; /* 6px Standard - 3px Border - 2px Offset = 1px */
 }
 
 .legend-row.active .legend-label-chip {
   background-color: transparent;
-  color: white;
+  color: var(--active-toggle-color);
 }
 
 /* Attribut-Zeilen: Transparenter farbiger Hintergrund OHNE border-left */
@@ -487,7 +487,7 @@ input#depth {
 }
 
 .toggle-btn.active {
-  background-color: var(--active-toggle-bg, #6366f1);
+  background-color: var(--active-toggle-bg);
   color: var(--active-toggle-color, white);
   border-color: transparent;
   box-shadow: 0 2px 5px rgba(99,102,241,0.4);
@@ -519,6 +519,8 @@ input#depth {
   --control-hover: #e2e8f0;
   --active-toggle-bg: #6366f1;
   --active-toggle-color: white;
+  --accent-color: #4F46E5;
+  --button-primary-hover: #5558e3;
   --canvas-bg: #ffffff;
 
   /* Graph-Elemente */
@@ -601,6 +603,7 @@ input#depth {
     --node-fill-low-level: #6366f1;
     --active-toggle-bg: #818cf8;
     --active-toggle-color: #ffffff;
+    --link-label-fill: #94a3b8;
     --node-with-attributes-fill: #ffffff;
     --node-with-attributes-stroke: #93c5fd;
     --node-with-attributes-stroke-width: 0;
@@ -681,12 +684,12 @@ input#depth {
 }
 
 /* Spezielle Styles für ausgeblendete Kategorie-Eye-Buttons */
-.legend-icon-btn.hidden {
+.legend-icon-btn.dimmed {
   opacity: 0.3;
 }
 
-.legend-row:hover .legend-icon-btn.hidden,
-.legend-header:hover .legend-icon-btn.hidden {
+.legend-row:hover .legend-icon-btn.dimmed,
+.legend-header:hover .legend-icon-btn.dimmed {
   opacity: 0.5;
   pointer-events: auto;
 }
@@ -865,7 +868,7 @@ input#depth {
   padding: 8px 16px;
   border: none;
   border-radius: 4px;
-  background: var(--accent-color, #4F46E5);
+  background: var(--accent-color);
   color: #fff;
   cursor: pointer;
 }
@@ -891,7 +894,7 @@ input#depth {
 .no-matches-message {
   padding: 8px;
   font-style: italic;
-  color: #666;
+  color: var(--text-muted);
 }
 
 /* Temporary toast notification (showTemporaryNotification) */
@@ -989,7 +992,7 @@ body.dz-dragging::after {
   border: none;
   background: none;
   padding: 0;
-  color: var(--text-muted, #8a93a3);
+  color: var(--text-muted);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -999,7 +1002,7 @@ body.dz-dragging::after {
   height: 14px;
 }
 .footer-reset-btn:hover {
-  color: var(--text-strong, #e8ecf2);
+  color: var(--text-strong);
 }
 
 /* Profile switcher (parallel configurations) */
@@ -1008,13 +1011,13 @@ body.dz-dragging::after {
   align-items: center;
   gap: 6px;
 }
-.profile-switcher-label { color: var(--text-muted, #8a93a3); }
+.profile-switcher-label { color: var(--text-muted); }
 .profile-select {
   font: inherit;
   font-size: inherit;
-  color: var(--text-strong, #e8ecf2);
-  background: var(--panel-bg, #1c2128);
-  border: 1px solid var(--panel-border, #30363d);
+  color: var(--text-strong);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
   border-radius: 4px;
   padding: 1px 4px;
   cursor: pointer;
@@ -1022,9 +1025,9 @@ body.dz-dragging::after {
 .profile-btn {
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--panel-border, #30363d);
+  border: 1px solid var(--panel-border);
   background: none;
-  color: var(--text-muted, #8a93a3);
+  color: var(--text-muted);
   font: inherit;
   line-height: 1;
   padding: 1px 6px;
@@ -1032,7 +1035,7 @@ body.dz-dragging::after {
   cursor: pointer;
 }
 .profile-btn .ic { width: 12px; height: 12px; }
-.profile-btn:hover { color: var(--text-strong, #e8ecf2); border-color: var(--text-muted, #8a93a3); }
+.profile-btn:hover { color: var(--text-strong); border-color: var(--text-muted); }
 
 .export-options {
   display: flex;
@@ -1168,7 +1171,7 @@ body.dz-dragging::after {
 }
 
 .export-btn-large:hover {
-  background-color: var(--button-primary-hover, #5558e3);
+  background-color: var(--button-primary-hover);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
 }
@@ -1260,11 +1263,10 @@ body.dz-dragging::after {
 
 /* Views legend (FR-7.5): topmost sidebar section, one row per view */
 #viewsLegend .legend-row { padding: 3px 6px; }
-#viewsLegend .legend-row:hover { background-color: var(--hover-bg, rgba(128, 128, 128, 0.15)); }
 #viewsLegend .legend-row.active {
   /* re-bind the base .legend-row.active tokens instead of restating props */
-  --org-fill: var(--active-toggle-bg, #4a9eff);
-  --org-stroke: var(--active-toggle-bg, #4a9eff);
+  --org-fill: var(--active-toggle-bg);
+  --org-stroke: var(--active-toggle-bg);
   padding-left: 3px;
 }
 #viewsLegend .view-row-invalid { opacity: 0.45; cursor: not-allowed; }
@@ -1443,6 +1445,10 @@ body.dz-dragging::after {
       <span id="profileSwitcher" class="profile-switcher" hidden>
         <label class="profile-switcher-label" for="profileSelect">Konfig:</label>
         <select id="profileSelect" class="profile-select"></select>
+        <button class="profile-btn" id="profileNewBtn" title="Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …"><i data-icon="plus"></i></button>
+        <button class="profile-btn" id="profileRenameBtn" title="Aktuelles Profil umbenennen"><i data-icon="edit"></i></button>
+        <button class="profile-btn" id="profileDuplicateBtn" title="Aktuelles Profil duplizieren"><i data-icon="copy"></i></button>
+        <button class="profile-btn" id="profileDeleteBtn" title="Aktuelles Profil löschen"><i data-icon="close"></i></button>
       </span>
       <span class="stat-separator">|</span>
       <span id="status">Bereit</span>
@@ -1512,7 +1518,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.185.182';
+const APP_VERSION = '1.186.183';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -1593,7 +1599,6 @@ const SVG_ATTR = 'class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColo
 const ICON = {
   // --- toolbar ---
   layers:       `<svg ${SVG_ATTR}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
-  arrowUp:      `<svg ${SVG_ATTR}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>`,
   arrowDown:    `<svg ${SVG_ATTR}><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>`,
   organization: `<svg ${SVG_ATTR}><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v3M5 17v-3h14v3M12 10v4"/></svg>`,
   hierarchy:    `<svg ${SVG_ATTR}><rect x="3" y="3" width="9" height="7" rx="1"/><rect x="12" y="14" width="9" height="7" rx="1"/><path d="M7.5 10v4a3 3 0 0 0 3 3H12"/></svg>`,
@@ -1608,15 +1613,12 @@ const ICON = {
   // --- legend / actions ---
   filter:       `<svg ${SVG_ATTR}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`,
   checkAll:     `<svg ${SVG_ATTR}><polyline points="1 12 5 16 12 9"/><polyline points="9 14 11 16 18 9"/></svg>`,
-  check:        `<svg ${SVG_ATTR}><polyline points="20 6 9 17 4 12"/></svg>`,
   eye:          `<svg ${SVG_ATTR}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
   eyeClosed:    `<svg ${SVG_ATTR}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
   chevronDown:  `<svg ${SVG_ATTR}><polyline points="6 9 12 15 18 9"/></svg>`,
   chevronRight: `<svg ${SVG_ATTR}><polyline points="9 6 15 12 9 18"/></svg>`,
   expandAll:    `<svg ${SVG_ATTR}><polyline points="6 6 12 12 18 6"/><polyline points="6 13 12 19 18 13"/></svg>`,
   diff:         `<svg ${SVG_ATTR}><path d="M12 4L3 20h18L12 4z"/></svg>`,
-  cloudUpload:  `<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
-  cloudDownload:`<svg ${SVG_ATTR}><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>`,
   close:        `<svg ${SVG_ATTR}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
   plus:         `<svg ${SVG_ATTR}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
   edit:         `<svg ${SVG_ATTR}><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 21.5 2 23l1.5-5.5L17 3z"/></svg>`,
@@ -1856,9 +1858,6 @@ function createModal({ id, title, onClose } = {}) {
   return { modal, content, close };
 }
 
-/** Resolved value of a CSS custom property on :root (export clones carry literal values). */
-const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name);
-
 /**
  * Export clone of the live graph: sanitized (FR-8.5), namespaced, with the
  * label-visibility classes carried over so the export matches the screen.
@@ -1867,7 +1866,7 @@ function buildExportClone(svgElement) {
   const svgClone = svgElement.cloneNode(true);
   sanitizeExportClone(svgClone);
   svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  for (const cls of ['labels-hidden', 'labels-attributes-only']) {
+  for (const cls of LABEL_VISIBILITY_CLASSES) {
     if (svgElement.classList.contains(cls)) svgClone.classList.add(cls);
   }
   return svgClone;
@@ -3501,6 +3500,24 @@ function cssNumber(varName, fallback) {
   return fallback !== undefined ? fallback : (CSS_NUMBER_DEFAULTS[varName] ?? 0);
 }
 
+// Color companion of CSS_NUMBER_DEFAULTS: mirrors the :root light palette in
+// styles.css; only applies without a loaded stylesheet (unit tests).
+const CSS_COLOR_DEFAULTS = {
+  '--node-fill': '#4F46E5',
+  '--node-fill-top-level': '#e0e7ff',
+  '--node-fill-mid-level': '#818cf8',
+  '--node-fill-low-level': '#4F46E5',
+};
+
+// Resolved string value of a CSS custom property on :root. Single owner of
+// the getComputedStyle+fallback pattern — the export stylesheet (03) and the
+// level-fill lookups below all go through here.
+function cssVar(varName, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  if (v) return v;
+  return fallback !== undefined ? fallback : (CSS_COLOR_DEFAULTS[varName] ?? '');
+}
+
 // Farb-Hilfen: gleiche Kategorie -> ähnliche Farben, Kategorien klar unterscheidbar
 const categoryHueCache = new Map();
 function quantizedHueFromCategory(category) {
@@ -3539,7 +3556,7 @@ function colorForCategoryAttribute(category, attrName, ordinal) {
  */
 function getNodeFillByLevel(node) {
   if (!node || node.type !== 'person') {
-    return getComputedStyle(document.documentElement).getPropertyValue('--node-fill') || '#4F46E5';
+    return cssVar('--node-fill');
   }
   
   const level = node.level || 0;
@@ -3547,24 +3564,24 @@ function getNodeFillByLevel(node) {
   
   // Wenn keine Hierarchie-Informationen verfügbar, Standardfarbe verwenden
   if (maxLevel === 0 || hierarchyLevels.size === 0) {
-    return getComputedStyle(document.documentElement).getPropertyValue('--node-fill') || '#4F46E5';
+    return cssVar('--node-fill');
   }
   
   // Normalisierte Ebene (0 = top, 1 = bottom)
   const normalizedLevel = maxLevel > 0 ? level / maxLevel : 0;
   
   // Hole die Gradient-Farben aus CSS-Variablen
-  const topLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-top-level') || '#e0e7ff';
-  const midLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-mid-level') || '#818cf8';
-  const lowLevelColor = getComputedStyle(document.documentElement).getPropertyValue('--node-fill-low-level') || '#4F46E5';
+  const topLevelColor = cssVar('--node-fill-top-level');
+  const midLevelColor = cssVar('--node-fill-mid-level');
+  const lowLevelColor = cssVar('--node-fill-low-level');
   
   // Whle Farbe basierend auf normalisierter Ebene
   if (normalizedLevel <= 0.33) {
-    return topLevelColor.trim();
+    return topLevelColor;
   } else if (normalizedLevel <= 0.67) {
-    return midLevelColor.trim();
+    return midLevelColor;
   } else {
-    return lowLevelColor.trim();
+    return lowLevelColor;
   }
 }
 
@@ -3949,7 +3966,7 @@ function updateAttributeCircles() {
   
   // Farbe und Stil für Knoten mit Attributen
   const nodeWithAttributesFill = 'var(--node-with-attributes-fill)';
-  const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke, #4682b4)';
+  const nodeWithAttributesStroke = 'var(--node-with-attributes-stroke)';
   const nodeWithAttributesStrokeWidth = cssNumber('--node-with-attributes-stroke-width');
   
   // Transparenz für Knoten ohne Attribute
@@ -5039,10 +5056,10 @@ function createLegendIconButton({ icon, svg, title, className = '', onClick } = 
 // toggled instead of re-composing the base class string; icon and title
 // swap together. Sole owner of post-construction icon-button state
 // (eye toggles in 11 and 16).
-function setLegendIconButtonState(btn, { icon, title, active, hidden } = {}) {
+function setLegendIconButtonState(btn, { icon, title, active, dimmed } = {}) {
   if (!btn) return;
   if (typeof active === 'boolean') btn.classList.toggle('active', active);
-  if (typeof hidden === 'boolean') btn.classList.toggle('hidden', hidden);
+  if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
   if (title != null) btn.title = title;
   if (icon) setIcon(btn, icon);
 }
@@ -5051,11 +5068,19 @@ function setLegendIconButtonState(btn, { icon, title, active, hidden } = {}) {
 // plus the chevron's own expanded/collapsed class. Single owner of that display
 // toggle — every collapse/expand path (click, collapse-children, collapse-all)
 // routes through here.
+// Chevron modifier state shared by construction (createLegendChevron) and the
+// subtree setter below — classes are toggled, the base string never rebuilt.
+function applyLegendChevronState(chevron, collapsed) {
+  chevron.classList.add('legend-tree-chevron');
+  chevron.classList.toggle('collapsed', collapsed);
+  chevron.classList.toggle('expanded', !collapsed);
+}
+
 function setLegendSubtreeCollapsed(chevron, collapsed) {
   const li = chevron.closest('li');
   const sub = li && li.querySelector('ul');
   if (sub) sub.style.display = collapsed ? 'none' : '';
-  chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
+  applyLegendChevronState(chevron, collapsed);
 }
 
 // Collapse state of a sidebar legend *section*: the content element's
@@ -5075,7 +5100,7 @@ function setLegendSectionCollapsed(chevronBtn, contentEl, collapsed) {
 function createLegendChevron({ collapsed = false, onToggle } = {}) {
   const chevron = document.createElement('button');
   chevron.type = 'button';
-  chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
+  applyLegendChevronState(chevron, collapsed);
   chevron.title = 'Ein-/Ausklappen';
   setIcon(chevron, 'chevronDown');
   chevron.addEventListener('click', (e) => {
@@ -6125,7 +6150,7 @@ function renderGraph(sub) {
       update => update.attr("marker-end", "url(#arrow)"), // Ensure marker stays
       exit => exit.remove()
     )
-    .attr("class", d => `link${d.diffClass ? ' ' + d.diffClass : ''}`);
+    .call(applyDiffClasses);
 
   // Debug-Link-Labels (optional)
   let linkLabelGroup = gZoom.select("g.link-labels");
@@ -6163,7 +6188,7 @@ function renderGraph(sub) {
       exit => exit.remove()
     )
     // Diff mode (§5/FR-8.6): added/removed/changed classification per node.
-    .attr("class", d => `node${d.diffClass ? ' ' + d.diffClass : ''}`);
+    .call(applyDiffClasses);
 
   // Styling-Parameter
   const nodeRadius = cssNumber('--node-radius');
@@ -6657,6 +6682,19 @@ function setLabelVisibility(mode) {
   svg.classed('labels-attributes-only', mode === 'attributes');
   svg.selectAll('.link-label').style('display', (debugMode && mode !== 'none') ? null : 'none');
 }
+
+// The two SVG-level label-visibility classes; setLabelVisibility (above) owns
+// them, buildExportClone (03) copies them onto the export clone.
+const LABEL_VISIBILITY_CLASSES = ['labels-hidden', 'labels-attributes-only'];
+
+// Diff mode (§5/FR-8.6): apply the classification classes additively so that
+// classes owned elsewhere (e.g. has-attributes from 08) survive re-renders —
+// a full class-attribute rewrite would silently wipe them.
+function applyDiffClasses(sel) {
+  sel.classed('diff-new', d => d.diffClass === 'diff-new')
+    .classed('diff-changed', d => d.diffClass === 'diff-changed')
+    .classed('diff-removed', d => d.diffClass === 'diff-removed');
+}
 function applyFromUI(triggerSource = 'unknown', callStack = false) {
   Logger.log(`[Timing] Start: applyFromUI.${triggerSource}`);
   // OrgGraph 2.0 tenant: the projection-based apply path owns rendering.
@@ -6873,23 +6911,21 @@ function buildAttributeLegend() {
     const eyeBtn = createLegendIconButton({
       icon: isHidden ? 'eyeClosed' : 'eye',
       title: isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
-      className: isHidden ? 'hidden' : '',
-    });
+      className: isHidden ? 'dimmed' : '',
+      onClick: () => {
+        const nowHidden = !hiddenCategories.has(cat);
+        if (nowHidden) hiddenCategories.add(cat);
+        else hiddenCategories.delete(cat);
+        setLegendIconButtonState(eyeBtn, {
+          dimmed: nowHidden,
+          title: nowHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
+          icon: nowHidden ? 'eyeClosed' : 'eye',
+        });
 
-    eyeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const nowHidden = !hiddenCategories.has(cat);
-      if (nowHidden) hiddenCategories.add(cat);
-      else hiddenCategories.delete(cat);
-      setLegendIconButtonState(eyeBtn, {
-        hidden: nowHidden,
-        title: nowHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
-        icon: nowHidden ? 'eyeClosed' : 'eye',
-      });
-
-      // Attribut-Kreise neu zeichnen
-      updateAttributeCircles();
-      notifyAttributeVisibilityChanged();
+        // Attribut-Kreise neu zeichnen
+        updateAttributeCircles();
+        notifyAttributeVisibilityChanged();
+      },
     });
 
     catRightArea.appendChild(eyeBtn);
@@ -8035,8 +8071,6 @@ function initializeCollapsibleLegends() {
     const target = document.getElementById(targetId);
     if (!target) return;
     
-    const isChevron = btn.classList.contains('legend-chevron');
-    
     // Initialen Zustand aus localStorage laden
     setLegendSectionCollapsed(btn, target, loadCollapseState(targetId));
     
@@ -8048,8 +8082,8 @@ function initializeCollapsibleLegends() {
       saveCollapseState(targetId, isCollapsed);
     });
     
-    // Klick-Event für die Überschrift (nur für Chevron-Buttons)
-    if (isChevron) {
+    // Klick-Event für die Überschrift
+    {
       const header = btn.closest('.legend-header');
       if (header) {
         header.addEventListener('click', (e) => {
@@ -8234,22 +8268,24 @@ async function renderProfileSwitcher() {
       catch (e) { console.error(e); showTemporaryNotification('Profilwechsel fehlgeschlagen', 4000); }
     });
 
-    // Icon buttons share the createIconButton primitive (12-legend-org.js)
-    const mkBtn = (icon, title, handler) =>
-      wrap.appendChild(createIconButton({ icon, title, className: 'profile-btn', onClick: handler }));
+    // Buttons are static template markup; JS only wires them (like #resetData)
+    const wireBtn = (id, handler) => {
+      const b = wrap.querySelector('#' + id);
+      if (b) b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handler(); });
+    };
 
-    mkBtn('plus', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
-    mkBtn('edit', 'Aktuelles Profil umbenennen', async () => {
+    wireBtn('profileNewBtn', () => openNewProfileDropZone());
+    wireBtn('profileRenameBtn', async () => {
       const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
       const name = (typeof prompt === 'function') ? prompt('Profil umbenennen:', cur ? cur.name : profileSwitcherActive) : null;
       if (name && name.trim()) { await renameProfile(profileSwitcherActive, name.trim()); await renderProfileSwitcher(); }
     });
-    mkBtn('copy', 'Aktuelles Profil duplizieren', async () => {
+    wireBtn('profileDuplicateBtn', async () => {
       const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
       const newId = await duplicateProfile(profileSwitcherActive, (cur ? cur.name : profileSwitcherActive) + ' Kopie');
       if (newId) { try { await switchProfile(newId); } catch (_) {} location.reload(); }
     });
-    mkBtn('close', 'Aktuelles Profil löschen', async () => {
+    wireBtn('profileDeleteBtn', async () => {
       const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
       const ok = (typeof confirm === 'function')
         ? confirm(`Profil "${cur ? cur.name : profileSwitcherActive}" und alle zugehörigen Daten löschen?`)

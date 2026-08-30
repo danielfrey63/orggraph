@@ -10,6 +10,10 @@ beforeEach(() => {
     '<span id="profileSwitcher" class="profile-switcher" hidden>' +
     '<label class="profile-switcher-label" for="profileSelect">Konfig:</label>' +
     '<select id="profileSelect" class="profile-select"></select>' +
+    '<button class="profile-btn" id="profileNewBtn" title="Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …"><i data-icon="plus"></i></button>' +
+    '<button class="profile-btn" id="profileRenameBtn" title="Aktuelles Profil umbenennen"><i data-icon="edit"></i></button>' +
+    '<button class="profile-btn" id="profileDuplicateBtn" title="Aktuelles Profil duplizieren"><i data-icon="copy"></i></button>' +
+    '<button class="profile-btn" id="profileDeleteBtn" title="Aktuelles Profil löschen"><i data-icon="close"></i></button>' +
     '</span><span class="stat-separator">|</span>' +
     '<span id="status">Bereit</span></div></footer>';
   globalThis.setIcon = setIcon;

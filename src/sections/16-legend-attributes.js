@@ -89,23 +89,21 @@ export function buildAttributeLegend() {
     const eyeBtn = createLegendIconButton({
       icon: isHidden ? 'eyeClosed' : 'eye',
       title: isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
-      className: isHidden ? 'hidden' : '',
-    });
+      className: isHidden ? 'dimmed' : '',
+      onClick: () => {
+        const nowHidden = !hiddenCategories.has(cat);
+        if (nowHidden) hiddenCategories.add(cat);
+        else hiddenCategories.delete(cat);
+        setLegendIconButtonState(eyeBtn, {
+          dimmed: nowHidden,
+          title: nowHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
+          icon: nowHidden ? 'eyeClosed' : 'eye',
+        });
 
-    eyeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const nowHidden = !hiddenCategories.has(cat);
-      if (nowHidden) hiddenCategories.add(cat);
-      else hiddenCategories.delete(cat);
-      setLegendIconButtonState(eyeBtn, {
-        hidden: nowHidden,
-        title: nowHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
-        icon: nowHidden ? 'eyeClosed' : 'eye',
-      });
-
-      // Attribut-Kreise neu zeichnen
-      updateAttributeCircles();
-      notifyAttributeVisibilityChanged();
+        // Attribut-Kreise neu zeichnen
+        updateAttributeCircles();
+        notifyAttributeVisibilityChanged();
+      },
     });
 
     catRightArea.appendChild(eyeBtn);

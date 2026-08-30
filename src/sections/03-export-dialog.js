@@ -196,9 +196,6 @@ export function createModal({ id, title, onClose } = {}) {
   return { modal, content, close };
 }
 
-/** Resolved value of a CSS custom property on :root (export clones carry literal values). */
-const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name);
-
 /**
  * Export clone of the live graph: sanitized (FR-8.5), namespaced, with the
  * label-visibility classes carried over so the export matches the screen.
@@ -207,7 +204,7 @@ function buildExportClone(svgElement) {
   const svgClone = svgElement.cloneNode(true);
   sanitizeExportClone(svgClone);
   svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  for (const cls of ['labels-hidden', 'labels-attributes-only']) {
+  for (const cls of LABEL_VISIBILITY_CLASSES) {
     if (svgElement.classList.contains(cls)) svgClone.classList.add(cls);
   }
   return svgClone;

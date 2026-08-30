@@ -256,8 +256,6 @@ export function initializeCollapsibleLegends() {
     const target = document.getElementById(targetId);
     if (!target) return;
     
-    const isChevron = btn.classList.contains('legend-chevron');
-    
     // Initialen Zustand aus localStorage laden
     setLegendSectionCollapsed(btn, target, loadCollapseState(targetId));
     
@@ -269,8 +267,8 @@ export function initializeCollapsibleLegends() {
       saveCollapseState(targetId, isCollapsed);
     });
     
-    // Klick-Event für die Überschrift (nur für Chevron-Buttons)
-    if (isChevron) {
+    // Klick-Event für die Überschrift
+    {
       const header = btn.closest('.legend-header');
       if (header) {
         header.addEventListener('click', (e) => {

@@ -39,22 +39,24 @@ export async function renderProfileSwitcher() {
       catch (e) { console.error(e); showTemporaryNotification('Profilwechsel fehlgeschlagen', 4000); }
     });
 
-    // Icon buttons share the createIconButton primitive (12-legend-org.js)
-    const mkBtn = (icon, title, handler) =>
-      wrap.appendChild(createIconButton({ icon, title, className: 'profile-btn', onClick: handler }));
+    // Buttons are static template markup; JS only wires them (like #resetData)
+    const wireBtn = (id, handler) => {
+      const b = wrap.querySelector('#' + id);
+      if (b) b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handler(); });
+    };
 
-    mkBtn('plus', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
-    mkBtn('edit', 'Aktuelles Profil umbenennen', async () => {
+    wireBtn('profileNewBtn', () => openNewProfileDropZone());
+    wireBtn('profileRenameBtn', async () => {
       const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
       const name = (typeof prompt === 'function') ? prompt('Profil umbenennen:', cur ? cur.name : profileSwitcherActive) : null;
       if (name && name.trim()) { await renameProfile(profileSwitcherActive, name.trim()); await renderProfileSwitcher(); }
     });
-    mkBtn('copy', 'Aktuelles Profil duplizieren', async () => {
+    wireBtn('profileDuplicateBtn', async () => {
       const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
       const newId = await duplicateProfile(profileSwitcherActive, (cur ? cur.name : profileSwitcherActive) + ' Kopie');
       if (newId) { try { await switchProfile(newId); } catch (_) {} location.reload(); }
     });
-    mkBtn('close', 'Aktuelles Profil löschen', async () => {
+    wireBtn('profileDeleteBtn', async () => {
       const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
       const ok = (typeof confirm === 'function')
         ? confirm(`Profil "${cur ? cur.name : profileSwitcherActive}" und alle zugehörigen Daten löschen?`)

@@ -101,7 +101,7 @@ describe('buildAttributeLegend', () => {
     const eyeBtn = document.querySelector('#attributeLegend .legend-icon-btn[title="Kategorie ausblenden"]');
     eyeBtn.click();
     expect(globalThis.hiddenCategories.size).toBe(1);
-    expect(eyeBtn.className).toBe('legend-icon-btn hidden');
+    expect(eyeBtn.className).toBe('legend-icon-btn dimmed');
     eyeBtn.click();
     expect(globalThis.hiddenCategories.size).toBe(0);
   });
