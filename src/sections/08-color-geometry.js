@@ -25,7 +25,15 @@ export const CSS_NUMBER_DEFAULTS = {
   '--collide-strength': 0.8,
   '--level-height': 200,
   '--level-force-strength': 0.5,
-  '--label-x-offset': 10,
+    '--label-x-offset': 10,
+  '--label-y-offset': 4,
+  '--label-ring-gap': 3,
+  '--link-label-dy': -3,
+  '--cluster-force-strength': 0.08,
+  '--cluster-jitter': 30,
+  '--cluster-ring-radius-factor': 0.35,
+  '--radial-child-padding': 4,
+  '--viewport-fit-pad': 20,
 };
 
 export function cssNumber(varName, fallback) {
@@ -638,8 +646,8 @@ export function updateAttributeCircles() {
     }
     
     // Label-Position basierend auf dem äußersten Radius anpassen
-    // Füge einen kleinen Abstand hinzu (z.B. 3 Pixel)
-    const labelOffset = 3;
+    // Füge einen kleinen Abstand hinzu
+    const labelOffset = cssNumber('--label-ring-gap');
     const labelPos = (outerMostRadius === nodeRadius) ? cssNumber('--label-x-offset') : (outerMostRadius + labelOffset);
     nodeGroup.select('text.label')
       .attr('x', labelPos);

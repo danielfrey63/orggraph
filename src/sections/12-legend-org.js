@@ -66,11 +66,12 @@ export function createLegendIconButton({ icon, svg, title, className = '', onCli
 // State refresh of an existing legend icon button: modifier classes are
 // toggled instead of re-composing the base class string; icon and title
 // swap together. Sole owner of post-construction icon-button state
-// (eye toggles in 11 and 16).
-export function setLegendIconButtonState(btn, { icon, title, active, dimmed } = {}) {
+// (eye toggles in 11, 16 and 18; oeFilter button visibility in 19).
+export function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible } = {}) {
   if (!btn) return;
   if (typeof active === 'boolean') btn.classList.toggle('active', active);
   if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
+  if (typeof visible === 'boolean') btn.classList.toggle('visible', visible);
   if (title != null) btn.title = title;
   if (icon) setIcon(btn, icon);
 }

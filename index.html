@@ -514,12 +514,19 @@ input#depth {
   --active-toggle-bg: #6366f1;
   --active-toggle-color: white;
   --accent-color: #4F46E5;
-  --button-primary-hover: #5558e3;
+    --button-primary-hover: #5558e3;
+  --error-color: #ef4444;
+  --overlay-dark-bg: rgba(17, 17, 17, 0.9);
+  --overlay-dark-fg: #fff;
+  --overlay-dark-hover: #1f2937;
   --canvas-bg: #ffffff;
 
   /* Graph-Elemente */
     --node-radius: 8;
-  --label-x-offset: 10;
+    --label-x-offset: 10;
+  --label-y-offset: 4;
+  --label-ring-gap: 3;
+  --link-label-dy: -3;
   --node-fill: #4F46E5;
   --node-fill-top-level: #e0e7ff;
   --node-fill-mid-level: #818cf8;
@@ -559,7 +566,10 @@ input#depth {
     --charge-strength: -250;
   --collide-padding: 6;
   --collide-strength: 0.8;
-  --center-strength: 0.05;
+    --center-strength: 0.05;
+  --cluster-force-strength: 0.08;
+  --cluster-jitter: 30;
+  --cluster-ring-radius-factor: 0.35;
   --alpha-decay: 0.05;
   --velocity-decay: 0.5;
   
@@ -568,7 +578,9 @@ input#depth {
   --level-force-strength: 0.5;
   --radial-force: 0.15;
   --radial-gap: 120;
-    --radial-base: 0;
+      --radial-base: 0;
+  --radial-child-padding: 4;
+  --viewport-fit-pad: 20;
 }
 
 /* Dunkelmodus */
@@ -834,11 +846,11 @@ input#depth {
 }
 
 .modal-input--error {
-  border-color: #ef4444;
+  border-color: var(--error-color);
 }
 
 .modal-error {
-  color: #ef4444;
+  color: var(--error-color);
   font-size: 12px;
   margin-top: 8px;
   min-height: 18px;
@@ -855,8 +867,8 @@ input#depth {
   padding: 8px 16px;
   border: none;
   border-radius: 4px;
-  background: var(--accent-color);
-  color: #fff;
+    background: var(--accent-color);
+  color: var(--active-toggle-color);
   cursor: pointer;
 }
 
@@ -864,8 +876,8 @@ input#depth {
 .cluster-tooltip {
   position: fixed;
   pointer-events: none;
-  background: rgba(17, 17, 17, 0.9);
-  color: #fff;
+    background: var(--overlay-dark-bg);
+  color: var(--overlay-dark-fg);
   font-size: 12px;
   padding: 10px 12px;
   border-radius: 6px;
@@ -896,8 +908,12 @@ input#depth {
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   z-index: 1000;
-  opacity: 0;
+    opacity: 0;
   transition: opacity 0.3s ease;
+}
+
+.toast.visible {
+  opacity: 1;
 }
 
 /* ========== Drop-Zone (Standalone-Datenimport) ========== */
@@ -1170,8 +1186,8 @@ body.dz-dragging::after {
 /* Context Menus */
 .node-context-menu {
   position: fixed;
-  background: #111;
-  color: #fff;
+    background: var(--overlay-dark-bg);
+  color: var(--overlay-dark-fg);
   font-size: 12px;
   border-radius: 6px;
   padding: 0px 3px;
@@ -1193,7 +1209,7 @@ body.dz-dragging::after {
 }
 
 .menu-item:hover {
-  background: #1f2937;
+  background: var(--overlay-dark-hover);
 }
 
 .menu-item.disabled {
@@ -1541,8 +1557,7 @@ function showTemporaryNotification(message, duration = 3000) {
   if (!notification) {
     notification = document.createElement('div');
     notification.id = 'temp-notification';
-    notification.className = 'toast';
-    notification.style.opacity = '0';
+        notification.className = 'toast';
     document.body.appendChild(notification);
   }
   
@@ -1555,13 +1570,13 @@ function showTemporaryNotification(message, duration = 3000) {
   notification.textContent = message;
   
   // Sicherstellen, dass das Element im DOM ist, bevor wir die Transition starten
-  setTimeout(() => {
-    notification.style.opacity = '1';
+    setTimeout(() => {
+    notification.classList.add('visible');
   }, 10);
   
   // Nach der angegebenen Zeit ausblenden
-  notification.hideTimeout = setTimeout(() => {
-    notification.style.opacity = '0';
+    notification.hideTimeout = setTimeout(() => {
+    notification.classList.remove('visible');
     // Nach dem Ausblenden aus dem DOM entfernen
     setTimeout(() => {
       if (notification.parentNode) {
@@ -3482,7 +3497,15 @@ const CSS_NUMBER_DEFAULTS = {
   '--collide-strength': 0.8,
   '--level-height': 200,
   '--level-force-strength': 0.5,
-  '--label-x-offset': 10,
+    '--label-x-offset': 10,
+  '--label-y-offset': 4,
+  '--label-ring-gap': 3,
+  '--link-label-dy': -3,
+  '--cluster-force-strength': 0.08,
+  '--cluster-jitter': 30,
+  '--cluster-ring-radius-factor': 0.35,
+  '--radial-child-padding': 4,
+  '--viewport-fit-pad': 20,
 };
 
 function cssNumber(varName, fallback) {
@@ -4095,8 +4118,8 @@ function updateAttributeCircles() {
     }
     
     // Label-Position basierend auf dem äußersten Radius anpassen
-    // Füge einen kleinen Abstand hinzu (z.B. 3 Pixel)
-    const labelOffset = 3;
+    // Füge einen kleinen Abstand hinzu
+    const labelOffset = cssNumber('--label-ring-gap');
     const labelPos = (outerMostRadius === nodeRadius) ? cssNumber('--label-x-offset') : (outerMostRadius + labelOffset);
     nodeGroup.select('text.label')
       .attr('x', labelPos);
@@ -5048,11 +5071,12 @@ function createLegendIconButton({ icon, svg, title, className = '', onClick } = 
 // State refresh of an existing legend icon button: modifier classes are
 // toggled instead of re-composing the base class string; icon and title
 // swap together. Sole owner of post-construction icon-button state
-// (eye toggles in 11 and 16).
-function setLegendIconButtonState(btn, { icon, title, active, dimmed } = {}) {
+// (eye toggles in 11, 16 and 18; oeFilter button visibility in 19).
+function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible } = {}) {
   if (!btn) return;
   if (typeof active === 'boolean') btn.classList.toggle('active', active);
   if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
+  if (typeof visible === 'boolean') btn.classList.toggle('visible', visible);
   if (title != null) btn.title = title;
   if (icon) setIcon(btn, icon);
 }
@@ -5773,7 +5797,7 @@ function findPositionOutsideHull(existingNodes, margin = 200) {
  * Führt eine Breadth-First Expansion für das radiale Layout durch
  */
 function radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positionedSet, includeParents = false) {
-  const childPadding = 4;
+  const childPadding = cssNumber('--radial-child-padding');
   
   while (queue.length > 0) {
     const current = queue.shift();
@@ -6155,7 +6179,7 @@ function renderGraph(sub) {
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
     .join("text")
     .attr("class", "link-label")
-    .attr("dy", -3);
+    .attr("dy", cssNumber('--link-label-dy'));
 
   // Nur Graph-Knoten (Draw-Kind 'node') rendern; Cluster werden als Hüllen gezeichnet
   const personNodes = sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node');
@@ -6197,7 +6221,7 @@ function renderGraph(sub) {
   nodeEnter.append("text")
     .text(d => debugMode ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})` : getDisplayLabel(d))
     .attr("x", cssNumber('--label-x-offset'))
-    .attr("y", 4)
+    .attr("y", cssNumber('--label-y-offset'))
     .attr("class", "label");
     
   // Attribut-Kreise hinzufügen (ohne Relayout)
@@ -7113,12 +7137,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     oesVisible = oeVisibilityBtn.classList.contains('active');
     
     oeVisibilityBtn.addEventListener('click', () => {
-      // Toggle Button-Status
-      oeVisibilityBtn.classList.toggle('active');
-      oesVisible = oeVisibilityBtn.classList.contains('active');
-      
-      // Icon wechseln zwischen eye und eye-closed
-      setIcon(oeVisibilityBtn, oesVisible ? 'eye' : 'eyeClosed');
+            // Toggle Button-Status (active-Klasse, Icon und Titel gemeinsam)
+      oesVisible = !oeVisibilityBtn.classList.contains('active');
+      setLegendIconButtonState(oeVisibilityBtn, {
+        active: oesVisible,
+        icon: oesVisible ? 'eye' : 'eyeClosed',
+        title: oesVisible ? 'Cluster ausblenden' : 'Cluster einblenden',
+      });
       
       if (oesVisible) {
         // OEs einblenden - gespeicherte Auswahl wiederherstellen
@@ -7208,15 +7233,17 @@ window.addEventListener("DOMContentLoaded", async () => {
       ? envConfig.LEGEND_ATTRIBUTES_ACTIVE
       : null;
 
-    if (envAttrVisible != null) {
+        if (envAttrVisible != null) {
       attributesVisible = !!envAttrVisible;
-      if (!attributesVisible) attributesVisibilityBtn.classList.remove('active');
     } else {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
     }
 
-    // Icon initial korrekt setzen (eye vs. eye-closed)
-    setIcon(attributesVisibilityBtn, attributesVisible ? 'eye' : 'eyeClosed');
+    // Anfangszustand konsistent setzen (active-Klasse + eye vs. eye-closed)
+    setLegendIconButtonState(attributesVisibilityBtn, {
+      active: attributesVisible,
+      icon: attributesVisible ? 'eye' : 'eyeClosed',
+    });
     
     attributesVisibilityBtn.addEventListener('click', (e) => {
       // Stop bubbling to the section header: setIcon replaces the clicked SVG,
@@ -7242,12 +7269,12 @@ window.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-      // Toggle Button-Status
-      attributesVisibilityBtn.classList.toggle('active');
-      attributesVisible = attributesVisibilityBtn.classList.contains('active');
-      
-      // Icon wechseln zwischen eye und eye-closed
-      setIcon(attributesVisibilityBtn, attributesVisible ? 'eye' : 'eyeClosed');
+            // Toggle Button-Status (active-Klasse und Icon gemeinsam)
+      attributesVisible = !attributesVisibilityBtn.classList.contains('active');
+      setLegendIconButtonState(attributesVisibilityBtn, {
+        active: attributesVisible,
+        icon: attributesVisible ? 'eye' : 'eyeClosed',
+      });
       
       // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:
       // - activeAttributes (bleiben wie sie sind)
@@ -7814,7 +7841,7 @@ function fitToViewport() {
   const bbox = g.getBBox();
   if (!isFinite(bbox.width) || !isFinite(bbox.height) || bbox.width === 0 || bbox.height === 0) return;
   // Use SVG viewBox units for stable centering
-  const pad = 20; // in viewBox units
+  const pad = cssNumber('--viewport-fit-pad'); // in viewBox units
   const availW = Math.max(1, WIDTH - pad * 2);
   const availH = Math.max(1, HEIGHT - pad * 2);
   const scale = Math.min(availW / bbox.width, availH / bbox.height);
@@ -7964,7 +7991,7 @@ function configureLayout(nodes, links, simulation, mode) {
     for (const set of memberships.values()) { for (const oid of set) orgIds.add(oid); }
     const orgList = Array.from(orgIds).sort((a,b) => (orgDepth(a) - orgDepth(b)) || String(a).localeCompare(String(b)));
     const cx = WIDTH / 2, cy = HEIGHT / 2;
-    const CLUSTER_RING_RADIUS = Math.min(WIDTH, HEIGHT) * 0.35;
+    const CLUSTER_RING_RADIUS = Math.min(WIDTH, HEIGHT) * cssNumber('--cluster-ring-radius-factor');
     const centers = new Map();
     for (let i = 0; i < Math.max(1, orgList.length); i++) {
       const angle = (2 * Math.PI * i) / Math.max(1, orgList.length);
@@ -7977,7 +8004,7 @@ function configureLayout(nodes, links, simulation, mode) {
       for (const oid of set) { const d = orgDepth(oid); if (d > bestDepth) { bestDepth = d; best = oid; } }
       primaryOf.set(pid, best);
     }
-    const JITTER = 30;
+    const JITTER = cssNumber('--cluster-jitter');
     nodes.forEach(n => {
       const pid = String(n.id);
       const oid = primaryOf.get(pid);
@@ -7985,7 +8012,7 @@ function configureLayout(nodes, links, simulation, mode) {
       if (!Number.isFinite(n.x)) n.x = c.x + (Math.random() - 0.5) * JITTER;
       if (!Number.isFinite(n.y)) n.y = c.y + (Math.random() - 0.5) * JITTER;
     });
-    const CLUSTER_FORCE_STRENGTH = 0.08;
+    const CLUSTER_FORCE_STRENGTH = cssNumber('--cluster-force-strength');
     simulation
       .force("clusterX", d3.forceX(d => {
         const pid = String(d.id);
@@ -8121,16 +8148,11 @@ function initializeCollapsibleLegends() {
   const oeFilterBtn = document.getElementById('oeFilterBtn');
   if (oeFilter && oeFilterBtn) {
     // Überwache Wertänderungen für has-value Klasse
-    const updateSearchFieldState = () => {
-      if (oeFilter.value.trim()) {
-        oeFilter.classList.add('has-value');
-        // Filter-Icon auch ohne Hover sichtbar wenn Wert vorhanden
-        oeFilterBtn.classList.add('visible');
-      } else {
-        oeFilter.classList.remove('has-value');
-        // Filter-Icon nur bei Hover sichtbar wenn leer
-        oeFilterBtn.classList.remove('visible');
-      }
+        const updateSearchFieldState = () => {
+      const hasValue = !!oeFilter.value.trim();
+      oeFilter.classList.toggle('has-value', hasValue);
+      // Filter-Icon ohne Hover nur sichtbar, wenn ein Wert vorhanden ist
+      setLegendIconButtonState(oeFilterBtn, { visible: hasValue });
     };
     
     oeFilter.addEventListener('input', updateSearchFieldState);

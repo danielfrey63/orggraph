@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
+import { setLegendIconButtonState } from '../src/sections/12-legend-org.js';
 import { setLabelVisibility } from '../src/sections/14-render.js';
 import {
   INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, INPUT_DEPTH_ID, SVG_ID,
@@ -49,7 +50,8 @@ beforeAll(async () => {
   document.body.innerHTML = FIXTURE;
   globalThis.d3 = d3Mod.exports;
   globalThis.ICON = ICON;
-  globalThis.setIcon = setIcon;
+    globalThis.setIcon = setIcon;
+  globalThis.setLegendIconButtonState = setLegendIconButtonState;
   globalThis.INPUT_COMBO_ID = INPUT_COMBO_ID;
   globalThis.LIST_COMBO_ID = LIST_COMBO_ID;
   globalThis.STATUS_ID = STATUS_ID;

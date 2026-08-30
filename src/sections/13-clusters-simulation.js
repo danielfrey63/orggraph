@@ -175,7 +175,7 @@ export function findPositionOutsideHull(existingNodes, margin = 200) {
  * Führt eine Breadth-First Expansion für das radiale Layout durch
  */
 export function radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes, positionedSet, includeParents = false) {
-  const childPadding = 4;
+  const childPadding = cssNumber('--radial-child-padding');
   
   while (queue.length > 0) {
     const current = queue.shift();

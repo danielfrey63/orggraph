@@ -125,12 +125,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     oesVisible = oeVisibilityBtn.classList.contains('active');
     
     oeVisibilityBtn.addEventListener('click', () => {
-      // Toggle Button-Status
-      oeVisibilityBtn.classList.toggle('active');
-      oesVisible = oeVisibilityBtn.classList.contains('active');
-      
-      // Icon wechseln zwischen eye und eye-closed
-      setIcon(oeVisibilityBtn, oesVisible ? 'eye' : 'eyeClosed');
+            // Toggle Button-Status (active-Klasse, Icon und Titel gemeinsam)
+      oesVisible = !oeVisibilityBtn.classList.contains('active');
+      setLegendIconButtonState(oeVisibilityBtn, {
+        active: oesVisible,
+        icon: oesVisible ? 'eye' : 'eyeClosed',
+        title: oesVisible ? 'Cluster ausblenden' : 'Cluster einblenden',
+      });
       
       if (oesVisible) {
         // OEs einblenden - gespeicherte Auswahl wiederherstellen
@@ -220,15 +221,17 @@ window.addEventListener("DOMContentLoaded", async () => {
       ? envConfig.LEGEND_ATTRIBUTES_ACTIVE
       : null;
 
-    if (envAttrVisible != null) {
+        if (envAttrVisible != null) {
       attributesVisible = !!envAttrVisible;
-      if (!attributesVisible) attributesVisibilityBtn.classList.remove('active');
     } else {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
     }
 
-    // Icon initial korrekt setzen (eye vs. eye-closed)
-    setIcon(attributesVisibilityBtn, attributesVisible ? 'eye' : 'eyeClosed');
+    // Anfangszustand konsistent setzen (active-Klasse + eye vs. eye-closed)
+    setLegendIconButtonState(attributesVisibilityBtn, {
+      active: attributesVisible,
+      icon: attributesVisible ? 'eye' : 'eyeClosed',
+    });
     
     attributesVisibilityBtn.addEventListener('click', (e) => {
       // Stop bubbling to the section header: setIcon replaces the clicked SVG,
@@ -254,12 +257,12 @@ window.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-      // Toggle Button-Status
-      attributesVisibilityBtn.classList.toggle('active');
-      attributesVisible = attributesVisibilityBtn.classList.contains('active');
-      
-      // Icon wechseln zwischen eye und eye-closed
-      setIcon(attributesVisibilityBtn, attributesVisible ? 'eye' : 'eyeClosed');
+            // Toggle Button-Status (active-Klasse und Icon gemeinsam)
+      attributesVisible = !attributesVisibilityBtn.classList.contains('active');
+      setLegendIconButtonState(attributesVisibilityBtn, {
+        active: attributesVisible,
+        icon: attributesVisible ? 'eye' : 'eyeClosed',
+      });
       
       // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:
       // - activeAttributes (bleiben wie sie sind)

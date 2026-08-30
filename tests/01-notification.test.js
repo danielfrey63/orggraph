@@ -16,9 +16,9 @@ describe('showTemporaryNotification', () => {
   it('creates the notification element and fades it in', () => {
     showTemporaryNotification('Hallo');
     expect(el().textContent).toBe('Hallo');
-    expect(el().style.opacity).toBe('0');
+    expect(el().classList.contains('visible')).toBe(false);
     vi.advanceTimersByTime(10);
-    expect(el().style.opacity).toBe('1');
+    expect(el().classList.contains('visible')).toBe(true);
   });
 
   it('reuses the existing element and updates the message', () => {
@@ -33,7 +33,7 @@ describe('showTemporaryNotification', () => {
   it('hides and removes the element after the duration', () => {
     showTemporaryNotification('Weg damit', 1000);
     vi.advanceTimersByTime(1000);
-    expect(el().style.opacity).toBe('0');
+    expect(el().classList.contains('visible')).toBe(false);
     vi.advanceTimersByTime(300);
     expect(el()).toBeNull();
   });

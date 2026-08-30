@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
+import { setLegendIconButtonState } from '../src/sections/12-legend-org.js';
 import {
   INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, INPUT_DEPTH_ID, SVG_ID,
 } from '../src/sections/01-config-status.js';
@@ -41,7 +42,8 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 const setupGlobals = () => {
   globalThis.ICON = ICON;
-  globalThis.setIcon = setIcon;
+    globalThis.setIcon = setIcon;
+  globalThis.setLegendIconButtonState = setLegendIconButtonState;
   globalThis.INPUT_COMBO_ID = INPUT_COMBO_ID;
   globalThis.LIST_COMBO_ID = LIST_COMBO_ID;
   globalThis.STATUS_ID = STATUS_ID;

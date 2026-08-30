@@ -506,12 +506,19 @@ input#depth {
   --active-toggle-bg: #6366f1;
   --active-toggle-color: white;
   --accent-color: #4F46E5;
-  --button-primary-hover: #5558e3;
+    --button-primary-hover: #5558e3;
+  --error-color: #ef4444;
+  --overlay-dark-bg: rgba(17, 17, 17, 0.9);
+  --overlay-dark-fg: #fff;
+  --overlay-dark-hover: #1f2937;
   --canvas-bg: #ffffff;
 
   /* Graph-Elemente */
     --node-radius: 8;
-  --label-x-offset: 10;
+    --label-x-offset: 10;
+  --label-y-offset: 4;
+  --label-ring-gap: 3;
+  --link-label-dy: -3;
   --node-fill: #4F46E5;
   --node-fill-top-level: #e0e7ff;
   --node-fill-mid-level: #818cf8;
@@ -551,7 +558,10 @@ input#depth {
     --charge-strength: -250;
   --collide-padding: 6;
   --collide-strength: 0.8;
-  --center-strength: 0.05;
+    --center-strength: 0.05;
+  --cluster-force-strength: 0.08;
+  --cluster-jitter: 30;
+  --cluster-ring-radius-factor: 0.35;
   --alpha-decay: 0.05;
   --velocity-decay: 0.5;
   
@@ -560,7 +570,9 @@ input#depth {
   --level-force-strength: 0.5;
   --radial-force: 0.15;
   --radial-gap: 120;
-    --radial-base: 0;
+      --radial-base: 0;
+  --radial-child-padding: 4;
+  --viewport-fit-pad: 20;
 }
 
 /* Dunkelmodus */
@@ -826,11 +838,11 @@ input#depth {
 }
 
 .modal-input--error {
-  border-color: #ef4444;
+  border-color: var(--error-color);
 }
 
 .modal-error {
-  color: #ef4444;
+  color: var(--error-color);
   font-size: 12px;
   margin-top: 8px;
   min-height: 18px;
@@ -847,8 +859,8 @@ input#depth {
   padding: 8px 16px;
   border: none;
   border-radius: 4px;
-  background: var(--accent-color);
-  color: #fff;
+    background: var(--accent-color);
+  color: var(--active-toggle-color);
   cursor: pointer;
 }
 
@@ -856,8 +868,8 @@ input#depth {
 .cluster-tooltip {
   position: fixed;
   pointer-events: none;
-  background: rgba(17, 17, 17, 0.9);
-  color: #fff;
+    background: var(--overlay-dark-bg);
+  color: var(--overlay-dark-fg);
   font-size: 12px;
   padding: 10px 12px;
   border-radius: 6px;
@@ -888,8 +900,12 @@ input#depth {
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   z-index: 1000;
-  opacity: 0;
+    opacity: 0;
   transition: opacity 0.3s ease;
+}
+
+.toast.visible {
+  opacity: 1;
 }
 
 /* ========== Drop-Zone (Standalone-Datenimport) ========== */
@@ -1162,8 +1178,8 @@ body.dz-dragging::after {
 /* Context Menus */
 .node-context-menu {
   position: fixed;
-  background: #111;
-  color: #fff;
+    background: var(--overlay-dark-bg);
+  color: var(--overlay-dark-fg);
   font-size: 12px;
   border-radius: 6px;
   padding: 0px 3px;
@@ -1185,7 +1201,7 @@ body.dz-dragging::after {
 }
 
 .menu-item:hover {
-  background: #1f2937;
+  background: var(--overlay-dark-hover);
 }
 
 .menu-item.disabled {

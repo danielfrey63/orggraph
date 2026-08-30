@@ -32,8 +32,7 @@ export function showTemporaryNotification(message, duration = 3000) {
   if (!notification) {
     notification = document.createElement('div');
     notification.id = 'temp-notification';
-    notification.className = 'toast';
-    notification.style.opacity = '0';
+        notification.className = 'toast';
     document.body.appendChild(notification);
   }
   
@@ -46,13 +45,13 @@ export function showTemporaryNotification(message, duration = 3000) {
   notification.textContent = message;
   
   // Sicherstellen, dass das Element im DOM ist, bevor wir die Transition starten
-  setTimeout(() => {
-    notification.style.opacity = '1';
+    setTimeout(() => {
+    notification.classList.add('visible');
   }, 10);
   
   // Nach der angegebenen Zeit ausblenden
-  notification.hideTimeout = setTimeout(() => {
-    notification.style.opacity = '0';
+    notification.hideTimeout = setTimeout(() => {
+    notification.classList.remove('visible');
     // Nach dem Ausblenden aus dem DOM entfernen
     setTimeout(() => {
       if (notification.parentNode) {

@@ -211,7 +211,7 @@ export function renderGraph(sub) {
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
     .join("text")
     .attr("class", "link-label")
-    .attr("dy", -3);
+    .attr("dy", cssNumber('--link-label-dy'));
 
   // Nur Graph-Knoten (Draw-Kind 'node') rendern; Cluster werden als Hüllen gezeichnet
   const personNodes = sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node');
@@ -253,7 +253,7 @@ export function renderGraph(sub) {
   nodeEnter.append("text")
     .text(d => debugMode ? `(${Math.round(d.x || 0)}, ${Math.round(d.y || 0)})` : getDisplayLabel(d))
     .attr("x", cssNumber('--label-x-offset'))
-    .attr("y", 4)
+    .attr("y", cssNumber('--label-y-offset'))
     .attr("class", "label");
     
   // Attribut-Kreise hinzufügen (ohne Relayout)

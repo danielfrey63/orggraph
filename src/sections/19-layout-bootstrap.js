@@ -6,7 +6,7 @@ export function fitToViewport() {
   const bbox = g.getBBox();
   if (!isFinite(bbox.width) || !isFinite(bbox.height) || bbox.width === 0 || bbox.height === 0) return;
   // Use SVG viewBox units for stable centering
-  const pad = 20; // in viewBox units
+  const pad = cssNumber('--viewport-fit-pad'); // in viewBox units
   const availW = Math.max(1, WIDTH - pad * 2);
   const availH = Math.max(1, HEIGHT - pad * 2);
   const scale = Math.min(availW / bbox.width, availH / bbox.height);
@@ -156,7 +156,7 @@ export function configureLayout(nodes, links, simulation, mode) {
     for (const set of memberships.values()) { for (const oid of set) orgIds.add(oid); }
     const orgList = Array.from(orgIds).sort((a,b) => (orgDepth(a) - orgDepth(b)) || String(a).localeCompare(String(b)));
     const cx = WIDTH / 2, cy = HEIGHT / 2;
-    const CLUSTER_RING_RADIUS = Math.min(WIDTH, HEIGHT) * 0.35;
+    const CLUSTER_RING_RADIUS = Math.min(WIDTH, HEIGHT) * cssNumber('--cluster-ring-radius-factor');
     const centers = new Map();
     for (let i = 0; i < Math.max(1, orgList.length); i++) {
       const angle = (2 * Math.PI * i) / Math.max(1, orgList.length);
@@ -169,7 +169,7 @@ export function configureLayout(nodes, links, simulation, mode) {
       for (const oid of set) { const d = orgDepth(oid); if (d > bestDepth) { bestDepth = d; best = oid; } }
       primaryOf.set(pid, best);
     }
-    const JITTER = 30;
+    const JITTER = cssNumber('--cluster-jitter');
     nodes.forEach(n => {
       const pid = String(n.id);
       const oid = primaryOf.get(pid);
@@ -177,7 +177,7 @@ export function configureLayout(nodes, links, simulation, mode) {
       if (!Number.isFinite(n.x)) n.x = c.x + (Math.random() - 0.5) * JITTER;
       if (!Number.isFinite(n.y)) n.y = c.y + (Math.random() - 0.5) * JITTER;
     });
-    const CLUSTER_FORCE_STRENGTH = 0.08;
+    const CLUSTER_FORCE_STRENGTH = cssNumber('--cluster-force-strength');
     simulation
       .force("clusterX", d3.forceX(d => {
         const pid = String(d.id);
@@ -313,16 +313,11 @@ export function initializeCollapsibleLegends() {
   const oeFilterBtn = document.getElementById('oeFilterBtn');
   if (oeFilter && oeFilterBtn) {
     // Überwache Wertänderungen für has-value Klasse
-    const updateSearchFieldState = () => {
-      if (oeFilter.value.trim()) {
-        oeFilter.classList.add('has-value');
-        // Filter-Icon auch ohne Hover sichtbar wenn Wert vorhanden
-        oeFilterBtn.classList.add('visible');
-      } else {
-        oeFilter.classList.remove('has-value');
-        // Filter-Icon nur bei Hover sichtbar wenn leer
-        oeFilterBtn.classList.remove('visible');
-      }
+        const updateSearchFieldState = () => {
+      const hasValue = !!oeFilter.value.trim();
+      oeFilter.classList.toggle('has-value', hasValue);
+      // Filter-Icon ohne Hover nur sichtbar, wenn ein Wert vorhanden ist
+      setLegendIconButtonState(oeFilterBtn, { visible: hasValue });
     };
     
     oeFilter.addEventListener('input', updateSearchFieldState);
