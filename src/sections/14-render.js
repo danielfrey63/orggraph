@@ -142,7 +142,14 @@ function ensureLayer(parent, selector) {
   const created = parent.append(m[1]);
   if (m[2] === '.') created.attr('class', m[3]);
   else if (m[2] === '#') created.attr('id', m[3]);
-  return created;
+    return created;
+}
+
+// Fallback placement: scatter a node around the viewport centre with the
+// same jitter the hierarchy layout uses (19, --hierarchy-jitter).
+function scatterAtCenter(n) {
+  n.x = WIDTH / 2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
+  n.y = HEIGHT / 2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
 }
 
 export function renderGraph(sub) {
@@ -410,8 +417,7 @@ export function renderGraph(sub) {
     // Fallback für neue Knoten ohne Parent (sollte selten vorkommen)
     personNodes.forEach(n => {
       if (newNodeIds.has(String(n.id)) && !positioned.has(String(n.id))) {
-        n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
-        n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
+        scatterAtCenter(n);
       }
     });
   };
@@ -438,8 +444,7 @@ export function renderGraph(sub) {
     // Fallback für Knoten ohne Position
     personNodes.forEach(n => {
       if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
-        n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
-        n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
+        scatterAtCenter(n);
       }
     });
   } else {
@@ -449,15 +454,13 @@ export function renderGraph(sub) {
     if (!radialInitialized) {
       // Kein Root gefunden - Fallback zu zufälligen Positionen
       personNodes.forEach(n => {
-        n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
-        n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
+        scatterAtCenter(n);
       });
     } else {
       // Radiales Layout wurde angewendet - Fallback für nicht-positionierte Knoten
       personNodes.forEach(n => {
         if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
-          n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
-          n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
+          scatterAtCenter(n);
         }
       });
     }

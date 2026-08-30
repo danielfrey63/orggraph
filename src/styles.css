@@ -164,7 +164,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .combo-list li.combo-hint--more {
   border-top: 1px solid var(--control-border);
 }
-.viewport { display: grid; grid-template-columns: 1fr 320px; gap: 0; overflow: hidden; }
+.viewport { display: grid; grid-template-columns: 1fr var(--sidebar-width); gap: 0; overflow: hidden; }
 .canvas { position: relative; overflow: hidden; background: var(--panel-bg); }
 #graph { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 
@@ -173,7 +173,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
    zuvor bei der Icon-Font greifen. Farbe via currentColor. */
 [data-icon] { display: inline-flex; align-items: center; justify-content: center; }
 .ic { width: 1em; height: 1em; font-size: 16px; display: inline-block; flex: 0 0 auto; vertical-align: -0.125em; background: none; }
-#legendPane { border-left: 1px solid var(--panel-border); padding: 0px; overflow: auto; background: var(--panel-bg); color: var(--text); width: 320px; }
+#legendPane { border-left: 1px solid var(--panel-border); padding: 0px; overflow: auto; background: var(--panel-bg); color: var(--text); width: var(--sidebar-width); }
 /* Kollabierbare Legenden - Neues Design */
 .legend-section { margin-bottom: 0px; }
 .legend-section:last-child { margin-bottom: 0; }
@@ -298,8 +298,8 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: var(--legend-row-slot);
+  height: var(--legend-row-slot);
   padding: 0;
   border: none;
   background: transparent;
@@ -325,13 +325,13 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 /* Spacer für Items ohne Chevron */
 .legend-tree-spacer {
-  width: 18px;
-  height: 18px;
+  width: var(--legend-row-slot);
+  height: var(--legend-row-slot);
   flex-shrink: 0;
 }
 
 .legend-depth-spacer {
-  height: 18px;
+  height: var(--legend-row-slot);
   flex-shrink: 0;
 }
 
@@ -515,7 +515,11 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   --node-fill-level-break-2: 0.67;
   --attr-local-hue-cycle: 6;
   --attr-lightness-alt-cycle: 2;
-  --bfs-level-delay-ms: 1000;
+    --bfs-level-delay-ms: 1000;
+  --org-hue-cycle: 12;
+  --org-hue-step: 30;
+  --legend-row-slot: 18px;
+  --sidebar-width: 320px;
   --viewport-fit-ms: 300;
   --hull-escape-width-factor: 0.2;
   --zoom-min: 0.2;
@@ -599,8 +603,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
     --control-border: #263042;
     --control-hover: #1b2537;
     --canvas-bg: #0f172a;
-    --link-stroke: #475569;
-    --node-fill-top-level: #e0e7ff;
+        --link-stroke: #475569;
     --node-fill-mid-level: #a5b4fc;
     --node-fill-low-level: #6366f1;
         --active-toggle-bg: #818cf8;
@@ -682,7 +685,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .legend-row:hover .legend-icon-btn.dimmed,
 .legend-header:hover .legend-icon-btn.dimmed {
   opacity: 0.5;
-  pointer-events: auto;
 }
 
 /* Ausschiebbares Suchfeld */
@@ -1216,7 +1218,7 @@ body.dz-dragging::after {
   height: 12px;
   border-radius: 50%;
   background-color: transparent;
-  border: 3px solid transparent;
+    border: calc(var(--attribute-circle-stroke-width) * 1px) solid transparent;
   margin-right: 8px;
   flex-shrink: 0;
 }

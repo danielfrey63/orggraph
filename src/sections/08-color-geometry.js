@@ -69,7 +69,9 @@ export const CSS_NUMBER_DEFAULTS = {
   '--node-fill-level-break-2': 0.67,
   '--attr-local-hue-cycle': 6,
   '--attr-lightness-alt-cycle': 2,
-  '--bfs-level-delay-ms': 1000,
+    '--bfs-level-delay-ms': 1000,
+  '--org-hue-cycle': 12,
+  '--org-hue-step': 30,
   '--viewport-fit-ms': 300,
   '--hull-escape-width-factor': 0.2,
   '--zoom-min': 0.2,
@@ -495,7 +497,7 @@ export function colorForOrg(oid){
     return orgColorCache.get(oid);
   }
   
-    const h = (hashCode(oid) % 12) * 30; // 12-step hue
+      const h = (hashCode(oid) % cssNumber('--org-hue-cycle')) * cssNumber('--org-hue-step');
   const s = cssNumber('--org-saturation');
   const fill = `hsla(${h}, ${s}%, ${cssNumber('--org-fill-lightness')}%, ${cssNumber('--org-fill-alpha')})`;
   const stroke = `hsla(${h}, ${s}%, ${cssNumber('--org-stroke-lightness')}%, ${cssNumber('--org-stroke-alpha')})`;

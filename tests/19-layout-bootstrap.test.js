@@ -176,7 +176,7 @@ describe('initializeCollapsibleLegends', () => {
   const setupDom = () => {
     document.body.innerHTML = `
       <div class="legend-header">
-        <button class="legend-chevron expanded" data-target="legend"></button>
+        <button class="legend-chevron" data-target="legend"></button>
         <span class="title">OEs</span>
         <button data-ignore-header-click="true" id="ignored"></button>
       </div>

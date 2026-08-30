@@ -172,7 +172,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .combo-list li.combo-hint--more {
   border-top: 1px solid var(--control-border);
 }
-.viewport { display: grid; grid-template-columns: 1fr 320px; gap: 0; overflow: hidden; }
+.viewport { display: grid; grid-template-columns: 1fr var(--sidebar-width); gap: 0; overflow: hidden; }
 .canvas { position: relative; overflow: hidden; background: var(--panel-bg); }
 #graph { width: 100%; height: 100%; display: block; background: var(--canvas-bg); }
 
@@ -181,7 +181,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
    zuvor bei der Icon-Font greifen. Farbe via currentColor. */
 [data-icon] { display: inline-flex; align-items: center; justify-content: center; }
 .ic { width: 1em; height: 1em; font-size: 16px; display: inline-block; flex: 0 0 auto; vertical-align: -0.125em; background: none; }
-#legendPane { border-left: 1px solid var(--panel-border); padding: 0px; overflow: auto; background: var(--panel-bg); color: var(--text); width: 320px; }
+#legendPane { border-left: 1px solid var(--panel-border); padding: 0px; overflow: auto; background: var(--panel-bg); color: var(--text); width: var(--sidebar-width); }
 /* Kollabierbare Legenden - Neues Design */
 .legend-section { margin-bottom: 0px; }
 .legend-section:last-child { margin-bottom: 0; }
@@ -306,8 +306,8 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: var(--legend-row-slot);
+  height: var(--legend-row-slot);
   padding: 0;
   border: none;
   background: transparent;
@@ -333,13 +333,13 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 /* Spacer für Items ohne Chevron */
 .legend-tree-spacer {
-  width: 18px;
-  height: 18px;
+  width: var(--legend-row-slot);
+  height: var(--legend-row-slot);
   flex-shrink: 0;
 }
 
 .legend-depth-spacer {
-  height: 18px;
+  height: var(--legend-row-slot);
   flex-shrink: 0;
 }
 
@@ -523,7 +523,11 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   --node-fill-level-break-2: 0.67;
   --attr-local-hue-cycle: 6;
   --attr-lightness-alt-cycle: 2;
-  --bfs-level-delay-ms: 1000;
+    --bfs-level-delay-ms: 1000;
+  --org-hue-cycle: 12;
+  --org-hue-step: 30;
+  --legend-row-slot: 18px;
+  --sidebar-width: 320px;
   --viewport-fit-ms: 300;
   --hull-escape-width-factor: 0.2;
   --zoom-min: 0.2;
@@ -607,8 +611,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
     --control-border: #263042;
     --control-hover: #1b2537;
     --canvas-bg: #0f172a;
-    --link-stroke: #475569;
-    --node-fill-top-level: #e0e7ff;
+        --link-stroke: #475569;
     --node-fill-mid-level: #a5b4fc;
     --node-fill-low-level: #6366f1;
         --active-toggle-bg: #818cf8;
@@ -690,7 +693,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .legend-row:hover .legend-icon-btn.dimmed,
 .legend-header:hover .legend-icon-btn.dimmed {
   opacity: 0.5;
-  pointer-events: auto;
 }
 
 /* Ausschiebbares Suchfeld */
@@ -1224,7 +1226,7 @@ body.dz-dragging::after {
   height: 12px;
   border-radius: 50%;
   background-color: transparent;
-  border: 3px solid transparent;
+    border: calc(var(--attribute-circle-stroke-width) * 1px) solid transparent;
   margin-right: 8px;
   flex-shrink: 0;
 }
@@ -1311,7 +1313,7 @@ body.dz-dragging::after {
         <div class="legend-header">
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
-              <button class="legend-chevron expanded" data-target="viewsLegend" aria-label="Ein-/Ausklappen">
+              <button class="legend-chevron" data-target="viewsLegend" aria-label="Ein-/Ausklappen">
                 <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title">Views</h2>
@@ -1330,7 +1332,7 @@ body.dz-dragging::after {
         <div class="legend-header">
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
-              <button class="legend-chevron expanded" data-target="legend" aria-label="Ein-/Ausklappen">
+              <button class="legend-chevron" data-target="legend" aria-label="Ein-/Ausklappen">
                 <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title">Cluster</h2>
@@ -1358,7 +1360,7 @@ body.dz-dragging::after {
         <div class="legend-header">
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
-              <button class="legend-chevron expanded" data-target="attributeContainer" aria-label="Ein-/Ausklappen">
+              <button class="legend-chevron" data-target="attributeContainer" aria-label="Ein-/Ausklappen">
                 <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title">Attribute</h2>
@@ -1390,7 +1392,7 @@ body.dz-dragging::after {
         <div class="legend-header">
           <div class="legend-header-layout">
             <div class="legend-collapse-area">
-              <button class="legend-chevron expanded" data-target="hiddenLegend" aria-label="Ein-/Ausklappen">
+              <button class="legend-chevron" data-target="hiddenLegend" aria-label="Ein-/Ausklappen">
                 <i data-icon="chevronDown"></i>
               </button>
               <h2 class="legend-title" id="hiddenLegendTitle">Ausgeblendet</h2>
@@ -1494,7 +1496,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.188.185';
+const APP_VERSION = '1.189.186';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -3505,7 +3507,9 @@ const CSS_NUMBER_DEFAULTS = {
   '--node-fill-level-break-2': 0.67,
   '--attr-local-hue-cycle': 6,
   '--attr-lightness-alt-cycle': 2,
-  '--bfs-level-delay-ms': 1000,
+    '--bfs-level-delay-ms': 1000,
+  '--org-hue-cycle': 12,
+  '--org-hue-step': 30,
   '--viewport-fit-ms': 300,
   '--hull-escape-width-factor': 0.2,
   '--zoom-min': 0.2,
@@ -3931,7 +3935,7 @@ function colorForOrg(oid){
     return orgColorCache.get(oid);
   }
   
-    const h = (hashCode(oid) % 12) * 30; // 12-step hue
+      const h = (hashCode(oid) % cssNumber('--org-hue-cycle')) * cssNumber('--org-hue-step');
   const s = cssNumber('--org-saturation');
   const fill = `hsla(${h}, ${s}%, ${cssNumber('--org-fill-lightness')}%, ${cssNumber('--org-fill-alpha')})`;
   const stroke = `hsla(${h}, ${s}%, ${cssNumber('--org-stroke-lightness')}%, ${cssNumber('--org-stroke-alpha')})`;
@@ -5130,7 +5134,7 @@ function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible } 
 }
 
 // Collapse state of a legend subtree: the first <ul> inside the chevron's <li>
-// plus the chevron's own expanded/collapsed class. Single owner of that display
+// plus the chevron's own collapsed class. Single owner of that display
 // toggle — every collapse/expand path (click, collapse-children, collapse-all)
 // routes through here.
 // Chevron modifier state shared by construction (createLegendChevron) and the
@@ -5138,7 +5142,6 @@ function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible } 
 function applyLegendChevronState(chevron, collapsed) {
   chevron.classList.add('legend-tree-chevron');
   chevron.classList.toggle('collapsed', collapsed);
-  chevron.classList.toggle('expanded', !collapsed);
 }
 
 function setLegendSubtreeCollapsed(chevron, collapsed) {
@@ -5149,14 +5152,13 @@ function setLegendSubtreeCollapsed(chevron, collapsed) {
 }
 
 // Collapse state of a sidebar legend *section*: the content element's
-// `collapsed` class plus the section chevron's expanded/collapsed pair.
+// `collapsed` class plus the section chevron's collapsed class.
 // Single owner of that toggle — localStorage/ENV init, chevron click, header
 // click and expand-all (16, 18, 19) all route through here.
 function setLegendSectionCollapsed(chevronBtn, contentEl, collapsed) {
   if (contentEl) contentEl.classList.toggle('collapsed', collapsed);
-  if (chevronBtn) {
+    if (chevronBtn) {
     chevronBtn.classList.toggle('collapsed', collapsed);
-    chevronBtn.classList.toggle('expanded', !collapsed);
   }
 }
 
@@ -6127,7 +6129,14 @@ function ensureLayer(parent, selector) {
   const created = parent.append(m[1]);
   if (m[2] === '.') created.attr('class', m[3]);
   else if (m[2] === '#') created.attr('id', m[3]);
-  return created;
+    return created;
+}
+
+// Fallback placement: scatter a node around the viewport centre with the
+// same jitter the hierarchy layout uses (19, --hierarchy-jitter).
+function scatterAtCenter(n) {
+  n.x = WIDTH / 2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
+  n.y = HEIGHT / 2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
 }
 
 function renderGraph(sub) {
@@ -6395,8 +6404,7 @@ function renderGraph(sub) {
     // Fallback für neue Knoten ohne Parent (sollte selten vorkommen)
     personNodes.forEach(n => {
       if (newNodeIds.has(String(n.id)) && !positioned.has(String(n.id))) {
-        n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
-        n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
+        scatterAtCenter(n);
       }
     });
   };
@@ -6423,8 +6431,7 @@ function renderGraph(sub) {
     // Fallback für Knoten ohne Position
     personNodes.forEach(n => {
       if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
-        n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
-        n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
+        scatterAtCenter(n);
       }
     });
   } else {
@@ -6434,15 +6441,13 @@ function renderGraph(sub) {
     if (!radialInitialized) {
       // Kein Root gefunden - Fallback zu zufälligen Positionen
       personNodes.forEach(n => {
-        n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
-        n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
+        scatterAtCenter(n);
       });
     } else {
       // Radiales Layout wurde angewendet - Fallback für nicht-positionierte Knoten
       personNodes.forEach(n => {
         if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
-          n.x = WIDTH / 2 + (Math.random() - 0.5) * 100;
-          n.y = HEIGHT / 2 + (Math.random() - 0.5) * 100;
+          scatterAtCenter(n);
         }
       });
     }

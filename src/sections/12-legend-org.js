@@ -119,7 +119,7 @@ export function setLegendIconButtonState(btn, { icon, title, active, dimmed, vis
 }
 
 // Collapse state of a legend subtree: the first <ul> inside the chevron's <li>
-// plus the chevron's own expanded/collapsed class. Single owner of that display
+// plus the chevron's own collapsed class. Single owner of that display
 // toggle — every collapse/expand path (click, collapse-children, collapse-all)
 // routes through here.
 // Chevron modifier state shared by construction (createLegendChevron) and the
@@ -127,7 +127,6 @@ export function setLegendIconButtonState(btn, { icon, title, active, dimmed, vis
 function applyLegendChevronState(chevron, collapsed) {
   chevron.classList.add('legend-tree-chevron');
   chevron.classList.toggle('collapsed', collapsed);
-  chevron.classList.toggle('expanded', !collapsed);
 }
 
 export function setLegendSubtreeCollapsed(chevron, collapsed) {
@@ -138,14 +137,13 @@ export function setLegendSubtreeCollapsed(chevron, collapsed) {
 }
 
 // Collapse state of a sidebar legend *section*: the content element's
-// `collapsed` class plus the section chevron's expanded/collapsed pair.
+// `collapsed` class plus the section chevron's collapsed class.
 // Single owner of that toggle — localStorage/ENV init, chevron click, header
 // click and expand-all (16, 18, 19) all route through here.
 export function setLegendSectionCollapsed(chevronBtn, contentEl, collapsed) {
   if (contentEl) contentEl.classList.toggle('collapsed', collapsed);
-  if (chevronBtn) {
+    if (chevronBtn) {
     chevronBtn.classList.toggle('collapsed', collapsed);
-    chevronBtn.classList.toggle('expanded', !collapsed);
   }
 }
 
