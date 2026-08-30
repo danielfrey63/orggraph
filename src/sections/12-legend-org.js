@@ -56,6 +56,13 @@ export function createLegendChip(text, title) {
   return chip;
 }
 
+// Every legend list (OE, hidden, attribute, views) shares this class.
+export function createLegendList() {
+  const ul = document.createElement('ul');
+  ul.className = 'legend-list';
+  return ul;
+}
+
 // Aktions-Button rechts in der Row; onClick bekommt stopPropagation
 // Minimal icon-button primitive shared by every icon-button flavour
 // (legend buttons below). Icons come from the ICON registry only.
@@ -174,8 +181,7 @@ export function buildHiddenLegend() {
   if (hiddenByRoot.size === 0) {
     return;
   }
-  const ul = document.createElement('ul');
-  ul.className = 'legend-list';
+    const ul = createLegendList();
   for (const [root, setIds] of hiddenByRoot.entries()) {
     const li = document.createElement('li');
     // Kein .active State für ausgeblendete Items
@@ -410,22 +416,28 @@ export function buildOrgLegend() {
     children = localChildren;
   }
 
-  orgLegendNodes = new Map();
-
-  const ul = document.createElement('ul');
-  ul.className = 'legend-list';
-
-  const options = {
+    renderOrgLegendInto(legend, {
+    roots,
     childrenProvider: (id) => (children.get(String(id)) || []),
-    scopeSet: null,
+    scopeSet: null
+  });
+}
+
+// Shared build tail of buildOrgLegend/buildScopedOrgLegend: render the root
+// nodes into the legend and re-sync colours. Only the children source and the
+// visibility scope differ between the two callers.
+function renderOrgLegendInto(legend, { roots, childrenProvider, scopeSet }) {
+  orgLegendNodes = new Map();
+  const ul = createLegendList();
+  const options = {
+    childrenProvider,
+    scopeSet,
     registerNode: (id, li) => { orgLegendNodes.set(id, li); }
   };
-
   for (const r of roots) {
     const li = renderOrgLegendNode(r, 0, options);
     if (li) ul.appendChild(li);
   }
-
   legend.appendChild(ul);
   syncGraphAndLegendColors();
 }
@@ -455,22 +467,11 @@ export function buildScopedOrgLegend(visibleSet) {
     }
   }
 
-  const ul = document.createElement('ul');
-  ul.className = 'legend-list';
-
-  const options = {
+    renderOrgLegendInto(legend, {
+    roots,
     childrenProvider: (id) => (orgChildren.get(String(id)) || []),
-    scopeSet,
-    registerNode: (id, li) => { orgLegendNodes.set(id, li); }
-  };
-
-  for (const r of roots) {
-    const li = renderOrgLegendNode(r, 0, options);
-    if (li) ul.appendChild(li);
-  }
-
-  legend.appendChild(ul);
-  syncGraphAndLegendColors();
+    scopeSet
+  });
 }
 
 let currentLegendScope = new Set();
@@ -512,7 +513,7 @@ export function updateLegendChips(rootEl) {
 
 export function updateLegendRowColors(rootEl) {
   const root = rootEl || document;
-    root.querySelectorAll('.legend-list > li, .legend-list li').forEach(li => {
+    root.querySelectorAll('.legend-list li').forEach(li => {
     const row = li.querySelector(':scope > .legend-row');
     const oid = li.dataset.oid;
     if (!row || !oid) return;

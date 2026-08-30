@@ -3,7 +3,7 @@ import {
   buildAttributeLegend,
 } from '../src/sections/16-legend-attributes.js';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
-import { setLegendSectionCollapsed, setLegendIconButtonState, setLegendRowActive, legendChipText, legendChipTitle } from '../src/sections/12-legend-org.js';
+import { setLegendSectionCollapsed, setLegendIconButtonState, setLegendRowActive, legendChipText, legendChipTitle, createLegendList } from '../src/sections/12-legend-org.js';
 import { cssNumber } from '../src/sections/08-color-geometry.js';
 import {
   createLegendRow,
@@ -29,7 +29,8 @@ beforeEach(() => {
   globalThis.createLegendTreeSpacer = createLegendTreeSpacer;
   globalThis.createLegendChip = createLegendChip;
   globalThis.createLegendIconButton = createLegendIconButton;
-  globalThis.createLegendChevron = createLegendChevron;
+    globalThis.createLegendChevron = createLegendChevron;
+  globalThis.createLegendList = createLegendList;
   globalThis.updateAttributeStats = vi.fn();
   globalThis.updateAttributeCircles = vi.fn();
   globalThis.notifyAttributeVisibilityChanged = vi.fn();

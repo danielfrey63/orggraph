@@ -39,9 +39,7 @@ export function buildAttributeLegend() {
     }
   }
 
-  // Liste erstellen mit legend-list (wie OEs)
-  const ul = document.createElement('ul');
-  ul.className = 'legend-list';
+    const ul = createLegendList();
 
   const sortedCats = Array.from(categories.keys()).sort();
   for (const cat of sortedCats) {

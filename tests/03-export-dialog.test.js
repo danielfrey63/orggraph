@@ -9,7 +9,7 @@ import {
   sanitizeExportClone,
 } from '../src/sections/03-export-dialog.js';
 import { SVG_ID, WIDTH, HEIGHT } from '../src/sections/01-config-status.js';
-import { cssVar } from '../src/sections/08-color-geometry.js';
+import { cssVar, cssNumber } from '../src/sections/08-color-geometry.js';
 import { setExclusiveActive } from '../src/sections/12-legend-org.js';
 import { LABEL_VISIBILITY_CLASSES } from '../src/sections/14-render.js';
 
@@ -40,7 +40,8 @@ beforeEach(() => {
   document.body.innerHTML = FIXTURE;
   downloads = [];
   globalThis.SVG_ID = SVG_ID;
-    globalThis.cssVar = cssVar;
+        globalThis.cssVar = cssVar;
+    globalThis.cssNumber = cssNumber;
   globalThis.setExclusiveActive = setExclusiveActive;
   globalThis.LABEL_VISIBILITY_CLASSES = LABEL_VISIBILITY_CLASSES;
   globalThis.WIDTH = WIDTH;

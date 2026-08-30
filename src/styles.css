@@ -60,8 +60,7 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   height: 50%;
   padding: 0;
   margin: 0;
-  border: none !important;
-  border-width: 0 !important;
+    border: none !important;
   background-color: transparent;
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -328,7 +327,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 .legend-tree-chevron:hover {
   color: var(--text);
-  background-color: transparent;
 }
 
 .legend-tree-chevron .ic {
@@ -509,7 +507,17 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   --org-fill-lightness: 60;
   --org-fill-alpha: 0.25;
   --org-stroke-lightness: 40;
-  --org-stroke-alpha: 0.85;
+    --org-stroke-alpha: 0.85;
+  --rainbow-hue-span: 300;
+  --rainbow-saturation: 70;
+  --rainbow-lightness: 50;
+  --attr-category-hue-step: 40;
+  --attr-local-hue-step: 10;
+  --attr-saturation: 65;
+  --attr-lightness: 50;
+  --attr-lightness-alt-boost: 5;
+  --cluster-hull-samples: 12;
+  --export-pixel-density: 4;
   --viewport-fit-ms: 300;
   --hull-escape-width-factor: 0.2;
   --zoom-min: 0.2;
@@ -597,13 +605,11 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
     --node-fill-top-level: #e0e7ff;
     --node-fill-mid-level: #a5b4fc;
     --node-fill-low-level: #6366f1;
-    --active-toggle-bg: #818cf8;
-    --active-toggle-color: #ffffff;
+        --active-toggle-bg: #818cf8;
     --link-label-fill: #94a3b8;
     --node-with-attributes-fill: #ffffff;
     --node-with-attributes-stroke: #93c5fd;
-    --node-with-attributes-stroke-width: 0;
-    --nodes-without-attributes-opacity: 0.2;
+        --node-with-attributes-stroke-width: 0;
   }
 }
 
@@ -667,7 +673,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 
 .legend-icon-btn:hover {
   color: var(--text);
-  background-color: transparent;
   transform: translateY(-1px);
 }
 
@@ -679,18 +684,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .legend-row:hover .legend-icon-btn.dimmed,
 .legend-header:hover .legend-icon-btn.dimmed {
   opacity: 0.5;
-  pointer-events: auto;
-}
-
-.legend-icon-btn.active {
-  color: var(--text-muted);
-  background-color: transparent;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.legend-header:hover .legend-icon-btn.active {
-  opacity: 1;
   pointer-events: auto;
 }
 
@@ -1156,14 +1149,14 @@ body.dz-dragging::after {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--active-toggle-bg) 30%, transparent);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-color) 30%, transparent);
   margin-top: 8px;
 }
 
 .export-btn-large:hover {
   background-color: var(--button-primary-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--active-toggle-bg) 40%, transparent);
+    transform: translateY(-2px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent-color) 40%, transparent);
 }
 
 .export-btn-large:active {
@@ -1205,10 +1198,6 @@ body.dz-dragging::after {
   pointer-events: none;
 }
 
-.menu-item.disabled:hover {
-  background: transparent;
-}
-
 .menu-item-label {
   flex: 1;
 }
@@ -1234,8 +1223,6 @@ body.dz-dragging::after {
   margin-right: 8px;
   flex-shrink: 0;
 }
-
-/* Save Button für geänderte Kategorien - gleiche Farbe wie andere Icons */
 
 /* Diff mode (§5/FR-8.6): added / removed / changed classification */
 .node.diff-new circle { stroke: var(--diff-new-stroke); stroke-width: 3px; }

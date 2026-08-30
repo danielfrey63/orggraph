@@ -54,7 +54,17 @@ export const CSS_NUMBER_DEFAULTS = {
   '--org-fill-lightness': 60,
   '--org-fill-alpha': 0.25,
   '--org-stroke-lightness': 40,
-  '--org-stroke-alpha': 0.85,
+    '--org-stroke-alpha': 0.85,
+  '--rainbow-hue-span': 300,
+  '--rainbow-saturation': 70,
+  '--rainbow-lightness': 50,
+  '--attr-category-hue-step': 40,
+  '--attr-local-hue-step': 10,
+  '--attr-saturation': 65,
+  '--attr-lightness': 50,
+  '--attr-lightness-alt-boost': 5,
+  '--cluster-hull-samples': 12,
+  '--export-pixel-density': 4,
   '--viewport-fit-ms': 300,
   '--hull-escape-width-factor': 0.2,
   '--zoom-min': 0.2,
@@ -123,8 +133,8 @@ export function cssVar(varName, fallback) {
 export const categoryHueCache = new Map();
 export function quantizedHueFromCategory(category) {
   if (categoryHueCache.has(category)) return categoryHueCache.get(category);
-  const rawHue = Math.abs(hashCode(String(category))) % 360;
-  const step = 40; // große Abstände zwischen Kategorien
+    const rawHue = Math.abs(hashCode(String(category))) % 360;
+  const step = cssNumber('--attr-category-hue-step'); // große Abstände zwischen Kategorien
   const hue = (Math.round(rawHue / step) * step) % 360;
   categoryHueCache.set(category, hue);
   return hue;
@@ -137,16 +147,16 @@ export function quantizedHueFromCategory(category) {
 export function colorForRainbowPosition(index, total) {
   const n = Math.max(1, total);
   const t = n === 1 ? 0 : Math.min(1, Math.max(0, index / (n - 1)));
-  const hue = Math.round(t * 300); // 0=red … 300=violet
-  return `hsl(${hue}, 70%, 50%)`;
+    const hue = Math.round(t * cssNumber('--rainbow-hue-span')); // 0=red … span=violet
+  return `hsl(${hue}, ${cssNumber('--rainbow-saturation')}%, ${cssNumber('--rainbow-lightness')}%)`;
 }
 
 export function colorForCategoryAttribute(category, attrName, ordinal) {
   const baseHue = quantizedHueFromCategory(category);
-  const localShift = (ordinal % 6) * 10; // kleine Variation innerhalb der Kategorie
+    const localShift = (ordinal % 6) * cssNumber('--attr-local-hue-step'); // kleine Variation innerhalb der Kategorie
   const hue = (baseHue + localShift) % 360;
-  const sat = 65;
-  const light = 50 + ((ordinal % 2) ? 5 : 0); // leichte Helligkeitsvariation
+  const sat = cssNumber('--attr-saturation');
+  const light = cssNumber('--attr-lightness') + ((ordinal % 2) ? cssNumber('--attr-lightness-alt-boost') : 0); // leichte Helligkeitsvariation
   return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
@@ -214,9 +224,10 @@ export function computeClusterPolygon(nodes, pad) {
   const metrics = nodeOuterRadiusMetrics();
   const pts = [];
   for (const n of nodes) {
-    const r = getNodeOuterRadius(n, metrics) + pad;
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
+        const r = getNodeOuterRadius(n, metrics) + pad;
+    const samples = cssNumber('--cluster-hull-samples');
+    for (let i = 0; i < samples; i++) {
+      const a = (i / samples) * Math.PI * 2;
       pts.push([n.x + Math.cos(a) * r, n.y + Math.sin(a) * r]);
     }
   }

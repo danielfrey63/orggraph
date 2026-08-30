@@ -207,14 +207,20 @@ function buildExportClone(svgElement) {
   for (const cls of LABEL_VISIBILITY_CLASSES) {
     if (svgElement.classList.contains(cls)) svgClone.classList.add(cls);
   }
+  // SVGs have no background by default — every export gets the canvas colour.
+  const backgroundRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  backgroundRect.setAttribute('width', '100%');
+  backgroundRect.setAttribute('height', '100%');
+  backgroundRect.setAttribute('fill', cssVar('--canvas-bg'));
+  svgClone.insertBefore(backgroundRect, svgClone.firstChild);
   return svgClone;
 }
 
 /**
- * Inline stylesheet for an export clone — the graph's CSS variables resolved
- * to literal values. withBody adds the canvas background (PNG rasterization).
+  * Inline stylesheet for an export clone — the graph's CSS variables resolved
+ * to literal values. The canvas background is a <rect> owned by buildExportClone.
  */
-function buildExportStylesheet({ withBody = false } = {}) {
+function buildExportStylesheet() {
   const styleElement = document.createElement('style');
   styleElement.textContent = `
       .link { stroke: ${cssVar('--link-stroke')}; stroke-width: ${cssVar('--link-stroke-width')}; stroke-opacity: ${cssVar('--link-opacity')}; }
@@ -231,7 +237,6 @@ function buildExportStylesheet({ withBody = false } = {}) {
       .node.diff-removed circle { stroke: ${cssVar('--diff-removed-stroke')}; stroke-width: 2px; stroke-dasharray: 4 3; }
       .link.diff-new { stroke: ${cssVar('--diff-new-stroke')}; }
       .link.diff-removed { stroke: ${cssVar('--diff-removed-stroke')}; stroke-dasharray: 4 3; opacity: ${cssVar('--diff-link-removed-opacity')}; }
-      ${withBody ? `body { background-color: ${cssVar('--canvas-bg')}; }` : ''}
       .labels-hidden .label { display: none; }
       .labels-attributes-only .label { display: none; }
       .labels-attributes-only .node.has-attributes .label { display: block; }
@@ -332,8 +337,8 @@ export function exportAsPng() {
         const width = parseInt(customWidthInput.value, 10) || WIDTH;
     const height = parseInt(customHeightInput.value, 10) || HEIGHT;
     
-    // Qualitätsfaktor (Pixeldichte) - immer Maximum für beste Qualität
-    const quality = 4.0;
+        // Qualitätsfaktor (Pixeldichte)
+    const quality = cssNumber('--export-pixel-density');
     
     const svgClone = buildExportClone(svgElement);
     
@@ -346,14 +351,7 @@ export function exportAsPng() {
     svgClone.setAttribute('viewBox', currentViewBox);
 
     // Inline-Styles einfügen
-    svgClone.insertBefore(buildExportStylesheet({ withBody: true }), svgClone.firstChild);
-
-    // Hintergrundfarbe hinzufügen (da SVGs standardmäßig keinen Hintergrund haben)
-    const backgroundRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    backgroundRect.setAttribute('width', '100%');
-    backgroundRect.setAttribute('height', '100%');
-    backgroundRect.setAttribute('fill', cssVar('--canvas-bg'));
-    svgClone.insertBefore(backgroundRect, svgClone.firstChild);
+        svgClone.insertBefore(buildExportStylesheet(), svgClone.firstChild);
     
     // SVG in Text umwandeln
     const serializer = new XMLSerializer();
@@ -370,9 +368,7 @@ export function exportAsPng() {
       canvas.width = width * quality; // Höhere Auflösung durch Qualitätsfaktor
       canvas.height = height * quality;
       
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = cssVar('--canvas-bg');
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const ctx = canvas.getContext('2d');
       
       // Anti-Aliasing aktivieren
       ctx.imageSmoothingEnabled = true;
