@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { showTemporaryNotification } from '../src/sections/01-config-status.js';
+import { cssNumber } from '../src/sections/08-color-geometry.js';
+
+globalThis.cssNumber = cssNumber;
 
 beforeEach(() => {
   vi.useFakeTimers();

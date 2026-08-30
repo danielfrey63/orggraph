@@ -4,8 +4,7 @@ import {
   hashCode,
   quantizedHueFromCategory,
   colorForCategoryAttribute,
-  colorForOrg,
-  colorToTransparent,
+    colorForOrg,
   computeClusterPolygon,
   countVisibleAttributeRings,
   cssNumber,
@@ -95,21 +94,6 @@ describe('colorForOrg', () => {
 
   it('caches per org id', () => {
     expect(colorForOrg('o-2')).toBe(colorForOrg('o-2'));
-  });
-});
-
-describe('colorToTransparent', () => {
-  it('converts hsl() to hsla() with the given alpha', () => {
-    expect(colorToTransparent('hsl(120, 65%, 50%)', 0.5)).toBe('hsla(120, 65%, 50%, 0.5)');
-  });
-
-  it('defaults alpha to 0.25', () => {
-    expect(colorToTransparent('hsl(0, 10%, 20%)')).toBe('hsla(0, 10%, 20%, 0.25)');
-  });
-
-  it('returns non-hsl colors unchanged', () => {
-    expect(colorToTransparent('#ff0000', 0.5)).toBe('#ff0000');
-    expect(colorToTransparent('rgb(1, 2, 3)')).toBe('rgb(1, 2, 3)');
   });
 });
 

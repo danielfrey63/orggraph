@@ -401,7 +401,7 @@ input#depth {
 
 /* Attribut-Zeilen: Transparenter farbiger Hintergrund OHNE border-left */
 .legend-row.active[data-attribute-color] {
-  background-color: var(--attribute-bg);
+    background-color: color-mix(in srgb, var(--attribute-color) 25%, transparent);
   border-left: none;
   padding-left: 4px; /* Standard Padding ohne Border */
 }
@@ -419,7 +419,7 @@ input#depth {
 }
 
 .legend-row.active[data-attribute-color]:hover {
-  background-color: var(--attribute-bg-hover);
+    background-color: color-mix(in srgb, var(--attribute-color) 35%, transparent);
 }
 
 /* Verschachtelte Liste mit Einrückung */
@@ -518,7 +518,9 @@ input#depth {
     --label-x-offset: 10;
   --label-y-offset: 4;
   --label-ring-gap: 3;
-  --link-label-dy: -3;
+    --link-label-dy: -3;
+  --tooltip-cursor-offset: 12;
+  --toast-fade-ms: 300;
   --node-fill: #4F46E5;
   --node-fill-top-level: #e0e7ff;
   --node-fill-mid-level: #818cf8;
@@ -571,8 +573,10 @@ input#depth {
   --radial-force: 0.15;
   --radial-gap: 120;
       --radial-base: 0;
-  --radial-child-padding: 4;
+    --radial-child-padding: 4;
   --viewport-fit-pad: 20;
+  --radial-fallback-radius: 40;
+  --root-spacing-radius-factor: 1.5;
 }
 
 /* Dunkelmodus */
@@ -900,8 +904,8 @@ input#depth {
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   z-index: 1000;
-    opacity: 0;
-  transition: opacity 0.3s ease;
+      opacity: 0;
+  transition: opacity calc(var(--toast-fade-ms) * 1ms) ease;
 }
 
 .toast.visible {

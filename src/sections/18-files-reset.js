@@ -343,8 +343,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (attributeFocusBtn) {
     attributeFocusBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      attributeFocusBtn.classList.toggle('active');
-      attributeFocusEnabled = attributeFocusBtn.classList.contains('active');
+            attributeFocusEnabled = !attributeFocusBtn.classList.contains('active');
+      setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusEnabled });
       if (attributeFocusEnabled) {
         recomputeAttributeFocusHidden();
       } else {
@@ -450,23 +450,17 @@ window.addEventListener("DOMContentLoaded", async () => {
   /**
    * Aktualisiert das Icon des Label-Toggle-Buttons basierend auf dem Zustand [SF]
    */
-  function updateLabelToggleIcon(btn) {
+    function updateLabelToggleIcon(btn) {
     // Icon + Button-Zustand basierend auf labelsVisible setzen
     switch (labelsVisible) {
       case 'all':
-        setIcon(btn, 'tag');
-        btn.classList.add('active');
-        btn.title = 'Alle Labels anzeigen';
+        setIconButtonState(btn, { icon: 'tag', active: true, title: 'Alle Labels anzeigen' });
         break;
       case 'attributes':
-        setIcon(btn, 'property');
-        btn.classList.add('active');
-        btn.title = 'Nur Attribut-Labels anzeigen';
+        setIconButtonState(btn, { icon: 'property', active: true, title: 'Nur Attribut-Labels anzeigen' });
         break;
       case 'none':
-        setIcon(btn, 'eyeClosed');
-        btn.classList.remove('active');
-        btn.title = 'Labels ausgeblendet';
+        setIconButtonState(btn, { icon: 'eyeClosed', active: false, title: 'Labels ausgeblendet' });
         break;
     }
   }

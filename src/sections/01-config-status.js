@@ -57,7 +57,7 @@ export function showTemporaryNotification(message, duration = 3000) {
       if (notification.parentNode) {
         notification.parentNode.removeChild(notification);
       }
-    }, 300); // Dauer der Ausblend-Transition
+        }, cssNumber('--toast-fade-ms')); // Dauer der Ausblend-Transition
   }, duration);
 }
 

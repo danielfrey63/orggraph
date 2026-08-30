@@ -32,8 +32,17 @@ export const CSS_NUMBER_DEFAULTS = {
   '--cluster-force-strength': 0.08,
   '--cluster-jitter': 30,
   '--cluster-ring-radius-factor': 0.35,
-  '--radial-child-padding': 4,
+    '--radial-child-padding': 4,
   '--viewport-fit-pad': 20,
+  '--radial-fallback-radius': 40,
+  '--root-spacing-radius-factor': 1.5,
+  '--tooltip-cursor-offset': 12,
+  '--toast-fade-ms': 300,
+  '--cluster-stroke-width': 1.5,
+  '--cluster-opacity': 1,
+  '--attribute-circle-opacity': 0.8,
+  '--diff-removed-opacity': 0.45,
+  '--diff-link-removed-opacity': 0.5,
 };
 
 export function cssNumber(varName, fallback) {
@@ -43,15 +52,29 @@ export function cssNumber(varName, fallback) {
   return fallback !== undefined ? fallback : (CSS_NUMBER_DEFAULTS[varName] ?? 0);
 }
 
-// Color companion of CSS_NUMBER_DEFAULTS: mirrors the :root light palette in
-// styles.css; only applies without a loaded stylesheet (unit tests).
+// String companion of CSS_NUMBER_DEFAULTS: mirrors the :root light palette in
+// styles.css (var() indirections resolved); only applies without a loaded
+// stylesheet (unit tests). Covers every token the export stylesheet reads.
 export const CSS_COLOR_DEFAULTS = {
   '--node-fill': '#4F46E5',
   '--node-fill-top-level': '#e0e7ff',
   '--node-fill-mid-level': '#818cf8',
-    '--node-fill-low-level': '#4F46E5',
+  '--node-fill-low-level': '#4F46E5',
   '--node-with-attributes-fill': '#000000',
   '--node-with-attributes-stroke': '#4682b4',
+  '--canvas-bg': '#ffffff',
+  '--node-stroke': '#ffffff',
+  '--link-stroke': '#cbd5e1',
+  '--cluster-fill': 'rgba(79,70,229,0.10)',
+  '--cluster-stroke': 'rgba(79,70,229,0.25)',
+  '--root-node-fill': '#86efac',
+  '--label-font-size': '8px',
+  '--label-fill': '#334155',
+  '--link-label-font-size': '10px',
+  '--link-label-fill': '#666',
+  '--diff-new-stroke': '#22c55e',
+  '--diff-changed-stroke': '#f59e0b',
+  '--diff-removed-stroke': '#ef4444',
 };
 
 // Resolved string value of a CSS custom property on :root. Single owner of
@@ -60,7 +83,11 @@ export const CSS_COLOR_DEFAULTS = {
 export function cssVar(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   if (v) return v;
-  return fallback !== undefined ? fallback : (CSS_COLOR_DEFAULTS[varName] ?? '');
+  if (fallback !== undefined) return fallback;
+  if (varName in CSS_COLOR_DEFAULTS) return CSS_COLOR_DEFAULTS[varName];
+  // numeric tokens read as strings (export stylesheet) share the number map
+  if (varName in CSS_NUMBER_DEFAULTS) return String(CSS_NUMBER_DEFAULTS[varName]);
+  return '';
 }
 
 // Farb-Hilfen: gleiche Kategorie -> ähnliche Farben, Kategorien klar unterscheidbar
@@ -191,9 +218,10 @@ export function ensureTooltip() {
   document.body.appendChild(tooltipEl);
 }
 export function showTooltip(x, y, lines) {
+  const offset = cssNumber('--tooltip-cursor-offset');
   tooltipEl.textContent = lines.join('\n');
-  tooltipEl.style.left = `${x+12}px`;
-  tooltipEl.style.top = `${y+12}px`;
+  tooltipEl.style.left = `${x + offset}px`;
+  tooltipEl.style.top = `${y + offset}px`;
   tooltipEl.style.display = 'block';
 }
 export function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
@@ -442,26 +470,6 @@ export function orgDepth(oid){
     d++;
   }
   return d;
-}
-
-/**
- * Konvertiert eine Farbe in ein transparentes RGBA-Format (wie bei OEs)
- * @param {string} color - Farbe im Format hsl(...) oder rgb(...) oder #hex
- * @param {number} alpha - Alpha-Wert (0-1), default 0.25 wie bei OEs
- * @returns {string} RGBA-Farbe mit Transparenz
- */
-export function colorToTransparent(color, alpha = 0.25) {
-  // Parse HSL
-  const hslMatch = /hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/.exec(color);
-  if (hslMatch) {
-    const h = parseInt(hslMatch[1]);
-    const s = parseInt(hslMatch[2]);
-    const l = parseInt(hslMatch[3]);
-    return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
-  }
-  
-  // Fallback: gib die ursprüngliche Farbe zurück
-  return color;
 }
 
 

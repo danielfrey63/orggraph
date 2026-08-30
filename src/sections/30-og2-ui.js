@@ -349,7 +349,7 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
     }
   }
   const focusBtn = document.getElementById('toggleAttributeFocus');
-  if (focusBtn) focusBtn.classList.toggle('active', attributeFocusEnabled);
+    if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled });
 }
 
 // og2-owned restore parts; unresolvable pieces fall back individually.

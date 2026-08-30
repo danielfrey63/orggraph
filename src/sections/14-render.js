@@ -312,7 +312,7 @@ export function renderGraph(sub) {
       } else {
         // Sekundärer Root: Außerhalb der Hülle der bereits positionierten Knoten
         const alreadyPositioned = personNodes.filter(n => positioned.has(String(n.id)));
-        const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius') * 1.5); // baseRadius * 1.5 approximated
+        const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius') * cssNumber('--root-spacing-radius-factor'));
         rootX = pos.x;
         rootY = pos.y;
       }
@@ -409,7 +409,7 @@ export function renderGraph(sub) {
       const rootNode = personNodes.find(n => String(n.id) === rootId);
       if (!rootNode) continue;
       const alreadyPositioned = personNodes.filter(n => positioned.has(String(n.id)));
-      const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius') * 1.5);
+      const pos = findPositionOutsideHull(alreadyPositioned, cssNumber('--node-radius') * cssNumber('--root-spacing-radius-factor'));
       rootNode.x = pos.x;
       rootNode.y = pos.y;
       positioned.add(rootId);

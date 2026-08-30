@@ -42,38 +42,43 @@ export function createLegendChip(text, title) {
 
 // Aktions-Button rechts in der Row; onClick bekommt stopPropagation
 // Minimal icon-button primitive shared by every icon-button flavour
-// (legend buttons below, profile switcher in 20).
-export function createIconButton({ icon, svg, title, className = '', onClick } = {}) {
+// (legend buttons below). Icons come from the ICON registry only.
+export function createIconButton({ icon, title, className = '', onClick } = {}) {
   const btn = document.createElement('button');
   btn.type = 'button';
   if (className) btn.className = className;
   if (title) btn.title = title;
   if (icon) setIcon(btn, icon);
-  else if (svg) btn.innerHTML = svg;
   if (onClick) btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onClick(e); });
   return btn;
 }
 
-export function createLegendIconButton({ icon, svg, title, className = '', onClick } = {}) {
+export function createLegendIconButton({ icon, title, className = '', onClick } = {}) {
   const btn = createIconButton({
-    icon, svg, title, onClick,
+    icon, title, onClick,
     className: className ? `legend-icon-btn ${className}` : 'legend-icon-btn',
   });
   btn.setAttribute('data-ignore-header-click', 'true');
   return btn;
 }
 
-// State refresh of an existing legend icon button: modifier classes are
-// toggled instead of re-composing the base class string; icon and title
-// swap together. Sole owner of post-construction icon-button state
-// (eye toggles in 11, 16 and 18; oeFilter button visibility in 19).
-export function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible } = {}) {
+// Post-construction state of ANY icon button, regardless of its base class:
+// modifier class, icon and title swap together so none of them drifts.
+export function setIconButtonState(btn, { icon, title, active } = {}) {
   if (!btn) return;
   if (typeof active === 'boolean') btn.classList.toggle('active', active);
-  if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
-  if (typeof visible === 'boolean') btn.classList.toggle('visible', visible);
   if (title != null) btn.title = title;
   if (icon) setIcon(btn, icon);
+}
+
+// Legend flavour: adds the legend-only dimmed/visible modifiers on top.
+// Sole owner of post-construction legend-icon-button state (eye toggles in
+// 11, 16 and 18; oeFilter button visibility in 19).
+export function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible } = {}) {
+  if (!btn) return;
+  if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
+  if (typeof visible === 'boolean') btn.classList.toggle('visible', visible);
+  setIconButtonState(btn, { icon, title, active });
 }
 
 // Collapse state of a legend subtree: the first <ul> inside the chevron's <li>

@@ -122,13 +122,11 @@ export function buildAttributeLegend() {
         active: activeAttributes.has(it.key),
         withRight: false,
       });
-      itemRow.setAttribute('data-attribute-color', it.color);
+            itemRow.setAttribute('data-attribute-color', it.color);
 
-      // Setze die Attribut-Farbe als CSS-Variable für den Hintergrund (transparent wie bei OEs)
-      const transparentBg = colorToTransparent(it.color, 0.25);
-      const transparentHoverBg = colorToTransparent(it.color, 0.35);
-      itemRow.style.setProperty('--attribute-bg', transparentBg);
-      itemRow.style.setProperty('--attribute-bg-hover', transparentHoverBg);
+      // Attribut-Farbe als Custom-Property; die Transparenz mischt CSS per
+      // color-mix (wie bei den OE-Rows), unabhängig vom Farbformat
+      itemRow.style.setProperty('--attribute-color', it.color);
 
       // Tiefe-Spacer für Einrückung (16px wie bei OEs), dann Spacer statt Chevron
       itemLeftArea.appendChild(createLegendDepthSpacer(1));

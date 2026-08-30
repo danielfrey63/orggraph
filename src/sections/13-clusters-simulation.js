@@ -200,7 +200,7 @@ export function radialLayoutExpansion(queue, childrenOf, parentsOf, personNodes,
           .filter(Boolean);
         
         const parentNode = personNodes.find(n => String(n.id) === current.nodeId);
-        let parentRadius = 40; 
+        let parentRadius = cssNumber('--radial-fallback-radius'); 
         if (parentNode) {
           parentRadius = getNodeOuterRadius(parentNode) + childPadding;
         }
