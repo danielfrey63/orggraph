@@ -209,9 +209,9 @@ export function renderGraph(sub) {
   const linkLabel = linkLabelGroup
     .selectAll("text")
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
-    .join("text")
-    .attr("class", "link-label")
-    .attr("dy", cssNumber('--link-label-dy'));
+        .join(enter => enter.append("text")
+      .attr("class", "link-label")
+      .attr("dy", cssNumber('--link-label-dy')));
 
   // Nur Graph-Knoten (Draw-Kind 'node') rendern; Cluster werden als Hüllen gezeichnet
   const personNodes = sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node');

@@ -36,7 +36,7 @@ export async function renderProfileSwitcher() {
     select.addEventListener('change', async () => {
       if (select.value === profileSwitcherActive) return;
       try { await switchProfile(select.value); location.reload(); }
-      catch (e) { console.error(e); showTemporaryNotification('Profilwechsel fehlgeschlagen', 4000); }
+      catch (e) { console.error(e); showTemporaryNotification('Profilwechsel fehlgeschlagen'); }
     });
 
     // Buttons are static template markup; JS only wires them (like #resetData)

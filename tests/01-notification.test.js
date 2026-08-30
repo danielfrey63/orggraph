@@ -34,18 +34,18 @@ describe('showTemporaryNotification', () => {
   });
 
   it('hides and removes the element after the duration', () => {
-    showTemporaryNotification('Weg damit', 1000);
-    vi.advanceTimersByTime(1000);
+        showTemporaryNotification('Weg damit', 'medium');
+    vi.advanceTimersByTime(6000);
     expect(el().classList.contains('visible')).toBe(false);
     vi.advanceTimersByTime(300);
     expect(el()).toBeNull();
   });
 
   it('resets the hide timer when re-shown before expiry', () => {
-    showTemporaryNotification('A', 1000);
-    vi.advanceTimersByTime(900);
-    showTemporaryNotification('B', 1000); // old timer must be cancelled
-    vi.advanceTimersByTime(900);
+        showTemporaryNotification('A');
+    vi.advanceTimersByTime(2900);
+    showTemporaryNotification('B'); // old timer must be cancelled
+    vi.advanceTimersByTime(2900);
     expect(el()).not.toBeNull(); // still visible: new timer not yet expired
     vi.advanceTimersByTime(100 + 300);
     expect(el()).toBeNull();

@@ -44,7 +44,17 @@ export const CSS_NUMBER_DEFAULTS = {
   '--cluster-hull-tension': 0.75,
       '--sim-settle-ms': 100,
     '--legend-settle-ms': 50,
-  '--combo-debounce-ms': 150,
+    '--combo-debounce-ms': 150,
+  '--toast-short-ms': 3000,
+  '--toast-medium-ms': 6000,
+  '--toast-long-ms': 10000,
+  '--toast-mount-ms': 10,
+  '--og2-persist-debounce-ms': 400,
+  '--org-saturation': 60,
+  '--org-fill-lightness': 60,
+  '--org-fill-alpha': 0.25,
+  '--org-stroke-lightness': 40,
+  '--org-stroke-alpha': 0.85,
   '--viewport-fit-ms': 300,
   '--hull-escape-width-factor': 0.2,
   '--zoom-min': 0.2,
@@ -469,9 +479,10 @@ export function colorForOrg(oid){
     return orgColorCache.get(oid);
   }
   
-  const h = (hashCode(oid) % 12) * 30; // 12-step hue
-  const fill = `hsla(${h}, 60%, 60%, 0.25)`;
-  const stroke = `hsla(${h}, 60%, 40%, 0.85)`;
+    const h = (hashCode(oid) % 12) * 30; // 12-step hue
+  const s = cssNumber('--org-saturation');
+  const fill = `hsla(${h}, ${s}%, ${cssNumber('--org-fill-lightness')}%, ${cssNumber('--org-fill-alpha')})`;
+  const stroke = `hsla(${h}, ${s}%, ${cssNumber('--org-stroke-lightness')}%, ${cssNumber('--org-stroke-alpha')})`;
   const colors = { fill, stroke };
   
   orgColorCache.set(oid, colors);

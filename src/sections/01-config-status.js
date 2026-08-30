@@ -24,7 +24,7 @@ export function setStatus(msg) {
 /**
  * Zeigt eine temporäre Benachrichtigung an, ohne den Status zu überschreiben
  */
-export function showTemporaryNotification(message, duration = 3000) {
+export function showTemporaryNotification(message, tier = 'short') {
   // Prüfe, ob bereits eine Benachrichtigung existiert
   let notification = document.getElementById('temp-notification');
   
@@ -45,9 +45,9 @@ export function showTemporaryNotification(message, duration = 3000) {
   notification.textContent = message;
   
   // Sicherstellen, dass das Element im DOM ist, bevor wir die Transition starten
-    setTimeout(() => {
+      setTimeout(() => {
     notification.classList.add('visible');
-  }, 10);
+  }, cssNumber('--toast-mount-ms'));
   
   // Nach der angegebenen Zeit ausblenden
     notification.hideTimeout = setTimeout(() => {
@@ -58,7 +58,7 @@ export function showTemporaryNotification(message, duration = 3000) {
         notification.parentNode.removeChild(notification);
       }
         }, cssNumber('--toast-fade-ms')); // Dauer der Ausblend-Transition
-  }, duration);
+    }, cssNumber(`--toast-${tier}-ms`));
 }
 
 

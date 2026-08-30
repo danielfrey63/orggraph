@@ -290,15 +290,13 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   display: flex;
   align-items: center;
   width: 100%;
-  padding-left: 4px;
+  /* transparent placeholder keeps box metrics stable; states swap only the colour */
+  border-left: 3px solid transparent;
+  padding-left: 1px;
   cursor: pointer;
   border-radius: 3px; 
   transition: background-color 0.2s ease;
   position: relative;
-}
-
-.legend-row:hover {
-  background-color: var(--control-hover);
 }
 
 /* Linker Bereich: Chevron + Label */
@@ -380,20 +378,17 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .legend-row.active {
   background-color: var(--org-fill, var(--active-toggle-bg));
   color: var(--active-toggle-color);
-  border-left: 3px solid var(--org-stroke, var(--active-toggle-bg));
-  padding-left: 1px; /* 6px Standard - 3px Border - 2px Offset = 1px */
+    border-left-color: var(--org-stroke, var(--active-toggle-bg));
 }
 
 .legend-row.active .legend-label-chip {
-  background-color: transparent;
   color: var(--active-toggle-color);
 }
 
 /* Attribut-Zeilen: Transparenter farbiger Hintergrund OHNE border-left */
 .legend-row.active[data-attribute-color] {
-    background-color: color-mix(in srgb, var(--attribute-color) 25%, transparent);
-  border-left: none;
-  padding-left: 4px; /* Standard Padding ohne Border */
+      background-color: color-mix(in srgb, var(--attribute-color) 25%, transparent);
+  border-left-color: transparent;
 }
 
 .legend-row.active[data-attribute-color] .legend-label-chip {
@@ -512,7 +507,17 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   --cluster-hull-tension: 0.75;
       --sim-settle-ms: 100;
     --legend-settle-ms: 50;
-  --combo-debounce-ms: 150;
+    --combo-debounce-ms: 150;
+  --toast-short-ms: 3000;
+  --toast-medium-ms: 6000;
+  --toast-long-ms: 10000;
+  --toast-mount-ms: 10;
+  --og2-persist-debounce-ms: 400;
+  --org-saturation: 60;
+  --org-fill-lightness: 60;
+  --org-fill-alpha: 0.25;
+  --org-stroke-lightness: 40;
+  --org-stroke-alpha: 0.85;
   --viewport-fit-ms: 300;
   --hull-escape-width-factor: 0.2;
   --zoom-min: 0.2;
@@ -1255,8 +1260,7 @@ body.dz-dragging::after {
 .time-controls .toggle-btn { padding: 0 6px; line-height: 1.4; }
 
 /* Views legend (FR-7.5): topmost sidebar section, one row per view */
-#viewsLegend .legend-row { padding: 3px 6px; }
-#viewsLegend .legend-row.active { padding-left: 3px; }
+#viewsLegend .legend-row { padding: 3px 6px 3px 3px; }
 #viewsLegend .view-row-invalid { opacity: 0.45; cursor: not-allowed; }
 
   </style>
@@ -1534,7 +1538,7 @@ function setStatus(msg) {
 /**
  * Zeigt eine temporäre Benachrichtigung an, ohne den Status zu überschreiben
  */
-function showTemporaryNotification(message, duration = 3000) {
+function showTemporaryNotification(message, tier = 'short') {
   // Prüfe, ob bereits eine Benachrichtigung existiert
   let notification = document.getElementById('temp-notification');
   
@@ -1555,9 +1559,9 @@ function showTemporaryNotification(message, duration = 3000) {
   notification.textContent = message;
   
   // Sicherstellen, dass das Element im DOM ist, bevor wir die Transition starten
-    setTimeout(() => {
+      setTimeout(() => {
     notification.classList.add('visible');
-  }, 10);
+  }, cssNumber('--toast-mount-ms'));
   
   // Nach der angegebenen Zeit ausblenden
     notification.hideTimeout = setTimeout(() => {
@@ -1568,7 +1572,7 @@ function showTemporaryNotification(message, duration = 3000) {
         notification.parentNode.removeChild(notification);
       }
         }, cssNumber('--toast-fade-ms')); // Dauer der Ausblend-Transition
-  }, duration);
+    }, cssNumber(`--toast-${tier}-ms`));
 }
 
 
@@ -2832,7 +2836,7 @@ async function expandZipEntries(entries) {
       out.push(...(await readZipEntries(en.file)));
     } catch (e) {
       console.error('[dropzone] ZIP konnte nicht gelesen werden:', en.path, e);
-      showTemporaryNotification(`ZIP-Archiv konnte nicht gelesen werden: ${en.path}`, 5000);
+      showTemporaryNotification(`ZIP-Archiv konnte nicht gelesen werden: ${en.path}`, 'medium');
     }
   }
   return out;
@@ -2937,7 +2941,7 @@ async function collectDropPayload(dataTransfer) {
     if (await collectViaHandle(h.handlePromise, flat)) continue;
     if (h.entry && h.entry.isDirectory) {
       if (await collectViaEntry(h.entry, flat)) continue;
-      showTemporaryNotification(`Ordner "${h.entry.name}" konnte nicht gelesen werden – bitte als ZIP-Archiv packen und droppen.`, 6000);
+      showTemporaryNotification(`Ordner "${h.entry.name}" konnte nicht gelesen werden – bitte als ZIP-Archiv packen und droppen.`, 'medium');
       continue;
     }
     // Plain file: prefer the File from getAsFile — entry.file() breaks on file:// pages.
@@ -3044,11 +3048,11 @@ function installGlobalDrop(onFiles) {
         // Never end a drop silently (live-test finding): on file:// pages
         // Chrome sometimes yields no usable handles for certain sources.
         if (entries.length) onFiles(entries);
-        else showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — bitte den Auswahl-Dialog («Dateien auswählen…») nutzen.', 6000);
+        else showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — bitte den Auswahl-Dialog («Dateien auswählen…») nutzen.', 'medium');
       })
       .catch((err) => {
         console.error('[dropzone] Drop konnte nicht verarbeitet werden:', err);
-        showTemporaryNotification('Drop konnte nicht verarbeitet werden – Ordner ggf. als ZIP-Archiv droppen.', 6000);
+        showTemporaryNotification('Drop konnte nicht verarbeitet werden – Ordner ggf. als ZIP-Archiv droppen.', 'medium');
       });
   };
 
@@ -3499,7 +3503,17 @@ const CSS_NUMBER_DEFAULTS = {
   '--cluster-hull-tension': 0.75,
       '--sim-settle-ms': 100,
     '--legend-settle-ms': 50,
-  '--combo-debounce-ms': 150,
+    '--combo-debounce-ms': 150,
+  '--toast-short-ms': 3000,
+  '--toast-medium-ms': 6000,
+  '--toast-long-ms': 10000,
+  '--toast-mount-ms': 10,
+  '--og2-persist-debounce-ms': 400,
+  '--org-saturation': 60,
+  '--org-fill-lightness': 60,
+  '--org-fill-alpha': 0.25,
+  '--org-stroke-lightness': 40,
+  '--org-stroke-alpha': 0.85,
   '--viewport-fit-ms': 300,
   '--hull-escape-width-factor': 0.2,
   '--zoom-min': 0.2,
@@ -3924,9 +3938,10 @@ function colorForOrg(oid){
     return orgColorCache.get(oid);
   }
   
-  const h = (hashCode(oid) % 12) * 30; // 12-step hue
-  const fill = `hsla(${h}, 60%, 60%, 0.25)`;
-  const stroke = `hsla(${h}, 60%, 40%, 0.85)`;
+    const h = (hashCode(oid) % 12) * 30; // 12-step hue
+  const s = cssNumber('--org-saturation');
+  const fill = `hsla(${h}, ${s}%, ${cssNumber('--org-fill-lightness')}%, ${cssNumber('--org-fill-alpha')})`;
+  const stroke = `hsla(${h}, ${s}%, ${cssNumber('--org-stroke-lightness')}%, ${cssNumber('--org-stroke-alpha')})`;
   const colors = { fill, stroke };
   
   orgColorCache.set(oid, colors);
@@ -4276,13 +4291,13 @@ async function loadEnvConfig() {
       // Keine gültige env.json gefunden (HTTP-Fehler)
       console.warn('env.json konnte nicht geladen werden:', res.status, res.statusText);
       setStatus('Keine gültige env.json gefunden – Dateien per Drag & Drop laden.');
-      showTemporaryNotification('env.json konnte nicht geladen werden – bitte Datei prüfen oder per Drag & Drop laden.', 5000);
+      showTemporaryNotification('env.json konnte nicht geladen werden – bitte Datei prüfen oder per Drag & Drop laden.', 'medium');
     }
   } catch (e) {
     // Fehler beim Laden oder Parsen von env.json
     console.error('Fehler beim Laden von env.json:', e);
     setStatus('Fehler beim Laden von env.json – Dateien per Drag & Drop laden.');
-    showTemporaryNotification('env.json ist ungültig oder konnte nicht gelesen werden (z.B. JSON-Syntaxfehler). Bitte Datei prüfen.', 5000);
+    showTemporaryNotification('env.json ist ungültig oder konnte nicht gelesen werden (z.B. JSON-Syntaxfehler). Bitte Datei prüfen.', 'medium');
   }
   envConfig = null;
   Logger.log('[Timing] End: init.loadEnv');
@@ -6194,9 +6209,9 @@ function renderGraph(sub) {
   const linkLabel = linkLabelGroup
     .selectAll("text")
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
-    .join("text")
-    .attr("class", "link-label")
-    .attr("dy", cssNumber('--link-label-dy'));
+        .join(enter => enter.append("text")
+      .attr("class", "link-label")
+      .attr("dy", cssNumber('--link-label-dy')));
 
   // Nur Graph-Knoten (Draw-Kind 'node') rendern; Cluster werden als Hüllen gezeichnet
   const personNodes = sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node');
@@ -7080,22 +7095,22 @@ async function handleDroppedFiles(entryList) {
     unknown: summary.unknown, missing: summary.missing, ignored: summary.ignored,
   }));
   if (summary.unknown.length) {
-    showTemporaryNotification(`Nicht erkannt, ignoriert: ${summary.unknown.join(', ')}`, 5000);
+    showTemporaryNotification(`Nicht erkannt, ignoriert: ${summary.unknown.join(', ')}`, 'medium');
   }
   if (summary.missing.length) {
-    showTemporaryNotification(`In env.json referenziert, aber nicht im Import enthalten: ${summary.missing.join(', ')}`, 6000);
+    showTemporaryNotification(`In env.json referenziert, aber nicht im Import enthalten: ${summary.missing.join(', ')}`, 'medium');
   }
   if (summary.ignored.length) {
-    showTemporaryNotification(`Nicht verwendet (env.json ist massgebend): ${summary.ignored.join(', ')}`, 5000);
+    showTemporaryNotification(`Nicht verwendet (env.json ist massgebend): ${summary.ignored.join(', ')}`, 'medium');
   }
   // E25/FR-6.7: legacy datasets and attribute lists are rejected — the way
   // in is the one-off migration script (§10), never an in-app import.
   if (summary.rejected && summary.rejected.length) {
-    showTemporaryNotification(`Legacy-Format abgewiesen (${summary.rejected.map(r => r.filename).join(', ')}): dieser Tenant versteht nur Registry/env/Snapshots. Bitte mit scripts/migrate-legacy.mjs migrieren.`, 8000);
+    showTemporaryNotification(`Legacy-Format abgewiesen (${summary.rejected.map(r => r.filename).join(', ')}): dieser Tenant versteht nur Registry/env/Snapshots. Bitte mit scripts/migrate-legacy.mjs migrieren.`, 'long');
   }
   if (!summary.stored.length) {
     if (!summary.unknown.length && !(summary.rejected && summary.rejected.length) && !summary.missing.length && !summary.ignored.length) {
-      showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — erwartet werden registry.json, env.json und Snapshot-Dateien (JSON); alternativ den Auswahl-Dialog nutzen.', 6000);
+      showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — erwartet werden registry.json, env.json und Snapshot-Dateien (JSON); alternativ den Auswahl-Dialog nutzen.', 'medium');
     }
     return;
   }
@@ -8290,7 +8305,7 @@ async function renderProfileSwitcher() {
     select.addEventListener('change', async () => {
       if (select.value === profileSwitcherActive) return;
       try { await switchProfile(select.value); location.reload(); }
-      catch (e) { console.error(e); showTemporaryNotification('Profilwechsel fehlgeschlagen', 4000); }
+      catch (e) { console.error(e); showTemporaryNotification('Profilwechsel fehlgeschlagen'); }
     });
 
     // Buttons are static template markup; JS only wires them (like #resetData)
@@ -11577,11 +11592,11 @@ async function og2TryBoot() {
       if (res.status === 'imported') {
         store = res.store || store;
         imported++;
-        showTemporaryNotification(`Snapshot ${p.filename}: importiert`, 3000);
+        showTemporaryNotification(`Snapshot ${p.filename}: importiert`);
       } else if (res.status === 'noop') {
-        showTemporaryNotification(`Snapshot ${p.filename}: bereits importiert`, 4000);
+        showTemporaryNotification(`Snapshot ${p.filename}: bereits importiert`);
       } else {
-        showTemporaryNotification(`Snapshot ${p.filename}: ${res.status}${res.reason ? ' — ' + res.reason : ''}`, 8000);
+        showTemporaryNotification(`Snapshot ${p.filename}: ${res.status}${res.reason ? ' — ' + res.reason : ''}`, 'long');
         console.warn('Snapshot-Import abgelehnt:', p.filename, res);
       }
     }
@@ -11615,7 +11630,7 @@ async function og2TryBoot() {
             store = imp.store || store;
             imported++;
           } else {
-            showTemporaryNotification(`Snapshot (DATA_URL): ${imp.status}${imp.reason ? ' — ' + imp.reason : ''}`, 8000);
+            showTemporaryNotification(`Snapshot (DATA_URL): ${imp.status}${imp.reason ? ' — ' + imp.reason : ''}`, 'long');
           }
         }
       }
@@ -11636,7 +11651,7 @@ async function og2TryBoot() {
   if (rejectedNames.length) {
     // §7 / AK 84: never a silent blank — report each rejected view.
     const lines = rejectedNames.map((n) => `${n}: ${og2.rejectedViews[n].join('; ')}`);
-    showTemporaryNotification(`Ungültige View-Konfiguration:\n${lines.join('\n')}`, 10000);
+    showTemporaryNotification(`Ungültige View-Konfiguration:\n${lines.join('\n')}`, 'long');
   }
   // FR-8.14: restore the persisted session state before the first render —
   // og2 fields before the stock globals (the combo domain follows the active
@@ -11878,7 +11893,7 @@ async function og2PersistUiStateNow() {
 function og2PersistUiStateSoon() {
   if (!og2) return;
   if (og2PersistTimer) clearTimeout(og2PersistTimer);
-  og2PersistTimer = setTimeout(() => { og2PersistTimer = null; og2PersistUiStateNow(); }, 400);
+    og2PersistTimer = setTimeout(() => { og2PersistTimer = null; og2PersistUiStateNow(); }, cssNumber('--og2-persist-debounce-ms'));
 }
 
 function og2InstallStatePersistence() {
@@ -11970,18 +11985,18 @@ function og2BuildViewsLegend() {
 // persisted in the tenant store — never a silent overwrite.
 async function og2SaveCurrentView() {
   if (!og2 || !og2.activeViewName) {
-    showTemporaryNotification('Keine aktive View — nichts zu speichern.', 4000);
+    showTemporaryNotification('Keine aktive View — nichts zu speichern.');
     return;
   }
   const baseRaw = og2.env && og2.env.VIEWS ? og2.env.VIEWS[og2.activeViewName] : null;
   if (!baseRaw) {
-    showTemporaryNotification('Die aktive Ansicht hat keine View-Konfiguration als Basis (Diagnose-Projektion) — bitte zuerst eine konfigurierte View wählen.', 6000);
+    showTemporaryNotification('Die aktive Ansicht hat keine View-Konfiguration als Basis (Diagnose-Projektion) — bitte zuerst eine konfigurierte View wählen.', 'medium');
     return;
   }
   const name = (window.prompt('Name der neuen View:') || '').trim();
   if (!name) return;
   if ((og2.env.VIEWS && Object.prototype.hasOwnProperty.call(og2.env.VIEWS, name)) || og2.views[name] || (og2.rejectedViews && og2.rejectedViews[name])) {
-    showTemporaryNotification(`View «${name}» existiert bereits — bitte einen anderen Namen wählen (kein Überschreiben, FR-7.5a).`, 6000);
+    showTemporaryNotification(`View «${name}» existiert bereits — bitte einen anderen Namen wählen (kein Überschreiben, FR-7.5a).`, 'medium');
     return;
   }
   const def = JSON.parse(JSON.stringify(baseRaw));
@@ -11992,7 +12007,7 @@ async function og2SaveCurrentView() {
   else if (og2.runtimeDepth != null) def.depth = og2.runtimeDepth;
   const { valid, rejected } = validateViews({ [name]: def }, og2.registry);
   if (!valid[name]) {
-    showTemporaryNotification(`View «${name}» ist ungültig: ${((rejected && rejected[name]) || []).join('; ')}`, 8000);
+    showTemporaryNotification(`View «${name}» ist ungültig: ${((rejected && rejected[name]) || []).join('; ')}`, 'long');
     return;
   }
   og2.env.VIEWS = og2.env.VIEWS || {};
@@ -12002,13 +12017,13 @@ async function og2SaveCurrentView() {
     await putStored(KEY_ENV, JSON.stringify(og2.env));
   } catch (e) {
     console.error('View-Persistenz fehlgeschlagen:', e);
-    showTemporaryNotification('View konnte nicht gespeichert werden — Details in der Konsole.', 6000);
+    showTemporaryNotification('View konnte nicht gespeichert werden — Details in der Konsole.', 'medium');
     return;
   }
   og2SwitchView(name);
   og2BuildViewsLegend();
   await og2PersistUiStateNow(); // the new active view must survive an immediate reload
-  showTemporaryNotification(`View «${name}» gespeichert.`, 4000);
+  showTemporaryNotification(`View «${name}» gespeichert.`);
 }
 
 // Footer time controls (FR-8.6): asOf slider and diff pickers live next to

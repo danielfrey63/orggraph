@@ -89,7 +89,7 @@ export async function expandZipEntries(entries) {
       out.push(...(await readZipEntries(en.file)));
     } catch (e) {
       console.error('[dropzone] ZIP konnte nicht gelesen werden:', en.path, e);
-      showTemporaryNotification(`ZIP-Archiv konnte nicht gelesen werden: ${en.path}`, 5000);
+      showTemporaryNotification(`ZIP-Archiv konnte nicht gelesen werden: ${en.path}`, 'medium');
     }
   }
   return out;
@@ -194,7 +194,7 @@ export async function collectDropPayload(dataTransfer) {
     if (await collectViaHandle(h.handlePromise, flat)) continue;
     if (h.entry && h.entry.isDirectory) {
       if (await collectViaEntry(h.entry, flat)) continue;
-      showTemporaryNotification(`Ordner "${h.entry.name}" konnte nicht gelesen werden – bitte als ZIP-Archiv packen und droppen.`, 6000);
+      showTemporaryNotification(`Ordner "${h.entry.name}" konnte nicht gelesen werden – bitte als ZIP-Archiv packen und droppen.`, 'medium');
       continue;
     }
     // Plain file: prefer the File from getAsFile — entry.file() breaks on file:// pages.
@@ -301,11 +301,11 @@ export function installGlobalDrop(onFiles) {
         // Never end a drop silently (live-test finding): on file:// pages
         // Chrome sometimes yields no usable handles for certain sources.
         if (entries.length) onFiles(entries);
-        else showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — bitte den Auswahl-Dialog («Dateien auswählen…») nutzen.', 6000);
+        else showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — bitte den Auswahl-Dialog («Dateien auswählen…») nutzen.', 'medium');
       })
       .catch((err) => {
         console.error('[dropzone] Drop konnte nicht verarbeitet werden:', err);
-        showTemporaryNotification('Drop konnte nicht verarbeitet werden – Ordner ggf. als ZIP-Archiv droppen.', 6000);
+        showTemporaryNotification('Drop konnte nicht verarbeitet werden – Ordner ggf. als ZIP-Archiv droppen.', 'medium');
       });
   };
 

@@ -106,11 +106,11 @@ export async function og2TryBoot() {
       if (res.status === 'imported') {
         store = res.store || store;
         imported++;
-        showTemporaryNotification(`Snapshot ${p.filename}: importiert`, 3000);
+        showTemporaryNotification(`Snapshot ${p.filename}: importiert`);
       } else if (res.status === 'noop') {
-        showTemporaryNotification(`Snapshot ${p.filename}: bereits importiert`, 4000);
+        showTemporaryNotification(`Snapshot ${p.filename}: bereits importiert`);
       } else {
-        showTemporaryNotification(`Snapshot ${p.filename}: ${res.status}${res.reason ? ' — ' + res.reason : ''}`, 8000);
+        showTemporaryNotification(`Snapshot ${p.filename}: ${res.status}${res.reason ? ' — ' + res.reason : ''}`, 'long');
         console.warn('Snapshot-Import abgelehnt:', p.filename, res);
       }
     }
@@ -144,7 +144,7 @@ export async function og2TryBoot() {
             store = imp.store || store;
             imported++;
           } else {
-            showTemporaryNotification(`Snapshot (DATA_URL): ${imp.status}${imp.reason ? ' — ' + imp.reason : ''}`, 8000);
+            showTemporaryNotification(`Snapshot (DATA_URL): ${imp.status}${imp.reason ? ' — ' + imp.reason : ''}`, 'long');
           }
         }
       }
@@ -165,7 +165,7 @@ export async function og2TryBoot() {
   if (rejectedNames.length) {
     // §7 / AK 84: never a silent blank — report each rejected view.
     const lines = rejectedNames.map((n) => `${n}: ${og2.rejectedViews[n].join('; ')}`);
-    showTemporaryNotification(`Ungültige View-Konfiguration:\n${lines.join('\n')}`, 10000);
+    showTemporaryNotification(`Ungültige View-Konfiguration:\n${lines.join('\n')}`, 'long');
   }
   // FR-8.14: restore the persisted session state before the first render —
   // og2 fields before the stock globals (the combo domain follows the active
@@ -407,7 +407,7 @@ export async function og2PersistUiStateNow() {
 export function og2PersistUiStateSoon() {
   if (!og2) return;
   if (og2PersistTimer) clearTimeout(og2PersistTimer);
-  og2PersistTimer = setTimeout(() => { og2PersistTimer = null; og2PersistUiStateNow(); }, 400);
+    og2PersistTimer = setTimeout(() => { og2PersistTimer = null; og2PersistUiStateNow(); }, cssNumber('--og2-persist-debounce-ms'));
 }
 
 function og2InstallStatePersistence() {
@@ -499,18 +499,18 @@ export function og2BuildViewsLegend() {
 // persisted in the tenant store — never a silent overwrite.
 export async function og2SaveCurrentView() {
   if (!og2 || !og2.activeViewName) {
-    showTemporaryNotification('Keine aktive View — nichts zu speichern.', 4000);
+    showTemporaryNotification('Keine aktive View — nichts zu speichern.');
     return;
   }
   const baseRaw = og2.env && og2.env.VIEWS ? og2.env.VIEWS[og2.activeViewName] : null;
   if (!baseRaw) {
-    showTemporaryNotification('Die aktive Ansicht hat keine View-Konfiguration als Basis (Diagnose-Projektion) — bitte zuerst eine konfigurierte View wählen.', 6000);
+    showTemporaryNotification('Die aktive Ansicht hat keine View-Konfiguration als Basis (Diagnose-Projektion) — bitte zuerst eine konfigurierte View wählen.', 'medium');
     return;
   }
   const name = (window.prompt('Name der neuen View:') || '').trim();
   if (!name) return;
   if ((og2.env.VIEWS && Object.prototype.hasOwnProperty.call(og2.env.VIEWS, name)) || og2.views[name] || (og2.rejectedViews && og2.rejectedViews[name])) {
-    showTemporaryNotification(`View «${name}» existiert bereits — bitte einen anderen Namen wählen (kein Überschreiben, FR-7.5a).`, 6000);
+    showTemporaryNotification(`View «${name}» existiert bereits — bitte einen anderen Namen wählen (kein Überschreiben, FR-7.5a).`, 'medium');
     return;
   }
   const def = JSON.parse(JSON.stringify(baseRaw));
@@ -521,7 +521,7 @@ export async function og2SaveCurrentView() {
   else if (og2.runtimeDepth != null) def.depth = og2.runtimeDepth;
   const { valid, rejected } = validateViews({ [name]: def }, og2.registry);
   if (!valid[name]) {
-    showTemporaryNotification(`View «${name}» ist ungültig: ${((rejected && rejected[name]) || []).join('; ')}`, 8000);
+    showTemporaryNotification(`View «${name}» ist ungültig: ${((rejected && rejected[name]) || []).join('; ')}`, 'long');
     return;
   }
   og2.env.VIEWS = og2.env.VIEWS || {};
@@ -531,13 +531,13 @@ export async function og2SaveCurrentView() {
     await putStored(KEY_ENV, JSON.stringify(og2.env));
   } catch (e) {
     console.error('View-Persistenz fehlgeschlagen:', e);
-    showTemporaryNotification('View konnte nicht gespeichert werden — Details in der Konsole.', 6000);
+    showTemporaryNotification('View konnte nicht gespeichert werden — Details in der Konsole.', 'medium');
     return;
   }
   og2SwitchView(name);
   og2BuildViewsLegend();
   await og2PersistUiStateNow(); // the new active view must survive an immediate reload
-  showTemporaryNotification(`View «${name}» gespeichert.`, 4000);
+  showTemporaryNotification(`View «${name}» gespeichert.`);
 }
 
 // Footer time controls (FR-8.6): asOf slider and diff pickers live next to
