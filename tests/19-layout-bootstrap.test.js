@@ -187,7 +187,7 @@ describe('initializeCollapsibleLegends', () => {
         <span class="depth-value"></span>
         <button class="depth-down"></button>
       </div>
-      <input id="depth" value="2">`;
+            <input id="depth" value="2" min="0" max="6">`;
   };
 
   it('toggles collapse via chevron and persists the state', () => {

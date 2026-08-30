@@ -508,7 +508,13 @@ input#depth {
   --error-color: #ef4444;
   --overlay-dark-bg: rgba(17, 17, 17, 0.9);
   --overlay-dark-fg: #fff;
-  --overlay-dark-hover: #1f2937;
+      --overlay-dark-hover: #1f2937;
+  --z-popover: 1000;
+  --z-overlay: 2000;
+  --dz-overlay-bg: rgba(15, 18, 24, 0.72);
+  --dz-panel-bg: rgba(30, 35, 45, 0.96);
+  --dz-panel-fg: #e8ecf2;
+  --dz-panel-muted: #aeb6c2;
   --canvas-bg: #ffffff;
 
   /* Graph-Elemente */
@@ -520,7 +526,10 @@ input#depth {
   --tooltip-cursor-offset: 12;
     --toast-fade-ms: 300;
   --depth-pulse-ms: 300;
-  --node-hover-tolerance: 6;
+    --node-hover-tolerance: 6;
+  --legend-depth-step: 16;
+  --cluster-hull-tension: 0.75;
+  --sim-settle-ms: 100;
   --node-fill: #4F46E5;
   --node-fill-top-level: #e0e7ff;
   --node-fill-mid-level: #818cf8;
@@ -769,7 +778,7 @@ input#depth {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 2000;
+  z-index: var(--z-overlay);
   display: none;
   align-items: center;
   justify-content: center;
@@ -797,7 +806,7 @@ input#depth {
   max-height: 90vh;
   overflow: auto;
   position: relative;
-  z-index: 2001;
+  z-index: calc(var(--z-overlay) + 1);
 }
 
 .modal-header {
@@ -885,7 +894,7 @@ input#depth {
   font-size: 12px;
   padding: 10px 12px;
   border-radius: 6px;
-  z-index: 1000;
+  z-index: var(--z-popover);
   white-space: pre;
   display: none;
   max-width: 400px;
@@ -911,7 +920,7 @@ input#depth {
   padding: 8px 16px;
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  z-index: 1000;
+  z-index: var(--z-popover);
       opacity: 0;
   transition: opacity calc(var(--toast-fade-ms) * 1ms) ease;
 }
@@ -924,11 +933,11 @@ input#depth {
 .dz-overlay {
   position: fixed;
   inset: 0;
-  z-index: 2000;
+  z-index: var(--z-overlay);
   display: none;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 18, 24, 0.72);
+    background: var(--dz-overlay-bg);
   backdrop-filter: blur(2px);
 }
 .dz-overlay.dz-visible {
@@ -940,8 +949,8 @@ input#depth {
   padding: 32px 36px;
   border: 2px dashed rgba(255, 255, 255, 0.35);
   border-radius: 14px;
-  background: rgba(30, 35, 45, 0.96);
-  color: #e8ecf2;
+    background: var(--dz-panel-bg);
+  color: var(--dz-panel-fg);
   text-align: center;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
 }
@@ -960,9 +969,9 @@ input#depth {
 }
 .dz-text {
   margin: 0 0 20px;
-  font-size: 13.5px;
+    font-size: 13.5px;
   line-height: 1.55;
-  color: #aeb6c2;
+  color: var(--dz-panel-muted);
 }
 .dz-text code {
   padding: 1px 5px;
@@ -974,25 +983,25 @@ input#depth {
   padding: 9px 18px;
   border: none;
   border-radius: 8px;
-  background: #3b82f6;
-  color: #fff;
+  background: var(--accent-color);
+  color: var(--active-toggle-color);
   font-size: 14px;
   cursor: pointer;
   transition: background 0.15s;
 }
 .dz-pick:hover {
-  background: #2f6fd6;
+  background: var(--button-primary-hover);
 }
 /* Visuelles Feedback, während eine Datei über das Fenster gezogen wird. */
 body.dz-dragging::after {
   content: '';
   position: fixed;
   inset: 8px;
-  z-index: 1999;
+  z-index: calc(var(--z-overlay) - 1);
   pointer-events: none;
-  border: 3px dashed #3b82f6;
+    border: 3px dashed var(--accent-color);
   border-radius: 12px;
-  background: rgba(59, 130, 246, 0.08);
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
 }
 
 .footer-reset-btn {
@@ -1197,7 +1206,7 @@ body.dz-dragging::after {
   padding: 0px 3px;
   min-width: 160px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  z-index: 2000;
+  z-index: var(--z-overlay);
   display: none;
 }
 
@@ -3358,8 +3367,8 @@ function refreshAllLabels() {
       const node = byId.get(rootId);
       const setIds = hiddenByRoot.get(rootId);
       const count = setIds ? setIds.size : 0;
-      const label = getDisplayLabel(node);
-      chip.textContent = `${label} (${count})`;
+            const label = getDisplayLabel(node);
+      chip.textContent = legendChipText(label, count);
       chip.title = label;
     }
   });
@@ -3515,7 +3524,10 @@ const CSS_NUMBER_DEFAULTS = {
   '--tooltip-cursor-offset': 12,
     '--toast-fade-ms': 300,
   '--depth-pulse-ms': 300,
-  '--node-hover-tolerance': 6,
+    '--node-hover-tolerance': 6,
+  '--legend-depth-step': 16,
+  '--cluster-hull-tension': 0.75,
+  '--sim-settle-ms': 100,
   '--sim-idle-alpha': 0.15,
   '--sim-reheat-alpha-soft': 0.1,
   '--sim-reheat-alpha': 0.3,
@@ -5047,7 +5059,7 @@ function createLegendRow({ active = false, withRight = true } = {}) {
 function createLegendDepthSpacer(depth) {
   const spacer = document.createElement('div');
   spacer.className = 'legend-depth-spacer';
-  spacer.style.width = `${Math.max(0, Number(depth) || 0) * 16}px`;
+    spacer.style.width = `${Math.max(0, Number(depth) || 0) * cssNumber('--legend-depth-step')}px`;
   return spacer;
 }
 
@@ -5059,6 +5071,12 @@ function createLegendTreeSpacer() {
 }
 
 // Label-Chip
+// Chip-Beschriftung: sichtbarer Text mit optionalem Zähler; der Titel bleibt
+// das blanke Label. Von 12 (Hidden-Legende) und 06 (Pseudo-Refresh) geteilt.
+function legendChipText(label, count) {
+  return count == null ? label : `${label} (${count})`;
+}
+
 function createLegendChip(text, title) {
   const chip = document.createElement('span');
   chip.className = 'legend-label-chip';
@@ -5080,13 +5098,20 @@ function createIconButton({ icon, title, className = '', onClick } = {}) {
   return btn;
 }
 
-function createLegendIconButton({ icon, title, className = '', onClick } = {}) {
+function createLegendIconButton({ icon, title, className = '', onClick, dimmed } = {}) {
   const btn = createIconButton({
     icon, title, onClick,
     className: className ? `legend-icon-btn ${className}` : 'legend-icon-btn',
   });
-  btn.setAttribute('data-ignore-header-click', 'true');
+    btn.setAttribute('data-ignore-header-click', 'true');
+  if (typeof dimmed === 'boolean') setLegendIconButtonState(btn, { dimmed });
   return btn;
+}
+
+// Aktiv-Zustand einer bestehenden Legend-Row; Gegenstück zum active-Flag,
+// das createLegendRow bei der Konstruktion setzt.
+function setLegendRowActive(row, active) {
+  if (row) row.classList.toggle('active', !!active);
 }
 
 // Post-construction state of ANY icon button, regardless of its base class:
@@ -5185,7 +5210,7 @@ function buildHiddenLegend() {
     // Label (pseudonymisiert wenn aktiv)
     const node = byId.get(root);
     const name = getDisplayLabel(node);
-    const chip = createLegendChip(`${name} (${setIds.size})`, name);
+        const chip = createLegendChip(legendChipText(name, setIds.size), name);
     chip.dataset.rootId = root; // Für spätere Aktualisierung
     left.appendChild(chip);
 
@@ -5539,13 +5564,7 @@ function updateLegendRowColors(rootEl) {
     row.style.setProperty('--org-fill', fill);
     row.style.setProperty('--org-stroke', stroke);
     
-    if (cb.checked && allowedOrgs.has(oid)) {
-      // Active state
-      row.classList.add('active');
-    } else {
-      // Inactive state
-      row.classList.remove('active');
-    }
+        setLegendRowActive(row, cb.checked && allowedOrgs.has(oid));
   });
 }
 
@@ -5718,7 +5737,7 @@ function renderClusterHulls(layer, personIds, simNodeById, pad) {
       const poly = computeClusterPolygon(d.nodes, pad);
       clusterPolygons.set(d.oid, poly);
       const { stroke, fill } = colorForOrg(d.oid);
-      const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
+      const line = d3.line().curve(d3.curveCardinalClosed.tension(cssNumber('--cluster-hull-tension')));
       d3.select(this)
         .attr('d', line(poly))
         .style('fill', fill)
@@ -6495,10 +6514,7 @@ function renderGraph(sub) {
       onOnlyDirectChildren: () => {
         setSingleRoot(pid);
         currentSelectedId = pid;
-        const depthEl = document.querySelector(INPUT_DEPTH_ID);
-        if (depthEl) depthEl.value = 1;
-        const depthDisplay = document.querySelector('#depthControl .depth-value');
-        if (depthDisplay) depthDisplay.textContent = '1';
+                setDepth(1, { pulse: false });
         applyFromUI('contextDirectChildren');
       },
       onSetAsRoot: () => {
@@ -6954,8 +6970,8 @@ function buildAttributeLegend() {
     const isHidden = hiddenCategories.has(cat);
     const eyeBtn = createLegendIconButton({
       icon: isHidden ? 'eyeClosed' : 'eye',
-      title: isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
-      className: isHidden ? 'dimmed' : '',
+            title: isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
+      dimmed: isHidden,
       onClick: () => {
         const nowHidden = !hiddenCategories.has(cat);
         if (nowHidden) hiddenCategories.add(cat);
@@ -7011,13 +7027,9 @@ function buildAttributeLegend() {
       itemRow.addEventListener('click', (e) => {
         const isActive = activeAttributes.has(it.key);
         
-        if (isActive) {
-          activeAttributes.delete(it.key);
-          itemRow.classList.remove('active');
-        } else {
-          activeAttributes.add(it.key);
-          itemRow.classList.add('active');
-        }
+                if (isActive) activeAttributes.delete(it.key);
+        else activeAttributes.add(it.key);
+        setLegendRowActive(itemRow, !isActive);
 
         updateAttributeStats();
         updateAttributeCircles();
@@ -7312,13 +7324,13 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Nur Attribut-Kreise im Graph aktualisieren
       updateAttributeCircles();
       
-      // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
-            if (currentSimulation) {
+            // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
+      if (currentSimulation) {
         currentSimulation.alpha(cssNumber('--sim-reheat-alpha-soft')).restart();
         // Nach kurzer Zeit wieder stoppen
         setTimeout(() => {
           if (currentSimulation) currentSimulation.alpha(0);
-        }, 100);
+        }, cssNumber('--sim-settle-ms'));
       }
     });
   }
@@ -7932,6 +7944,28 @@ function computeHierarchyLevels(nodes, links) {
 }
 
 /**
+ * Einziger Schreiber des Tiefen-Widgets: Input-Wert, Anzeige-Text, Tooltip und
+ * Puls-Animation wechseln gemeinsam; Grenzen kommen aus den min/max-Attributen.
+ */
+function setDepth(value, { pulse = true } = {}) {
+  const depthControl = document.getElementById('depthControl');
+  const depthInput = document.getElementById('depth');
+  const depthValueDisplay = depthControl?.querySelector('.depth-value');
+  if (!depthControl || !depthInput || !depthValueDisplay) return;
+  const min = depthInput.min !== '' ? Number(depthInput.min) : 0;
+  const max = depthInput.max !== '' ? Number(depthInput.max) : Infinity;
+  const clamped = Math.max(min, Math.min(max, Number(value) || 0));
+  depthInput.value = clamped;
+  depthValueDisplay.textContent = clamped;
+  const plural = clamped === 1 ? 'Ebene' : 'Ebenen';
+  depthControl.title = `Hierarchietiefe: ${clamped} ${plural}`;
+  if (pulse) {
+    depthControl.classList.add('changed');
+    setTimeout(() => depthControl.classList.remove('changed'), cssNumber('--depth-pulse-ms'));
+  }
+}
+
+/**
  * Konfiguriert das Graph-Layout
  */
 function configureLayout(nodes, links, simulation, mode) {
@@ -8059,7 +8093,7 @@ function switchLayout(mode, simulation) {
   // Konfiguriere Layout basierend auf Modus [DRY]
   configureLayout(nodes, links, simulation, mode);
   
-  setTimeout(() => refreshClusters(), 100);
+    setTimeout(() => refreshClusters(), cssNumber('--sim-settle-ms'));
 }
 
 /**
@@ -8198,63 +8232,46 @@ function initializeCollapsibleLegends() {
   const depthUpBtn = depthControl?.querySelector('.depth-up');
   const depthDownBtn = depthControl?.querySelector('.depth-down');
   
-  if (depthControl && depthInput && depthValueDisplay) {
-    const MIN_DEPTH = 0;
-    const MAX_DEPTH = 6;
-    
-    // Funktion zum Aktualisieren der Anzeige
-    const updateDepthDisplay = (value) => {
-      depthValueDisplay.textContent = value;
-      depthInput.value = value;
-      
-      // Animation triggern
-      depthControl.classList.add('changed');
-      setTimeout(() => depthControl.classList.remove('changed'), cssNumber('--depth-pulse-ms'));
-      
-      // Tooltip aktualisieren
-      const plural = value === 1 ? 'Ebene' : 'Ebenen';
-      depthControl.title = `Hierarchietiefe: ${value} ${plural}`;
-    };
-    
+    if (depthControl && depthInput && depthValueDisplay) {
+    // Grenzen kommen aus den min/max-Attributen des Inputs (Template als Quelle)
+    const MIN_DEPTH = depthInput.min !== '' ? Number(depthInput.min) : 0;
+    const MAX_DEPTH = depthInput.max !== '' ? Number(depthInput.max) : Infinity;
+
     // Up-Button: Tiefe erhöhen
     if (depthUpBtn) {
       depthUpBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const current = parseInt(depthInput.value) || 0;
         if (current < MAX_DEPTH) {
-          updateDepthDisplay(current + 1);
+          setDepth(current + 1);
           // Trigger change event für bestehende Handler
           depthInput.dispatchEvent(new Event('change'));
         }
       });
     }
-    
+
     // Down-Button: Tiefe verringern
     if (depthDownBtn) {
       depthDownBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const current = parseInt(depthInput.value) || 0;
         if (current > MIN_DEPTH) {
-          updateDepthDisplay(current - 1);
+          setDepth(current - 1);
           // Trigger change event für bestehende Handler
           depthInput.dispatchEvent(new Event('change'));
         }
       });
     }
-    
+
     // Synchronisiere Anzeige mit Input-Feld (falls extern geändert)
     depthInput.addEventListener('change', () => {
       const value = parseInt(depthInput.value) || 0;
-      const clamped = Math.max(MIN_DEPTH, Math.min(MAX_DEPTH, value));
-      depthValueDisplay.textContent = clamped;
+      setDepth(value, { pulse: false });
     });
-    
+
     // Initiale Anzeige setzen
     const initialValue = parseInt(depthInput.value, 10);
-    const displayValue = isNaN(initialValue) ? 2 : initialValue;
-    depthValueDisplay.textContent = displayValue;
-    const plural = displayValue === 1 ? 'Ebene' : 'Ebenen';
-    depthControl.title = `Hierarchietiefe: ${displayValue} ${plural}`;
+    setDepth(isNaN(initialValue) ? 2 : initialValue, { pulse: false });
   }
 }
 // ========== Profile switcher (parallel configurations) ==========
@@ -11815,14 +11832,9 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
     }
   }
 
-  if (Number.isFinite(depth)) {
+    if (Number.isFinite(depth)) {
     og2.runtimeDepth = depth;
-    const depthEl = document.querySelector(INPUT_DEPTH_ID);
-    if (depthEl) {
-      depthEl.value = depth;
-      const display = document.querySelector('#depthControl .depth-value');
-      if (display) display.textContent = String(depth);
-    }
+    setDepth(depth, { pulse: false });
   }
   const focusBtn = document.getElementById('toggleAttributeFocus');
       if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled, dimmed: !attributeFocusEnabled });
@@ -12064,9 +12076,11 @@ function og2SyncTimeControls() {
   const t2Sel = wrap.querySelector('#diffT2');
   const toggle = wrap.querySelector('#diffToggle');
   const hint = 'Zeitnavigation braucht mindestens zwei Snapshot-Stände (FR-8.6).';
-  for (const el of [slider, t1Sel, t2Sel, toggle]) {
+    for (const el of [slider, t1Sel, t2Sel, toggle]) {
     el.disabled = !enabled;
-    el.title = enabled ? el.title : hint;
+    // Basis-Titel beim ersten Überschreiben sichern, beim Aktivieren wiederherstellen
+    if (el.dataset.baseTitle === undefined) el.dataset.baseTitle = el.title;
+    el.title = enabled ? el.dataset.baseTitle : hint;
   }
   slider.max = String(Math.max(0, instants.length - 1));
   const activeIdx = og2.asOf ? Math.max(0, instants.indexOf(og2.asOf)) : Math.max(0, instants.length - 1);

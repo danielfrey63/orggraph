@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { cssNumber } from '../src/sections/08-color-geometry.js';
+
+globalThis.cssNumber = cssNumber;
 import {
   buildHiddenLegend,
   initLegendCollapsedItems,

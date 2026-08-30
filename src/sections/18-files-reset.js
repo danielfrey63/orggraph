@@ -275,13 +275,13 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Nur Attribut-Kreise im Graph aktualisieren
       updateAttributeCircles();
       
-      // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
-            if (currentSimulation) {
+            // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
+      if (currentSimulation) {
         currentSimulation.alpha(cssNumber('--sim-reheat-alpha-soft')).restart();
         // Nach kurzer Zeit wieder stoppen
         setTimeout(() => {
           if (currentSimulation) currentSimulation.alpha(0);
-        }, 100);
+        }, cssNumber('--sim-settle-ms'));
       }
     });
   }

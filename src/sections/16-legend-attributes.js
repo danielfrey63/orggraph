@@ -88,8 +88,8 @@ export function buildAttributeLegend() {
     const isHidden = hiddenCategories.has(cat);
     const eyeBtn = createLegendIconButton({
       icon: isHidden ? 'eyeClosed' : 'eye',
-      title: isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
-      className: isHidden ? 'dimmed' : '',
+            title: isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
+      dimmed: isHidden,
       onClick: () => {
         const nowHidden = !hiddenCategories.has(cat);
         if (nowHidden) hiddenCategories.add(cat);
@@ -145,13 +145,9 @@ export function buildAttributeLegend() {
       itemRow.addEventListener('click', (e) => {
         const isActive = activeAttributes.has(it.key);
         
-        if (isActive) {
-          activeAttributes.delete(it.key);
-          itemRow.classList.remove('active');
-        } else {
-          activeAttributes.add(it.key);
-          itemRow.classList.add('active');
-        }
+                if (isActive) activeAttributes.delete(it.key);
+        else activeAttributes.add(it.key);
+        setLegendRowActive(itemRow, !isActive);
 
         updateAttributeStats();
         updateAttributeCircles();

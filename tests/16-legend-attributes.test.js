@@ -3,7 +3,8 @@ import {
   buildAttributeLegend,
 } from '../src/sections/16-legend-attributes.js';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
-import { setLegendSectionCollapsed, setLegendIconButtonState } from '../src/sections/12-legend-org.js';
+import { setLegendSectionCollapsed, setLegendIconButtonState, setLegendRowActive } from '../src/sections/12-legend-org.js';
+import { cssNumber } from '../src/sections/08-color-geometry.js';
 import {
   createLegendRow,
   createLegendDepthSpacer,
@@ -18,7 +19,9 @@ beforeEach(() => {
   globalThis.ICON = ICON;
   globalThis.setIcon = setIcon;
   globalThis.setLegendSectionCollapsed = setLegendSectionCollapsed;
-  globalThis.setLegendIconButtonState = setLegendIconButtonState;
+    globalThis.setLegendIconButtonState = setLegendIconButtonState;
+  globalThis.setLegendRowActive = setLegendRowActive;
+  globalThis.cssNumber = cssNumber;
   globalThis.createLegendRow = createLegendRow;
   globalThis.createLegendDepthSpacer = createLegendDepthSpacer;
   globalThis.createLegendTreeSpacer = createLegendTreeSpacer;

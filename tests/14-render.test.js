@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vite
 import { readFileSync } from 'node:fs';
 import { idOf, drawKindOf } from '../src/sections/09-data-load.js';
 import { cssNumber, getNodeFillByLevel, countVisibleAttributeRings } from '../src/sections/08-color-geometry.js';
+import { setDepth } from '../src/sections/19-layout-bootstrap.js';
 import {
   SVG_ID, WIDTH, HEIGHT, BFS_LEVEL_ANIMATION_DELAY_MS,
 } from '../src/sections/01-config-status.js';
@@ -29,7 +30,8 @@ beforeEach(() => {
   globalThis.d3 = d3;
   globalThis.idOf = idOf;
   globalThis.drawKindOf = drawKindOf;
-  globalThis.cssNumber = cssNumber;
+    globalThis.cssNumber = cssNumber;
+  globalThis.setDepth = setDepth;
   globalThis.renderClusterHulls = sim13.renderClusterHulls;
   globalThis.getNodeFillByLevel = getNodeFillByLevel;
   globalThis.SVG_ID = SVG_ID;

@@ -339,14 +339,9 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
     }
   }
 
-  if (Number.isFinite(depth)) {
+    if (Number.isFinite(depth)) {
     og2.runtimeDepth = depth;
-    const depthEl = document.querySelector(INPUT_DEPTH_ID);
-    if (depthEl) {
-      depthEl.value = depth;
-      const display = document.querySelector('#depthControl .depth-value');
-      if (display) display.textContent = String(depth);
-    }
+    setDepth(depth, { pulse: false });
   }
   const focusBtn = document.getElementById('toggleAttributeFocus');
       if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled, dimmed: !attributeFocusEnabled });
@@ -588,9 +583,11 @@ export function og2SyncTimeControls() {
   const t2Sel = wrap.querySelector('#diffT2');
   const toggle = wrap.querySelector('#diffToggle');
   const hint = 'Zeitnavigation braucht mindestens zwei Snapshot-Stände (FR-8.6).';
-  for (const el of [slider, t1Sel, t2Sel, toggle]) {
+    for (const el of [slider, t1Sel, t2Sel, toggle]) {
     el.disabled = !enabled;
-    el.title = enabled ? el.title : hint;
+    // Basis-Titel beim ersten Überschreiben sichern, beim Aktivieren wiederherstellen
+    if (el.dataset.baseTitle === undefined) el.dataset.baseTitle = el.title;
+    el.title = enabled ? el.dataset.baseTitle : hint;
   }
   slider.max = String(Math.max(0, instants.length - 1));
   const activeIdx = og2.asOf ? Math.max(0, instants.indexOf(og2.asOf)) : Math.max(0, instants.length - 1);

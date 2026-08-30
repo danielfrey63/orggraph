@@ -82,6 +82,28 @@ export function computeHierarchyLevels(nodes, links) {
 }
 
 /**
+ * Einziger Schreiber des Tiefen-Widgets: Input-Wert, Anzeige-Text, Tooltip und
+ * Puls-Animation wechseln gemeinsam; Grenzen kommen aus den min/max-Attributen.
+ */
+export function setDepth(value, { pulse = true } = {}) {
+  const depthControl = document.getElementById('depthControl');
+  const depthInput = document.getElementById('depth');
+  const depthValueDisplay = depthControl?.querySelector('.depth-value');
+  if (!depthControl || !depthInput || !depthValueDisplay) return;
+  const min = depthInput.min !== '' ? Number(depthInput.min) : 0;
+  const max = depthInput.max !== '' ? Number(depthInput.max) : Infinity;
+  const clamped = Math.max(min, Math.min(max, Number(value) || 0));
+  depthInput.value = clamped;
+  depthValueDisplay.textContent = clamped;
+  const plural = clamped === 1 ? 'Ebene' : 'Ebenen';
+  depthControl.title = `Hierarchietiefe: ${clamped} ${plural}`;
+  if (pulse) {
+    depthControl.classList.add('changed');
+    setTimeout(() => depthControl.classList.remove('changed'), cssNumber('--depth-pulse-ms'));
+  }
+}
+
+/**
  * Konfiguriert das Graph-Layout
  */
 export function configureLayout(nodes, links, simulation, mode) {
@@ -209,7 +231,7 @@ export function switchLayout(mode, simulation) {
   // Konfiguriere Layout basierend auf Modus [DRY]
   configureLayout(nodes, links, simulation, mode);
   
-  setTimeout(() => refreshClusters(), 100);
+    setTimeout(() => refreshClusters(), cssNumber('--sim-settle-ms'));
 }
 
 /**
@@ -348,62 +370,45 @@ export function initializeCollapsibleLegends() {
   const depthUpBtn = depthControl?.querySelector('.depth-up');
   const depthDownBtn = depthControl?.querySelector('.depth-down');
   
-  if (depthControl && depthInput && depthValueDisplay) {
-    const MIN_DEPTH = 0;
-    const MAX_DEPTH = 6;
-    
-    // Funktion zum Aktualisieren der Anzeige
-    const updateDepthDisplay = (value) => {
-      depthValueDisplay.textContent = value;
-      depthInput.value = value;
-      
-      // Animation triggern
-      depthControl.classList.add('changed');
-      setTimeout(() => depthControl.classList.remove('changed'), cssNumber('--depth-pulse-ms'));
-      
-      // Tooltip aktualisieren
-      const plural = value === 1 ? 'Ebene' : 'Ebenen';
-      depthControl.title = `Hierarchietiefe: ${value} ${plural}`;
-    };
-    
+    if (depthControl && depthInput && depthValueDisplay) {
+    // Grenzen kommen aus den min/max-Attributen des Inputs (Template als Quelle)
+    const MIN_DEPTH = depthInput.min !== '' ? Number(depthInput.min) : 0;
+    const MAX_DEPTH = depthInput.max !== '' ? Number(depthInput.max) : Infinity;
+
     // Up-Button: Tiefe erhöhen
     if (depthUpBtn) {
       depthUpBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const current = parseInt(depthInput.value) || 0;
         if (current < MAX_DEPTH) {
-          updateDepthDisplay(current + 1);
+          setDepth(current + 1);
           // Trigger change event für bestehende Handler
           depthInput.dispatchEvent(new Event('change'));
         }
       });
     }
-    
+
     // Down-Button: Tiefe verringern
     if (depthDownBtn) {
       depthDownBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const current = parseInt(depthInput.value) || 0;
         if (current > MIN_DEPTH) {
-          updateDepthDisplay(current - 1);
+          setDepth(current - 1);
           // Trigger change event für bestehende Handler
           depthInput.dispatchEvent(new Event('change'));
         }
       });
     }
-    
+
     // Synchronisiere Anzeige mit Input-Feld (falls extern geändert)
     depthInput.addEventListener('change', () => {
       const value = parseInt(depthInput.value) || 0;
-      const clamped = Math.max(MIN_DEPTH, Math.min(MAX_DEPTH, value));
-      depthValueDisplay.textContent = clamped;
+      setDepth(value, { pulse: false });
     });
-    
+
     // Initiale Anzeige setzen
     const initialValue = parseInt(depthInput.value, 10);
-    const displayValue = isNaN(initialValue) ? 2 : initialValue;
-    depthValueDisplay.textContent = displayValue;
-    const plural = displayValue === 1 ? 'Ebene' : 'Ebenen';
-    depthControl.title = `Hierarchietiefe: ${displayValue} ${plural}`;
+    setDepth(isNaN(initialValue) ? 2 : initialValue, { pulse: false });
   }
 }

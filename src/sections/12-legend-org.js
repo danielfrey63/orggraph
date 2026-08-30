@@ -20,7 +20,7 @@ export function createLegendRow({ active = false, withRight = true } = {}) {
 export function createLegendDepthSpacer(depth) {
   const spacer = document.createElement('div');
   spacer.className = 'legend-depth-spacer';
-  spacer.style.width = `${Math.max(0, Number(depth) || 0) * 16}px`;
+    spacer.style.width = `${Math.max(0, Number(depth) || 0) * cssNumber('--legend-depth-step')}px`;
   return spacer;
 }
 
@@ -32,6 +32,12 @@ export function createLegendTreeSpacer() {
 }
 
 // Label-Chip
+// Chip-Beschriftung: sichtbarer Text mit optionalem Zähler; der Titel bleibt
+// das blanke Label. Von 12 (Hidden-Legende) und 06 (Pseudo-Refresh) geteilt.
+export function legendChipText(label, count) {
+  return count == null ? label : `${label} (${count})`;
+}
+
 export function createLegendChip(text, title) {
   const chip = document.createElement('span');
   chip.className = 'legend-label-chip';
@@ -53,13 +59,20 @@ export function createIconButton({ icon, title, className = '', onClick } = {}) 
   return btn;
 }
 
-export function createLegendIconButton({ icon, title, className = '', onClick } = {}) {
+export function createLegendIconButton({ icon, title, className = '', onClick, dimmed } = {}) {
   const btn = createIconButton({
     icon, title, onClick,
     className: className ? `legend-icon-btn ${className}` : 'legend-icon-btn',
   });
-  btn.setAttribute('data-ignore-header-click', 'true');
+    btn.setAttribute('data-ignore-header-click', 'true');
+  if (typeof dimmed === 'boolean') setLegendIconButtonState(btn, { dimmed });
   return btn;
+}
+
+// Aktiv-Zustand einer bestehenden Legend-Row; Gegenstück zum active-Flag,
+// das createLegendRow bei der Konstruktion setzt.
+export function setLegendRowActive(row, active) {
+  if (row) row.classList.toggle('active', !!active);
 }
 
 // Post-construction state of ANY icon button, regardless of its base class:
@@ -158,7 +171,7 @@ export function buildHiddenLegend() {
     // Label (pseudonymisiert wenn aktiv)
     const node = byId.get(root);
     const name = getDisplayLabel(node);
-    const chip = createLegendChip(`${name} (${setIds.size})`, name);
+        const chip = createLegendChip(legendChipText(name, setIds.size), name);
     chip.dataset.rootId = root; // Für spätere Aktualisierung
     left.appendChild(chip);
 
@@ -512,13 +525,7 @@ export function updateLegendRowColors(rootEl) {
     row.style.setProperty('--org-fill', fill);
     row.style.setProperty('--org-stroke', stroke);
     
-    if (cb.checked && allowedOrgs.has(oid)) {
-      // Active state
-      row.classList.add('active');
-    } else {
-      // Inactive state
-      row.classList.remove('active');
-    }
+        setLegendRowActive(row, cb.checked && allowedOrgs.has(oid));
   });
 }
 

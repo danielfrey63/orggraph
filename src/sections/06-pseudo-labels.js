@@ -191,8 +191,8 @@ export function refreshAllLabels() {
       const node = byId.get(rootId);
       const setIds = hiddenByRoot.get(rootId);
       const count = setIds ? setIds.size : 0;
-      const label = getDisplayLabel(node);
-      chip.textContent = `${label} (${count})`;
+            const label = getDisplayLabel(node);
+      chip.textContent = legendChipText(label, count);
       chip.title = label;
     }
   });

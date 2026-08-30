@@ -500,10 +500,7 @@ export function renderGraph(sub) {
       onOnlyDirectChildren: () => {
         setSingleRoot(pid);
         currentSelectedId = pid;
-        const depthEl = document.querySelector(INPUT_DEPTH_ID);
-        if (depthEl) depthEl.value = 1;
-        const depthDisplay = document.querySelector('#depthControl .depth-value');
-        if (depthDisplay) depthDisplay.textContent = '1';
+                setDepth(1, { pulse: false });
         applyFromUI('contextDirectChildren');
       },
       onSetAsRoot: () => {

@@ -69,7 +69,7 @@ export function renderClusterHulls(layer, personIds, simNodeById, pad) {
       const poly = computeClusterPolygon(d.nodes, pad);
       clusterPolygons.set(d.oid, poly);
       const { stroke, fill } = colorForOrg(d.oid);
-      const line = d3.line().curve(d3.curveCardinalClosed.tension(0.75));
+      const line = d3.line().curve(d3.curveCardinalClosed.tension(cssNumber('--cluster-hull-tension')));
       d3.select(this)
         .attr('d', line(poly))
         .style('fill', fill)
