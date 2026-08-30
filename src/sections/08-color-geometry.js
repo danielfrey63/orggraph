@@ -126,6 +126,12 @@ export const CSS_COLOR_DEFAULTS = {
 // Resolved string value of a CSS custom property on :root. Single owner of
 // the getComputedStyle+fallback pattern — the export stylesheet (03) and the
 // level-fill lookups below all go through here.
+// One-axis fallback jitter around a centre coordinate; the spread comes from
+// a --…-jitter token (hierarchy, cluster).
+export function jitterAround(center, tokenName) {
+  return center + (Math.random() - 0.5) * cssNumber(tokenName);
+}
+
 export function cssVar(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   if (v) return v;

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { idOf, drawKindOf } from '../src/sections/09-data-load.js';
-import { cssNumber, getNodeFillByLevel, countVisibleAttributeRings } from '../src/sections/08-color-geometry.js';
+import { cssNumber, jitterAround, getNodeFillByLevel, countVisibleAttributeRings } from '../src/sections/08-color-geometry.js';
 
 const BFS_DELAY = cssNumber('--bfs-level-delay-ms');
 import { setDepth } from '../src/sections/19-layout-bootstrap.js';
@@ -32,7 +32,8 @@ beforeEach(() => {
   globalThis.d3 = d3;
   globalThis.idOf = idOf;
   globalThis.drawKindOf = drawKindOf;
-    globalThis.cssNumber = cssNumber;
+        globalThis.cssNumber = cssNumber;
+    globalThis.jitterAround = jitterAround;
   globalThis.setDepth = setDepth;
   globalThis.renderClusterHulls = sim13.renderClusterHulls;
   globalThis.getNodeFillByLevel = getNodeFillByLevel;

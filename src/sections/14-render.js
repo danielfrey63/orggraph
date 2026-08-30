@@ -148,8 +148,8 @@ function ensureLayer(parent, selector) {
 // Fallback placement: scatter a node around the viewport centre with the
 // same jitter the hierarchy layout uses (19, --hierarchy-jitter).
 function scatterAtCenter(n) {
-  n.x = WIDTH / 2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
-  n.y = HEIGHT / 2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
+  n.x = jitterAround(WIDTH / 2, '--hierarchy-jitter');
+  n.y = jitterAround(HEIGHT / 2, '--hierarchy-jitter');
 }
 
 export function renderGraph(sub) {
@@ -197,7 +197,6 @@ export function renderGraph(sub) {
       enter => enter.append("line")
         .attr("class", "link")
         .attr("marker-end", "url(#arrow)"),
-      update => update.attr("marker-end", "url(#arrow)"), // Ensure marker stays
       exit => exit.remove()
     )
     .call(applyDiffClasses);

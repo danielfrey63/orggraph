@@ -151,7 +151,7 @@ export function configureLayout(nodes, links, simulation, mode) {
     // Knoten vorpositionieren für besseren Start [SF]
     nodes.forEach(n => {
       if (!Number.isFinite(n.x)) {
-        n.x = WIDTH/2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
+                n.x = jitterAround(WIDTH / 2, '--hierarchy-jitter');
       }
       if (!Number.isFinite(n.y)) {
         const level = hierarchyLevels.get(String(n.id)) ?? 0;
@@ -198,13 +198,12 @@ export function configureLayout(nodes, links, simulation, mode) {
       for (const oid of set) { const d = orgDepth(oid); if (d > bestDepth) { bestDepth = d; best = oid; } }
       primaryOf.set(pid, best);
     }
-    const JITTER = cssNumber('--cluster-jitter');
     nodes.forEach(n => {
       const pid = String(n.id);
       const oid = primaryOf.get(pid);
       const c = (oid && centers.get(oid)) || { x: cx, y: cy };
-      if (!Number.isFinite(n.x)) n.x = c.x + (Math.random() - 0.5) * JITTER;
-      if (!Number.isFinite(n.y)) n.y = c.y + (Math.random() - 0.5) * JITTER;
+            if (!Number.isFinite(n.x)) n.x = jitterAround(c.x, '--cluster-jitter');
+      if (!Number.isFinite(n.y)) n.y = jitterAround(c.y, '--cluster-jitter');
     });
     const CLUSTER_FORCE_STRENGTH = cssNumber('--cluster-force-strength');
     simulation

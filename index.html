@@ -10,7 +10,6 @@
 /* The hidden attribute wins over any display rule — show/hide chrome via el.hidden, not inline display */
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg); min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
-body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); background: var(--bg); }
 .app-header, .app-footer { padding: 12px 16px; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); }
 .app-footer { border-top: 1px solid var(--panel-border); border-bottom: none; font-size: 13px; color: var(--text-muted); }
 .footer-stats { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -73,10 +72,8 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
   background-color: transparent;
   cursor: pointer;
   transition: background-color 0.2s ease;
-  z-index: 1;
-  pointer-events: auto;
+    z-index: 1;
   outline: none;
-  box-shadow: none;
 }
 
 .depth-half.depth-up {
@@ -184,7 +181,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 #legendPane { border-left: 1px solid var(--panel-border); padding: 0px; overflow: auto; background: var(--panel-bg); color: var(--text); width: var(--sidebar-width); }
 /* Kollabierbare Legenden - Neues Design */
 .legend-section { margin-bottom: 0px; }
-.legend-section:last-child { margin-bottom: 0; }
 
 /* Border oben für alle Legenden ab der zweiten (keine doppelten Borders) */
 .legend-section + .legend-section .legend-header {
@@ -636,7 +632,6 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 /* Visual-root highlight (08-color-geometry, applyRootStyling) */
 .node-circle.is-root {
   fill: var(--root-node-fill);
-  opacity: 1;
 }
 
 .node-circle {
@@ -649,9 +644,8 @@ body { display: grid; grid-template-rows: auto 1fr auto; color: var(--text); bac
 .cluster {
   fill: var(--cluster-fill);
   stroke: var(--cluster-stroke);
-  opacity: var(--cluster-opacity);
+    opacity: var(--cluster-opacity);
   stroke-width: var(--cluster-stroke-width);
-  pointer-events: auto;
 }
 
 /* Neue Icon-Buttons mit Hover-Verhalten */
@@ -1872,7 +1866,7 @@ function buildExportStylesheet() {
       .node.has-attributes .node-circle { stroke: ${cssVar('--node-with-attributes-stroke')}; stroke-width: ${cssVar('--node-with-attributes-stroke-width')}; }
       .node.has-attributes .node-circle:not(.is-root) { fill: ${cssVar('--node-with-attributes-fill')}; }
       .node.attr-dimmed .node-circle:not(.is-root) { opacity: ${cssVar('--nodes-without-attributes-opacity')}; }
-      .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; opacity: 1; }
+            .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; }
       .node.diff-new circle { stroke: ${cssVar('--diff-new-stroke')}; stroke-width: 3px; }
       .node.diff-changed circle { stroke: ${cssVar('--diff-changed-stroke')}; stroke-width: 3px; }
       .node.diff-removed { opacity: ${cssVar('--diff-removed-opacity')}; }
@@ -3564,6 +3558,12 @@ const CSS_COLOR_DEFAULTS = {
 // Resolved string value of a CSS custom property on :root. Single owner of
 // the getComputedStyle+fallback pattern — the export stylesheet (03) and the
 // level-fill lookups below all go through here.
+// One-axis fallback jitter around a centre coordinate; the spread comes from
+// a --…-jitter token (hierarchy, cluster).
+function jitterAround(center, tokenName) {
+  return center + (Math.random() - 0.5) * cssNumber(tokenName);
+}
+
 function cssVar(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   if (v) return v;
@@ -6135,8 +6135,8 @@ function ensureLayer(parent, selector) {
 // Fallback placement: scatter a node around the viewport centre with the
 // same jitter the hierarchy layout uses (19, --hierarchy-jitter).
 function scatterAtCenter(n) {
-  n.x = WIDTH / 2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
-  n.y = HEIGHT / 2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
+  n.x = jitterAround(WIDTH / 2, '--hierarchy-jitter');
+  n.y = jitterAround(HEIGHT / 2, '--hierarchy-jitter');
 }
 
 function renderGraph(sub) {
@@ -6184,7 +6184,6 @@ function renderGraph(sub) {
       enter => enter.append("line")
         .attr("class", "link")
         .attr("marker-end", "url(#arrow)"),
-      update => update.attr("marker-end", "url(#arrow)"), // Ensure marker stays
       exit => exit.remove()
     )
     .call(applyDiffClasses);
@@ -7976,7 +7975,7 @@ function configureLayout(nodes, links, simulation, mode) {
     // Knoten vorpositionieren für besseren Start [SF]
     nodes.forEach(n => {
       if (!Number.isFinite(n.x)) {
-        n.x = WIDTH/2 + (Math.random() - 0.5) * cssNumber('--hierarchy-jitter');
+                n.x = jitterAround(WIDTH / 2, '--hierarchy-jitter');
       }
       if (!Number.isFinite(n.y)) {
         const level = hierarchyLevels.get(String(n.id)) ?? 0;
@@ -8023,13 +8022,12 @@ function configureLayout(nodes, links, simulation, mode) {
       for (const oid of set) { const d = orgDepth(oid); if (d > bestDepth) { bestDepth = d; best = oid; } }
       primaryOf.set(pid, best);
     }
-    const JITTER = cssNumber('--cluster-jitter');
     nodes.forEach(n => {
       const pid = String(n.id);
       const oid = primaryOf.get(pid);
       const c = (oid && centers.get(oid)) || { x: cx, y: cy };
-      if (!Number.isFinite(n.x)) n.x = c.x + (Math.random() - 0.5) * JITTER;
-      if (!Number.isFinite(n.y)) n.y = c.y + (Math.random() - 0.5) * JITTER;
+            if (!Number.isFinite(n.x)) n.x = jitterAround(c.x, '--cluster-jitter');
+      if (!Number.isFinite(n.y)) n.y = jitterAround(c.y, '--cluster-jitter');
     });
     const CLUSTER_FORCE_STRENGTH = cssNumber('--cluster-force-strength');
     simulation

@@ -234,7 +234,7 @@ function buildExportStylesheet() {
       .node.has-attributes .node-circle { stroke: ${cssVar('--node-with-attributes-stroke')}; stroke-width: ${cssVar('--node-with-attributes-stroke-width')}; }
       .node.has-attributes .node-circle:not(.is-root) { fill: ${cssVar('--node-with-attributes-fill')}; }
       .node.attr-dimmed .node-circle:not(.is-root) { opacity: ${cssVar('--nodes-without-attributes-opacity')}; }
-      .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; opacity: 1; }
+            .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; }
       .node.diff-new circle { stroke: ${cssVar('--diff-new-stroke')}; stroke-width: 3px; }
       .node.diff-changed circle { stroke: ${cssVar('--diff-changed-stroke')}; stroke-width: 3px; }
       .node.diff-removed { opacity: ${cssVar('--diff-removed-opacity')}; }
