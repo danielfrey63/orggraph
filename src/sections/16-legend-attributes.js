@@ -63,8 +63,8 @@ export function buildAttributeLegend() {
     }));
 
     // Kategorie-Label mit Anzahl
-    const total = items.reduce((s,it)=> s + (it.count||0), 0);
-    catLeftArea.appendChild(createLegendChip(`${cat} (${total})`, `${cat} - ${total} Einträge`));
+        const total = items.reduce((s,it)=> s + (it.count||0), 0);
+    catLeftArea.appendChild(createLegendChip(legendChipText(cat, total), legendChipTitle(cat, total)));
 
     // Toggle all attributes of this category on/off (mirrors the section-wide checkAll)
     if (items.length > 0) {
@@ -139,7 +139,7 @@ export function buildAttributeLegend() {
       itemLeftArea.appendChild(colorSpan);
 
       // Item-Label mit Count
-      itemLeftArea.appendChild(createLegendChip(`${it.name} (${it.count})`, `${cat} :: ${it.name} - ${it.count} Einträge`));
+            itemLeftArea.appendChild(createLegendChip(legendChipText(it.name, it.count), legendChipTitle(`${cat} :: ${it.name}`, it.count)));
       
       // Ganze Zeile klickbar für Toggle
       itemRow.addEventListener('click', (e) => {

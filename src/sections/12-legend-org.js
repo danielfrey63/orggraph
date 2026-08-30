@@ -38,6 +38,11 @@ export function legendChipText(label, count) {
   return count == null ? label : `${label} (${count})`;
 }
 
+// Tooltip-Gegenstück zu legendChipText (Attribut-Legende in 16).
+export function legendChipTitle(label, count) {
+  return `${label} - ${count} Einträge`;
+}
+
 export function createLegendChip(text, title) {
   const chip = document.createElement('span');
   chip.className = 'legend-label-chip';
@@ -67,6 +72,12 @@ export function createLegendIconButton({ icon, title, className = '', onClick, d
     btn.setAttribute('data-ignore-header-click', 'true');
   if (typeof dimmed === 'boolean') setLegendIconButtonState(btn, { dimmed });
   return btn;
+}
+
+// Exklusiv-Auswahl in einer Button-Gruppe: genau das übergebene Element trägt
+// active, alle anderen verlieren es (el = null leert die Gruppe).
+export function setExclusiveActive(group, el) {
+  for (const item of group) item.classList.toggle('active', item === el);
 }
 
 // Aktiv-Zustand einer bestehenden Legend-Row; Gegenstück zum active-Flag,

@@ -666,7 +666,7 @@ export function renderGraph(sub) {
   });
 
   // Zoom-Verhalten
-  zoomBehavior = d3.zoom().scaleExtent([0.2, 5])
+  zoomBehavior = d3.zoom().scaleExtent([cssNumber('--zoom-min'), cssNumber('--zoom-max')])
     .on("zoom", (event) => {
       currentZoomTransform = event.transform;
       gZoom.attr("transform", event.transform);

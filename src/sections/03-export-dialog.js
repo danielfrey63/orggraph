@@ -72,10 +72,7 @@ export function initializeExport() {
     btn.addEventListener('click', () => {
       const format = btn.dataset.format;
       
-      // Aktiven Zustand für alle Buttons entfernen
-      exportFormatBtns.forEach(b => b.classList.remove('active'));
-      // Aktiven Zustand für geklickten Button setzen
-      btn.classList.add('active');
+            setExclusiveActive(exportFormatBtns, btn);
       
       // Optionen anzeigen/verstecken
       svgOptionsDiv.hidden = format !== 'svg';
@@ -86,10 +83,7 @@ export function initializeExport() {
   // Event-Listener für Auflösungs-Presets
   resolutionPresets.forEach(preset => {
     preset.addEventListener('click', () => {
-      // Aktiven Zustand entfernen
-      resolutionPresets.forEach(p => p.classList.remove('active'));
-      // Aktiven Zustand setzen
-      preset.classList.add('active');
+            setExclusiveActive(resolutionPresets, preset);
       
       // Werte auf Eingabefelder übertragen
       customWidthInput.value = preset.dataset.width;
@@ -99,9 +93,9 @@ export function initializeExport() {
   
   // Event-Listener für Custom-Resolution-Eingabefelder
   if (customWidthInput) {
-    // Entferne active von Presets bei Eingabe
+        // Entferne active von Presets bei Eingabe
     customWidthInput.addEventListener('input', () => {
-      resolutionPresets.forEach(p => p.classList.remove('active'));
+      setExclusiveActive(resolutionPresets, null);
     });
     // Auto-Select beim Focus
     customWidthInput.addEventListener('focus', function() {
@@ -113,9 +107,9 @@ export function initializeExport() {
     });
   }
   if (customHeightInput) {
-    // Entferne active von Presets bei Eingabe
+        // Entferne active von Presets bei Eingabe
     customHeightInput.addEventListener('input', () => {
-      resolutionPresets.forEach(p => p.classList.remove('active'));
+      setExclusiveActive(resolutionPresets, null);
     });
     // Auto-Select beim Focus
     customHeightInput.addEventListener('focus', function() {
@@ -141,9 +135,9 @@ export function showExportDialog() {
   if (exportModal) {
     exportModal.classList.add('open');
     
-    // Setze die erste Auflösungs-Preset als aktiv
+        // Setze die erste Auflösungs-Preset als aktiv (und leere alle anderen)
     if (resolutionPresets && resolutionPresets.length > 0) {
-      resolutionPresets[0].classList.add('active');
+      setExclusiveActive(resolutionPresets, resolutionPresets[0]);
     }
   }
 }

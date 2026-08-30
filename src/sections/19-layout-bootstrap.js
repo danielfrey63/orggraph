@@ -14,7 +14,7 @@ export function fitToViewport() {
   const ty = (HEIGHT - bbox.height * scale) / 2 - bbox.y * scale;
   const svg = d3.select(svgEl);
   const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
-  svg.transition().duration(300).call(zoomBehavior.transform, t);
+  svg.transition().duration(cssNumber('--viewport-fit-ms')).call(zoomBehavior.transform, t);
 }
 // Nach jeder allowedOrgs-Änderung aufrufen
 export function syncGraphAndLegendColors() {
@@ -85,13 +85,20 @@ export function computeHierarchyLevels(nodes, links) {
  * Einziger Schreiber des Tiefen-Widgets: Input-Wert, Anzeige-Text, Tooltip und
  * Puls-Animation wechseln gemeinsam; Grenzen kommen aus den min/max-Attributen.
  */
+// Grenzen des Tiefen-Widgets aus den min/max-Attributen des Inputs.
+function depthBounds(depthInput) {
+  return {
+    min: depthInput.min !== '' ? Number(depthInput.min) : 0,
+    max: depthInput.max !== '' ? Number(depthInput.max) : Infinity,
+  };
+}
+
 export function setDepth(value, { pulse = true } = {}) {
   const depthControl = document.getElementById('depthControl');
   const depthInput = document.getElementById('depth');
   const depthValueDisplay = depthControl?.querySelector('.depth-value');
   if (!depthControl || !depthInput || !depthValueDisplay) return;
-  const min = depthInput.min !== '' ? Number(depthInput.min) : 0;
-  const max = depthInput.max !== '' ? Number(depthInput.max) : Infinity;
+  const { min, max } = depthBounds(depthInput);
   const clamped = Math.max(min, Math.min(max, Number(value) || 0));
   depthInput.value = clamped;
   depthValueDisplay.textContent = clamped;
@@ -371,9 +378,8 @@ export function initializeCollapsibleLegends() {
   const depthDownBtn = depthControl?.querySelector('.depth-down');
   
     if (depthControl && depthInput && depthValueDisplay) {
-    // Grenzen kommen aus den min/max-Attributen des Inputs (Template als Quelle)
-    const MIN_DEPTH = depthInput.min !== '' ? Number(depthInput.min) : 0;
-    const MAX_DEPTH = depthInput.max !== '' ? Number(depthInput.max) : Infinity;
+        // Grenzen kommen aus den min/max-Attributen des Inputs (Template als Quelle)
+    const { min: MIN_DEPTH, max: MAX_DEPTH } = depthBounds(depthInput);
 
     // Up-Button: Tiefe erhöhen
     if (depthUpBtn) {

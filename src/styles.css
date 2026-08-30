@@ -143,12 +143,12 @@ input#depth {
 }
 .combo > input:focus {
   border-color: var(--active-toggle-bg);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--active-toggle-bg) 20%, transparent);
 }
 .app-header-main .combo { min-width: 300px; flex-grow: 1; }
 .combo-list {
   position: absolute;
-  z-index: 10;
+  z-index: var(--z-popover);
   margin: 2px 0 0 0;
   padding: 4px 0;
   list-style: none;
@@ -472,7 +472,7 @@ input#depth {
   background-color: var(--active-toggle-bg);
   color: var(--active-toggle-color);
   border-color: transparent;
-  box-shadow: 0 2px 5px rgba(99,102,241,0.4);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--active-toggle-bg) 40%, transparent);
 }
 
 .toggle-btn .ic {
@@ -506,7 +506,9 @@ input#depth {
   --dz-overlay-bg: rgba(15, 18, 24, 0.72);
   --dz-panel-bg: rgba(30, 35, 45, 0.96);
   --dz-panel-fg: #e8ecf2;
-  --dz-panel-muted: #aeb6c2;
+    --dz-panel-muted: #aeb6c2;
+  --dz-panel-border: rgba(255, 255, 255, 0.35);
+  --dz-panel-code-bg: rgba(255, 255, 255, 0.1);
   --canvas-bg: #ffffff;
 
   /* Graph-Elemente */
@@ -521,7 +523,11 @@ input#depth {
     --node-hover-tolerance: 6;
   --legend-depth-step: 16;
   --cluster-hull-tension: 0.75;
-  --sim-settle-ms: 100;
+    --sim-settle-ms: 100;
+  --viewport-fit-ms: 300;
+  --hull-escape-width-factor: 0.2;
+  --zoom-min: 0.2;
+  --zoom-max: 5;
   --node-fill: #4F46E5;
   --node-fill-top-level: #e0e7ff;
   --node-fill-mid-level: #818cf8;
@@ -751,7 +757,7 @@ input#depth {
 
 .legend-search-input:focus {
   border-color: var(--active-toggle-bg);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--active-toggle-bg) 20%, transparent);
 }
 
 .legend-title {
@@ -872,9 +878,13 @@ input#depth {
   padding: 8px 16px;
   border: none;
   border-radius: 4px;
-    background: var(--accent-color);
+  background: var(--accent-color);
   color: var(--active-toggle-color);
   cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: var(--button-primary-hover);
 }
 
 /* Cluster-Tooltip (ensureTooltip); nur left/top/display kommen dynamisch aus JS */
@@ -939,7 +949,7 @@ input#depth {
   max-width: 520px;
   margin: 24px;
   padding: 32px 36px;
-  border: 2px dashed rgba(255, 255, 255, 0.35);
+    border: 2px dashed var(--dz-panel-border);
   border-radius: 14px;
     background: var(--dz-panel-bg);
   color: var(--dz-panel-fg);
@@ -968,7 +978,7 @@ input#depth {
 .dz-text code {
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
+    background: var(--dz-panel-code-bg);
   font-size: 12px;
 }
 .dz-pick {
@@ -1093,11 +1103,12 @@ body.dz-dragging::after {
   border-color: var(--active-toggle-bg);
 }
 
-.format-btn.active {
+.format-btn.active,
+.resolution-preset.active {
   background-color: var(--active-toggle-bg);
-  color: white;
+  color: var(--active-toggle-color);
   border-color: var(--active-toggle-bg);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--active-toggle-bg) 40%, transparent);
 }
 
 /* Resolution Grid - 2x2 Layout */
@@ -1124,13 +1135,6 @@ body.dz-dragging::after {
   border-color: var(--active-toggle-bg);
 }
 
-.resolution-preset.active {
-  background-color: var(--active-toggle-bg);
-  color: white;
-  border-color: var(--active-toggle-bg);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
-}
-
 /* Custom Resolution - Inline with Spinner */
 .custom-resolution-inline {
   display: flex;
@@ -1153,7 +1157,7 @@ body.dz-dragging::after {
 .custom-resolution-inline input:focus {
   outline: none;
   border-color: var(--active-toggle-bg);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--active-toggle-bg) 10%, transparent);
 }
 
 .custom-resolution-inline input::-webkit-outer-spin-button,
@@ -1168,20 +1172,20 @@ body.dz-dragging::after {
   padding: 16px 24px;
   border-radius: 8px;
   border: none;
-  background-color: var(--active-toggle-bg);
-  color: white;
+    background-color: var(--accent-color);
+  color: var(--active-toggle-color);
   font-size: 1.125rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--active-toggle-bg) 30%, transparent);
   margin-top: 8px;
 }
 
 .export-btn-large:hover {
   background-color: var(--button-primary-hover);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--active-toggle-bg) 40%, transparent);
 }
 
 .export-btn-large:active {
@@ -1271,10 +1275,5 @@ body.dz-dragging::after {
 
 /* Views legend (FR-7.5): topmost sidebar section, one row per view */
 #viewsLegend .legend-row { padding: 3px 6px; }
-#viewsLegend .legend-row.active {
-  /* re-bind the base .legend-row.active tokens instead of restating props */
-  --org-fill: var(--active-toggle-bg);
-  --org-stroke: var(--active-toggle-bg);
-  padding-left: 3px;
-}
+#viewsLegend .legend-row.active { padding-left: 3px; }
 #viewsLegend .view-row-invalid { opacity: 0.45; cursor: not-allowed; }

@@ -166,7 +166,7 @@ export function findPositionOutsideHull(existingNodes, margin) {
   
   // Platziere neuen Root rechts außerhalb der Bounding Box
   return {
-    x: maxX + margin + width * 0.2,
+        x: maxX + margin + width * cssNumber('--hull-escape-width-factor'),
     y: centerY
   };
 }
