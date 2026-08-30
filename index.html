@@ -383,8 +383,8 @@ input#depth {
   flex-shrink: 0;
 }
 
-/* Label im neuen Format */
-.legend-list .legend-label-chip { 
+/* Label-Chip: unscoped Basis für alle Legend-Rows (Sidebar + Views) */
+.legend-label-chip { 
   display: inline-block; 
   background-color: transparent;
   white-space: nowrap; 
@@ -550,6 +550,11 @@ input#depth {
   --link-label-fill: #666;
   --attribute-circle-opacity: 0.8;
   --cluster-stroke-width: 1.5;
+  --diff-new-stroke: #22c55e;
+  --diff-changed-stroke: #f59e0b;
+  --diff-removed-stroke: #ef4444;
+  --diff-removed-opacity: 0.45;
+  --diff-link-removed-opacity: 0.5;
 
   /* Simulation-Parameter */
   --link-distance: 20;
@@ -1015,6 +1020,8 @@ body.dz-dragging::after {
   cursor: pointer;
 }
 .profile-btn {
+  display: inline-flex;
+  align-items: center;
   border: 1px solid var(--panel-border, #30363d);
   background: none;
   color: var(--text-muted, #8a93a3);
@@ -1024,7 +1031,6 @@ body.dz-dragging::after {
   border-radius: 4px;
   cursor: pointer;
 }
-.profile-btn { display: inline-flex; align-items: center; }
 .profile-btn .ic { width: 12px; height: 12px; }
 .profile-btn:hover { color: var(--text-strong, #e8ecf2); border-color: var(--text-muted, #8a93a3); }
 
@@ -1239,12 +1245,12 @@ body.dz-dragging::after {
 /* Save Button für geänderte Kategorien - gleiche Farbe wie andere Icons */
 
 /* Diff mode (§5/FR-8.6): added / removed / changed classification */
-.node.diff-new circle { stroke: #22c55e; stroke-width: 3px; }
-.node.diff-changed circle { stroke: #f59e0b; stroke-width: 3px; }
-.node.diff-removed { opacity: 0.45; }
-.node.diff-removed circle { stroke: #ef4444; stroke-width: 2px; stroke-dasharray: 4 3; }
-.link.diff-new { stroke: #22c55e; }
-.link.diff-removed { stroke: #ef4444; stroke-dasharray: 4 3; opacity: 0.5; }
+.node.diff-new circle { stroke: var(--diff-new-stroke); stroke-width: 3px; }
+.node.diff-changed circle { stroke: var(--diff-changed-stroke); stroke-width: 3px; }
+.node.diff-removed { opacity: var(--diff-removed-opacity); }
+.node.diff-removed circle { stroke: var(--diff-removed-stroke); stroke-width: 2px; stroke-dasharray: 4 3; }
+.link.diff-new { stroke: var(--diff-new-stroke); }
+.link.diff-removed { stroke: var(--diff-removed-stroke); stroke-dasharray: 4 3; opacity: var(--diff-link-removed-opacity); }
 
 /* Footer time controls (FR-8.6) */
 .time-controls { display: inline-flex; align-items: center; gap: 6px; }
@@ -1256,11 +1262,11 @@ body.dz-dragging::after {
 #viewsLegend .legend-row { padding: 3px 6px; }
 #viewsLegend .legend-row:hover { background-color: var(--hover-bg, rgba(128, 128, 128, 0.15)); }
 #viewsLegend .legend-row.active {
-  background-color: var(--active-toggle-bg, #4a9eff);
-  border-left: 3px solid var(--active-toggle-bg, #4a9eff);
+  /* re-bind the base .legend-row.active tokens instead of restating props */
+  --org-fill: var(--active-toggle-bg, #4a9eff);
+  --org-stroke: var(--active-toggle-bg, #4a9eff);
   padding-left: 3px;
 }
-#viewsLegend .legend-label-chip { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #viewsLegend .view-row-invalid { opacity: 0.45; cursor: not-allowed; }
 
   </style>
@@ -1434,7 +1440,10 @@ body.dz-dragging::after {
         <button id="diffToggle" class="toggle-btn" title="Diff-Modus T1→T2"><i data-icon="diff"></i></button>
         <span class="stat-separator">|</span>
       </span>
-      <span id="profileSwitcher" class="profile-switcher"></span>
+      <span id="profileSwitcher" class="profile-switcher" hidden>
+        <label class="profile-switcher-label" for="profileSelect">Konfig:</label>
+        <select id="profileSelect" class="profile-select"></select>
+      </span>
       <span class="stat-separator">|</span>
       <span id="status">Bereit</span>
       <span class="stat-separator">|</span>
@@ -1503,7 +1512,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.184.181';
+const APP_VERSION = '1.185.182';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -1878,6 +1887,13 @@ function buildExportStylesheet({ withBody = false } = {}) {
       .label { font-size: ${cssVar('--label-font-size')}; fill: ${cssVar('--label-fill')}; }
       .link-label { font-size: ${cssVar('--link-label-font-size')}; fill: ${cssVar('--link-label-fill')}; text-anchor: middle; }
       .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; }
+      .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; opacity: 1; }
+      .node.diff-new circle { stroke: ${cssVar('--diff-new-stroke')}; stroke-width: 3px; }
+      .node.diff-changed circle { stroke: ${cssVar('--diff-changed-stroke')}; stroke-width: 3px; }
+      .node.diff-removed { opacity: ${cssVar('--diff-removed-opacity')}; }
+      .node.diff-removed circle { stroke: ${cssVar('--diff-removed-stroke')}; stroke-width: 2px; stroke-dasharray: 4 3; }
+      .link.diff-new { stroke: ${cssVar('--diff-new-stroke')}; }
+      .link.diff-removed { stroke: ${cssVar('--diff-removed-stroke')}; stroke-dasharray: 4 3; opacity: ${cssVar('--diff-link-removed-opacity')}; }
       ${withBody ? `body { background-color: ${cssVar('--canvas-bg')}; }` : ''}
       .labels-hidden .label { display: none; }
       .labels-attributes-only .label { display: none; }
@@ -4906,10 +4922,11 @@ function updateHiddenLegendEyeButtons() {
     const rootId = btn.dataset.rootId;
     const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(rootId);
     // Verwende active-Klasse wie bei OEs/Attributen
-    btn.className = isVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
-    btn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
-    // Icon aktualisieren
-    setIcon(btn, isVisible ? 'eye' : 'eyeClosed');
+    setLegendIconButtonState(btn, {
+      active: isVisible,
+      title: isVisible ? 'Temporär ausblenden' : 'Temporär einblenden',
+      icon: isVisible ? 'eye' : 'eyeClosed',
+    });
   });
 }
 
@@ -4923,10 +4940,11 @@ function updateGlobalHiddenVisibilityButton() {
   
   if (hasHidden) {
     // Verwende active-Klasse wie bei OEs/Attributen für konsistentes Verhalten
-    btn.className = allHiddenTemporarilyVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
-    btn.title = allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden';
-    // Icon aktualisieren
-    setIcon(btn, allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed');
+    setLegendIconButtonState(btn, {
+      active: allHiddenTemporarilyVisible,
+      title: allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden',
+      icon: allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed',
+    });
   }
 }
 
@@ -5015,6 +5033,18 @@ function createLegendIconButton({ icon, svg, title, className = '', onClick } = 
   });
   btn.setAttribute('data-ignore-header-click', 'true');
   return btn;
+}
+
+// State refresh of an existing legend icon button: modifier classes are
+// toggled instead of re-composing the base class string; icon and title
+// swap together. Sole owner of post-construction icon-button state
+// (eye toggles in 11 and 16).
+function setLegendIconButtonState(btn, { icon, title, active, hidden } = {}) {
+  if (!btn) return;
+  if (typeof active === 'boolean') btn.classList.toggle('active', active);
+  if (typeof hidden === 'boolean') btn.classList.toggle('hidden', hidden);
+  if (title != null) btn.title = title;
+  if (icon) setIcon(btn, icon);
 }
 
 // Collapse state of a legend subtree: the first <ul> inside the chevron's <li>
@@ -6107,8 +6137,7 @@ function renderGraph(sub) {
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
     .join("text")
     .attr("class", "link-label")
-    .attr("dy", -3)
-    .style("display", (debugMode && labelsVisible !== 'none') ? "block" : "none");
+    .attr("dy", -3);
 
   // Nur Graph-Knoten (Draw-Kind 'node') rendern; Cluster werden als Hüllen gezeichnet
   const personNodes = sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node');
@@ -6574,8 +6603,7 @@ function renderGraph(sub) {
     });
   svg.call(zoomBehavior);
   // Label-Sichtbarkeitsklassen setzen [SF]
-  svg.classed('labels-hidden', labelsVisible === 'none');
-  svg.classed('labels-attributes-only', labelsVisible === 'attributes');
+  setLabelVisibility(labelsVisible);
 
   // Alten Zoom-Zustand wiederherstellen, falls vorhanden und gültig
   if (savedZoomTransform && typeof savedZoomTransform.k === 'number' && 
@@ -6618,6 +6646,17 @@ function renderGraph(sub) {
   }
 }
 
+// Sole owner of the SVG label-visibility state: the mode classes on the SVG
+// plus the (debug-only) link-label display toggle. renderGraph (above) and
+// the toolbar label toggle (18) both route through here; the export
+// stylesheet (03) mirrors the class pair.
+function setLabelVisibility(mode) {
+  const svg = d3.select(SVG_ID);
+  if (svg.empty()) return;
+  svg.classed('labels-hidden', mode === 'none');
+  svg.classed('labels-attributes-only', mode === 'attributes');
+  svg.selectAll('.link-label').style('display', (debugMode && mode !== 'none') ? null : 'none');
+}
 function applyFromUI(triggerSource = 'unknown', callStack = false) {
   Logger.log(`[Timing] Start: applyFromUI.${triggerSource}`);
   // OrgGraph 2.0 tenant: the projection-based apply path owns rendering.
@@ -6839,21 +6878,14 @@ function buildAttributeLegend() {
 
     eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const isCurrentlyHidden = hiddenCategories.has(cat);
-
-      if (isCurrentlyHidden) {
-        // Einblenden
-        hiddenCategories.delete(cat);
-        eyeBtn.className = 'legend-icon-btn';
-        eyeBtn.title = 'Kategorie ausblenden';
-        setIcon(eyeBtn, 'eye');
-      } else {
-        // Ausblenden
-        hiddenCategories.add(cat);
-        eyeBtn.className = 'legend-icon-btn hidden';
-        eyeBtn.title = 'Kategorie einblenden';
-        setIcon(eyeBtn, 'eyeClosed');
-      }
+      const nowHidden = !hiddenCategories.has(cat);
+      if (nowHidden) hiddenCategories.add(cat);
+      else hiddenCategories.delete(cat);
+      setLegendIconButtonState(eyeBtn, {
+        hidden: nowHidden,
+        title: nowHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
+        icon: nowHidden ? 'eyeClosed' : 'eye',
+      });
 
       // Attribut-Kreise neu zeichnen
       updateAttributeCircles();
@@ -7364,29 +7396,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   // Auto-fit functionality has been removed
   
-  function updateLinkLabelVisibility() {
-    const display = (debugMode && labelsVisible !== 'none') ? 'block' : 'none';
-    d3.select('#graph').selectAll('.link-label')
-      .style('display', display);
-  }
-  
   /**
    * Aktualisiert die Label-Sichtbarkeit im SVG basierend auf dem aktuellen Modus [SF]
    */
   function updateLabelVisibility() {
-    const svg = document.querySelector('#graph');
-    if (!svg) return;
-    
-    // CSS-Klassen für Label-Sichtbarkeit setzen
-    svg.classList.remove('labels-hidden', 'labels-attributes-only');
-    if (labelsVisible === 'none') {
-      svg.classList.add('labels-hidden');
-    } else if (labelsVisible === 'attributes') {
-      svg.classList.add('labels-attributes-only');
-    }
-    
-    // Link-Labels aktualisieren
-    updateLinkLabelVisibility();
+    setLabelVisibility(labelsVisible);
   }
   
   /**
@@ -7583,7 +7597,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       });
       
       // Link-Labels ein/ausblenden (nur wenn auch Labels sichtbar)
-      updateLinkLabelVisibility();
+      setLabelVisibility(labelsVisible);
       
       // Zoom-Info im Debug-Modus anzeigen [SF]
       updateDebugZoomDisplay();
@@ -8185,64 +8199,68 @@ function initializeCollapsibleLegends() {
 // and deleting reload the page so the existing init path rebuilds cleanly from
 // the newly active profile's namespace.
 
-/** (Re)build the footer profile switcher from the stored profile list. */
+// Latest rendered state — the wired-once control handlers read these instead
+// of stale render-scope closures.
+let profileSwitcherProfiles = [];
+let profileSwitcherActive = null;
+
+/** (Re)fill the footer profile switcher from the stored profile list. */
 async function renderProfileSwitcher() {
-  // The host span is static footer markup in index.template.html.
+  // Host span, label and select are static footer markup in
+  // index.template.html; this fills the options and wires the controls
+  // exactly once (dataset.wired), like the sibling #timeControls widget.
   const wrap = document.getElementById('profileSwitcher');
-  if (!wrap) return;
+  const select = wrap && wrap.querySelector('#profileSelect');
+  if (!wrap || !select) return;
 
-  const profiles = await listProfiles();
-  const active = await getActiveProfileId();
+  profileSwitcherProfiles = await listProfiles();
+  profileSwitcherActive = await getActiveProfileId();
 
-  wrap.innerHTML = '';
-
-  const label = document.createElement('label');
-  label.className = 'profile-switcher-label';
-  label.textContent = 'Konfig:';
-  label.htmlFor = 'profileSelect';
-  wrap.appendChild(label);
-
-  const select = document.createElement('select');
-  select.id = 'profileSelect';
-  select.className = 'profile-select';
-  for (const p of profiles) {
+  select.innerHTML = '';
+  for (const p of profileSwitcherProfiles) {
     const opt = document.createElement('option');
     opt.value = p.id;
     opt.textContent = p.name || p.id;
-    if (p.id === active) opt.selected = true;
+    if (p.id === profileSwitcherActive) opt.selected = true;
     select.appendChild(opt);
   }
-  select.addEventListener('change', async () => {
-    if (select.value === active) return;
-    try { await switchProfile(select.value); location.reload(); }
-    catch (e) { console.error(e); showTemporaryNotification('Profilwechsel fehlgeschlagen', 4000); }
-  });
-  wrap.appendChild(select);
 
-  // Icon buttons share the createIconButton primitive (12-legend-org.js)
-  const mkBtn = (icon, title, handler) =>
-    wrap.appendChild(createIconButton({ icon, title, className: 'profile-btn', onClick: handler }));
+  if (!wrap.dataset.wired) {
+    wrap.dataset.wired = 'true';
 
-  mkBtn('plus', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
-  mkBtn('edit', 'Aktuelles Profil umbenennen', async () => {
-    const cur = profiles.find(p => p.id === active);
-    const name = (typeof prompt === 'function') ? prompt('Profil umbenennen:', cur ? cur.name : active) : null;
-    if (name && name.trim()) { await renameProfile(active, name.trim()); await renderProfileSwitcher(); }
-  });
-  mkBtn('copy', 'Aktuelles Profil duplizieren', async () => {
-    const cur = profiles.find(p => p.id === active);
-    const newId = await duplicateProfile(active, (cur ? cur.name : active) + ' Kopie');
-    if (newId) { try { await switchProfile(newId); } catch (_) {} location.reload(); }
-  });
-  mkBtn('close', 'Aktuelles Profil löschen', async () => {
-    const cur = profiles.find(p => p.id === active);
-    const ok = (typeof confirm === 'function')
-      ? confirm(`Profil "${cur ? cur.name : active}" und alle zugehörigen Daten löschen?`)
-      : true;
-    if (!ok) return;
-    await deleteProfile(active);
-    location.reload();
-  });
+    select.addEventListener('change', async () => {
+      if (select.value === profileSwitcherActive) return;
+      try { await switchProfile(select.value); location.reload(); }
+      catch (e) { console.error(e); showTemporaryNotification('Profilwechsel fehlgeschlagen', 4000); }
+    });
+
+    // Icon buttons share the createIconButton primitive (12-legend-org.js)
+    const mkBtn = (icon, title, handler) =>
+      wrap.appendChild(createIconButton({ icon, title, className: 'profile-btn', onClick: handler }));
+
+    mkBtn('plus', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
+    mkBtn('edit', 'Aktuelles Profil umbenennen', async () => {
+      const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
+      const name = (typeof prompt === 'function') ? prompt('Profil umbenennen:', cur ? cur.name : profileSwitcherActive) : null;
+      if (name && name.trim()) { await renameProfile(profileSwitcherActive, name.trim()); await renderProfileSwitcher(); }
+    });
+    mkBtn('copy', 'Aktuelles Profil duplizieren', async () => {
+      const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
+      const newId = await duplicateProfile(profileSwitcherActive, (cur ? cur.name : profileSwitcherActive) + ' Kopie');
+      if (newId) { try { await switchProfile(newId); } catch (_) {} location.reload(); }
+    });
+    mkBtn('close', 'Aktuelles Profil löschen', async () => {
+      const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
+      const ok = (typeof confirm === 'function')
+        ? confirm(`Profil "${cur ? cur.name : profileSwitcherActive}" und alle zugehörigen Daten löschen?`)
+        : true;
+      if (!ok) return;
+      await deleteProfile(profileSwitcherActive);
+      location.reload();
+    });
+  }
+
+  wrap.hidden = false;
 }
 
 /** Open the drag-and-drop panel so a whole config (folder / ZIP / files) can be

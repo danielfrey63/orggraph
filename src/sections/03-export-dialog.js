@@ -227,6 +227,13 @@ function buildExportStylesheet({ withBody = false } = {}) {
       .label { font-size: ${cssVar('--label-font-size')}; fill: ${cssVar('--label-fill')}; }
       .link-label { font-size: ${cssVar('--link-label-font-size')}; fill: ${cssVar('--link-label-fill')}; text-anchor: middle; }
       .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; }
+      .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; opacity: 1; }
+      .node.diff-new circle { stroke: ${cssVar('--diff-new-stroke')}; stroke-width: 3px; }
+      .node.diff-changed circle { stroke: ${cssVar('--diff-changed-stroke')}; stroke-width: 3px; }
+      .node.diff-removed { opacity: ${cssVar('--diff-removed-opacity')}; }
+      .node.diff-removed circle { stroke: ${cssVar('--diff-removed-stroke')}; stroke-width: 2px; stroke-dasharray: 4 3; }
+      .link.diff-new { stroke: ${cssVar('--diff-new-stroke')}; }
+      .link.diff-removed { stroke: ${cssVar('--diff-removed-stroke')}; stroke-dasharray: 4 3; opacity: ${cssVar('--diff-link-removed-opacity')}; }
       ${withBody ? `body { background-color: ${cssVar('--canvas-bg')}; }` : ''}
       .labels-hidden .label { display: none; }
       .labels-attributes-only .label { display: none; }

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
+import { setLabelVisibility } from '../src/sections/14-render.js';
 import {
   INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, INPUT_DEPTH_ID, SVG_ID,
 } from '../src/sections/01-config-status.js';
@@ -54,6 +55,7 @@ beforeAll(async () => {
   globalThis.STATUS_ID = STATUS_ID;
   globalThis.INPUT_DEPTH_ID = INPUT_DEPTH_ID;
   globalThis.SVG_ID = SVG_ID;
+  globalThis.setLabelVisibility = setLabelVisibility;
   globalThis.envConfig = null;
   globalThis.pseudonymizationEnabled = true;
   globalThis.oesVisible = true;

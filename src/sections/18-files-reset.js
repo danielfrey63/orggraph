@@ -437,29 +437,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   // Auto-fit functionality has been removed
   
-  function updateLinkLabelVisibility() {
-    const display = (debugMode && labelsVisible !== 'none') ? 'block' : 'none';
-    d3.select('#graph').selectAll('.link-label')
-      .style('display', display);
-  }
-  
   /**
    * Aktualisiert die Label-Sichtbarkeit im SVG basierend auf dem aktuellen Modus [SF]
    */
   function updateLabelVisibility() {
-    const svg = document.querySelector('#graph');
-    if (!svg) return;
-    
-    // CSS-Klassen für Label-Sichtbarkeit setzen
-    svg.classList.remove('labels-hidden', 'labels-attributes-only');
-    if (labelsVisible === 'none') {
-      svg.classList.add('labels-hidden');
-    } else if (labelsVisible === 'attributes') {
-      svg.classList.add('labels-attributes-only');
-    }
-    
-    // Link-Labels aktualisieren
-    updateLinkLabelVisibility();
+    setLabelVisibility(labelsVisible);
   }
   
   /**
@@ -656,7 +638,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       });
       
       // Link-Labels ein/ausblenden (nur wenn auch Labels sichtbar)
-      updateLinkLabelVisibility();
+      setLabelVisibility(labelsVisible);
       
       // Zoom-Info im Debug-Modus anzeigen [SF]
       updateDebugZoomDisplay();

@@ -111,6 +111,7 @@ const setupGlobals = () => {
   globalThis.showTemporaryNotification = vi.fn();
   globalThis.showPasswordDialog = vi.fn();
   globalThis.setSingleRoot = vi.fn();
+  globalThis.setLabelVisibility = vi.fn();
   globalThis.confirm = vi.fn(() => true);
   globalThis.storeEntries = vi.fn(async () => ({ stored: [], unknown: [], missing: [], ignored: [] }));
 };

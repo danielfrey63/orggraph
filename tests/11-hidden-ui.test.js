@@ -4,9 +4,11 @@ import {
   updateGlobalHiddenVisibilityButton,
   updateHiddenLegendTitle,
 } from '../src/sections/11-graph-core.js';
+import { setLegendIconButtonState } from '../src/sections/12-legend-org.js';
 
 beforeEach(() => {
   globalThis.setIcon = vi.fn();
+  globalThis.setLegendIconButtonState = setLegendIconButtonState;
   globalThis.allHiddenTemporarilyVisible = false;
   globalThis.temporarilyVisibleRoots = new Set();
   globalThis.hiddenByRoot = new Map();
@@ -50,7 +52,7 @@ describe('updateHiddenLegendEyeButtons', () => {
 
 describe('updateGlobalHiddenVisibilityButton', () => {
   beforeEach(() => {
-    document.body.innerHTML = '<button id="toggleAllHiddenVisibility"><span data-icon="eye"></span></button>';
+    document.body.innerHTML = '<button id="toggleAllHiddenVisibility" class="legend-icon-btn"><span data-icon="eye"></span></button>';
   });
 
   it('hides the button when nothing is hidden', () => {

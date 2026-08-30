@@ -63,6 +63,18 @@ export function createLegendIconButton({ icon, svg, title, className = '', onCli
   return btn;
 }
 
+// State refresh of an existing legend icon button: modifier classes are
+// toggled instead of re-composing the base class string; icon and title
+// swap together. Sole owner of post-construction icon-button state
+// (eye toggles in 11 and 16).
+export function setLegendIconButtonState(btn, { icon, title, active, hidden } = {}) {
+  if (!btn) return;
+  if (typeof active === 'boolean') btn.classList.toggle('active', active);
+  if (typeof hidden === 'boolean') btn.classList.toggle('hidden', hidden);
+  if (title != null) btn.title = title;
+  if (icon) setIcon(btn, icon);
+}
+
 // Collapse state of a legend subtree: the first <ul> inside the chevron's <li>
 // plus the chevron's own expanded/collapsed class. Single owner of that display
 // toggle — every collapse/expand path (click, collapse-children, collapse-all)

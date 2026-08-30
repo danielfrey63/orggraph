@@ -4,64 +4,68 @@
 // and deleting reload the page so the existing init path rebuilds cleanly from
 // the newly active profile's namespace.
 
-/** (Re)build the footer profile switcher from the stored profile list. */
+// Latest rendered state — the wired-once control handlers read these instead
+// of stale render-scope closures.
+let profileSwitcherProfiles = [];
+let profileSwitcherActive = null;
+
+/** (Re)fill the footer profile switcher from the stored profile list. */
 export async function renderProfileSwitcher() {
-  // The host span is static footer markup in index.template.html.
+  // Host span, label and select are static footer markup in
+  // index.template.html; this fills the options and wires the controls
+  // exactly once (dataset.wired), like the sibling #timeControls widget.
   const wrap = document.getElementById('profileSwitcher');
-  if (!wrap) return;
+  const select = wrap && wrap.querySelector('#profileSelect');
+  if (!wrap || !select) return;
 
-  const profiles = await listProfiles();
-  const active = await getActiveProfileId();
+  profileSwitcherProfiles = await listProfiles();
+  profileSwitcherActive = await getActiveProfileId();
 
-  wrap.innerHTML = '';
-
-  const label = document.createElement('label');
-  label.className = 'profile-switcher-label';
-  label.textContent = 'Konfig:';
-  label.htmlFor = 'profileSelect';
-  wrap.appendChild(label);
-
-  const select = document.createElement('select');
-  select.id = 'profileSelect';
-  select.className = 'profile-select';
-  for (const p of profiles) {
+  select.innerHTML = '';
+  for (const p of profileSwitcherProfiles) {
     const opt = document.createElement('option');
     opt.value = p.id;
     opt.textContent = p.name || p.id;
-    if (p.id === active) opt.selected = true;
+    if (p.id === profileSwitcherActive) opt.selected = true;
     select.appendChild(opt);
   }
-  select.addEventListener('change', async () => {
-    if (select.value === active) return;
-    try { await switchProfile(select.value); location.reload(); }
-    catch (e) { console.error(e); showTemporaryNotification('Profilwechsel fehlgeschlagen', 4000); }
-  });
-  wrap.appendChild(select);
 
-  // Icon buttons share the createIconButton primitive (12-legend-org.js)
-  const mkBtn = (icon, title, handler) =>
-    wrap.appendChild(createIconButton({ icon, title, className: 'profile-btn', onClick: handler }));
+  if (!wrap.dataset.wired) {
+    wrap.dataset.wired = 'true';
 
-  mkBtn('plus', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
-  mkBtn('edit', 'Aktuelles Profil umbenennen', async () => {
-    const cur = profiles.find(p => p.id === active);
-    const name = (typeof prompt === 'function') ? prompt('Profil umbenennen:', cur ? cur.name : active) : null;
-    if (name && name.trim()) { await renameProfile(active, name.trim()); await renderProfileSwitcher(); }
-  });
-  mkBtn('copy', 'Aktuelles Profil duplizieren', async () => {
-    const cur = profiles.find(p => p.id === active);
-    const newId = await duplicateProfile(active, (cur ? cur.name : active) + ' Kopie');
-    if (newId) { try { await switchProfile(newId); } catch (_) {} location.reload(); }
-  });
-  mkBtn('close', 'Aktuelles Profil löschen', async () => {
-    const cur = profiles.find(p => p.id === active);
-    const ok = (typeof confirm === 'function')
-      ? confirm(`Profil "${cur ? cur.name : active}" und alle zugehörigen Daten löschen?`)
-      : true;
-    if (!ok) return;
-    await deleteProfile(active);
-    location.reload();
-  });
+    select.addEventListener('change', async () => {
+      if (select.value === profileSwitcherActive) return;
+      try { await switchProfile(select.value); location.reload(); }
+      catch (e) { console.error(e); showTemporaryNotification('Profilwechsel fehlgeschlagen', 4000); }
+    });
+
+    // Icon buttons share the createIconButton primitive (12-legend-org.js)
+    const mkBtn = (icon, title, handler) =>
+      wrap.appendChild(createIconButton({ icon, title, className: 'profile-btn', onClick: handler }));
+
+    mkBtn('plus', 'Neue Konfiguration laden (Ordner/ZIP/Dateien hierher ziehen) …', () => openNewProfileDropZone());
+    mkBtn('edit', 'Aktuelles Profil umbenennen', async () => {
+      const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
+      const name = (typeof prompt === 'function') ? prompt('Profil umbenennen:', cur ? cur.name : profileSwitcherActive) : null;
+      if (name && name.trim()) { await renameProfile(profileSwitcherActive, name.trim()); await renderProfileSwitcher(); }
+    });
+    mkBtn('copy', 'Aktuelles Profil duplizieren', async () => {
+      const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
+      const newId = await duplicateProfile(profileSwitcherActive, (cur ? cur.name : profileSwitcherActive) + ' Kopie');
+      if (newId) { try { await switchProfile(newId); } catch (_) {} location.reload(); }
+    });
+    mkBtn('close', 'Aktuelles Profil löschen', async () => {
+      const cur = profileSwitcherProfiles.find(p => p.id === profileSwitcherActive);
+      const ok = (typeof confirm === 'function')
+        ? confirm(`Profil "${cur ? cur.name : profileSwitcherActive}" und alle zugehörigen Daten löschen?`)
+        : true;
+      if (!ok) return;
+      await deleteProfile(profileSwitcherActive);
+      location.reload();
+    });
+  }
+
+  wrap.hidden = false;
 }
 
 /** Open the drag-and-drop panel so a whole config (folder / ZIP / files) can be

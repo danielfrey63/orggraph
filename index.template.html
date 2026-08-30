@@ -178,7 +178,10 @@
         <button id="diffToggle" class="toggle-btn" title="Diff-Modus T1→T2"><i data-icon="diff"></i></button>
         <span class="stat-separator">|</span>
       </span>
-      <span id="profileSwitcher" class="profile-switcher"></span>
+      <span id="profileSwitcher" class="profile-switcher" hidden>
+        <label class="profile-switcher-label" for="profileSelect">Konfig:</label>
+        <select id="profileSelect" class="profile-select"></select>
+      </span>
       <span class="stat-separator">|</span>
       <span id="status">Bereit</span>
       <span class="stat-separator">|</span>
@@ -246,7 +249,7 @@
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.184.181';
+const APP_VERSION = '1.185.182';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 @@APP@@
 </script>

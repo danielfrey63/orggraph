@@ -375,8 +375,8 @@ input#depth {
   flex-shrink: 0;
 }
 
-/* Label im neuen Format */
-.legend-list .legend-label-chip { 
+/* Label-Chip: unscoped Basis für alle Legend-Rows (Sidebar + Views) */
+.legend-label-chip { 
   display: inline-block; 
   background-color: transparent;
   white-space: nowrap; 
@@ -542,6 +542,11 @@ input#depth {
   --link-label-fill: #666;
   --attribute-circle-opacity: 0.8;
   --cluster-stroke-width: 1.5;
+  --diff-new-stroke: #22c55e;
+  --diff-changed-stroke: #f59e0b;
+  --diff-removed-stroke: #ef4444;
+  --diff-removed-opacity: 0.45;
+  --diff-link-removed-opacity: 0.5;
 
   /* Simulation-Parameter */
   --link-distance: 20;
@@ -1007,6 +1012,8 @@ body.dz-dragging::after {
   cursor: pointer;
 }
 .profile-btn {
+  display: inline-flex;
+  align-items: center;
   border: 1px solid var(--panel-border, #30363d);
   background: none;
   color: var(--text-muted, #8a93a3);
@@ -1016,7 +1023,6 @@ body.dz-dragging::after {
   border-radius: 4px;
   cursor: pointer;
 }
-.profile-btn { display: inline-flex; align-items: center; }
 .profile-btn .ic { width: 12px; height: 12px; }
 .profile-btn:hover { color: var(--text-strong, #e8ecf2); border-color: var(--text-muted, #8a93a3); }
 
@@ -1231,12 +1237,12 @@ body.dz-dragging::after {
 /* Save Button für geänderte Kategorien - gleiche Farbe wie andere Icons */
 
 /* Diff mode (§5/FR-8.6): added / removed / changed classification */
-.node.diff-new circle { stroke: #22c55e; stroke-width: 3px; }
-.node.diff-changed circle { stroke: #f59e0b; stroke-width: 3px; }
-.node.diff-removed { opacity: 0.45; }
-.node.diff-removed circle { stroke: #ef4444; stroke-width: 2px; stroke-dasharray: 4 3; }
-.link.diff-new { stroke: #22c55e; }
-.link.diff-removed { stroke: #ef4444; stroke-dasharray: 4 3; opacity: 0.5; }
+.node.diff-new circle { stroke: var(--diff-new-stroke); stroke-width: 3px; }
+.node.diff-changed circle { stroke: var(--diff-changed-stroke); stroke-width: 3px; }
+.node.diff-removed { opacity: var(--diff-removed-opacity); }
+.node.diff-removed circle { stroke: var(--diff-removed-stroke); stroke-width: 2px; stroke-dasharray: 4 3; }
+.link.diff-new { stroke: var(--diff-new-stroke); }
+.link.diff-removed { stroke: var(--diff-removed-stroke); stroke-dasharray: 4 3; opacity: var(--diff-link-removed-opacity); }
 
 /* Footer time controls (FR-8.6) */
 .time-controls { display: inline-flex; align-items: center; gap: 6px; }
@@ -1248,9 +1254,9 @@ body.dz-dragging::after {
 #viewsLegend .legend-row { padding: 3px 6px; }
 #viewsLegend .legend-row:hover { background-color: var(--hover-bg, rgba(128, 128, 128, 0.15)); }
 #viewsLegend .legend-row.active {
-  background-color: var(--active-toggle-bg, #4a9eff);
-  border-left: 3px solid var(--active-toggle-bg, #4a9eff);
+  /* re-bind the base .legend-row.active tokens instead of restating props */
+  --org-fill: var(--active-toggle-bg, #4a9eff);
+  --org-stroke: var(--active-toggle-bg, #4a9eff);
   padding-left: 3px;
 }
-#viewsLegend .legend-label-chip { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #viewsLegend .view-row-invalid { opacity: 0.45; cursor: not-allowed; }

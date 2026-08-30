@@ -7,7 +7,10 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(() => {
   document.body.innerHTML = '<footer class="app-footer"><div class="footer-stats">' +
-    '<span id="profileSwitcher" class="profile-switcher"></span><span class="stat-separator">|</span>' +
+    '<span id="profileSwitcher" class="profile-switcher" hidden>' +
+    '<label class="profile-switcher-label" for="profileSelect">Konfig:</label>' +
+    '<select id="profileSelect" class="profile-select"></select>' +
+    '</span><span class="stat-separator">|</span>' +
     '<span id="status">Bereit</span></div></footer>';
   globalThis.setIcon = setIcon;
   globalThis.createIconButton = createIconButton;

@@ -94,21 +94,14 @@ export function buildAttributeLegend() {
 
     eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const isCurrentlyHidden = hiddenCategories.has(cat);
-
-      if (isCurrentlyHidden) {
-        // Einblenden
-        hiddenCategories.delete(cat);
-        eyeBtn.className = 'legend-icon-btn';
-        eyeBtn.title = 'Kategorie ausblenden';
-        setIcon(eyeBtn, 'eye');
-      } else {
-        // Ausblenden
-        hiddenCategories.add(cat);
-        eyeBtn.className = 'legend-icon-btn hidden';
-        eyeBtn.title = 'Kategorie einblenden';
-        setIcon(eyeBtn, 'eyeClosed');
-      }
+      const nowHidden = !hiddenCategories.has(cat);
+      if (nowHidden) hiddenCategories.add(cat);
+      else hiddenCategories.delete(cat);
+      setLegendIconButtonState(eyeBtn, {
+        hidden: nowHidden,
+        title: nowHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
+        icon: nowHidden ? 'eyeClosed' : 'eye',
+      });
 
       // Attribut-Kreise neu zeichnen
       updateAttributeCircles();

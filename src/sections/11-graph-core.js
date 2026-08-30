@@ -449,10 +449,11 @@ export function updateHiddenLegendEyeButtons() {
     const rootId = btn.dataset.rootId;
     const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(rootId);
     // Verwende active-Klasse wie bei OEs/Attributen
-    btn.className = isVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
-    btn.title = isVisible ? 'Temporär ausblenden' : 'Temporär einblenden';
-    // Icon aktualisieren
-    setIcon(btn, isVisible ? 'eye' : 'eyeClosed');
+    setLegendIconButtonState(btn, {
+      active: isVisible,
+      title: isVisible ? 'Temporär ausblenden' : 'Temporär einblenden',
+      icon: isVisible ? 'eye' : 'eyeClosed',
+    });
   });
 }
 
@@ -466,10 +467,11 @@ export function updateGlobalHiddenVisibilityButton() {
   
   if (hasHidden) {
     // Verwende active-Klasse wie bei OEs/Attributen für konsistentes Verhalten
-    btn.className = allHiddenTemporarilyVisible ? 'legend-icon-btn active' : 'legend-icon-btn';
-    btn.title = allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden';
-    // Icon aktualisieren
-    setIcon(btn, allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed');
+    setLegendIconButtonState(btn, {
+      active: allHiddenTemporarilyVisible,
+      title: allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden',
+      icon: allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed',
+    });
   }
 }
 

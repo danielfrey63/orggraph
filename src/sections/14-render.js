@@ -211,8 +211,7 @@ export function renderGraph(sub) {
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
     .join("text")
     .attr("class", "link-label")
-    .attr("dy", -3)
-    .style("display", (debugMode && labelsVisible !== 'none') ? "block" : "none");
+    .attr("dy", -3);
 
   // Nur Graph-Knoten (Draw-Kind 'node') rendern; Cluster werden als Hüllen gezeichnet
   const personNodes = sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node');
@@ -678,8 +677,7 @@ export function renderGraph(sub) {
     });
   svg.call(zoomBehavior);
   // Label-Sichtbarkeitsklassen setzen [SF]
-  svg.classed('labels-hidden', labelsVisible === 'none');
-  svg.classed('labels-attributes-only', labelsVisible === 'attributes');
+  setLabelVisibility(labelsVisible);
 
   // Alten Zoom-Zustand wiederherstellen, falls vorhanden und gültig
   if (savedZoomTransform && typeof savedZoomTransform.k === 'number' && 
@@ -722,3 +720,14 @@ export function renderGraph(sub) {
   }
 }
 
+// Sole owner of the SVG label-visibility state: the mode classes on the SVG
+// plus the (debug-only) link-label display toggle. renderGraph (above) and
+// the toolbar label toggle (18) both route through here; the export
+// stylesheet (03) mirrors the class pair.
+export function setLabelVisibility(mode) {
+  const svg = d3.select(SVG_ID);
+  if (svg.empty()) return;
+  svg.classed('labels-hidden', mode === 'none');
+  svg.classed('labels-attributes-only', mode === 'attributes');
+  svg.selectAll('.link-label').style('display', (debugMode && mode !== 'none') ? null : 'none');
+}
