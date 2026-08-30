@@ -179,7 +179,7 @@ export function createModal({ id, title, onClose } = {}) {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'modal-close-btn';
-  closeBtn.innerHTML = '&times;';
+  setIcon(closeBtn, 'close');
   header.append(heading, closeBtn);
   const content = document.createElement('div');
   content.className = 'modal-content';
@@ -221,6 +221,7 @@ function buildExportStylesheet({ withBody = false } = {}) {
   const styleElement = document.createElement('style');
   styleElement.textContent = `
       .link { stroke: ${cssVar('--link-stroke')}; stroke-width: ${cssVar('--link-stroke-width')}; stroke-opacity: ${cssVar('--link-opacity')}; }
+      #arrow path { fill: ${cssVar('--link-stroke')}; fill-opacity: ${cssVar('--link-opacity')}; }
       .node-circle { fill: ${cssVar('--node-fill')}; stroke: ${cssVar('--node-stroke')}; stroke-width: ${cssVar('--node-stroke-width')}; }
       .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${cssVar('--cluster-opacity')}; }
       .label { font-size: 8px; fill: #000; }

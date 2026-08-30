@@ -64,6 +64,18 @@ export function setLegendSubtreeCollapsed(chevron, collapsed) {
   chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
 }
 
+// Collapse state of a sidebar legend *section*: the content element's
+// `collapsed` class plus the section chevron's expanded/collapsed pair.
+// Single owner of that toggle — localStorage/ENV init, chevron click, header
+// click and expand-all (16, 18, 19) all route through here.
+export function setLegendSectionCollapsed(chevronBtn, contentEl, collapsed) {
+  if (contentEl) contentEl.classList.toggle('collapsed', collapsed);
+  if (chevronBtn) {
+    chevronBtn.classList.toggle('collapsed', collapsed);
+    chevronBtn.classList.toggle('expanded', !collapsed);
+  }
+}
+
 // Auf-/Zuklapp-Chevron: toggelt das erste <ul> im umgebenden <li>
 // und meldet den neuen Zustand über onToggle(nowCollapsed)
 export function createLegendChevron({ collapsed = false, onToggle } = {}) {

@@ -295,8 +295,8 @@ input#depth {
 .legend-list > li { margin: 0; }
 .legend-list li { display: block; margin-bottom: 1px; }
 
-/* Neues Layout für Legend-List Items */
-.legend-list .legend-row {
+/* Basis-Layout aller Legend-Rows (OE-/Hidden-/Attribut-/Views-Legende) */
+.legend-row {
   display: flex;
   align-items: center;
   width: 100%;
@@ -307,7 +307,7 @@ input#depth {
   position: relative;
 }
 
-.legend-list .legend-row:hover {
+.legend-row:hover {
   background-color: var(--control-hover);
 }
 
@@ -595,6 +595,17 @@ input#depth {
   stroke-opacity: var(--link-opacity);
 }
 
+#arrow path {
+  fill: var(--link-stroke);
+  fill-opacity: var(--link-opacity);
+}
+
+/* Visual-root highlight (08-color-geometry, applyRootStyling) */
+.node-circle.is-root {
+  fill: var(--root-node-fill);
+  opacity: 1;
+}
+
 .node-circle {
   fill: var(--node-fill);
   stroke: var(--node-stroke);
@@ -800,12 +811,15 @@ input#depth {
 .modal-close-btn {
   background: transparent;
   border: none;
-  font-size: 1.75rem;
-  line-height: 1;
+  display: inline-flex;
   padding: 0;
   color: var(--text-muted);
   cursor: pointer;
   transition: color 0.2s;
+}
+
+.modal-close-btn .ic {
+  font-size: 20px;
 }
 
 .modal-close-btn:hover {
@@ -1243,7 +1257,7 @@ body.dz-dragging::after {
 .time-controls #diffToggle { padding: 0 6px; line-height: 1.4; }
 
 /* Views legend (FR-7.5): topmost sidebar section, one row per view */
-#viewsLegend .legend-row { cursor: pointer; padding: 3px 6px; }
+#viewsLegend .legend-row { padding: 3px 6px; }
 #viewsLegend .legend-row:hover { background-color: var(--hover-bg, rgba(128, 128, 128, 0.15)); }
 #viewsLegend .legend-row.active {
   background-color: var(--active-toggle-bg, #4a9eff);

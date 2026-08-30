@@ -250,39 +250,13 @@ export function initializeCollapsibleLegends() {
     const isChevron = btn.classList.contains('legend-chevron');
     
     // Initialen Zustand aus localStorage laden
-    const isInitiallyCollapsed = loadCollapseState(targetId);
-    if (isInitiallyCollapsed) {
-      target.classList.add('collapsed');
-      if (isChevron) {
-        btn.classList.remove('expanded');
-        btn.classList.add('collapsed');
-      } else {
-        btn.classList.add('collapsed');
-      }
-    } else {
-      if (isChevron) {
-        btn.classList.remove('collapsed');
-        btn.classList.add('expanded');
-      }
-    }
+    setLegendSectionCollapsed(btn, target, loadCollapseState(targetId));
     
     // Klick-Event für den Button
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const isCollapsed = target.classList.toggle('collapsed');
-      
-      if (isChevron) {
-        if (isCollapsed) {
-          btn.classList.remove('expanded');
-          btn.classList.add('collapsed');
-        } else {
-          btn.classList.remove('collapsed');
-          btn.classList.add('expanded');
-        }
-      } else {
-        btn.classList.toggle('collapsed');
-      }
-      
+      const isCollapsed = !target.classList.contains('collapsed');
+      setLegendSectionCollapsed(btn, target, isCollapsed);
       saveCollapseState(targetId, isCollapsed);
     });
     
@@ -318,16 +292,8 @@ export function initializeCollapsibleLegends() {
           
           // Wenn der Klick nicht auf den collapse-button selbst war und nicht auf ein zu ignorierendes Element
           if (!shouldIgnore && e.target !== btn) {
-            const isCollapsed = target.classList.toggle('collapsed');
-            
-            if (isCollapsed) {
-              btn.classList.remove('expanded');
-              btn.classList.add('collapsed');
-            } else {
-              btn.classList.remove('collapsed');
-              btn.classList.add('expanded');
-            }
-            
+            const isCollapsed = !target.classList.contains('collapsed');
+            setLegendSectionCollapsed(btn, target, isCollapsed);
             saveCollapseState(targetId, isCollapsed);
           }
         });

@@ -4,6 +4,7 @@ import {
   buildAttributeLegend,
 } from '../src/sections/16-legend-attributes.js';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
+import { setLegendSectionCollapsed } from '../src/sections/12-legend-org.js';
 import { colorToTransparent } from '../src/sections/08-color-geometry.js';
 import {
   createLegendRow,
@@ -18,6 +19,7 @@ beforeEach(() => {
   document.body.innerHTML = '<div id="attributeLegend"></div><span id="stats-attributes-count">0</span>';
   globalThis.ICON = ICON;
   globalThis.setIcon = setIcon;
+  globalThis.setLegendSectionCollapsed = setLegendSectionCollapsed;
   globalThis.colorToTransparent = colorToTransparent;
   globalThis.createLegendRow = createLegendRow;
   globalThis.createLegendDepthSpacer = createLegendDepthSpacer;

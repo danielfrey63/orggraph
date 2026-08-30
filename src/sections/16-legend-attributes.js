@@ -16,15 +16,7 @@ export function initializeLegendCollapsedStates() {
     const content = document.getElementById(target);
     
     if (chevronBtn && content) {
-      if (shouldCollapse) {
-        chevronBtn.classList.remove('expanded');
-        chevronBtn.classList.add('collapsed');
-        content.classList.add('collapsed');
-      } else {
-        chevronBtn.classList.remove('collapsed');
-        chevronBtn.classList.add('expanded');
-        content.classList.remove('collapsed');
-      }
+      setLegendSectionCollapsed(chevronBtn, content, shouldCollapse);
     }
   }
 }

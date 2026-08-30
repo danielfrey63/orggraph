@@ -99,7 +99,8 @@ describe('updateAttributeCircles', () => {
     globalThis.selectedRootIds = ['p2'];
     updateAttributeCircles();
     const rootCircle = nodeGroup('p2').querySelector('circle.node-circle');
-    expect(rootCircle.style.fill).toBe('var(--root-node-fill)');
-    expect(Number(rootCircle.style.opacity)).toBe(1);
+    expect(rootCircle.classList.contains('is-root')).toBe(true);
+    expect(rootCircle.style.fill).toBe('');
+    expect(rootCircle.style.opacity).toBe('');
   });
 });

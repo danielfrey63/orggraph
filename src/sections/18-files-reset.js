@@ -194,9 +194,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         // EXPANDIEREN: Alle Kategorien expandieren
         // 1. Legende selbst expandieren (falls kollabiert)
         if (attributeContainer && chevron) {
-          attributeContainer.classList.remove('collapsed');
-          chevron.classList.remove('collapsed');
-          chevron.classList.add('expanded');
+          setLegendSectionCollapsed(chevron, attributeContainer, false);
         }
         
         // 2. Alle Kategorien aus collapsedCategories entfernen
@@ -386,24 +384,24 @@ window.addEventListener("DOMContentLoaded", async () => {
         
         // Wenn der übergeordnete Knoten sichtbar ist, mache alle Kinder sichtbar
         if (match && term !== '') {
-          // Mache alle Eltern-ULs sichtbar
+          // Eltern-Teilbäume sichtbar machen und über die Chevron-Factory
+          // expandieren, damit die Chevron-Klasse nicht veraltet
           let parent = li.parentElement;
           while (parent) {
             if (parent.tagName === 'UL') {
-              parent.style.display = '';
               const parentLi = parent.parentElement;
               if (parentLi && parentLi.tagName === 'LI') {
                 parentLi.hidden = false;
+                const parentChevron = parentLi.querySelector('.legend-tree-chevron');
+                if (parentChevron) setLegendSubtreeCollapsed(parentChevron, false);
               }
             }
             parent = parent.parentElement;
           }
-          
-          // Mache alle Kind-ULs sichtbar und expandiere sie
-          const childUl = li.querySelector('ul');
-          if (childUl) {
-            childUl.style.display = '';
-          }
+
+          // Den Teilbaum unter dem Treffer expandieren
+          const ownChevron = li.querySelector('.legend-tree-chevron');
+          if (ownChevron) setLegendSubtreeCollapsed(ownChevron, false);
         }
       });
       

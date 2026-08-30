@@ -303,8 +303,8 @@ input#depth {
 .legend-list > li { margin: 0; }
 .legend-list li { display: block; margin-bottom: 1px; }
 
-/* Neues Layout für Legend-List Items */
-.legend-list .legend-row {
+/* Basis-Layout aller Legend-Rows (OE-/Hidden-/Attribut-/Views-Legende) */
+.legend-row {
   display: flex;
   align-items: center;
   width: 100%;
@@ -315,7 +315,7 @@ input#depth {
   position: relative;
 }
 
-.legend-list .legend-row:hover {
+.legend-row:hover {
   background-color: var(--control-hover);
 }
 
@@ -603,6 +603,17 @@ input#depth {
   stroke-opacity: var(--link-opacity);
 }
 
+#arrow path {
+  fill: var(--link-stroke);
+  fill-opacity: var(--link-opacity);
+}
+
+/* Visual-root highlight (08-color-geometry, applyRootStyling) */
+.node-circle.is-root {
+  fill: var(--root-node-fill);
+  opacity: 1;
+}
+
 .node-circle {
   fill: var(--node-fill);
   stroke: var(--node-stroke);
@@ -808,12 +819,15 @@ input#depth {
 .modal-close-btn {
   background: transparent;
   border: none;
-  font-size: 1.75rem;
-  line-height: 1;
+  display: inline-flex;
   padding: 0;
   color: var(--text-muted);
   cursor: pointer;
   transition: color 0.2s;
+}
+
+.modal-close-btn .ic {
+  font-size: 20px;
 }
 
 .modal-close-btn:hover {
@@ -1251,7 +1265,7 @@ body.dz-dragging::after {
 .time-controls #diffToggle { padding: 0 6px; line-height: 1.4; }
 
 /* Views legend (FR-7.5): topmost sidebar section, one row per view */
-#viewsLegend .legend-row { cursor: pointer; padding: 3px 6px; }
+#viewsLegend .legend-row { padding: 3px 6px; }
 #viewsLegend .legend-row:hover { background-color: var(--hover-bg, rgba(128, 128, 128, 0.15)); }
 #viewsLegend .legend-row.active {
   background-color: var(--active-toggle-bg, #4a9eff);
@@ -1395,7 +1409,7 @@ body.dz-dragging::after {
           </div>
         </div>
         <div id="attributeContainer" class="legend-content">
-          <div id="attributeLegend" class="attribute-legend">
+          <div id="attributeLegend">
             <!-- Dynamisch generierte Attribut-Legende -->
           </div>
         </div>
@@ -1458,7 +1472,7 @@ body.dz-dragging::after {
     <div class="modal-container">
       <div class="modal-header">
         <h2>Grafik exportieren</h2>
-        <button class="modal-close-btn">&times;</button>
+        <button class="modal-close-btn"><i data-icon="close"></i></button>
       </div>
       <div class="modal-content">
         <div class="export-options">
@@ -1502,7 +1516,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.182.179';
+const APP_VERSION = '1.183.180';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -1822,7 +1836,7 @@ function createModal({ id, title, onClose } = {}) {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'modal-close-btn';
-  closeBtn.innerHTML = '&times;';
+  setIcon(closeBtn, 'close');
   header.append(heading, closeBtn);
   const content = document.createElement('div');
   content.className = 'modal-content';
@@ -1864,6 +1878,7 @@ function buildExportStylesheet({ withBody = false } = {}) {
   const styleElement = document.createElement('style');
   styleElement.textContent = `
       .link { stroke: ${cssVar('--link-stroke')}; stroke-width: ${cssVar('--link-stroke-width')}; stroke-opacity: ${cssVar('--link-opacity')}; }
+      #arrow path { fill: ${cssVar('--link-stroke')}; fill-opacity: ${cssVar('--link-opacity')}; }
       .node-circle { fill: ${cssVar('--node-fill')}; stroke: ${cssVar('--node-stroke')}; stroke-width: ${cssVar('--node-stroke-width')}; }
       .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: 1.5px; opacity: ${cssVar('--cluster-opacity')}; }
       .label { font-size: 8px; fill: #000; }
@@ -3916,13 +3931,13 @@ function updateAttributeCircles() {
       const isVisualRoot = hasExplicitRoots
         ? selectedRootIds.includes(sid)
         : (currentSelectedId != null && String(currentSelectedId) === sid);
-      if (!isVisualRoot) return;
-      const nodeGroup = d3.select(this);
       // Roots get a configured fill instead of a colored border, so they stay
-      // clearly distinguishable from the attribute rings around the node
-      nodeGroup.select('circle.node-circle')
-        .style('fill', 'var(--root-node-fill)')
-        .style('opacity', 1);
+      // clearly distinguishable from the attribute rings around the node.
+      // Presentation lives in styles.css (.node-circle.is-root); the inline
+      // fill/opacity from the level-based reset is cleared so the rule wins.
+      const circle = d3.select(this).select('circle.node-circle')
+        .classed('is-root', isVisualRoot);
+      if (isVisualRoot) circle.style('fill', null).style('opacity', null);
     });
   };
   
@@ -4984,6 +4999,18 @@ function setLegendSubtreeCollapsed(chevron, collapsed) {
   chevron.className = collapsed ? 'legend-tree-chevron collapsed' : 'legend-tree-chevron expanded';
 }
 
+// Collapse state of a sidebar legend *section*: the content element's
+// `collapsed` class plus the section chevron's expanded/collapsed pair.
+// Single owner of that toggle — localStorage/ENV init, chevron click, header
+// click and expand-all (16, 18, 19) all route through here.
+function setLegendSectionCollapsed(chevronBtn, contentEl, collapsed) {
+  if (contentEl) contentEl.classList.toggle('collapsed', collapsed);
+  if (chevronBtn) {
+    chevronBtn.classList.toggle('collapsed', collapsed);
+    chevronBtn.classList.toggle('expanded', !collapsed);
+  }
+}
+
 // Auf-/Zuklapp-Chevron: toggelt das erste <ul> im umgebenden <li>
 // und meldet den neuen Zustand über onToggle(nowCollapsed)
 function createLegendChevron({ collapsed = false, onToggle } = {}) {
@@ -5994,10 +6021,8 @@ function renderGraph(sub) {
   if (arrowPath.empty()) {
     arrowPath = arrow.append("path");
   }
-  arrowPath
-    .attr("d", "M 0 0 L 10 5 L 0 10 z")
-    .attr("fill", getComputedStyle(document.documentElement).getPropertyValue('--link-stroke') || '#bbb')
-    .attr("fill-opacity", parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')) || 1);
+  // Presentation lives in styles.css (#arrow path) and the export stylesheet
+  arrowPath.attr("d", "M 0 0 L 10 5 L 0 10 z");
 
   // Zoom-Container (einmalig)
   let gZoom = svg.select("g.zoom-layer");
@@ -6373,10 +6398,6 @@ function renderGraph(sub) {
   } else {
     simulation = createSimulation(personNodes, linksPP);
   }
-
-  // Optionale BFS-Level-Animation entfernt - wird nun von transitionGraph gehandhabt
-  node.style('opacity', 1);
-  link.style('opacity', 1);
 
   // Tick-Handler für Animation
   simulation.on("tick", () => {
@@ -6777,15 +6798,7 @@ function initializeLegendCollapsedStates() {
     const content = document.getElementById(target);
     
     if (chevronBtn && content) {
-      if (shouldCollapse) {
-        chevronBtn.classList.remove('expanded');
-        chevronBtn.classList.add('collapsed');
-        content.classList.add('collapsed');
-      } else {
-        chevronBtn.classList.remove('collapsed');
-        chevronBtn.classList.add('expanded');
-        content.classList.remove('collapsed');
-      }
+      setLegendSectionCollapsed(chevronBtn, content, shouldCollapse);
     }
   }
 }
@@ -7168,9 +7181,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         // EXPANDIEREN: Alle Kategorien expandieren
         // 1. Legende selbst expandieren (falls kollabiert)
         if (attributeContainer && chevron) {
-          attributeContainer.classList.remove('collapsed');
-          chevron.classList.remove('collapsed');
-          chevron.classList.add('expanded');
+          setLegendSectionCollapsed(chevron, attributeContainer, false);
         }
         
         // 2. Alle Kategorien aus collapsedCategories entfernen
@@ -7360,24 +7371,24 @@ window.addEventListener("DOMContentLoaded", async () => {
         
         // Wenn der übergeordnete Knoten sichtbar ist, mache alle Kinder sichtbar
         if (match && term !== '') {
-          // Mache alle Eltern-ULs sichtbar
+          // Eltern-Teilbäume sichtbar machen und über die Chevron-Factory
+          // expandieren, damit die Chevron-Klasse nicht veraltet
           let parent = li.parentElement;
           while (parent) {
             if (parent.tagName === 'UL') {
-              parent.style.display = '';
               const parentLi = parent.parentElement;
               if (parentLi && parentLi.tagName === 'LI') {
                 parentLi.hidden = false;
+                const parentChevron = parentLi.querySelector('.legend-tree-chevron');
+                if (parentChevron) setLegendSubtreeCollapsed(parentChevron, false);
               }
             }
             parent = parent.parentElement;
           }
-          
-          // Mache alle Kind-ULs sichtbar und expandiere sie
-          const childUl = li.querySelector('ul');
-          if (childUl) {
-            childUl.style.display = '';
-          }
+
+          // Den Teilbaum unter dem Treffer expandieren
+          const ownChevron = li.querySelector('.legend-tree-chevron');
+          if (ownChevron) setLegendSubtreeCollapsed(ownChevron, false);
         }
       });
       
@@ -8071,39 +8082,13 @@ function initializeCollapsibleLegends() {
     const isChevron = btn.classList.contains('legend-chevron');
     
     // Initialen Zustand aus localStorage laden
-    const isInitiallyCollapsed = loadCollapseState(targetId);
-    if (isInitiallyCollapsed) {
-      target.classList.add('collapsed');
-      if (isChevron) {
-        btn.classList.remove('expanded');
-        btn.classList.add('collapsed');
-      } else {
-        btn.classList.add('collapsed');
-      }
-    } else {
-      if (isChevron) {
-        btn.classList.remove('collapsed');
-        btn.classList.add('expanded');
-      }
-    }
+    setLegendSectionCollapsed(btn, target, loadCollapseState(targetId));
     
     // Klick-Event für den Button
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const isCollapsed = target.classList.toggle('collapsed');
-      
-      if (isChevron) {
-        if (isCollapsed) {
-          btn.classList.remove('expanded');
-          btn.classList.add('collapsed');
-        } else {
-          btn.classList.remove('collapsed');
-          btn.classList.add('expanded');
-        }
-      } else {
-        btn.classList.toggle('collapsed');
-      }
-      
+      const isCollapsed = !target.classList.contains('collapsed');
+      setLegendSectionCollapsed(btn, target, isCollapsed);
       saveCollapseState(targetId, isCollapsed);
     });
     
@@ -8139,16 +8124,8 @@ function initializeCollapsibleLegends() {
           
           // Wenn der Klick nicht auf den collapse-button selbst war und nicht auf ein zu ignorierendes Element
           if (!shouldIgnore && e.target !== btn) {
-            const isCollapsed = target.classList.toggle('collapsed');
-            
-            if (isCollapsed) {
-              btn.classList.remove('expanded');
-              btn.classList.add('collapsed');
-            } else {
-              btn.classList.remove('collapsed');
-              btn.classList.add('expanded');
-            }
-            
+            const isCollapsed = !target.classList.contains('collapsed');
+            setLegendSectionCollapsed(btn, target, isCollapsed);
             saveCollapseState(targetId, isCollapsed);
           }
         });

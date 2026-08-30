@@ -470,13 +470,13 @@ export function updateAttributeCircles() {
       const isVisualRoot = hasExplicitRoots
         ? selectedRootIds.includes(sid)
         : (currentSelectedId != null && String(currentSelectedId) === sid);
-      if (!isVisualRoot) return;
-      const nodeGroup = d3.select(this);
       // Roots get a configured fill instead of a colored border, so they stay
-      // clearly distinguishable from the attribute rings around the node
-      nodeGroup.select('circle.node-circle')
-        .style('fill', 'var(--root-node-fill)')
-        .style('opacity', 1);
+      // clearly distinguishable from the attribute rings around the node.
+      // Presentation lives in styles.css (.node-circle.is-root); the inline
+      // fill/opacity from the level-based reset is cleared so the rule wins.
+      const circle = d3.select(this).select('circle.node-circle')
+        .classed('is-root', isVisualRoot);
+      if (isVisualRoot) circle.style('fill', null).style('opacity', null);
     });
   };
   

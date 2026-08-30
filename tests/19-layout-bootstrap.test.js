@@ -10,6 +10,7 @@ import {
 } from '../src/sections/19-layout-bootstrap.js';
 import { idOf, drawKindOf } from '../src/sections/09-data-load.js';
 import { orgDepth } from '../src/sections/08-color-geometry.js';
+import { setLegendSectionCollapsed } from '../src/sections/12-legend-org.js';
 import { SVG_ID, WIDTH, HEIGHT } from '../src/sections/01-config-status.js';
 
 const d3Src = readFileSync('vendor/d3.v7.min.js', 'utf8');
@@ -33,6 +34,7 @@ beforeEach(() => {
   globalThis.idOf = idOf;
   globalThis.drawKindOf = drawKindOf;
   globalThis.orgDepth = orgDepth;
+  globalThis.setLegendSectionCollapsed = setLegendSectionCollapsed;
   globalThis.SVG_ID = SVG_ID;
   globalThis.WIDTH = WIDTH;
   globalThis.HEIGHT = HEIGHT;

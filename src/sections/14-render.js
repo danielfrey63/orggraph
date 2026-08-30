@@ -164,10 +164,8 @@ export function renderGraph(sub) {
   if (arrowPath.empty()) {
     arrowPath = arrow.append("path");
   }
-  arrowPath
-    .attr("d", "M 0 0 L 10 5 L 0 10 z")
-    .attr("fill", getComputedStyle(document.documentElement).getPropertyValue('--link-stroke') || '#bbb')
-    .attr("fill-opacity", parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--link-opacity')) || 1);
+  // Presentation lives in styles.css (#arrow path) and the export stylesheet
+  arrowPath.attr("d", "M 0 0 L 10 5 L 0 10 z");
 
   // Zoom-Container (einmalig)
   let gZoom = svg.select("g.zoom-layer");
@@ -543,10 +541,6 @@ export function renderGraph(sub) {
   } else {
     simulation = createSimulation(personNodes, linksPP);
   }
-
-  // Optionale BFS-Level-Animation entfernt - wird nun von transitionGraph gehandhabt
-  node.style('opacity', 1);
-  link.style('opacity', 1);
 
   // Tick-Handler für Animation
   simulation.on("tick", () => {
