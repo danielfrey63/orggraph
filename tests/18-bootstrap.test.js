@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
 import { cssNumber } from '../src/sections/08-color-geometry.js';
-import { setIconButtonState, setLegendIconButtonState } from '../src/sections/12-legend-org.js';
+import { setIconButtonState, setLegendIconButtonState, setEyeToggleState } from '../src/sections/12-legend-org.js';
 import {
   INPUT_COMBO_ID, LIST_COMBO_ID, STATUS_ID, INPUT_DEPTH_ID, SVG_ID,
 } from '../src/sections/01-config-status.js';
@@ -46,7 +46,8 @@ const setupGlobals = () => {
     globalThis.setIcon = setIcon;
   globalThis.cssNumber = cssNumber;
     globalThis.setIconButtonState = setIconButtonState;
-  globalThis.setLegendIconButtonState = setLegendIconButtonState;
+    globalThis.setLegendIconButtonState = setLegendIconButtonState;
+  globalThis.setEyeToggleState = setEyeToggleState;
   globalThis.INPUT_COMBO_ID = INPUT_COMBO_ID;
   globalThis.LIST_COMBO_ID = LIST_COMBO_ID;
   globalThis.STATUS_ID = STATUS_ID;

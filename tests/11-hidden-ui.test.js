@@ -4,11 +4,12 @@ import {
   updateGlobalHiddenVisibilityButton,
   updateHiddenLegendTitle,
 } from '../src/sections/11-graph-core.js';
-import { setLegendIconButtonState } from '../src/sections/12-legend-org.js';
+import { setLegendIconButtonState, setEyeToggleState } from '../src/sections/12-legend-org.js';
 
 beforeEach(() => {
   globalThis.setIcon = vi.fn();
-  globalThis.setLegendIconButtonState = setLegendIconButtonState;
+    globalThis.setLegendIconButtonState = setLegendIconButtonState;
+  globalThis.setEyeToggleState = setEyeToggleState;
   globalThis.allHiddenTemporarilyVisible = false;
   globalThis.temporarilyVisibleRoots = new Set();
   globalThis.hiddenByRoot = new Map();

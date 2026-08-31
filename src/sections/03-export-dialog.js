@@ -227,7 +227,7 @@ function buildExportStylesheet() {
       .link { stroke: ${cssVar('--link-stroke')}; stroke-width: ${cssVar('--link-stroke-width')}; stroke-opacity: ${cssVar('--link-opacity')}; }
       #arrow path { fill: ${cssVar('--link-stroke')}; fill-opacity: ${cssVar('--link-opacity')}; }
       .node-circle { fill: ${cssVar('--node-fill')}; stroke: ${cssVar('--node-stroke')}; stroke-width: ${cssVar('--node-stroke-width')}; }
-      .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: ${cssVar('--cluster-stroke-width')}; opacity: ${cssVar('--cluster-opacity')}; }
+      .cluster { stroke-width: ${cssVar('--cluster-stroke-width')}; opacity: ${cssVar('--cluster-opacity')}; }
       .label { font-size: ${cssVar('--label-font-size')}; fill: ${cssVar('--label-fill')}; }
       .link-label { font-size: ${cssVar('--link-label-font-size')}; fill: ${cssVar('--link-label-fill')}; text-anchor: middle; }
             .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; stroke-width: ${cssVar('--attribute-circle-stroke-width')}; }

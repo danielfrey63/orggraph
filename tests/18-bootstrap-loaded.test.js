@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ICON, setIcon } from '../src/sections/02-icons.js';
 import { cssNumber } from '../src/sections/08-color-geometry.js';
-import { setIconButtonState, setLegendIconButtonState } from '../src/sections/12-legend-org.js';
+import { setIconButtonState, setLegendIconButtonState, setEyeToggleState } from '../src/sections/12-legend-org.js';
 import { setDepth } from '../src/sections/19-layout-bootstrap.js';
 import { setLabelVisibility } from '../src/sections/14-render.js';
 import {
@@ -57,7 +57,8 @@ beforeAll(async () => {
   globalThis.cssNumber = cssNumber;
       globalThis.setIconButtonState = setIconButtonState;
   globalThis.setDepth = setDepth;
-  globalThis.setLegendIconButtonState = setLegendIconButtonState;
+    globalThis.setLegendIconButtonState = setLegendIconButtonState;
+  globalThis.setEyeToggleState = setEyeToggleState;
   globalThis.INPUT_COMBO_ID = INPUT_COMBO_ID;
   globalThis.LIST_COMBO_ID = LIST_COMBO_ID;
   globalThis.STATUS_ID = STATUS_ID;

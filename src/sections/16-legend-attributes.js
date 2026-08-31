@@ -85,23 +85,21 @@ export function buildAttributeLegend() {
     // Eye-Toggle Button (rechts) - blendet Kategorie temporär aus
     const isHidden = hiddenCategories.has(cat);
     const eyeBtn = createLegendIconButton({
-      icon: isHidden ? 'eyeClosed' : 'eye',
-            title: isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
-      dimmed: isHidden,
       onClick: () => {
         const nowHidden = !hiddenCategories.has(cat);
         if (nowHidden) hiddenCategories.add(cat);
         else hiddenCategories.delete(cat);
-        setLegendIconButtonState(eyeBtn, {
-          dimmed: nowHidden,
-          title: nowHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
-          icon: nowHidden ? 'eyeClosed' : 'eye',
+        setEyeToggleState(eyeBtn, !nowHidden, {
+          onTitle: 'Kategorie ausblenden', offTitle: 'Kategorie einblenden', withDimmed: true,
         });
 
         // Attribut-Kreise neu zeichnen
         updateAttributeCircles();
         notifyAttributeVisibilityChanged();
       },
+    });
+    setEyeToggleState(eyeBtn, !isHidden, {
+      onTitle: 'Kategorie ausblenden', offTitle: 'Kategorie einblenden', withDimmed: true,
     });
 
     catRightArea.appendChild(eyeBtn);
@@ -134,7 +132,6 @@ export function buildAttributeLegend() {
       // Farb-Indikator (nur Border, wie Attribut-Ringe im Graphen)
       const colorSpan = document.createElement('span');
       colorSpan.className = 'attribute-color-dot';
-      colorSpan.style.borderColor = it.color;
       itemLeftArea.appendChild(colorSpan);
 
       // Item-Label mit Count

@@ -3,7 +3,8 @@
 // Row-Skelett: .legend-row mit .legend-row-left (+ optional .legend-row-right)
 export function createLegendRow({ active = false, withRight = true } = {}) {
   const row = document.createElement('div');
-  row.className = active ? 'legend-row active' : 'legend-row';
+  row.className = 'legend-row';
+  setLegendRowActive(row, active);
   const left = document.createElement('div');
   left.className = 'legend-row-left';
   row.appendChild(left);
@@ -113,15 +114,23 @@ export function setIconButtonState(btn, { icon, title, active } = {}) {
 // 11, 16 and 18; oeFilter button visibility in 19).
 export function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible } = {}) {
   if (!btn) return;
-  if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
+    if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
   if (typeof visible === 'boolean') btn.classList.toggle('visible', visible);
   setIconButtonState(btn, { icon, title, active });
 }
 
-// Collapse state of a legend subtree: the first <ul> inside the chevron's <li>
-// plus the chevron's own collapsed class. Single owner of that display
-// toggle — every collapse/expand path (click, collapse-children, collapse-all)
-// routes through here.
+// Eye toggle: icon, title and state modifier always change together. `visible`
+// drives the icon (eye/eyeClosed) and picks onTitle/offTitle; WHICH modifier
+// carries the state (active, dimmed or both) stays a call-site decision, and a
+// site may omit the title pair to keep a richer static template title.
+export function setEyeToggleState(btn, visible, { onTitle, offTitle, withActive = false, withDimmed = false } = {}) {
+  const state = { icon: visible ? 'eye' : 'eyeClosed' };
+  if (onTitle !== undefined) state.title = visible ? onTitle : offTitle;
+  if (withActive) state.active = visible;
+  if (withDimmed) state.dimmed = !visible;
+  setLegendIconButtonState(btn, state);
+}
+
 // Chevron modifier state shared by construction (createLegendChevron) and the
 // subtree setter below — classes are toggled, the base string never rebuilt.
 function applyLegendChevronState(chevron, collapsed) {
@@ -129,6 +138,10 @@ function applyLegendChevronState(chevron, collapsed) {
   chevron.classList.toggle('collapsed', collapsed);
 }
 
+// Collapse state of a legend subtree: the first <ul> inside the chevron's <li>
+// plus the chevron's own collapsed class. Single owner of that display
+// toggle — every collapse/expand path (click, collapse-children, collapse-all)
+// routes through here.
 export function setLegendSubtreeCollapsed(chevron, collapsed) {
   const li = chevron.closest('li');
   const sub = li && li.querySelector('ul');
@@ -205,11 +218,9 @@ export function buildHiddenLegend() {
 
     // Eye-Button zum temporären Ein-/Ausblenden (ganz rechts)
     const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(root);
-    const eyeBtn = createLegendIconButton({
-      icon: isVisible ? 'eye' : 'eyeClosed',
-      title: isVisible ? 'Temporär ausblenden' : 'Temporär einblenden',
-            active: isVisible,
-      onClick: () => toggleHiddenRootVisibility(root),
+    const eyeBtn = createLegendIconButton({ onClick: () => toggleHiddenRootVisibility(root) });
+    setEyeToggleState(eyeBtn, isVisible, {
+      onTitle: 'Temporär ausblenden', offTitle: 'Temporär einblenden', withActive: true,
     });
     eyeBtn.dataset.rootId = root;
     right.appendChild(eyeBtn);
@@ -575,8 +586,7 @@ export function createSubmenuItem(label, handler, { arrow = false, disabled = fa
 export function ensureNodeMenu() {
   if (nodeMenuEl) return nodeMenuEl;
   const el = document.createElement('div');
-  el.className = 'node-context-menu';
-  el.appendChild(createSubmenuItem('Ausblenden', null));
+    el.className = 'node-context-menu';
   document.body.appendChild(el);
   nodeMenuEl = el;
   document.addEventListener('click', () => { if (nodeMenuEl && nodeMenuEl.style.display === 'block') nodeMenuEl.style.display = 'none'; });

@@ -125,13 +125,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     oesVisible = oeVisibilityBtn.classList.contains('active');
     
     oeVisibilityBtn.addEventListener('click', () => {
-            // Toggle Button-Status (active-Klasse, Icon und Titel gemeinsam)
+      // Toggle Button-Status (active-Klasse, Icon und Titel gemeinsam)
       oesVisible = !oeVisibilityBtn.classList.contains('active');
-            setLegendIconButtonState(oeVisibilityBtn, {
-        active: oesVisible,
-        dimmed: !oesVisible,
-        icon: oesVisible ? 'eye' : 'eyeClosed',
-        title: oesVisible ? 'Cluster ausblenden' : 'Cluster einblenden',
+      setEyeToggleState(oeVisibilityBtn, oesVisible, {
+        onTitle: 'Cluster ausblenden', offTitle: 'Cluster einblenden',
+        withActive: true, withDimmed: true,
       });
       
       if (oesVisible) {
@@ -165,6 +163,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     updateGlobalHiddenVisibilityButton();
   }
   
+  // Collapse/expand every attribute subtree once the rebuilt legend settled.
+  // Single owner of the settle-delay + chevron sweep both branches below share.
+  function setAllAttributeSubtrees(legendEl, collapsed) {
+    setTimeout(() => {
+      if (legendEl) {
+        legendEl.querySelectorAll('.legend-tree-chevron')
+          .forEach(chev => setLegendSubtreeCollapsed(chev, collapsed));
+      }
+    }, cssNumber('--legend-settle-ms'));
+  }
+
   // Alle Attribut-Kategorien expandieren/kollabieren (Toggle)
   const expandAllAttributesBtn = document.getElementById('expandAllAttributes');
   if (expandAllAttributesBtn) {
@@ -183,13 +192,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         
         // Legende neu aufbauen
         buildAttributeLegend();
-        
-        setTimeout(() => {
-          if (attributeLegend) {
-            attributeLegend.querySelectorAll('.legend-tree-chevron')
-                            .forEach(chev => setLegendSubtreeCollapsed(chev, true));
-          }
-        }, cssNumber('--legend-settle-ms'));
+        setAllAttributeSubtrees(attributeLegend, true);
       } else {
         // EXPANDIEREN: Alle Kategorien expandieren
         // 1. Legende selbst expandieren (falls kollabiert)
@@ -202,14 +205,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         
         // 3. Legende neu aufbauen
         buildAttributeLegend();
-        
+
         // 4. Alle Listen und Items einblenden
-        setTimeout(() => {
-          if (attributeLegend) {
-            attributeLegend.querySelectorAll('.legend-tree-chevron')
-                            .forEach(chev => setLegendSubtreeCollapsed(chev, false));
-          }
-        }, cssNumber('--legend-settle-ms'));
+        setAllAttributeSubtrees(attributeLegend, false);
       }
     });
   }
@@ -228,11 +226,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
     }
 
-        // Anfangszustand konsistent setzen (active-Klasse + eye vs. eye-closed)
-    setLegendIconButtonState(attributesVisibilityBtn, {
-      active: attributesVisible,
-      dimmed: !attributesVisible,
-      icon: attributesVisible ? 'eye' : 'eyeClosed',
+    // Anfangszustand konsistent setzen; der statische Template-Titel (mit
+    // Shift-Klick-Hinweis) bleibt bewusst stehen — kein Titel-Paar hier.
+    setEyeToggleState(attributesVisibilityBtn, attributesVisible, {
+      withActive: true, withDimmed: true,
     });
     
     attributesVisibilityBtn.addEventListener('click', (e) => {
@@ -259,12 +256,10 @@ window.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-                  // Toggle Button-Status (active-Klasse und Icon gemeinsam)
+      // Toggle Button-Status (active-Klasse und Icon gemeinsam)
       attributesVisible = !attributesVisibilityBtn.classList.contains('active');
-      setLegendIconButtonState(attributesVisibilityBtn, {
-        active: attributesVisible,
-        dimmed: !attributesVisible,
-        icon: attributesVisible ? 'eye' : 'eyeClosed',
+      setEyeToggleState(attributesVisibilityBtn, attributesVisible, {
+        withActive: true, withDimmed: true,
       });
       
       // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:

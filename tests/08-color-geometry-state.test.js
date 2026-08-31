@@ -53,9 +53,9 @@ beforeEach(() => {
 
 describe('getNodeFillByLevel', () => {
   it('returns the default fill for non-person nodes and without hierarchy info', () => {
-    expect(getNodeFillByLevel({ type: 'org' })).toBe('#4F46E5');
-    expect(getNodeFillByLevel(null)).toBe('#4F46E5');
-    expect(getNodeFillByLevel({ type: 'person', level: 1 })).toBe('#4F46E5');
+    expect(getNodeFillByLevel({ type: 'org' })).toBeNull();
+    expect(getNodeFillByLevel(null)).toBeNull();
+    expect(getNodeFillByLevel({ type: 'person', level: 1 })).toBeNull();
   });
 
   it('maps normalized level to top/mid/low colors', () => {

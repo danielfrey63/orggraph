@@ -10,8 +10,9 @@
 /* The hidden attribute wins over any display rule — show/hide chrome via el.hidden, not inline display */
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg); min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
-.app-header, .app-footer { padding: 12px 16px; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); }
-.app-footer { border-top: 1px solid var(--panel-border); border-bottom: none; font-size: 13px; color: var(--text-muted); }
+.app-header, .app-footer { padding: 12px 16px; background: var(--panel-bg); }
+.app-header { border-bottom: 1px solid var(--panel-border); }
+.app-footer { border-top: 1px solid var(--panel-border); font-size: 13px; color: var(--text-muted); }
 .footer-stats { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .footer-stats .stat-separator { color: var(--text-muted); }
 .footer-stats strong { color: var(--text-strong); font-weight: 600; }
@@ -538,8 +539,6 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   --link-stroke-width: 2;
   --link-opacity: 0.5;
   --arrow-length: 8;
-  --cluster-fill: rgba(79,70,229,0.10);
-  --cluster-stroke: rgba(79,70,229,0.25);
   --cluster-opacity: 1;
   --cluster-pad: 10;
   --attribute-circle-gap: 1;
@@ -642,9 +641,8 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
 
 /* OE hulls */
 .cluster {
-  fill: var(--cluster-fill);
-  stroke: var(--cluster-stroke);
-    opacity: var(--cluster-opacity);
+  /* fill/stroke are per-datum (colorForOrg via renderClusterHulls, 13) */
+  opacity: var(--cluster-opacity);
   stroke-width: var(--cluster-stroke-width);
 }
 
@@ -1220,7 +1218,7 @@ body.dz-dragging::after {
   height: 12px;
   border-radius: 50%;
   background-color: transparent;
-    border: calc(var(--attribute-circle-stroke-width) * 1px) solid transparent;
+      border: calc(var(--attribute-circle-stroke-width) * 1px) solid var(--attribute-color, transparent);
   margin-right: 8px;
   flex-shrink: 0;
 }
@@ -1490,7 +1488,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.189.186';
+const APP_VERSION = '1.191.191';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -1859,7 +1857,7 @@ function buildExportStylesheet() {
       .link { stroke: ${cssVar('--link-stroke')}; stroke-width: ${cssVar('--link-stroke-width')}; stroke-opacity: ${cssVar('--link-opacity')}; }
       #arrow path { fill: ${cssVar('--link-stroke')}; fill-opacity: ${cssVar('--link-opacity')}; }
       .node-circle { fill: ${cssVar('--node-fill')}; stroke: ${cssVar('--node-stroke')}; stroke-width: ${cssVar('--node-stroke-width')}; }
-      .cluster { fill: ${cssVar('--cluster-fill')}; stroke: ${cssVar('--cluster-stroke')}; stroke-width: ${cssVar('--cluster-stroke-width')}; opacity: ${cssVar('--cluster-opacity')}; }
+      .cluster { stroke-width: ${cssVar('--cluster-stroke-width')}; opacity: ${cssVar('--cluster-opacity')}; }
       .label { font-size: ${cssVar('--label-font-size')}; fill: ${cssVar('--label-fill')}; }
       .link-label { font-size: ${cssVar('--link-label-font-size')}; fill: ${cssVar('--link-label-fill')}; text-anchor: middle; }
             .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; stroke-width: ${cssVar('--attribute-circle-stroke-width')}; }
@@ -2931,7 +2929,7 @@ function ensureOverlay(onFiles) {
   overlay.className = 'dz-overlay';
   overlay.innerHTML = `
     <div class="dz-panel">
-      <div class="dz-icon">${ICON.arrowDown}</div>
+      <div class="dz-icon" data-icon="arrowDown">${ICON.arrowDown}</div>
       <h2 class="dz-title">Mandanten-Dateien hierher ziehen</h2>
       <p class="dz-text">
         Benötigt werden <strong>drei Dateien</strong>:<br>
@@ -3543,8 +3541,6 @@ const CSS_COLOR_DEFAULTS = {
   '--canvas-bg': '#ffffff',
   '--node-stroke': '#ffffff',
   '--link-stroke': '#cbd5e1',
-  '--cluster-fill': 'rgba(79,70,229,0.10)',
-  '--cluster-stroke': 'rgba(79,70,229,0.25)',
   '--root-node-fill': '#86efac',
   '--label-font-size': '8px',
   '--label-fill': '#334155',
@@ -3555,15 +3551,15 @@ const CSS_COLOR_DEFAULTS = {
   '--diff-removed-stroke': '#ef4444',
 };
 
-// Resolved string value of a CSS custom property on :root. Single owner of
-// the getComputedStyle+fallback pattern — the export stylesheet (03) and the
-// level-fill lookups below all go through here.
 // One-axis fallback jitter around a centre coordinate; the spread comes from
 // a --…-jitter token (hierarchy, cluster).
 function jitterAround(center, tokenName) {
   return center + (Math.random() - 0.5) * cssNumber(tokenName);
 }
 
+// Resolved string value of a CSS custom property on :root. Single owner of
+// the getComputedStyle+fallback pattern — the export stylesheet (03) and the
+// level-fill lookups below all go through here.
 function cssVar(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   if (v) return v;
@@ -3608,11 +3604,11 @@ function colorForCategoryAttribute(category, attrName, ordinal) {
 /**
  * Berechnet die Füllfarbe für einen Node basierend auf seiner hierarchischen Ebene
  * @param {Object} node - Der Node-Datensatz
- * @returns {string} CSS-Farbwert für die Füllung
+ * @returns {?string} CSS-Farbwert oder null — dann übernimmt die .node-circle-Regel
  */
 function getNodeFillByLevel(node) {
   if (!node || node.type !== 'person') {
-    return cssVar('--node-fill');
+    return null;
   }
   
   const level = node.level || 0;
@@ -3620,7 +3616,7 @@ function getNodeFillByLevel(node) {
   
   // Wenn keine Hierarchie-Informationen verfügbar, Standardfarbe verwenden
   if (maxLevel === 0 || hierarchyLevels.size === 0) {
-    return cssVar('--node-fill');
+    return null;
   }
   
   // Normalisierte Ebene (0 = top, 1 = bottom)
@@ -4027,23 +4023,23 @@ function updateAttributeCircles() {
   
   // Alle bestehenden Attribut-Kreise entfernen
   nodes.selectAll('circle.attribute-circle').remove();
-  
-  // Wenn Attribute ausgeblendet sind, nur die Kreise entfernen und den Rest überspringen
-  if (!attributesVisible) {
-    // Alle Knoten auf Standard zurücksetzen, aber hierarchie-basierte Fill behalten
+
+  // Shared reset of both branches below: level fill stays per datum, every
+  // other presentation channel goes back to the CSS class rules.
+  function resetNodePresentation() {
     nodes.selectAll('circle.node-circle')
       .style('fill', d => getNodeFillByLevel(d))
       .style('stroke', null)
       .style('stroke-width', null)
       .style('opacity', null);
-    
-    // has-attributes Klasse entfernen [SF]
     nodes.classed('has-attributes', false).classed('attr-dimmed', false);
-    
-    // Labels auf Standard-Position zurücksetzen
     nodes.selectAll('text.label')
       .attr('x', cssNumber('--label-x-offset'));
-    
+  }
+  
+  // Wenn Attribute ausgeblendet sind, nur die Kreise entfernen und den Rest überspringen
+  if (!attributesVisible) {
+    resetNodePresentation();
     applyRootStyling();
     return;
   }
@@ -4054,19 +4050,8 @@ function updateAttributeCircles() {
   // Set zum Speichern aller IDs von Knoten mit aktiven Attributen
   const nodesWithActiveAttributesIds = new Set();
   
-  // Alle Knoten auf Standard zurücksetzen, aber hierarchie-basierte Fill behalten
-  nodes.selectAll('circle.node-circle')
-    .style('fill', d => getNodeFillByLevel(d))
-    .style('stroke', null)
-    .style('stroke-width', null)
-    .style('opacity', null);
-  
-  // has-attributes Klasse zurücksetzen (wird in der Schleife neu gesetzt) [SF]
-  nodes.classed('has-attributes', false).classed('attr-dimmed', false);
-  
-  // Labels auf Standard-Position zurücksetzen (werden später für Knoten mit Attributen angepasst)
-  nodes.selectAll('text.label')
-    .attr('x', cssNumber('--label-x-offset'));
+  // Zustand zurücksetzen (wird in der Schleife unten neu gesetzt) [SF]
+  resetNodePresentation();
   
   // Neue Attribut-Kreise hinzufügen und Knoten mit Attributen identifizieren
   nodes.each(function(d) {
@@ -4964,11 +4949,8 @@ function updateHiddenLegendEyeButtons() {
   eyeBtns.forEach(btn => {
     const rootId = btn.dataset.rootId;
     const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(rootId);
-    // Verwende active-Klasse wie bei OEs/Attributen
-    setLegendIconButtonState(btn, {
-      active: isVisible,
-      title: isVisible ? 'Temporär ausblenden' : 'Temporär einblenden',
-      icon: isVisible ? 'eye' : 'eyeClosed',
+    setEyeToggleState(btn, isVisible, {
+      onTitle: 'Temporär ausblenden', offTitle: 'Temporär einblenden', withActive: true,
     });
   });
 }
@@ -4982,11 +4964,8 @@ function updateGlobalHiddenVisibilityButton() {
   btn.hidden = !hasHidden;
   
   if (hasHidden) {
-    // Verwende active-Klasse wie bei OEs/Attributen für konsistentes Verhalten
-    setLegendIconButtonState(btn, {
-      active: allHiddenTemporarilyVisible,
-      title: allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden',
-      icon: allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed',
+    setEyeToggleState(btn, allHiddenTemporarilyVisible, {
+      onTitle: 'Alle temporär ausblenden', offTitle: 'Alle temporär einblenden', withActive: true,
     });
   }
 }
@@ -5018,7 +4997,8 @@ function updateHiddenLegendTitle() {
 // Row-Skelett: .legend-row mit .legend-row-left (+ optional .legend-row-right)
 function createLegendRow({ active = false, withRight = true } = {}) {
   const row = document.createElement('div');
-  row.className = active ? 'legend-row active' : 'legend-row';
+  row.className = 'legend-row';
+  setLegendRowActive(row, active);
   const left = document.createElement('div');
   left.className = 'legend-row-left';
   row.appendChild(left);
@@ -5128,15 +5108,23 @@ function setIconButtonState(btn, { icon, title, active } = {}) {
 // 11, 16 and 18; oeFilter button visibility in 19).
 function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible } = {}) {
   if (!btn) return;
-  if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
+    if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
   if (typeof visible === 'boolean') btn.classList.toggle('visible', visible);
   setIconButtonState(btn, { icon, title, active });
 }
 
-// Collapse state of a legend subtree: the first <ul> inside the chevron's <li>
-// plus the chevron's own collapsed class. Single owner of that display
-// toggle — every collapse/expand path (click, collapse-children, collapse-all)
-// routes through here.
+// Eye toggle: icon, title and state modifier always change together. `visible`
+// drives the icon (eye/eyeClosed) and picks onTitle/offTitle; WHICH modifier
+// carries the state (active, dimmed or both) stays a call-site decision, and a
+// site may omit the title pair to keep a richer static template title.
+function setEyeToggleState(btn, visible, { onTitle, offTitle, withActive = false, withDimmed = false } = {}) {
+  const state = { icon: visible ? 'eye' : 'eyeClosed' };
+  if (onTitle !== undefined) state.title = visible ? onTitle : offTitle;
+  if (withActive) state.active = visible;
+  if (withDimmed) state.dimmed = !visible;
+  setLegendIconButtonState(btn, state);
+}
+
 // Chevron modifier state shared by construction (createLegendChevron) and the
 // subtree setter below — classes are toggled, the base string never rebuilt.
 function applyLegendChevronState(chevron, collapsed) {
@@ -5144,6 +5132,10 @@ function applyLegendChevronState(chevron, collapsed) {
   chevron.classList.toggle('collapsed', collapsed);
 }
 
+// Collapse state of a legend subtree: the first <ul> inside the chevron's <li>
+// plus the chevron's own collapsed class. Single owner of that display
+// toggle — every collapse/expand path (click, collapse-children, collapse-all)
+// routes through here.
 function setLegendSubtreeCollapsed(chevron, collapsed) {
   const li = chevron.closest('li');
   const sub = li && li.querySelector('ul');
@@ -5220,11 +5212,9 @@ function buildHiddenLegend() {
 
     // Eye-Button zum temporären Ein-/Ausblenden (ganz rechts)
     const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(root);
-    const eyeBtn = createLegendIconButton({
-      icon: isVisible ? 'eye' : 'eyeClosed',
-      title: isVisible ? 'Temporär ausblenden' : 'Temporär einblenden',
-            active: isVisible,
-      onClick: () => toggleHiddenRootVisibility(root),
+    const eyeBtn = createLegendIconButton({ onClick: () => toggleHiddenRootVisibility(root) });
+    setEyeToggleState(eyeBtn, isVisible, {
+      onTitle: 'Temporär ausblenden', offTitle: 'Temporär einblenden', withActive: true,
     });
     eyeBtn.dataset.rootId = root;
     right.appendChild(eyeBtn);
@@ -5590,8 +5580,7 @@ function createSubmenuItem(label, handler, { arrow = false, disabled = false } =
 function ensureNodeMenu() {
   if (nodeMenuEl) return nodeMenuEl;
   const el = document.createElement('div');
-  el.className = 'node-context-menu';
-  el.appendChild(createSubmenuItem('Ausblenden', null));
+    el.className = 'node-context-menu';
   document.body.appendChild(el);
   nodeMenuEl = el;
   document.addEventListener('click', () => { if (nodeMenuEl && nodeMenuEl.style.display === 'block') nodeMenuEl.style.display = 'none'; });
@@ -6139,6 +6128,13 @@ function scatterAtCenter(n) {
   n.y = jitterAround(HEIGHT / 2, '--hierarchy-jitter');
 }
 
+// Scatter only the nodes that still lack a finite position.
+function scatterUnplaced(nodes) {
+  nodes.forEach(n => {
+    if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) scatterAtCenter(n);
+  });
+}
+
 function renderGraph(sub) {
   // Aktuellen Zoom-Zustand speichern
   const savedZoomTransform = currentZoomTransform;
@@ -6206,14 +6202,7 @@ function renderGraph(sub) {
   const node = nodeGroup
     .selectAll("g.node")
     .data(personNodes, d => String(d.id))
-    .join(
-      enter => {
-        const g = enter.append("g").attr("class", "node");
-        return g;
-      },
-      update => update,
-      exit => exit.remove()
-    )
+    .join(enter => enter.append("g").attr("class", "node"))
     // Diff mode (§5/FR-8.6): added/removed/changed classification per node.
     .call(applyDiffClasses);
 
@@ -6425,11 +6414,7 @@ function renderGraph(sub) {
     extendLayoutWithNewNodes();
     
     // Fallback für Knoten ohne Position
-    personNodes.forEach(n => {
-      if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
-        scatterAtCenter(n);
-      }
-    });
+    scatterUnplaced(personNodes);
   } else {
     // ERSTES Laden - radiales Initial-Layout
     const radialInitialized = initializeRadialLayout();
@@ -6441,11 +6426,7 @@ function renderGraph(sub) {
       });
     } else {
       // Radiales Layout wurde angewendet - Fallback für nicht-positionierte Knoten
-      personNodes.forEach(n => {
-        if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
-          scatterAtCenter(n);
-        }
-      });
+      scatterUnplaced(personNodes);
     }
   }
 
@@ -6927,23 +6908,21 @@ function buildAttributeLegend() {
     // Eye-Toggle Button (rechts) - blendet Kategorie temporär aus
     const isHidden = hiddenCategories.has(cat);
     const eyeBtn = createLegendIconButton({
-      icon: isHidden ? 'eyeClosed' : 'eye',
-            title: isHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
-      dimmed: isHidden,
       onClick: () => {
         const nowHidden = !hiddenCategories.has(cat);
         if (nowHidden) hiddenCategories.add(cat);
         else hiddenCategories.delete(cat);
-        setLegendIconButtonState(eyeBtn, {
-          dimmed: nowHidden,
-          title: nowHidden ? 'Kategorie einblenden' : 'Kategorie ausblenden',
-          icon: nowHidden ? 'eyeClosed' : 'eye',
+        setEyeToggleState(eyeBtn, !nowHidden, {
+          onTitle: 'Kategorie ausblenden', offTitle: 'Kategorie einblenden', withDimmed: true,
         });
 
         // Attribut-Kreise neu zeichnen
         updateAttributeCircles();
         notifyAttributeVisibilityChanged();
       },
+    });
+    setEyeToggleState(eyeBtn, !isHidden, {
+      onTitle: 'Kategorie ausblenden', offTitle: 'Kategorie einblenden', withDimmed: true,
     });
 
     catRightArea.appendChild(eyeBtn);
@@ -6976,7 +6955,6 @@ function buildAttributeLegend() {
       // Farb-Indikator (nur Border, wie Attribut-Ringe im Graphen)
       const colorSpan = document.createElement('span');
       colorSpan.className = 'attribute-color-dot';
-      colorSpan.style.borderColor = it.color;
       itemLeftArea.appendChild(colorSpan);
 
       // Item-Label mit Count
@@ -7133,13 +7111,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     oesVisible = oeVisibilityBtn.classList.contains('active');
     
     oeVisibilityBtn.addEventListener('click', () => {
-            // Toggle Button-Status (active-Klasse, Icon und Titel gemeinsam)
+      // Toggle Button-Status (active-Klasse, Icon und Titel gemeinsam)
       oesVisible = !oeVisibilityBtn.classList.contains('active');
-            setLegendIconButtonState(oeVisibilityBtn, {
-        active: oesVisible,
-        dimmed: !oesVisible,
-        icon: oesVisible ? 'eye' : 'eyeClosed',
-        title: oesVisible ? 'Cluster ausblenden' : 'Cluster einblenden',
+      setEyeToggleState(oeVisibilityBtn, oesVisible, {
+        onTitle: 'Cluster ausblenden', offTitle: 'Cluster einblenden',
+        withActive: true, withDimmed: true,
       });
       
       if (oesVisible) {
@@ -7173,6 +7149,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     updateGlobalHiddenVisibilityButton();
   }
   
+  // Collapse/expand every attribute subtree once the rebuilt legend settled.
+  // Single owner of the settle-delay + chevron sweep both branches below share.
+  function setAllAttributeSubtrees(legendEl, collapsed) {
+    setTimeout(() => {
+      if (legendEl) {
+        legendEl.querySelectorAll('.legend-tree-chevron')
+          .forEach(chev => setLegendSubtreeCollapsed(chev, collapsed));
+      }
+    }, cssNumber('--legend-settle-ms'));
+  }
+
   // Alle Attribut-Kategorien expandieren/kollabieren (Toggle)
   const expandAllAttributesBtn = document.getElementById('expandAllAttributes');
   if (expandAllAttributesBtn) {
@@ -7191,13 +7178,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         
         // Legende neu aufbauen
         buildAttributeLegend();
-        
-        setTimeout(() => {
-          if (attributeLegend) {
-            attributeLegend.querySelectorAll('.legend-tree-chevron')
-                            .forEach(chev => setLegendSubtreeCollapsed(chev, true));
-          }
-        }, cssNumber('--legend-settle-ms'));
+        setAllAttributeSubtrees(attributeLegend, true);
       } else {
         // EXPANDIEREN: Alle Kategorien expandieren
         // 1. Legende selbst expandieren (falls kollabiert)
@@ -7210,14 +7191,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         
         // 3. Legende neu aufbauen
         buildAttributeLegend();
-        
+
         // 4. Alle Listen und Items einblenden
-        setTimeout(() => {
-          if (attributeLegend) {
-            attributeLegend.querySelectorAll('.legend-tree-chevron')
-                            .forEach(chev => setLegendSubtreeCollapsed(chev, false));
-          }
-        }, cssNumber('--legend-settle-ms'));
+        setAllAttributeSubtrees(attributeLegend, false);
       }
     });
   }
@@ -7236,11 +7212,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
     }
 
-        // Anfangszustand konsistent setzen (active-Klasse + eye vs. eye-closed)
-    setLegendIconButtonState(attributesVisibilityBtn, {
-      active: attributesVisible,
-      dimmed: !attributesVisible,
-      icon: attributesVisible ? 'eye' : 'eyeClosed',
+    // Anfangszustand konsistent setzen; der statische Template-Titel (mit
+    // Shift-Klick-Hinweis) bleibt bewusst stehen — kein Titel-Paar hier.
+    setEyeToggleState(attributesVisibilityBtn, attributesVisible, {
+      withActive: true, withDimmed: true,
     });
     
     attributesVisibilityBtn.addEventListener('click', (e) => {
@@ -7267,12 +7242,10 @@ window.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-                  // Toggle Button-Status (active-Klasse und Icon gemeinsam)
+      // Toggle Button-Status (active-Klasse und Icon gemeinsam)
       attributesVisible = !attributesVisibilityBtn.classList.contains('active');
-      setLegendIconButtonState(attributesVisibilityBtn, {
-        active: attributesVisible,
-        dimmed: !attributesVisible,
-        icon: attributesVisible ? 'eye' : 'eyeClosed',
+      setEyeToggleState(attributesVisibilityBtn, attributesVisible, {
+        withActive: true, withDimmed: true,
       });
       
       // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:

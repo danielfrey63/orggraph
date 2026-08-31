@@ -152,6 +152,13 @@ function scatterAtCenter(n) {
   n.y = jitterAround(HEIGHT / 2, '--hierarchy-jitter');
 }
 
+// Scatter only the nodes that still lack a finite position.
+function scatterUnplaced(nodes) {
+  nodes.forEach(n => {
+    if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) scatterAtCenter(n);
+  });
+}
+
 export function renderGraph(sub) {
   // Aktuellen Zoom-Zustand speichern
   const savedZoomTransform = currentZoomTransform;
@@ -219,14 +226,7 @@ export function renderGraph(sub) {
   const node = nodeGroup
     .selectAll("g.node")
     .data(personNodes, d => String(d.id))
-    .join(
-      enter => {
-        const g = enter.append("g").attr("class", "node");
-        return g;
-      },
-      update => update,
-      exit => exit.remove()
-    )
+    .join(enter => enter.append("g").attr("class", "node"))
     // Diff mode (§5/FR-8.6): added/removed/changed classification per node.
     .call(applyDiffClasses);
 
@@ -438,11 +438,7 @@ export function renderGraph(sub) {
     extendLayoutWithNewNodes();
     
     // Fallback für Knoten ohne Position
-    personNodes.forEach(n => {
-      if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
-        scatterAtCenter(n);
-      }
-    });
+    scatterUnplaced(personNodes);
   } else {
     // ERSTES Laden - radiales Initial-Layout
     const radialInitialized = initializeRadialLayout();
@@ -454,11 +450,7 @@ export function renderGraph(sub) {
       });
     } else {
       // Radiales Layout wurde angewendet - Fallback für nicht-positionierte Knoten
-      personNodes.forEach(n => {
-        if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) {
-          scatterAtCenter(n);
-        }
-      });
+      scatterUnplaced(personNodes);
     }
   }
 

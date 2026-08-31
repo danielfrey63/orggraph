@@ -111,8 +111,6 @@ export const CSS_COLOR_DEFAULTS = {
   '--canvas-bg': '#ffffff',
   '--node-stroke': '#ffffff',
   '--link-stroke': '#cbd5e1',
-  '--cluster-fill': 'rgba(79,70,229,0.10)',
-  '--cluster-stroke': 'rgba(79,70,229,0.25)',
   '--root-node-fill': '#86efac',
   '--label-font-size': '8px',
   '--label-fill': '#334155',
@@ -123,15 +121,15 @@ export const CSS_COLOR_DEFAULTS = {
   '--diff-removed-stroke': '#ef4444',
 };
 
-// Resolved string value of a CSS custom property on :root. Single owner of
-// the getComputedStyle+fallback pattern — the export stylesheet (03) and the
-// level-fill lookups below all go through here.
 // One-axis fallback jitter around a centre coordinate; the spread comes from
 // a --…-jitter token (hierarchy, cluster).
 export function jitterAround(center, tokenName) {
   return center + (Math.random() - 0.5) * cssNumber(tokenName);
 }
 
+// Resolved string value of a CSS custom property on :root. Single owner of
+// the getComputedStyle+fallback pattern — the export stylesheet (03) and the
+// level-fill lookups below all go through here.
 export function cssVar(varName, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   if (v) return v;
@@ -176,11 +174,11 @@ export function colorForCategoryAttribute(category, attrName, ordinal) {
 /**
  * Berechnet die Füllfarbe für einen Node basierend auf seiner hierarchischen Ebene
  * @param {Object} node - Der Node-Datensatz
- * @returns {string} CSS-Farbwert für die Füllung
+ * @returns {?string} CSS-Farbwert oder null — dann übernimmt die .node-circle-Regel
  */
 export function getNodeFillByLevel(node) {
   if (!node || node.type !== 'person') {
-    return cssVar('--node-fill');
+    return null;
   }
   
   const level = node.level || 0;
@@ -188,7 +186,7 @@ export function getNodeFillByLevel(node) {
   
   // Wenn keine Hierarchie-Informationen verfügbar, Standardfarbe verwenden
   if (maxLevel === 0 || hierarchyLevels.size === 0) {
-    return cssVar('--node-fill');
+    return null;
   }
   
   // Normalisierte Ebene (0 = top, 1 = bottom)
@@ -595,23 +593,23 @@ export function updateAttributeCircles() {
   
   // Alle bestehenden Attribut-Kreise entfernen
   nodes.selectAll('circle.attribute-circle').remove();
-  
-  // Wenn Attribute ausgeblendet sind, nur die Kreise entfernen und den Rest überspringen
-  if (!attributesVisible) {
-    // Alle Knoten auf Standard zurücksetzen, aber hierarchie-basierte Fill behalten
+
+  // Shared reset of both branches below: level fill stays per datum, every
+  // other presentation channel goes back to the CSS class rules.
+  function resetNodePresentation() {
     nodes.selectAll('circle.node-circle')
       .style('fill', d => getNodeFillByLevel(d))
       .style('stroke', null)
       .style('stroke-width', null)
       .style('opacity', null);
-    
-    // has-attributes Klasse entfernen [SF]
     nodes.classed('has-attributes', false).classed('attr-dimmed', false);
-    
-    // Labels auf Standard-Position zurücksetzen
     nodes.selectAll('text.label')
       .attr('x', cssNumber('--label-x-offset'));
-    
+  }
+  
+  // Wenn Attribute ausgeblendet sind, nur die Kreise entfernen und den Rest überspringen
+  if (!attributesVisible) {
+    resetNodePresentation();
     applyRootStyling();
     return;
   }
@@ -622,19 +620,8 @@ export function updateAttributeCircles() {
   // Set zum Speichern aller IDs von Knoten mit aktiven Attributen
   const nodesWithActiveAttributesIds = new Set();
   
-  // Alle Knoten auf Standard zurücksetzen, aber hierarchie-basierte Fill behalten
-  nodes.selectAll('circle.node-circle')
-    .style('fill', d => getNodeFillByLevel(d))
-    .style('stroke', null)
-    .style('stroke-width', null)
-    .style('opacity', null);
-  
-  // has-attributes Klasse zurücksetzen (wird in der Schleife neu gesetzt) [SF]
-  nodes.classed('has-attributes', false).classed('attr-dimmed', false);
-  
-  // Labels auf Standard-Position zurücksetzen (werden später für Knoten mit Attributen angepasst)
-  nodes.selectAll('text.label')
-    .attr('x', cssNumber('--label-x-offset'));
+  // Zustand zurücksetzen (wird in der Schleife unten neu gesetzt) [SF]
+  resetNodePresentation();
   
   // Neue Attribut-Kreise hinzufügen und Knoten mit Attributen identifizieren
   nodes.each(function(d) {

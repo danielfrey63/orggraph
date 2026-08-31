@@ -448,11 +448,8 @@ export function updateHiddenLegendEyeButtons() {
   eyeBtns.forEach(btn => {
     const rootId = btn.dataset.rootId;
     const isVisible = allHiddenTemporarilyVisible || temporarilyVisibleRoots.has(rootId);
-    // Verwende active-Klasse wie bei OEs/Attributen
-    setLegendIconButtonState(btn, {
-      active: isVisible,
-      title: isVisible ? 'Temporär ausblenden' : 'Temporär einblenden',
-      icon: isVisible ? 'eye' : 'eyeClosed',
+    setEyeToggleState(btn, isVisible, {
+      onTitle: 'Temporär ausblenden', offTitle: 'Temporär einblenden', withActive: true,
     });
   });
 }
@@ -466,11 +463,8 @@ export function updateGlobalHiddenVisibilityButton() {
   btn.hidden = !hasHidden;
   
   if (hasHidden) {
-    // Verwende active-Klasse wie bei OEs/Attributen für konsistentes Verhalten
-    setLegendIconButtonState(btn, {
-      active: allHiddenTemporarilyVisible,
-      title: allHiddenTemporarilyVisible ? 'Alle temporär ausblenden' : 'Alle temporär einblenden',
-      icon: allHiddenTemporarilyVisible ? 'eye' : 'eyeClosed',
+    setEyeToggleState(btn, allHiddenTemporarilyVisible, {
+      onTitle: 'Alle temporär ausblenden', offTitle: 'Alle temporär einblenden', withActive: true,
     });
   }
 }
