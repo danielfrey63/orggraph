@@ -6180,12 +6180,9 @@ function renderGraph(sub) {
   const link = linkGroup
     .selectAll("line")
     .data(linksPP, d => `${idOf(d.source)}|${idOf(d.target)}`)
-    .join(
-      enter => enter.append("line")
-        .attr("class", "link")
-        .attr("marker-end", "url(#arrow)"),
-      exit => exit.remove()
-    )
+    .join(enter => enter.append("line")
+      .attr("class", "link")
+      .attr("marker-end", "url(#arrow)"))
     .call(applyDiffClasses);
 
   // Debug-Link-Labels (optional)
