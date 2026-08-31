@@ -9,3 +9,8 @@ vendor/** -text
 # Build output: its APP_VERSION is stamped by build.js from index.template.html,
 # so the AI-Toolbox bumper must not treat it as an artifact of its own.
 index.html -bump
+
+# Sources of the single-file deliverable: a change here must bump the
+# template's APP_VERSION — the AI-Toolbox bumper follows bump-target.
+src/** bump-target=index.template.html
+build.js bump-target=index.template.html
