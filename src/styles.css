@@ -604,8 +604,7 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
         --active-toggle-bg: #818cf8;
     --link-label-fill: #94a3b8;
     --node-with-attributes-fill: #ffffff;
-    --node-with-attributes-stroke: #93c5fd;
-        --node-with-attributes-stroke-width: 0;
+    --node-with-attributes-stroke-width: 0;
   }
 }
 
@@ -1210,7 +1209,7 @@ body.dz-dragging::after {
   height: 12px;
   border-radius: 50%;
   background-color: transparent;
-      border: calc(var(--attribute-circle-stroke-width) * 1px) solid var(--attribute-color, transparent);
+  border: calc(var(--attribute-circle-stroke-width) * 1px) solid var(--attribute-color, transparent);
   margin-right: 8px;
   flex-shrink: 0;
 }

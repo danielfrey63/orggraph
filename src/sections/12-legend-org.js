@@ -112,9 +112,10 @@ export function setIconButtonState(btn, { icon, title, active } = {}) {
 // Legend flavour: adds the legend-only dimmed/visible modifiers on top.
 // Sole owner of post-construction legend-icon-button state (eye toggles in
 // 11, 16 and 18; oeFilter button visibility in 19).
-export function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible } = {}) {
+export function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible, mirrorDimmed = false } = {}) {
   if (!btn) return;
-    if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
+  if (mirrorDimmed && typeof active === 'boolean') dimmed = !active;
+  if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
   if (typeof visible === 'boolean') btn.classList.toggle('visible', visible);
   setIconButtonState(btn, { icon, title, active });
 }
@@ -155,9 +156,7 @@ export function setLegendSubtreeCollapsed(chevron, collapsed) {
 // click and expand-all (16, 18, 19) all route through here.
 export function setLegendSectionCollapsed(chevronBtn, contentEl, collapsed) {
   if (contentEl) contentEl.classList.toggle('collapsed', collapsed);
-    if (chevronBtn) {
-    chevronBtn.classList.toggle('collapsed', collapsed);
-  }
+  if (chevronBtn) chevronBtn.classList.toggle('collapsed', collapsed);
 }
 
 // Auf-/Zuklapp-Chevron: toggelt das erste <ul> im umgebenden <li>

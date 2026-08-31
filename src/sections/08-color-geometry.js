@@ -652,7 +652,7 @@ export function updateAttributeCircles() {
         // Klasse für CSS-basierte Label-Sichtbarkeit setzen [SF]
         nodeGroup.classed('has-attributes', true);
         
-                // Presentation lives in styles.css (.node.has-attributes .node-circle)
+        // Presentation lives in styles.css (.node.has-attributes .node-circle)
         // and the export stylesheet; the inline level fill is cleared so the
         // class rules win. Roots keep their fill via :not(.is-root).
         nodeGroup.select('circle.node-circle').style('fill', null);

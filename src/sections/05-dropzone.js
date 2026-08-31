@@ -211,7 +211,7 @@ export function ensureOverlay(onFiles) {
   overlay.className = 'dz-overlay';
   overlay.innerHTML = `
     <div class="dz-panel">
-      <div class="dz-icon" data-icon="arrowDown">${ICON.arrowDown}</div>
+      <div class="dz-icon" data-icon="arrowDown"></div>
       <h2 class="dz-title">Mandanten-Dateien hierher ziehen</h2>
       <p class="dz-text">
         Benötigt werden <strong>drei Dateien</strong>:<br>
@@ -226,6 +226,7 @@ export function ensureOverlay(onFiles) {
       </p>
       <button class="dz-pick" type="button">Dateien auswählen…</button>
     </div>`;
+  hydrateIcons(overlay);
 
   const pick = overlay.querySelector('.dz-pick');
   pick.addEventListener('click', () => {

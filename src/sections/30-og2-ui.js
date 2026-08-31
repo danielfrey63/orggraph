@@ -339,12 +339,12 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
     }
   }
 
-    if (Number.isFinite(depth)) {
+  if (Number.isFinite(depth)) {
     og2.runtimeDepth = depth;
     setDepth(depth, { pulse: false });
   }
   const focusBtn = document.getElementById('toggleAttributeFocus');
-      if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled, dimmed: !attributeFocusEnabled });
+  if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled, mirrorDimmed: true });
 }
 
 // og2-owned restore parts; unresolvable pieces fall back individually.

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { deflateRawSync } from 'node:zlib';
-import { ICON } from '../src/sections/02-icons.js';
+import { ICON, hydrateIcons } from '../src/sections/02-icons.js';
 import {
   isZipName,
   inflateRaw,
@@ -61,6 +61,7 @@ beforeEach(() => {
   document.body.innerHTML = '';
   document.body.className = '';
   globalThis.ICON = ICON;
+  globalThis.hydrateIcons = hydrateIcons;
   globalThis._overlay = null;
   globalThis._dragDepth = 0;
   globalThis.debugMode = false;

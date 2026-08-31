@@ -84,23 +84,20 @@ export function buildAttributeLegend() {
 
     // Eye-Toggle Button (rechts) - blendet Kategorie temporär aus
     const isHidden = hiddenCategories.has(cat);
+    const eyeOpts = { onTitle: 'Kategorie ausblenden', offTitle: 'Kategorie einblenden', withDimmed: true };
     const eyeBtn = createLegendIconButton({
       onClick: () => {
         const nowHidden = !hiddenCategories.has(cat);
         if (nowHidden) hiddenCategories.add(cat);
         else hiddenCategories.delete(cat);
-        setEyeToggleState(eyeBtn, !nowHidden, {
-          onTitle: 'Kategorie ausblenden', offTitle: 'Kategorie einblenden', withDimmed: true,
-        });
+        setEyeToggleState(eyeBtn, !nowHidden, eyeOpts);
 
         // Attribut-Kreise neu zeichnen
         updateAttributeCircles();
         notifyAttributeVisibilityChanged();
       },
     });
-    setEyeToggleState(eyeBtn, !isHidden, {
-      onTitle: 'Kategorie ausblenden', offTitle: 'Kategorie einblenden', withDimmed: true,
-    });
+    setEyeToggleState(eyeBtn, !isHidden, eyeOpts);
 
     catRightArea.appendChild(eyeBtn);
 
@@ -118,7 +115,7 @@ export function buildAttributeLegend() {
         active: activeAttributes.has(it.key),
         withRight: false,
       });
-                  // presence flag only — the value lives in --attribute-color below
+      // presence flag only — the value lives in --attribute-color below
       itemRow.setAttribute('data-attribute-color', '');
 
       // Attribut-Farbe als Custom-Property; die Transparenz mischt CSS per
@@ -141,7 +138,7 @@ export function buildAttributeLegend() {
       itemRow.addEventListener('click', (e) => {
         const isActive = activeAttributes.has(it.key);
         
-                if (isActive) activeAttributes.delete(it.key);
+        if (isActive) activeAttributes.delete(it.key);
         else activeAttributes.add(it.key);
         setLegendRowActive(itemRow, !isActive);
 

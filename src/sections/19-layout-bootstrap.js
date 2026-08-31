@@ -202,7 +202,7 @@ export function configureLayout(nodes, links, simulation, mode) {
       const pid = String(n.id);
       const oid = primaryOf.get(pid);
       const c = (oid && centers.get(oid)) || { x: cx, y: cy };
-            if (!Number.isFinite(n.x)) n.x = jitterAround(c.x, '--cluster-jitter');
+      if (!Number.isFinite(n.x)) n.x = jitterAround(c.x, '--cluster-jitter');
       if (!Number.isFinite(n.y)) n.y = jitterAround(c.y, '--cluster-jitter');
     });
     const CLUSTER_FORCE_STRENGTH = cssNumber('--cluster-force-strength');

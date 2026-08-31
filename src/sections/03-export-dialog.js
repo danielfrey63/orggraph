@@ -72,7 +72,7 @@ export function initializeExport() {
     btn.addEventListener('click', () => {
       const format = btn.dataset.format;
       
-            setExclusiveActive(exportFormatBtns, btn);
+      setExclusiveActive(exportFormatBtns, btn);
       
       // Optionen anzeigen/verstecken
       svgOptionsDiv.hidden = format !== 'svg';
@@ -366,7 +366,7 @@ export function exportAsPng() {
       canvas.width = width * quality; // Höhere Auflösung durch Qualitätsfaktor
       canvas.height = height * quality;
       
-            const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d');
       
       // Anti-Aliasing aktivieren
       ctx.imageSmoothingEnabled = true;

@@ -445,9 +445,8 @@ export function renderGraph(sub) {
     
     if (!radialInitialized) {
       // Kein Root gefunden - Fallback zu zufälligen Positionen
-      personNodes.forEach(n => {
-        scatterAtCenter(n);
-      });
+      // (prevPos ist leer, also platziert scatterUnplaced hier ALLE Knoten)
+      scatterUnplaced(personNodes);
     } else {
       // Radiales Layout wurde angewendet - Fallback für nicht-positionierte Knoten
       scatterUnplaced(personNodes);
@@ -479,7 +478,7 @@ export function renderGraph(sub) {
       onOnlyDirectChildren: () => {
         setSingleRoot(pid);
         currentSelectedId = pid;
-                setDepth(1, { pulse: false });
+        setDepth(1, { pulse: false });
         applyFromUI('contextDirectChildren');
       },
       onSetAsRoot: () => {

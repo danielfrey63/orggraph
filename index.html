@@ -612,8 +612,7 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
         --active-toggle-bg: #818cf8;
     --link-label-fill: #94a3b8;
     --node-with-attributes-fill: #ffffff;
-    --node-with-attributes-stroke: #93c5fd;
-        --node-with-attributes-stroke-width: 0;
+    --node-with-attributes-stroke-width: 0;
   }
 }
 
@@ -1218,7 +1217,7 @@ body.dz-dragging::after {
   height: 12px;
   border-radius: 50%;
   background-color: transparent;
-      border: calc(var(--attribute-circle-stroke-width) * 1px) solid var(--attribute-color, transparent);
+  border: calc(var(--attribute-circle-stroke-width) * 1px) solid var(--attribute-color, transparent);
   margin-right: 8px;
   flex-shrink: 0;
 }
@@ -1488,7 +1487,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.191.191';
+const APP_VERSION = '1.193.218';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -1702,7 +1701,7 @@ function initializeExport() {
     btn.addEventListener('click', () => {
       const format = btn.dataset.format;
       
-            setExclusiveActive(exportFormatBtns, btn);
+      setExclusiveActive(exportFormatBtns, btn);
       
       // Optionen anzeigen/verstecken
       svgOptionsDiv.hidden = format !== 'svg';
@@ -1996,7 +1995,7 @@ function exportAsPng() {
       canvas.width = width * quality; // Höhere Auflösung durch Qualitätsfaktor
       canvas.height = height * quality;
       
-            const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d');
       
       // Anti-Aliasing aktivieren
       ctx.imageSmoothingEnabled = true;
@@ -2929,7 +2928,7 @@ function ensureOverlay(onFiles) {
   overlay.className = 'dz-overlay';
   overlay.innerHTML = `
     <div class="dz-panel">
-      <div class="dz-icon" data-icon="arrowDown">${ICON.arrowDown}</div>
+      <div class="dz-icon" data-icon="arrowDown"></div>
       <h2 class="dz-title">Mandanten-Dateien hierher ziehen</h2>
       <p class="dz-text">
         Benötigt werden <strong>drei Dateien</strong>:<br>
@@ -2944,6 +2943,7 @@ function ensureOverlay(onFiles) {
       </p>
       <button class="dz-pick" type="button">Dateien auswählen…</button>
     </div>`;
+  hydrateIcons(overlay);
 
   const pick = overlay.querySelector('.dz-pick');
   pick.addEventListener('click', () => {
@@ -3300,7 +3300,7 @@ function refreshAllLabels() {
       const node = byId.get(li.dataset.oid);
       if (node) {
         const label = getDisplayLabel(node, orgDepth(li.dataset.oid));
-                setLegendChipText(chip, label, label);
+        setLegendChipText(chip, label, label);
       }
     }
   });
@@ -3313,8 +3313,8 @@ function refreshAllLabels() {
       const node = byId.get(rootId);
       const setIds = hiddenByRoot.get(rootId);
       const count = setIds ? setIds.size : 0;
-            const label = getDisplayLabel(node);
-            setLegendChipText(chip, legendChipText(label, count), label);
+      const label = getDisplayLabel(node);
+      setLegendChipText(chip, legendChipText(label, count), label);
     }
   });
   
@@ -4082,7 +4082,7 @@ function updateAttributeCircles() {
         // Klasse für CSS-basierte Label-Sichtbarkeit setzen [SF]
         nodeGroup.classed('has-attributes', true);
         
-                // Presentation lives in styles.css (.node.has-attributes .node-circle)
+        // Presentation lives in styles.css (.node.has-attributes .node-circle)
         // and the export stylesheet; the inline level fill is cleared so the
         // class rules win. Roots keep their fill via :not(.is-root).
         nodeGroup.select('circle.node-circle').style('fill', null);
@@ -5106,9 +5106,10 @@ function setIconButtonState(btn, { icon, title, active } = {}) {
 // Legend flavour: adds the legend-only dimmed/visible modifiers on top.
 // Sole owner of post-construction legend-icon-button state (eye toggles in
 // 11, 16 and 18; oeFilter button visibility in 19).
-function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible } = {}) {
+function setLegendIconButtonState(btn, { icon, title, active, dimmed, visible, mirrorDimmed = false } = {}) {
   if (!btn) return;
-    if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
+  if (mirrorDimmed && typeof active === 'boolean') dimmed = !active;
+  if (typeof dimmed === 'boolean') btn.classList.toggle('dimmed', dimmed);
   if (typeof visible === 'boolean') btn.classList.toggle('visible', visible);
   setIconButtonState(btn, { icon, title, active });
 }
@@ -5149,9 +5150,7 @@ function setLegendSubtreeCollapsed(chevron, collapsed) {
 // click and expand-all (16, 18, 19) all route through here.
 function setLegendSectionCollapsed(chevronBtn, contentEl, collapsed) {
   if (contentEl) contentEl.classList.toggle('collapsed', collapsed);
-    if (chevronBtn) {
-    chevronBtn.classList.toggle('collapsed', collapsed);
-  }
+  if (chevronBtn) chevronBtn.classList.toggle('collapsed', collapsed);
 }
 
 // Auf-/Zuklapp-Chevron: toggelt das erste <ul> im umgebenden <li>
@@ -6421,9 +6420,8 @@ function renderGraph(sub) {
     
     if (!radialInitialized) {
       // Kein Root gefunden - Fallback zu zufälligen Positionen
-      personNodes.forEach(n => {
-        scatterAtCenter(n);
-      });
+      // (prevPos ist leer, also platziert scatterUnplaced hier ALLE Knoten)
+      scatterUnplaced(personNodes);
     } else {
       // Radiales Layout wurde angewendet - Fallback für nicht-positionierte Knoten
       scatterUnplaced(personNodes);
@@ -6455,7 +6453,7 @@ function renderGraph(sub) {
       onOnlyDirectChildren: () => {
         setSingleRoot(pid);
         currentSelectedId = pid;
-                setDepth(1, { pulse: false });
+        setDepth(1, { pulse: false });
         applyFromUI('contextDirectChildren');
       },
       onSetAsRoot: () => {
@@ -6907,23 +6905,20 @@ function buildAttributeLegend() {
 
     // Eye-Toggle Button (rechts) - blendet Kategorie temporär aus
     const isHidden = hiddenCategories.has(cat);
+    const eyeOpts = { onTitle: 'Kategorie ausblenden', offTitle: 'Kategorie einblenden', withDimmed: true };
     const eyeBtn = createLegendIconButton({
       onClick: () => {
         const nowHidden = !hiddenCategories.has(cat);
         if (nowHidden) hiddenCategories.add(cat);
         else hiddenCategories.delete(cat);
-        setEyeToggleState(eyeBtn, !nowHidden, {
-          onTitle: 'Kategorie ausblenden', offTitle: 'Kategorie einblenden', withDimmed: true,
-        });
+        setEyeToggleState(eyeBtn, !nowHidden, eyeOpts);
 
         // Attribut-Kreise neu zeichnen
         updateAttributeCircles();
         notifyAttributeVisibilityChanged();
       },
     });
-    setEyeToggleState(eyeBtn, !isHidden, {
-      onTitle: 'Kategorie ausblenden', offTitle: 'Kategorie einblenden', withDimmed: true,
-    });
+    setEyeToggleState(eyeBtn, !isHidden, eyeOpts);
 
     catRightArea.appendChild(eyeBtn);
 
@@ -6941,7 +6936,7 @@ function buildAttributeLegend() {
         active: activeAttributes.has(it.key),
         withRight: false,
       });
-                  // presence flag only — the value lives in --attribute-color below
+      // presence flag only — the value lives in --attribute-color below
       itemRow.setAttribute('data-attribute-color', '');
 
       // Attribut-Farbe als Custom-Property; die Transparenz mischt CSS per
@@ -6964,7 +6959,7 @@ function buildAttributeLegend() {
       itemRow.addEventListener('click', (e) => {
         const isActive = activeAttributes.has(it.key);
         
-                if (isActive) activeAttributes.delete(it.key);
+        if (isActive) activeAttributes.delete(it.key);
         else activeAttributes.add(it.key);
         setLegendRowActive(itemRow, !isActive);
 
@@ -7133,7 +7128,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       // NUR den Graph aktualisieren ohne UI-Elemente zu beeinflussen
       refreshClusters();
       
-            // Simulation neu anstoßen, damit sich Kräfte ausbalancieren
+      // Simulation neu anstoßen, damit sich Kräfte ausbalancieren
       if (currentSimulation) currentSimulation.alpha(cssNumber('--sim-reheat-alpha-soft')).restart();
     });
   }
@@ -7206,7 +7201,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       ? envConfig.LEGEND_ATTRIBUTES_ACTIVE
       : null;
 
-        if (envAttrVisible != null) {
+    if (envAttrVisible != null) {
       attributesVisible = !!envAttrVisible;
     } else {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
@@ -7214,9 +7209,8 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     // Anfangszustand konsistent setzen; der statische Template-Titel (mit
     // Shift-Klick-Hinweis) bleibt bewusst stehen — kein Titel-Paar hier.
-    setEyeToggleState(attributesVisibilityBtn, attributesVisible, {
-      withActive: true, withDimmed: true,
-    });
+    const eyeOpts = { withActive: true, withDimmed: true };
+    setEyeToggleState(attributesVisibilityBtn, attributesVisible, eyeOpts);
     
     attributesVisibilityBtn.addEventListener('click', (e) => {
       // Stop bubbling to the section header: setIcon replaces the clicked SVG,
@@ -7244,9 +7238,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
       // Toggle Button-Status (active-Klasse und Icon gemeinsam)
       attributesVisible = !attributesVisibilityBtn.classList.contains('active');
-      setEyeToggleState(attributesVisibilityBtn, attributesVisible, {
-        withActive: true, withDimmed: true,
-      });
+      setEyeToggleState(attributesVisibilityBtn, attributesVisible, eyeOpts);
       
       // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:
       // - activeAttributes (bleiben wie sie sind)
@@ -7256,7 +7248,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Nur Attribut-Kreise im Graph aktualisieren
       updateAttributeCircles();
       
-            // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
+      // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
       if (currentSimulation) {
         currentSimulation.alpha(cssNumber('--sim-reheat-alpha-soft')).restart();
         // Nach kurzer Zeit wieder stoppen
@@ -7323,14 +7315,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Attribut-Fokus: prune nodes without visible attributes in self or below
-    const attributeFocusBtn = document.getElementById('toggleAttributeFocus');
+  const attributeFocusBtn = document.getElementById('toggleAttributeFocus');
   if (attributeFocusBtn) {
     // Anfangszustand: gedimmt solange der Modus aus ist
-    setLegendIconButtonState(attributeFocusBtn, { dimmed: !attributeFocusBtn.classList.contains('active') });
+    setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusBtn.classList.contains('active'), mirrorDimmed: true });
     attributeFocusBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-            attributeFocusEnabled = !attributeFocusBtn.classList.contains('active');
-            setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusEnabled, dimmed: !attributeFocusEnabled });
+      attributeFocusEnabled = !attributeFocusBtn.classList.contains('active');
+      setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusEnabled, mirrorDimmed: true });
       if (attributeFocusEnabled) {
         recomputeAttributeFocusHidden();
       } else {
@@ -7578,7 +7570,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         return; // Warten auf Dialog-Callback
       }
       
-            pseudonymizationEnabled = !pseudoBtn.classList.contains('active');
+      pseudonymizationEnabled = !pseudoBtn.classList.contains('active');
       setIconButtonState(pseudoBtn, { active: pseudonymizationEnabled });
       
       // Alle Labels aktualisieren
@@ -7996,7 +7988,7 @@ function configureLayout(nodes, links, simulation, mode) {
       const pid = String(n.id);
       const oid = primaryOf.get(pid);
       const c = (oid && centers.get(oid)) || { x: cx, y: cy };
-            if (!Number.isFinite(n.x)) n.x = jitterAround(c.x, '--cluster-jitter');
+      if (!Number.isFinite(n.x)) n.x = jitterAround(c.x, '--cluster-jitter');
       if (!Number.isFinite(n.y)) n.y = jitterAround(c.y, '--cluster-jitter');
     });
     const CLUSTER_FORCE_STRENGTH = cssNumber('--cluster-force-strength');
@@ -11769,12 +11761,12 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
     }
   }
 
-    if (Number.isFinite(depth)) {
+  if (Number.isFinite(depth)) {
     og2.runtimeDepth = depth;
     setDepth(depth, { pulse: false });
   }
   const focusBtn = document.getElementById('toggleAttributeFocus');
-      if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled, dimmed: !attributeFocusEnabled });
+  if (focusBtn) setLegendIconButtonState(focusBtn, { active: attributeFocusEnabled, mirrorDimmed: true });
 }
 
 // og2-owned restore parts; unresolvable pieces fall back individually.

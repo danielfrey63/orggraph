@@ -147,7 +147,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       // NUR den Graph aktualisieren ohne UI-Elemente zu beeinflussen
       refreshClusters();
       
-            // Simulation neu anstoßen, damit sich Kräfte ausbalancieren
+      // Simulation neu anstoßen, damit sich Kräfte ausbalancieren
       if (currentSimulation) currentSimulation.alpha(cssNumber('--sim-reheat-alpha-soft')).restart();
     });
   }
@@ -220,7 +220,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       ? envConfig.LEGEND_ATTRIBUTES_ACTIVE
       : null;
 
-        if (envAttrVisible != null) {
+    if (envAttrVisible != null) {
       attributesVisible = !!envAttrVisible;
     } else {
       attributesVisible = attributesVisibilityBtn.classList.contains('active');
@@ -228,9 +228,8 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     // Anfangszustand konsistent setzen; der statische Template-Titel (mit
     // Shift-Klick-Hinweis) bleibt bewusst stehen — kein Titel-Paar hier.
-    setEyeToggleState(attributesVisibilityBtn, attributesVisible, {
-      withActive: true, withDimmed: true,
-    });
+    const eyeOpts = { withActive: true, withDimmed: true };
+    setEyeToggleState(attributesVisibilityBtn, attributesVisible, eyeOpts);
     
     attributesVisibilityBtn.addEventListener('click', (e) => {
       // Stop bubbling to the section header: setIcon replaces the clicked SVG,
@@ -258,9 +257,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
       // Toggle Button-Status (active-Klasse und Icon gemeinsam)
       attributesVisible = !attributesVisibilityBtn.classList.contains('active');
-      setEyeToggleState(attributesVisibilityBtn, attributesVisible, {
-        withActive: true, withDimmed: true,
-      });
+      setEyeToggleState(attributesVisibilityBtn, attributesVisible, eyeOpts);
       
       // NUR die Graph-Sichtbarkeit steuern, KEINE Änderung an:
       // - activeAttributes (bleiben wie sie sind)
@@ -270,7 +267,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Nur Attribut-Kreise im Graph aktualisieren
       updateAttributeCircles();
       
-            // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
+      // Simulation kurz reaktivieren um Links neu zu positionieren [SF]
       if (currentSimulation) {
         currentSimulation.alpha(cssNumber('--sim-reheat-alpha-soft')).restart();
         // Nach kurzer Zeit wieder stoppen
@@ -337,14 +334,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Attribut-Fokus: prune nodes without visible attributes in self or below
-    const attributeFocusBtn = document.getElementById('toggleAttributeFocus');
+  const attributeFocusBtn = document.getElementById('toggleAttributeFocus');
   if (attributeFocusBtn) {
     // Anfangszustand: gedimmt solange der Modus aus ist
-    setLegendIconButtonState(attributeFocusBtn, { dimmed: !attributeFocusBtn.classList.contains('active') });
+    setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusBtn.classList.contains('active'), mirrorDimmed: true });
     attributeFocusBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-            attributeFocusEnabled = !attributeFocusBtn.classList.contains('active');
-            setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusEnabled, dimmed: !attributeFocusEnabled });
+      attributeFocusEnabled = !attributeFocusBtn.classList.contains('active');
+      setLegendIconButtonState(attributeFocusBtn, { active: attributeFocusEnabled, mirrorDimmed: true });
       if (attributeFocusEnabled) {
         recomputeAttributeFocusHidden();
       } else {
@@ -592,7 +589,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         return; // Warten auf Dialog-Callback
       }
       
-            pseudonymizationEnabled = !pseudoBtn.classList.contains('active');
+      pseudonymizationEnabled = !pseudoBtn.classList.contains('active');
       setIconButtonState(pseudoBtn, { active: pseudonymizationEnabled });
       
       // Alle Labels aktualisieren
