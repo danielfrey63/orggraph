@@ -230,11 +230,11 @@ function buildExportStylesheet() {
       .cluster { stroke-width: ${cssVar('--cluster-stroke-width')}; opacity: ${cssVar('--cluster-opacity')}; }
       .label { font-size: ${cssVar('--label-font-size')}; fill: ${cssVar('--label-fill')}; }
       .link-label { font-size: ${cssVar('--link-label-font-size')}; fill: ${cssVar('--link-label-fill')}; text-anchor: middle; }
-            .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; stroke-width: ${cssVar('--attribute-circle-stroke-width')}; }
+      .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; stroke-width: ${cssVar('--attribute-circle-stroke-width')}; }
       .node.has-attributes .node-circle { stroke: ${cssVar('--node-with-attributes-stroke')}; stroke-width: ${cssVar('--node-with-attributes-stroke-width')}; }
       .node.has-attributes .node-circle:not(.is-root) { fill: ${cssVar('--node-with-attributes-fill')}; }
       .node.attr-dimmed .node-circle:not(.is-root) { opacity: ${cssVar('--nodes-without-attributes-opacity')}; }
-            .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; }
+      .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; }
       .node.diff-new circle { stroke: ${cssVar('--diff-new-stroke')}; stroke-width: 3px; }
       .node.diff-changed circle { stroke: ${cssVar('--diff-changed-stroke')}; stroke-width: 3px; }
       .node.diff-removed { opacity: ${cssVar('--diff-removed-opacity')}; }

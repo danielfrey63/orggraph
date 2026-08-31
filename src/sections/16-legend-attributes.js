@@ -132,7 +132,7 @@ export function buildAttributeLegend() {
       itemLeftArea.appendChild(colorSpan);
 
       // Item-Label mit Count
-            itemLeftArea.appendChild(createLegendChip(legendChipText(it.name, it.count), legendChipTitle(`${cat} :: ${it.name}`, it.count)));
+      itemLeftArea.appendChild(createLegendChip(legendChipText(it.name, it.count), legendChipTitle(`${cat} :: ${it.name}`, it.count)));
       
       // Ganze Zeile klickbar für Toggle
       itemRow.addEventListener('click', (e) => {

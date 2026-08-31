@@ -464,38 +464,38 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   --active-toggle-bg: #6366f1;
   --active-toggle-color: white;
   --accent-color: #4F46E5;
-    --button-primary-hover: #5558e3;
+  --button-primary-hover: #5558e3;
   --error-color: #ef4444;
   --overlay-dark-bg: rgba(17, 17, 17, 0.9);
   --overlay-dark-fg: #fff;
-      --overlay-dark-hover: #1f2937;
+  --overlay-dark-hover: #1f2937;
   --z-popover: 1000;
-    --z-overlay: 2000;
-    --overlay-scrim: rgba(0, 0, 0, 0.7);
+  --z-overlay: 2000;
+  --overlay-scrim: rgba(0, 0, 0, 0.7);
   --shadow-color: #000000;
   --dz-overlay-bg: rgba(15, 18, 24, 0.72);
   --dz-panel-bg: rgba(30, 35, 45, 0.96);
   --dz-panel-fg: #e8ecf2;
-    --dz-panel-muted: #aeb6c2;
+  --dz-panel-muted: #aeb6c2;
   --dz-panel-border: rgba(255, 255, 255, 0.35);
   --dz-panel-code-bg: rgba(255, 255, 255, 0.1);
   --canvas-bg: #ffffff;
 
   /* Graph-Elemente */
-    --node-radius: 8;
-    --label-x-offset: 10;
+  --node-radius: 8;
+  --label-x-offset: 10;
   --label-y-offset: 4;
   --label-ring-gap: 3;
-    --link-label-dy: -3;
+  --link-label-dy: -3;
   --tooltip-cursor-offset: 12;
-    --toast-fade-ms: 300;
+  --toast-fade-ms: 300;
   --depth-pulse-ms: 300;
-    --node-hover-tolerance: 6;
+  --node-hover-tolerance: 6;
   --legend-depth-step: 16;
   --cluster-hull-tension: 0.75;
-      --sim-settle-ms: 100;
-    --legend-settle-ms: 50;
-    --combo-debounce-ms: 150;
+  --sim-settle-ms: 100;
+  --legend-settle-ms: 50;
+  --combo-debounce-ms: 150;
   --toast-short-ms: 3000;
   --toast-medium-ms: 6000;
   --toast-long-ms: 10000;
@@ -505,7 +505,7 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   --org-fill-lightness: 60;
   --org-fill-alpha: 0.25;
   --org-stroke-lightness: 40;
-    --org-stroke-alpha: 0.85;
+  --org-stroke-alpha: 0.85;
   --rainbow-hue-span: 300;
   --rainbow-saturation: 70;
   --rainbow-lightness: 50;
@@ -515,12 +515,12 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   --attr-lightness: 50;
   --attr-lightness-alt-boost: 5;
   --cluster-hull-samples: 12;
-    --export-pixel-density: 4;
+  --export-pixel-density: 4;
   --node-fill-level-break-1: 0.33;
   --node-fill-level-break-2: 0.67;
   --attr-local-hue-cycle: 6;
   --attr-lightness-alt-cycle: 2;
-    --bfs-level-delay-ms: 1000;
+  --bfs-level-delay-ms: 1000;
   --org-hue-cycle: 12;
   --org-hue-step: 30;
   --legend-row-slot: 18px;
@@ -563,15 +563,15 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   /* Simulation-Parameter */
   --link-distance: 20;
   --link-strength: 0.7;
-    --charge-strength: -250;
+  --charge-strength: -250;
   --collide-padding: 6;
   --collide-strength: 0.8;
-    --center-strength: 0.05;
+  --center-strength: 0.05;
   --cluster-force-strength: 0.08;
   --cluster-jitter: 30;
   --cluster-ring-radius-factor: 0.35;
   --alpha-decay: 0.05;
-    --velocity-decay: 0.5;
+  --velocity-decay: 0.5;
   --sim-idle-alpha: 0.15;
   --sim-reheat-alpha-soft: 0.1;
   --sim-reheat-alpha: 0.3;
@@ -580,14 +580,14 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   --sim-drag-alpha-target: 0.3;
   
   /* Layout-Optionen */
-    --level-height: 200;
+  --level-height: 200;
   --level-top-offset: 100;
   --hierarchy-jitter: 100;
   --level-force-strength: 0.5;
   --radial-force: 0.15;
   --radial-gap: 120;
-      --radial-base: 0;
-    --radial-child-padding: 4;
+  --radial-base: 0;
+  --radial-child-padding: 4;
   --viewport-fit-pad: 20;
   --radial-fallback-radius: 40;
   --root-spacing-radius-factor: 1.5;
@@ -606,10 +606,10 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
     --control-border: #263042;
     --control-hover: #1b2537;
     --canvas-bg: #0f172a;
-        --link-stroke: #475569;
+    --link-stroke: #475569;
     --node-fill-mid-level: #a5b4fc;
     --node-fill-low-level: #6366f1;
-        --active-toggle-bg: #818cf8;
+    --active-toggle-bg: #818cf8;
     --link-label-fill: #94a3b8;
     --node-with-attributes-fill: #ffffff;
     --node-with-attributes-stroke-width: 0;
@@ -1487,7 +1487,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.193.218';
+const APP_VERSION = '1.194.219';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -1522,7 +1522,7 @@ function showTemporaryNotification(message, tier = 'short') {
   if (!notification) {
     notification = document.createElement('div');
     notification.id = 'temp-notification';
-        notification.className = 'toast';
+    notification.className = 'toast';
     document.body.appendChild(notification);
   }
   
@@ -1535,7 +1535,7 @@ function showTemporaryNotification(message, tier = 'short') {
   notification.textContent = message;
   
   // Sicherstellen, dass das Element im DOM ist, bevor wir die Transition starten
-      setTimeout(() => {
+  setTimeout(() => {
     notification.classList.add('visible');
   }, cssNumber('--toast-mount-ms'));
   
@@ -1859,11 +1859,11 @@ function buildExportStylesheet() {
       .cluster { stroke-width: ${cssVar('--cluster-stroke-width')}; opacity: ${cssVar('--cluster-opacity')}; }
       .label { font-size: ${cssVar('--label-font-size')}; fill: ${cssVar('--label-fill')}; }
       .link-label { font-size: ${cssVar('--link-label-font-size')}; fill: ${cssVar('--link-label-fill')}; text-anchor: middle; }
-            .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; stroke-width: ${cssVar('--attribute-circle-stroke-width')}; }
+      .attribute-circle { fill: none; opacity: ${cssVar('--attribute-circle-opacity')}; stroke-width: ${cssVar('--attribute-circle-stroke-width')}; }
       .node.has-attributes .node-circle { stroke: ${cssVar('--node-with-attributes-stroke')}; stroke-width: ${cssVar('--node-with-attributes-stroke-width')}; }
       .node.has-attributes .node-circle:not(.is-root) { fill: ${cssVar('--node-with-attributes-fill')}; }
       .node.attr-dimmed .node-circle:not(.is-root) { opacity: ${cssVar('--nodes-without-attributes-opacity')}; }
-            .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; }
+      .node-circle.is-root { fill: ${cssVar('--root-node-fill')}; }
       .node.diff-new circle { stroke: ${cssVar('--diff-new-stroke')}; stroke-width: 3px; }
       .node.diff-changed circle { stroke: ${cssVar('--diff-changed-stroke')}; stroke-width: 3px; }
       .node.diff-removed { opacity: ${cssVar('--diff-removed-opacity')}; }
@@ -4111,7 +4111,7 @@ function updateAttributeCircles() {
           .attr("r", attrRadius)
           .attr("class", "attribute-circle")
           .attr("data-attribute", attrName)
-                    .style("stroke", attrColor);
+          .style("stroke", attrColor);
       });
     }
     
@@ -4131,7 +4131,7 @@ function updateAttributeCircles() {
       const nodeGroup = d3.select(this);
       
       // Wenn dieser Knoten nicht in der Liste der Knoten mit aktiven Attributen ist
-            if (!nodesWithActiveAttributesIds.has(personId)) {
+      if (!nodesWithActiveAttributesIds.has(personId)) {
         nodeGroup.classed('attr-dimmed', true);
       }
     });
@@ -5198,7 +5198,7 @@ function buildHiddenLegend() {
     // Label (pseudonymisiert wenn aktiv)
     const node = byId.get(root);
     const name = getDisplayLabel(node);
-        const chip = createLegendChip(legendChipText(name, setIds.size), name);
+    const chip = createLegendChip(legendChipText(name, setIds.size), name);
     chip.dataset.rootId = root; // Für spätere Aktualisierung
     left.appendChild(chip);
 
@@ -5334,7 +5334,7 @@ function renderOrgLegendNode(oid, depth, options) {
     const directChildrenIds = new Set();
     const allDescendantIds = new Set();
     
-        if (subRoot) {
+    if (subRoot) {
       Array.from(subRoot.children).forEach(childLi => {
         if (childLi.dataset.oid) {
           directChildrenIds.add(childLi.dataset.oid);
@@ -6953,7 +6953,7 @@ function buildAttributeLegend() {
       itemLeftArea.appendChild(colorSpan);
 
       // Item-Label mit Count
-            itemLeftArea.appendChild(createLegendChip(legendChipText(it.name, it.count), legendChipTitle(`${cat} :: ${it.name}`, it.count)));
+      itemLeftArea.appendChild(createLegendChip(legendChipText(it.name, it.count), legendChipTitle(`${cat} :: ${it.name}`, it.count)));
       
       // Ganze Zeile klickbar für Toggle
       itemRow.addEventListener('click', (e) => {
@@ -8162,8 +8162,8 @@ function initializeCollapsibleLegends() {
   const depthUpBtn = depthControl?.querySelector('.depth-up');
   const depthDownBtn = depthControl?.querySelector('.depth-down');
   
-    if (depthControl && depthInput && depthValueDisplay) {
-        // Grenzen kommen aus den min/max-Attributen des Inputs (Template als Quelle)
+  if (depthControl && depthInput && depthValueDisplay) {
+    // Grenzen kommen aus den min/max-Attributen des Inputs (Template als Quelle)
     const { min: MIN_DEPTH, max: MAX_DEPTH } = depthBounds(depthInput);
 
     // Up-Button: Tiefe erhöhen
@@ -8199,7 +8199,7 @@ function initializeCollapsibleLegends() {
     });
 
     // Initiale Anzeige setzen
-        const initialValue = parseInt(depthInput.value, 10);
+    const initialValue = parseInt(depthInput.value, 10);
     setDepth(isNaN(initialValue) ? (parseInt(depthInput.defaultValue, 10) || 0) : initialValue, { pulse: false });
   }
 }

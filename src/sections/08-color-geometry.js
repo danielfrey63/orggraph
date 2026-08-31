@@ -681,7 +681,7 @@ export function updateAttributeCircles() {
           .attr("r", attrRadius)
           .attr("class", "attribute-circle")
           .attr("data-attribute", attrName)
-                    .style("stroke", attrColor);
+          .style("stroke", attrColor);
       });
     }
     
@@ -701,7 +701,7 @@ export function updateAttributeCircles() {
       const nodeGroup = d3.select(this);
       
       // Wenn dieser Knoten nicht in der Liste der Knoten mit aktiven Attributen ist
-            if (!nodesWithActiveAttributesIds.has(personId)) {
+      if (!nodesWithActiveAttributesIds.has(personId)) {
         nodeGroup.classed('attr-dimmed', true);
       }
     });

@@ -31,7 +31,7 @@ export function showTemporaryNotification(message, tier = 'short') {
   if (!notification) {
     notification = document.createElement('div');
     notification.id = 'temp-notification';
-        notification.className = 'toast';
+    notification.className = 'toast';
     document.body.appendChild(notification);
   }
   
@@ -44,7 +44,7 @@ export function showTemporaryNotification(message, tier = 'short') {
   notification.textContent = message;
   
   // Sicherstellen, dass das Element im DOM ist, bevor wir die Transition starten
-      setTimeout(() => {
+  setTimeout(() => {
     notification.classList.add('visible');
   }, cssNumber('--toast-mount-ms'));
   

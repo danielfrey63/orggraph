@@ -376,8 +376,8 @@ export function initializeCollapsibleLegends() {
   const depthUpBtn = depthControl?.querySelector('.depth-up');
   const depthDownBtn = depthControl?.querySelector('.depth-down');
   
-    if (depthControl && depthInput && depthValueDisplay) {
-        // Grenzen kommen aus den min/max-Attributen des Inputs (Template als Quelle)
+  if (depthControl && depthInput && depthValueDisplay) {
+    // Grenzen kommen aus den min/max-Attributen des Inputs (Template als Quelle)
     const { min: MIN_DEPTH, max: MAX_DEPTH } = depthBounds(depthInput);
 
     // Up-Button: Tiefe erhöhen
@@ -413,7 +413,7 @@ export function initializeCollapsibleLegends() {
     });
 
     // Initiale Anzeige setzen
-        const initialValue = parseInt(depthInput.value, 10);
+    const initialValue = parseInt(depthInput.value, 10);
     setDepth(isNaN(initialValue) ? (parseInt(depthInput.defaultValue, 10) || 0) : initialValue, { pulse: false });
   }
 }

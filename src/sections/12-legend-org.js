@@ -204,7 +204,7 @@ export function buildHiddenLegend() {
     // Label (pseudonymisiert wenn aktiv)
     const node = byId.get(root);
     const name = getDisplayLabel(node);
-        const chip = createLegendChip(legendChipText(name, setIds.size), name);
+    const chip = createLegendChip(legendChipText(name, setIds.size), name);
     chip.dataset.rootId = root; // Für spätere Aktualisierung
     left.appendChild(chip);
 
@@ -340,7 +340,7 @@ export function renderOrgLegendNode(oid, depth, options) {
     const directChildrenIds = new Set();
     const allDescendantIds = new Set();
     
-        if (subRoot) {
+    if (subRoot) {
       Array.from(subRoot.children).forEach(childLi => {
         if (childLi.dataset.oid) {
           directChildrenIds.add(childLi.dataset.oid);
