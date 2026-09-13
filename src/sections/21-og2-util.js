@@ -76,3 +76,38 @@ export function deepClone(value) {
 export function isScalar(v) {
   return v === null || ['string', 'number', 'boolean'].includes(typeof v);
 }
+
+// Slug for fallback ids (E41/E56): NFC, lower-case, every non-letter/digit
+// run collapsed to one dash. Shared by the legacy migration and the in-app
+// list intake so both derive the same container-node identity (E72).
+export function slug(text) {
+  return String(text)
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+// Levenshtein distance — the fuzzy fallback of identifier matching before an
+// export (FR-10.4, `identifiers` capability: matching happens before the
+// snapshot exists, never inside the import).
+export function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+// Length-normalized Levenshtein distance in [0, 1].
+export function normalizedDistance(a, b) {
+  const max = Math.max(a.length, b.length);
+  return max ? levenshtein(a, b) / max : 0;
+}

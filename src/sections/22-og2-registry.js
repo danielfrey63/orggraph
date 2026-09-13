@@ -120,6 +120,9 @@ function checkFieldPaths(name, decl, problems) {
   if (decl.leafProp !== undefined && !/^props\.[^.]+$/.test(String(decl.leafProp))) {
     problems.push(`node type "${name}": leafProp "${decl.leafProp}" must be a props path like "props.isBasis"`);
   }
+  if (decl.groupProp !== undefined && !/^props\.[^.]+$/.test(String(decl.groupProp))) {
+    problems.push(`node type "${name}": groupProp "${decl.groupProp}" must be a props path like "props.kategorie"`);
+  }
 }
 /* v8 ignore stop */
 

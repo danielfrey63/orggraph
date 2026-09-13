@@ -114,6 +114,16 @@ export function deserializeTenantStoreParts(headerText, partTexts) {
 //   ringGroups: Map('<Type>::<label>' -> { type, label, color, count }),
 //   footer: { ...projection counters + flags },
 // }
+// Legend group of a ring badge (E74): the `groupProp` value of the node's
+// stand when the type declares one and the value is a non-empty string,
+// otherwise the type name. "::" cannot appear in a group (legend key separator).
+export function resolveRingGroup(type, typeDecl, stand) {
+  const m = typeDecl && typeDecl.groupProp ? /^props\.([^.]+)$/.exec(String(typeDecl.groupProp)) : null;
+  const v = m && stand && stand.props ? stand.props[m[1]] : undefined;
+  if (typeof v === 'string' && v.trim() && !v.includes('::')) return v;
+  return type;
+}
+
 export function adaptProjection(projection, registry) {
   const nodeTypes = (registry && registry.nodeTypes) || {};
   const drawNodes = [];
@@ -150,37 +160,41 @@ export function adaptProjection(projection, registry) {
   for (const edge of projection.derivedEdges) routeEdge(edge.source, edge.target, edge.via, true);
 
   // Ring badges (E21): grouped per host under the composite key
-  // "<Type>::<resolved label>". Colors follow the long rainbow palette (E13,
-  // FR-4.2a): one spectral sweep laid once across the ordered list of ALL
-  // attributes — groups sorted, labels sorted within their group — so groups
-  // occupy distinct spectral bands while labels of one group sit on adjacent
-  // hues. The order is sorted, so the palette is deterministic per scene.
+  // "<Gruppe>::<resolved label>", where the group is the type name or — for
+  // types with a `groupProp` capability (E74, e.g. Attribut/props.kategorie)
+  // — the resolved group value, so one generic type can carry many legend
+  // categories. Colors follow the long rainbow palette (E13, FR-4.2a): one
+  // spectral sweep laid once across the ordered list of ALL attributes —
+  // groups sorted, labels sorted within their group — so groups occupy
+  // distinct spectral bands while labels of one group sit on adjacent hues.
+  // The order is sorted, so the palette is deterministic per scene.
   const ringsByHost = new Map();
   const ringGroups = new Map();
   const resolvedRings = [];
-  const labelsByType = new Map();
+  const labelsByGroup = new Map();
   for (const ring of projection.rings) {
     if (!kindOf.has(ring.host)) continue;
     const label = resolveDisplayLabel(nodeTypes[ring.type], ring.stand) ?? ring.node;
-    resolvedRings.push({ ring, label });
-    if (!labelsByType.has(ring.type)) labelsByType.set(ring.type, new Set());
-    labelsByType.get(ring.type).add(label);
+    const group = resolveRingGroup(ring.type, nodeTypes[ring.type], ring.stand);
+    resolvedRings.push({ ring, label, group });
+    if (!labelsByGroup.has(group)) labelsByGroup.set(group, new Set());
+    labelsByGroup.get(group).add(label);
   }
   const ordinalOf = new Map();
   const orderedKeys = [];
-  for (const type of [...labelsByType.keys()].sort()) {
-    for (const label of [...labelsByType.get(type)].sort()) orderedKeys.push(`${type}::${label}`);
+  for (const group of [...labelsByGroup.keys()].sort()) {
+    for (const label of [...labelsByGroup.get(group)].sort()) orderedKeys.push(`${group}::${label}`);
   }
   orderedKeys.forEach((key, i) => ordinalOf.set(key, i));
-  for (const { ring, label } of resolvedRings) {
-    const key = `${ring.type}::${label}`;
+  for (const { ring, label, group } of resolvedRings) {
+    const key = `${group}::${label}`;
     const color = colorForRainbowPosition(ordinalOf.get(key) || 0, orderedKeys.length);
     let hostMap = ringsByHost.get(ring.host);
     if (!hostMap) { hostMap = new Map(); ringsByHost.set(ring.host, hostMap); }
     hostMap.set(key, { color, node: ring.node });
-    const group = ringGroups.get(key);
-    if (group) group.count++;
-    else ringGroups.set(key, { type: ring.type, label, color, count: 1 });
+    const g = ringGroups.get(key);
+    if (g) g.count++;
+    else ringGroups.set(key, { type: ring.type, group, label, color, count: 1 });
   }
 
   return {

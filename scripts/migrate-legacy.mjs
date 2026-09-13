@@ -17,41 +17,21 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, basename, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { canonicalJson, fnv1a64 } from '../src/sections/21-og2-util.js';
+import { canonicalJson, fnv1a64, slug, levenshtein, normalizedDistance } from '../src/sections/21-og2-util.js';
 import { createTenantStore } from '../src/sections/23-og2-store.js';
 import { importSnapshot } from '../src/sections/26-og2-import.js';
+import { containerNodeOf } from '../src/sections/31-og2-intake.js';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // ---------------------------------------------------------------- helpers
 
-export function slug(text) {
-  return String(text)
-    .normalize('NFC')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, '-')
-    .replace(/^-+|-+$/g, '');
-}
+// slug / levenshtein live in the engine utilities (21-og2-util.js) since the
+// in-app list intake derives the same container identities (E72); re-exported
+// here so existing callers keep working.
+export { slug, levenshtein };
 
-export function levenshtein(a, b) {
-  const m = a.length, n = b.length;
-  if (!m) return n;
-  if (!n) return m;
-  let prev = Array.from({ length: n + 1 }, (_, j) => j);
-  for (let i = 1; i <= m; i++) {
-    const cur = [i];
-    for (let j = 1; j <= n; j++) {
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    }
-    prev = cur;
-  }
-  return prev[n];
-}
-
-const normDist = (a, b) => {
-  const max = Math.max(a.length, b.length);
-  return max ? levenshtein(a, b) / max : 0;
-};
+const normDist = normalizedDistance;
 
 // Attribute file parsing: tab-separated with 2 or 3 columns
 // ([identifier, value] or [identifier, categoryLabel, value]); lines without
@@ -135,17 +115,9 @@ export function normalizeRoleValue(value) {
   return stripped || val;
 }
 
-// E72: container node identity = category + value; empty value falls back to
-// the category. Returns a stable node (id per E41/E56, source-namespaced).
-export function containerNodeOf(source, type, category, value, categoryProp) {
-  const val = String(value || '').trim();
-  const id = val
-    ? `${source}:${type}:${slug(category)}--${slug(val)}`
-    : `${source}:${type}:${slug(category)}`;
-  const node = { id, type, label: val || category, props: {} };
-  if (categoryProp) node.props[categoryProp] = category;
-  return node;
-}
+// E72 container identity (category + value) lives in the intake module the
+// app uses as well — one rule for migration and in-app lists.
+export { containerNodeOf };
 
 export function migrateTenant({ source, cfg, registry, data, attributes, mapping = {} }) {
   const nodes = new Map(); // id -> node

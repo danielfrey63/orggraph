@@ -220,6 +220,9 @@ export function ensureOverlay(onFiles) {
         mindestens ein <code>Snapshot (*.json)</code> (Datenstand).<br>
         Optional: <code>pseudo.data.json</code> (Pseudonymisierungs-Pools).
         Auch möglich: ein Ordner oder ZIP-Archiv mit diesen Dateien.<br>
+        Auf einen geladenen Mandanten lassen sich zusätzlich <strong>Listen</strong>
+        (<code>.txt</code>/<code>.tsv</code>/<code>.csv</code> mit E-Mails oder IDs)
+        ziehen — sie werden als Attribut importiert.<br>
         Alles wird lokal im Browser (IndexedDB) gespeichert und beim
         nächsten Öffnen automatisch geladen — Dateien können auch einzeln
         nachgereicht werden.

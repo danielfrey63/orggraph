@@ -67,15 +67,24 @@ export async function handleDroppedFiles(entryList) {
   if (summary.ignored.length) {
     showTemporaryNotification(`Nicht verwendet (env.json ist massgebend): ${summary.ignored.join(', ')}`, 'medium');
   }
-  // E25/FR-6.7: legacy datasets and attribute lists are rejected — the way
-  // in is the one-off migration script (§10), never an in-app import.
+  // E25/FR-6.7: legacy datasets are rejected — the way in is the one-off
+  // migration script (§10). Identifier lists are NOT legacy anymore (E74):
+  // they are parked and handled by the intake dialog after the reload.
   if (summary.rejected && summary.rejected.length) {
     showTemporaryNotification(`Legacy-Format abgewiesen (${summary.rejected.map(r => r.filename).join(', ')}): dieser Tenant versteht nur Registry/env/Snapshots. Bitte mit scripts/migrate-legacy.mjs migrieren.`, 'long');
   }
   if (!summary.stored.length) {
     if (!summary.unknown.length && !(summary.rejected && summary.rejected.length) && !summary.missing.length && !summary.ignored.length) {
-      showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — erwartet werden registry.json, env.json und Snapshot-Dateien (JSON); alternativ den Auswahl-Dialog nutzen.', 'medium');
+      showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — erwartet werden registry.json, env.json, Snapshot-Dateien (JSON) oder Listen (.txt/.tsv/.csv); alternativ den Auswahl-Dialog nutzen.', 'medium');
     }
+    return;
+  }
+  // A drop consisting of lists only opens the intake dialog right away on a
+  // running tenant (E74) — no reload needed, the store stays in memory.
+  if (summary.stored.every(s => s.kind === 'list') && typeof og2Active === 'function' && og2Active()
+      && typeof og2OpenPendingLists === 'function') {
+    hideDropZone();
+    await og2OpenPendingLists();
     return;
   }
 

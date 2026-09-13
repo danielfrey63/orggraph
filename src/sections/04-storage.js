@@ -17,6 +17,9 @@ export const KEY_STORE = 'og2Store';
 export const KEY_STORE_PART_PREFIX = 'og2Store::part:';
 export const KEY_REGISTRY = 'og2Registry';
 export const SNAPSHOT_PREFIX = 'og2Snapshot::';
+// Dropped identifier lists (E74): kept until the intake dialog turned them
+// into a snapshot and imported it (or the user discarded them).
+export const LIST_PREFIX = 'og2List::';
 // Per-tenant UI session state (FR-8.14): persisted reactively on every
 // parameter change, restored on boot before the first render.
 export const KEY_UI_STATE = 'og2UiState';
@@ -456,10 +459,10 @@ export async function classifyFile(file) {
   const filename = file.name || 'unnamed';
   const text = await file.text();
 
-  // Legacy attribute lists are recognized only to reject them with a
-  // migration hint (E25/FR-6.7) — they are never stored in a v2 tenant.
+  // Identifier lists (E74): parked in the profile and turned into an
+  // enrichment snapshot by the intake dialog after boot (FR-6.7).
   if (ATTR_EXT.test(filename)) {
-    return { kind: 'attr', key: null, filename, text };
+    return { kind: 'list', key: LIST_PREFIX + filename, filename, text };
   }
 
   // JSON-ish: classify by content.
@@ -480,15 +483,24 @@ export async function classifyFile(file) {
 
 /** Dropped snapshots awaiting import: [{ key, filename, text }]. */
 export async function getPendingSnapshots() {
+  return getPendingByPrefix(SNAPSHOT_PREFIX);
+}
+
+/** Dropped identifier lists waiting for the intake dialog (E74). */
+export async function getPendingLists() {
+  return getPendingByPrefix(LIST_PREFIX);
+}
+
+async function getPendingByPrefix(prefix) {
   const id = await ensureProfilesInitialized();
   const db = await openDb();
   if (!db.objectStoreNames.contains(profileStoreName(id))) return [];
   const pairs = await readAllPairs(profileStoreName(id));
   const out = [];
   for (const [k, text] of pairs) {
-    if (typeof k !== 'string' || !k.startsWith(SNAPSHOT_PREFIX)) continue;
+    if (typeof k !== 'string' || !k.startsWith(prefix)) continue;
     if (typeof text !== 'string') continue;
-    out.push({ key: k, filename: k.slice(SNAPSHOT_PREFIX.length), text });
+    out.push({ key: k, filename: k.slice(prefix.length), text });
   }
   return out.sort((a, b) => a.filename.localeCompare(b.filename));
 }
@@ -613,7 +625,7 @@ export async function storeEntries(entryList) {
     if (used.has(c)) continue;
     if (c.kind === 'unknown') { unknown.push(c.filename); continue; }
     // Legacy classes are rejected, never persisted (E25/FR-6.7).
-    if (c.kind === 'data' || c.kind === 'attr' || c.kind === 'legacy-env') { rejected.push({ kind: c.kind, filename: c.filename }); continue; }
+    if (c.kind === 'data' || c.kind === 'legacy-env') { rejected.push({ kind: c.kind, filename: c.filename }); continue; }
     if (env && c.kind === 'env') { ignored.push(c.filename); continue; }
     await putStored(c.key, c.text);
     stored.push({ kind: c.kind, filename: c.filename });

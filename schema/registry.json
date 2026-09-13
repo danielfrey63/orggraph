@@ -1,6 +1,6 @@
 {
-  "$comment": "Canonical type registry (PRD FR-4.1). Grows exclusively through analysis-gate commits (PRD FR-6.1a). Format: registry.schema.json. Version 2026-07-05.1 = registry bootstrap, human-approved at the HIL-1 gate on 2026-07-05 (FR-10.1, E71); derived from the legacy structures (persons/orgs/links of HRM, SBB-GD, SEM v1) and their attribute categories.",
-  "version": "2026-07-05.1",
+  "$comment": "Canonical type registry (PRD FR-4.1). Grows exclusively through analysis-gate commits (PRD FR-6.1a). Format: registry.schema.json. Version 2026-07-05.1 = registry bootstrap, human-approved at the HIL-1 gate on 2026-07-05 (FR-10.1, E71); derived from the legacy structures (persons/orgs/links of HRM, SBB-GD, SEM v1) and their attribute categories. Version 2026-09-13.1 = generic Attribut/hatAttribut carrier for in-app list intake (E74), additive.",
+  "version": "2026-09-13.1",
   "nodeTypes": {
     "Person": {
       "description": "Individual person. Legacy: persons[] (id, label, email, isBasis).",
@@ -45,6 +45,13 @@
     },
     "Kontaktart": {
       "description": "Personal contact kind/channel, shared across persons. Reified as a node because the legacy data is multi-valued per person (FR-4.4). Legacy: SEM 'Persönliche Kontakt.tsv'."
+    },
+    "Attribut": {
+      "description": "Generic attribute carrier for in-app list intake (E74): one node per category+value (E72 identity; an empty value falls back to the category). The category is kept in props.kategorie and groups the ring legend (groupProp), so arbitrary lists need no new node type.",
+      "groupProp": "props.kategorie",
+      "props": {
+        "kategorie": { "type": "string", "nonSensitive": true, "description": "Attribute category (list name); legend group of the ring badges." }
+      }
     }
   },
   "edgeTypes": {
@@ -106,6 +113,11 @@
       "description": "Has personal contact kind/channel (multi-valued per person). Legacy: SEM 'Persönliche Kontakt.tsv'.",
       "from": "Person",
       "to": "Kontaktart"
+    },
+    "hatAttribut": {
+      "description": "Carries a generic list attribute (E74). Each imported list runs as its own source (liste-<kategorie>) and is a full state of its members' hatAttribut edges, so leaving a list closes the edge.",
+      "from": "Person",
+      "to": "Attribut"
     }
   }
 }

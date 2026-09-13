@@ -5,6 +5,8 @@ import {
   KEY_PSEUDO,
   KEY_REGISTRY,
   SNAPSHOT_PREFIX,
+  LIST_PREFIX,
+  getPendingLists,
   ATTR_EXT,
   looksLikeEnv,
   looksLikePseudo,
@@ -81,9 +83,9 @@ describe('content classifiers', () => {
 });
 
 describe('classifyFile', () => {
-  it('recognizes legacy classes without a storage key (E25/FR-6.7)', async () => {
-    const attr = await classifyFile(makeFile('Team.tsv', 'a@b\tX'));
-    expect(attr).toMatchObject({ kind: 'attr', key: null, filename: 'Team.tsv' });
+  it('recognizes legacy classes without a storage key (E25/FR-6.7) and parks lists (E74)', async () => {
+    const list = await classifyFile(makeFile('Team.tsv', 'a@b\tX'));
+    expect(list).toMatchObject({ kind: 'list', key: LIST_PREFIX + 'Team.tsv', filename: 'Team.tsv' });
     const data = await classifyFile(makeFile('d.json', '{"persons":[]}'));
     expect(data).toMatchObject({ kind: 'data', key: null });
   });
@@ -135,13 +137,13 @@ describe('storeFiles (E25/FR-6.7: legacy classes rejected, never stored)', () =>
       makeFile('Team.tsv', 'a@b\tRole'),
       makeFile('junk.json', 'nope'),
     ]);
-    expect(result.stored).toEqual([{ kind: 'snapshot', filename: 's.json' }]);
-    expect(result.rejected).toEqual([
-      { kind: 'data', filename: 'd.json' },
-      { kind: 'attr', filename: 'Team.tsv' },
-    ]);
+    expect(result.stored).toEqual([{ kind: 'snapshot', filename: 's.json' }, { kind: 'list', filename: 'Team.tsv' }]);
+    expect(result.rejected).toEqual([{ kind: 'data', filename: 'd.json' }]);
     expect(result.unknown).toEqual(['junk.json']);
     expect(await getStoredText(SNAPSHOT_PREFIX + 's.json')).toContain('20260101-1200');
+    // the list is parked for the intake dialog (E74), never a legacy reject
+    expect(await getStoredText(LIST_PREFIX + 'Team.tsv')).toBe('a@b\tRole');
+    expect((await getPendingLists()).map((p) => p.filename)).toEqual(['Team.tsv']);
     // nothing legacy landed in the profile store
     expect(await getStoredText('data')).toBeUndefined();
   });

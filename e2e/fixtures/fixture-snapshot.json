@@ -3,7 +3,7 @@
     "source": "e2e-fixture",
     "crawledAt": "2026-06-01T00:00:00Z",
     "snapshot": "20260601-0000",
-    "registryVersion": "2026-07-05.1",
+    "registryVersion": "2026-09-13.1",
     "scope": {
       "nodeTypes": ["Person", "OE", "Rolle", "Team"],
       "edgeTypes": ["berichtetAn", "mitgliedIn", "unterstellt", "hatRolle", "imTeam"]

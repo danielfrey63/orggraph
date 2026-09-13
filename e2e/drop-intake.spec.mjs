@@ -144,3 +144,36 @@ test('file:// drop intake: empty and legacy drops never end silently', async ({ 
   });
   await expect(page.locator('body')).toContainText('migrate-legacy', { timeout: 10_000 });
 });
+
+test('file:// drop intake: an identifier list opens the intake dialog and imports as ring attribute (E74)', async ({ page }) => {
+  test.setTimeout(120_000);
+  page.on('dialog', (d) => d.accept()); // E70 source registration, E69 join
+  await page.goto(appUrl);
+  await expect(page.locator('.dz-overlay')).toBeVisible();
+  await dropFiles(page, DROP_FILES);
+  await expect(page.locator('g.nodes circle:not(.attribute-circle)')).toHaveCount(5, { timeout: 60_000 });
+
+  // a plain e-mail list on the running tenant: no reload, the dialog opens
+  const listPath = join(mkdtempSync(join(tmpdir(), 'og2-list-')), 'Newsletter.txt');
+  writeFileSync(listPath, 'vera@example.org\nmax@example.org\nunknown@nowhere.org\n');
+  await dropFiles(page, [listPath]);
+  const dialog = page.locator('#listIntakeDialog');
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  await expect(dialog.locator('.modal-summary')).toContainText('2 exakt');
+  await expect(dialog.locator('.modal-summary')).toContainText('2 werden importiert');
+  await expect(dialog.locator('select.modal-input').first()).toHaveValue('hatAttribut');
+  // the active view lacks the ring hop → the extension offer is visible and on
+  const extend = dialog.locator('.modal-check').first();
+  await expect(extend).toBeVisible();
+  await expect(extend).toContainText('hatAttribut');
+
+  await dialog.locator('button.btn-primary').click();
+  await expect(dialog).toBeHidden({ timeout: 30_000 });
+  // rings for the two matched persons, in place (no reload); the legend
+  // groups by category (groupProp), the fixture's own role/team rings stay
+  await expect(page.locator('g.nodes circle.attribute-circle[data-attribute="Newsletter::Newsletter"]')).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.locator('#attributeLegend')).toContainText('Newsletter (2)');
+  // the parked list is consumed
+  const pending = await page.evaluate(() => getPendingLists().then((l) => l.length));
+  expect(pending).toBe(0);
+});

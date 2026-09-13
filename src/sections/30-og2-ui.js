@@ -23,7 +23,7 @@ export function og2State() {
 // Product HIL dialogs (FR-5.7, E46, E69, E70, FR-6.8): plain confirm dialogs
 // for now — every decision point is injectable and covered by fixture tests
 // at the engine level (E71); these are the interactive counterparts.
-function og2UiHooks() {
+export function og2UiHooks() {
   const ask = (title, detail) => window.confirm(`${title}\n\n${detail}`);
   return {
     confirmSourceRegistration: (info) => ({
@@ -150,15 +150,7 @@ export async function og2TryBoot() {
       }
     } catch (e) { console.warn('DATA_URL-Snapshot nicht ladbar:', e); }
   }
-  if (imported > 0) {
-    // v2 chunked persist: parts first, then the header (a reader never sees
-    // a header pointing at missing parts); stale surplus parts are removed.
-    const prevParts = isChunkedStoreHeader(storedStore) ? JSON.parse(storedStore).parts : 0;
-    const { header, parts } = serializeTenantStoreParts(store);
-    for (let i = 0; i < parts.length; i++) await putStored(KEY_STORE_PART_PREFIX + i, parts[i]);
-    await putStored(KEY_STORE, header);
-    for (let i = parts.length; i < prevParts; i++) await delStored(KEY_STORE_PART_PREFIX + i);
-  }
+  if (imported > 0) await og2PersistStore(store);
 
   og2 = createOg2State({ store, registry, env: envConfig || {} });
   const rejectedNames = Object.keys(og2.rejectedViews);
@@ -176,7 +168,51 @@ export async function og2TryBoot() {
   og2BuildViewsLegend();
   og2BuildTimeControls();
   og2InstallStatePersistence();
+  // Lists dropped before this boot (E74) get their intake dialog once the
+  // first scene is on screen — the dialog is modal, the order is cosmetic.
+  if (typeof og2OpenPendingLists === 'function') setTimeout(() => { og2OpenPendingLists(); }, 0);
   return true;
+}
+
+// Persist the tenant store (FR-8.9), v2 chunked layout: parts first, then
+// the header (a reader never sees a header pointing at missing parts); stale
+// surplus parts of a previously larger store are removed. Single owner of
+// the store write — boot and the intake dialog both go through here.
+export async function og2PersistStore(store) {
+  const prev = await getStoredText(KEY_STORE);
+  const prevParts = prev != null && isChunkedStoreHeader(prev) ? JSON.parse(prev).parts : 0;
+  const { header, parts } = serializeTenantStoreParts(store);
+  for (let i = 0; i < parts.length; i++) await putStored(KEY_STORE_PART_PREFIX + i, parts[i]);
+  await putStored(KEY_STORE, header);
+  for (let i = parts.length; i < prevParts; i++) await delStored(KEY_STORE_PART_PREFIX + i);
+}
+
+// Replace the tenant store after an in-app import (E74): persist, re-sync
+// the stock globals and re-render reactively (FR-8.11); the time controls
+// pick up the new instant.
+export async function og2AdoptStore(store) {
+  if (!og2) return;
+  og2.store = store;
+  await og2PersistStore(store);
+  og2SyncStockGlobals();
+  og2BuildTimeControls();
+  og2ApplyFromUI('store-adopted');
+}
+
+// Views of the running tenant changed in-app (E74 ring hop, later the view
+// editor): re-validate against the registry, keep the active view when it
+// survived, persist the env and rebuild the views legend.
+export async function og2ReplaceViews(views) {
+  if (!og2) return;
+  const env = { ...(og2.env || {}), VIEWS: views };
+  const next = createOg2State({ store: og2.store, registry: og2.registry, env });
+  og2.env = env;
+  og2.views = next.views;
+  og2.rejectedViews = next.rejectedViews;
+  if (!og2.views[og2.activeViewName]) og2.activeViewName = next.activeViewName;
+  envConfig = env;
+  await putStored(KEY_ENV, JSON.stringify(env, null, 2));
+  og2BuildViewsLegend();
 }
 
 // --- FR-7.5b view contexts + FR-8.14 session state --------------------------

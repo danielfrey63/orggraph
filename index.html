@@ -857,6 +857,90 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   background: var(--button-primary-hover);
 }
 
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Wide modal variant: form dialogs (list intake E74, editors) */
+.modal-container--wide {
+  max-width: 640px;
+}
+
+/* Modal form rows: label column + control column (intake dialog, editors) */
+.modal-form {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 10px 12px;
+  align-items: center;
+}
+
+.modal-form label {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.modal-form .modal-input {
+  width: 100%;
+}
+
+.modal-form .modal-form-span {
+  grid-column: 1 / -1;
+}
+
+.modal-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.modal-summary {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.modal-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Intake: undecided identifier rows (fuzzy proposals, no hits) */
+.intake-matches {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.intake-match {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.4fr);
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 12px;
+}
+
+.intake-match:last-child {
+  border-bottom: none;
+}
+
+.intake-match-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.intake-match--unmatched .intake-match-id {
+  color: var(--text-muted);
+}
+
 /* Cluster-Tooltip (ensureTooltip); nur left/top/display kommen dynamisch aus JS */
 .cluster-tooltip {
   position: fixed;
@@ -1487,7 +1571,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.194.219';
+const APP_VERSION = '1.196.243';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -2077,6 +2161,9 @@ const KEY_STORE = 'og2Store';
 const KEY_STORE_PART_PREFIX = 'og2Store::part:';
 const KEY_REGISTRY = 'og2Registry';
 const SNAPSHOT_PREFIX = 'og2Snapshot::';
+// Dropped identifier lists (E74): kept until the intake dialog turned them
+// into a snapshot and imported it (or the user discarded them).
+const LIST_PREFIX = 'og2List::';
 // Per-tenant UI session state (FR-8.14): persisted reactively on every
 // parameter change, restored on boot before the first render.
 const KEY_UI_STATE = 'og2UiState';
@@ -2516,10 +2603,10 @@ async function classifyFile(file) {
   const filename = file.name || 'unnamed';
   const text = await file.text();
 
-  // Legacy attribute lists are recognized only to reject them with a
-  // migration hint (E25/FR-6.7) — they are never stored in a v2 tenant.
+  // Identifier lists (E74): parked in the profile and turned into an
+  // enrichment snapshot by the intake dialog after boot (FR-6.7).
   if (ATTR_EXT.test(filename)) {
-    return { kind: 'attr', key: null, filename, text };
+    return { kind: 'list', key: LIST_PREFIX + filename, filename, text };
   }
 
   // JSON-ish: classify by content.
@@ -2540,15 +2627,24 @@ async function classifyFile(file) {
 
 /** Dropped snapshots awaiting import: [{ key, filename, text }]. */
 async function getPendingSnapshots() {
+  return getPendingByPrefix(SNAPSHOT_PREFIX);
+}
+
+/** Dropped identifier lists waiting for the intake dialog (E74). */
+async function getPendingLists() {
+  return getPendingByPrefix(LIST_PREFIX);
+}
+
+async function getPendingByPrefix(prefix) {
   const id = await ensureProfilesInitialized();
   const db = await openDb();
   if (!db.objectStoreNames.contains(profileStoreName(id))) return [];
   const pairs = await readAllPairs(profileStoreName(id));
   const out = [];
   for (const [k, text] of pairs) {
-    if (typeof k !== 'string' || !k.startsWith(SNAPSHOT_PREFIX)) continue;
+    if (typeof k !== 'string' || !k.startsWith(prefix)) continue;
     if (typeof text !== 'string') continue;
-    out.push({ key: k, filename: k.slice(SNAPSHOT_PREFIX.length), text });
+    out.push({ key: k, filename: k.slice(prefix.length), text });
   }
   return out.sort((a, b) => a.filename.localeCompare(b.filename));
 }
@@ -2673,7 +2769,7 @@ async function storeEntries(entryList) {
     if (used.has(c)) continue;
     if (c.kind === 'unknown') { unknown.push(c.filename); continue; }
     // Legacy classes are rejected, never persisted (E25/FR-6.7).
-    if (c.kind === 'data' || c.kind === 'attr' || c.kind === 'legacy-env') { rejected.push({ kind: c.kind, filename: c.filename }); continue; }
+    if (c.kind === 'data' || c.kind === 'legacy-env') { rejected.push({ kind: c.kind, filename: c.filename }); continue; }
     if (env && c.kind === 'env') { ignored.push(c.filename); continue; }
     await putStored(c.key, c.text);
     stored.push({ kind: c.kind, filename: c.filename });
@@ -2937,6 +3033,9 @@ function ensureOverlay(onFiles) {
         mindestens ein <code>Snapshot (*.json)</code> (Datenstand).<br>
         Optional: <code>pseudo.data.json</code> (Pseudonymisierungs-Pools).
         Auch möglich: ein Ordner oder ZIP-Archiv mit diesen Dateien.<br>
+        Auf einen geladenen Mandanten lassen sich zusätzlich <strong>Listen</strong>
+        (<code>.txt</code>/<code>.tsv</code>/<code>.csv</code> mit E-Mails oder IDs)
+        ziehen — sie werden als Attribut importiert.<br>
         Alles wird lokal im Browser (IndexedDB) gespeichert und beim
         nächsten Öffnen automatisch geladen — Dateien können auch einzeln
         nachgereicht werden.
@@ -7048,15 +7147,24 @@ async function handleDroppedFiles(entryList) {
   if (summary.ignored.length) {
     showTemporaryNotification(`Nicht verwendet (env.json ist massgebend): ${summary.ignored.join(', ')}`, 'medium');
   }
-  // E25/FR-6.7: legacy datasets and attribute lists are rejected — the way
-  // in is the one-off migration script (§10), never an in-app import.
+  // E25/FR-6.7: legacy datasets are rejected — the way in is the one-off
+  // migration script (§10). Identifier lists are NOT legacy anymore (E74):
+  // they are parked and handled by the intake dialog after the reload.
   if (summary.rejected && summary.rejected.length) {
     showTemporaryNotification(`Legacy-Format abgewiesen (${summary.rejected.map(r => r.filename).join(', ')}): dieser Tenant versteht nur Registry/env/Snapshots. Bitte mit scripts/migrate-legacy.mjs migrieren.`, 'long');
   }
   if (!summary.stored.length) {
     if (!summary.unknown.length && !(summary.rejected && summary.rejected.length) && !summary.missing.length && !summary.ignored.length) {
-      showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — erwartet werden registry.json, env.json und Snapshot-Dateien (JSON); alternativ den Auswahl-Dialog nutzen.', 'medium');
+      showTemporaryNotification('Keine lesbaren Dateien im Drop erkannt — erwartet werden registry.json, env.json, Snapshot-Dateien (JSON) oder Listen (.txt/.tsv/.csv); alternativ den Auswahl-Dialog nutzen.', 'medium');
     }
+    return;
+  }
+  // A drop consisting of lists only opens the intake dialog right away on a
+  // running tenant (E74) — no reload needed, the store stays in memory.
+  if (summary.stored.every(s => s.kind === 'list') && typeof og2Active === 'function' && og2Active()
+      && typeof og2OpenPendingLists === 'function') {
+    hideDropZone();
+    await og2OpenPendingLists();
     return;
   }
 
@@ -8362,6 +8470,41 @@ function deepClone(value) {
 function isScalar(v) {
   return v === null || ['string', 'number', 'boolean'].includes(typeof v);
 }
+
+// Slug for fallback ids (E41/E56): NFC, lower-case, every non-letter/digit
+// run collapsed to one dash. Shared by the legacy migration and the in-app
+// list intake so both derive the same container-node identity (E72).
+function slug(text) {
+  return String(text)
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+// Levenshtein distance — the fuzzy fallback of identifier matching before an
+// export (FR-10.4, `identifiers` capability: matching happens before the
+// snapshot exists, never inside the import).
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+// Length-normalized Levenshtein distance in [0, 1].
+function normalizedDistance(a, b) {
+  const max = Math.max(a.length, b.length);
+  return max ? levenshtein(a, b) / max : 0;
+}
 // OrgGraph 2.0 engine — registry access and self-consistency gate (FR-4.1).
 // The registry is data; this module never names a concrete type (NFR-5).
 
@@ -8482,6 +8625,9 @@ function checkFieldPaths(name, decl, problems) {
   }
   if (decl.leafProp !== undefined && !/^props\.[^.]+$/.test(String(decl.leafProp))) {
     problems.push(`node type "${name}": leafProp "${decl.leafProp}" must be a props path like "props.isBasis"`);
+  }
+  if (decl.groupProp !== undefined && !/^props\.[^.]+$/.test(String(decl.groupProp))) {
+    problems.push(`node type "${name}": groupProp "${decl.groupProp}" must be a props path like "props.kategorie"`);
   }
 }
 
@@ -11072,6 +11218,16 @@ function deserializeTenantStoreParts(headerText, partTexts) {
 //   ringGroups: Map('<Type>::<label>' -> { type, label, color, count }),
 //   footer: { ...projection counters + flags },
 // }
+// Legend group of a ring badge (E74): the `groupProp` value of the node's
+// stand when the type declares one and the value is a non-empty string,
+// otherwise the type name. "::" cannot appear in a group (legend key separator).
+function resolveRingGroup(type, typeDecl, stand) {
+  const m = typeDecl && typeDecl.groupProp ? /^props\.([^.]+)$/.exec(String(typeDecl.groupProp)) : null;
+  const v = m && stand && stand.props ? stand.props[m[1]] : undefined;
+  if (typeof v === 'string' && v.trim() && !v.includes('::')) return v;
+  return type;
+}
+
 function adaptProjection(projection, registry) {
   const nodeTypes = (registry && registry.nodeTypes) || {};
   const drawNodes = [];
@@ -11108,37 +11264,41 @@ function adaptProjection(projection, registry) {
   for (const edge of projection.derivedEdges) routeEdge(edge.source, edge.target, edge.via, true);
 
   // Ring badges (E21): grouped per host under the composite key
-  // "<Type>::<resolved label>". Colors follow the long rainbow palette (E13,
-  // FR-4.2a): one spectral sweep laid once across the ordered list of ALL
-  // attributes — groups sorted, labels sorted within their group — so groups
-  // occupy distinct spectral bands while labels of one group sit on adjacent
-  // hues. The order is sorted, so the palette is deterministic per scene.
+  // "<Gruppe>::<resolved label>", where the group is the type name or — for
+  // types with a `groupProp` capability (E74, e.g. Attribut/props.kategorie)
+  // — the resolved group value, so one generic type can carry many legend
+  // categories. Colors follow the long rainbow palette (E13, FR-4.2a): one
+  // spectral sweep laid once across the ordered list of ALL attributes —
+  // groups sorted, labels sorted within their group — so groups occupy
+  // distinct spectral bands while labels of one group sit on adjacent hues.
+  // The order is sorted, so the palette is deterministic per scene.
   const ringsByHost = new Map();
   const ringGroups = new Map();
   const resolvedRings = [];
-  const labelsByType = new Map();
+  const labelsByGroup = new Map();
   for (const ring of projection.rings) {
     if (!kindOf.has(ring.host)) continue;
     const label = resolveDisplayLabel(nodeTypes[ring.type], ring.stand) ?? ring.node;
-    resolvedRings.push({ ring, label });
-    if (!labelsByType.has(ring.type)) labelsByType.set(ring.type, new Set());
-    labelsByType.get(ring.type).add(label);
+    const group = resolveRingGroup(ring.type, nodeTypes[ring.type], ring.stand);
+    resolvedRings.push({ ring, label, group });
+    if (!labelsByGroup.has(group)) labelsByGroup.set(group, new Set());
+    labelsByGroup.get(group).add(label);
   }
   const ordinalOf = new Map();
   const orderedKeys = [];
-  for (const type of [...labelsByType.keys()].sort()) {
-    for (const label of [...labelsByType.get(type)].sort()) orderedKeys.push(`${type}::${label}`);
+  for (const group of [...labelsByGroup.keys()].sort()) {
+    for (const label of [...labelsByGroup.get(group)].sort()) orderedKeys.push(`${group}::${label}`);
   }
   orderedKeys.forEach((key, i) => ordinalOf.set(key, i));
-  for (const { ring, label } of resolvedRings) {
-    const key = `${ring.type}::${label}`;
+  for (const { ring, label, group } of resolvedRings) {
+    const key = `${group}::${label}`;
     const color = colorForRainbowPosition(ordinalOf.get(key) || 0, orderedKeys.length);
     let hostMap = ringsByHost.get(ring.host);
     if (!hostMap) { hostMap = new Map(); ringsByHost.set(ring.host, hostMap); }
     hostMap.set(key, { color, node: ring.node });
-    const group = ringGroups.get(key);
-    if (group) group.count++;
-    else ringGroups.set(key, { type: ring.type, label, color, count: 1 });
+    const g = ringGroups.get(key);
+    if (g) g.count++;
+    else ringGroups.set(key, { type: ring.type, group, label, color, count: 1 });
   }
 
   return {
@@ -11572,15 +11732,7 @@ async function og2TryBoot() {
       }
     } catch (e) { console.warn('DATA_URL-Snapshot nicht ladbar:', e); }
   }
-  if (imported > 0) {
-    // v2 chunked persist: parts first, then the header (a reader never sees
-    // a header pointing at missing parts); stale surplus parts are removed.
-    const prevParts = isChunkedStoreHeader(storedStore) ? JSON.parse(storedStore).parts : 0;
-    const { header, parts } = serializeTenantStoreParts(store);
-    for (let i = 0; i < parts.length; i++) await putStored(KEY_STORE_PART_PREFIX + i, parts[i]);
-    await putStored(KEY_STORE, header);
-    for (let i = parts.length; i < prevParts; i++) await delStored(KEY_STORE_PART_PREFIX + i);
-  }
+  if (imported > 0) await og2PersistStore(store);
 
   og2 = createOg2State({ store, registry, env: envConfig || {} });
   const rejectedNames = Object.keys(og2.rejectedViews);
@@ -11598,7 +11750,51 @@ async function og2TryBoot() {
   og2BuildViewsLegend();
   og2BuildTimeControls();
   og2InstallStatePersistence();
+  // Lists dropped before this boot (E74) get their intake dialog once the
+  // first scene is on screen — the dialog is modal, the order is cosmetic.
+  if (typeof og2OpenPendingLists === 'function') setTimeout(() => { og2OpenPendingLists(); }, 0);
   return true;
+}
+
+// Persist the tenant store (FR-8.9), v2 chunked layout: parts first, then
+// the header (a reader never sees a header pointing at missing parts); stale
+// surplus parts of a previously larger store are removed. Single owner of
+// the store write — boot and the intake dialog both go through here.
+async function og2PersistStore(store) {
+  const prev = await getStoredText(KEY_STORE);
+  const prevParts = prev != null && isChunkedStoreHeader(prev) ? JSON.parse(prev).parts : 0;
+  const { header, parts } = serializeTenantStoreParts(store);
+  for (let i = 0; i < parts.length; i++) await putStored(KEY_STORE_PART_PREFIX + i, parts[i]);
+  await putStored(KEY_STORE, header);
+  for (let i = parts.length; i < prevParts; i++) await delStored(KEY_STORE_PART_PREFIX + i);
+}
+
+// Replace the tenant store after an in-app import (E74): persist, re-sync
+// the stock globals and re-render reactively (FR-8.11); the time controls
+// pick up the new instant.
+async function og2AdoptStore(store) {
+  if (!og2) return;
+  og2.store = store;
+  await og2PersistStore(store);
+  og2SyncStockGlobals();
+  og2BuildTimeControls();
+  og2ApplyFromUI('store-adopted');
+}
+
+// Views of the running tenant changed in-app (E74 ring hop, later the view
+// editor): re-validate against the registry, keep the active view when it
+// survived, persist the env and rebuild the views legend.
+async function og2ReplaceViews(views) {
+  if (!og2) return;
+  const env = { ...(og2.env || {}), VIEWS: views };
+  const next = createOg2State({ store: og2.store, registry: og2.registry, env });
+  og2.env = env;
+  og2.views = next.views;
+  og2.rejectedViews = next.rejectedViews;
+  if (!og2.views[og2.activeViewName]) og2.activeViewName = next.activeViewName;
+  envConfig = env;
+  await putStored(KEY_ENV, JSON.stringify(env, null, 2));
+  og2BuildViewsLegend();
 }
 
 // --- FR-7.5b view contexts + FR-8.14 session state --------------------------
@@ -12207,6 +12403,657 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
   lastRenderRoots = roots.slice();
   lastRenderDepth = og2.runtimeDepth;
   og2PersistUiStateSoon(); // FR-8.14: every applied parameter change persists
+}
+// OrgGraph 2.0 — in-app list intake (PRD E74): turns a plain identifier
+// list (e-mails, ids, one per line or TSV/CSV) into an ENRICHMENT snapshot
+// the regular import pipeline consumes — nodeTypes [], one edge type, the
+// matched members as edgeSources (E30). Every list runs as its own source
+// (`liste-<kategorie>`), so a re-imported list is the full state of exactly
+// that attribute: a member missing from the list loses the edge, while other
+// lists and other sources are never touched (source partition, E37).
+//
+// Identifier matching happens HERE, before the snapshot exists — never inside
+// the import (FR-5.2: node identity is the id alone; `identifiers` are a
+// pre-export matching aid, FR-4.2). Exact matches over the registry's
+// identifier paths; fuzzy candidates are proposals the user confirms.
+//
+// DOM-free: shared by the dialog (32) and the unit tests; type names arrive as
+// data (NFR-5) — no canonical type name appears in this file.
+
+// ---- list parsing ---------------------------------------------------------
+
+// Header aliases (lower-case). A first row whose identifier cell is one of
+// the identifier aliases is a header and maps the columns; without a header
+// the columns are positional: [identifier], [identifier, value] or
+// [identifier, category, value] (the legacy attribute-TSV shapes).
+const LIST_HEADERS = {
+  identifier: ['email', 'e-mail', 'mail', 'mailadresse', 'e-mail-adresse', 'id', 'identifier', 'kennung', 'person', 'name', 'teilnehmer', 'teilnehmerin', 'mitglied'],
+  value: ['wert', 'value', 'attribut', 'attribute', 'label', 'bezeichnung'],
+  category: ['kategorie', 'category', 'klasse', 'kohorte', 'cohort', 'kurs', 'training', 'liste'],
+};
+
+function splitDelimited(line, delim) {
+  if (delim === '\t') return line.split('\t');
+  const out = [];
+  let field = '', quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) {
+      if (c === '"') { if (line[i + 1] === '"') { field += '"'; i++; } else quoted = false; }
+      else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === delim) { out.push(field); field = ''; }
+    else field += c;
+  }
+  out.push(field);
+  return out;
+}
+
+function detectDelimiter(line) {
+  if (line.includes('\t')) return '\t';
+  const semi = line.split(';').length, comma = line.split(',').length;
+  if (semi > 1 && semi >= comma) return ';';
+  if (comma > 1) return ',';
+  return null;
+}
+
+// Parse a list file into rows { identifier, value, category? }. `fileStem`
+// (file name without extension) is the default category, like the legacy
+// attribute files whose name was the category (README v1).
+function parseListText(text, fileStem = '') {
+  const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/)
+    .map((l) => l.replace(/\s+$/, ''))
+    .filter((l) => l.trim() && !l.trim().startsWith('#'));
+  if (!lines.length) return { rows: [], category: fileStem, delimiter: null, header: false };
+  const delimiter = detectDelimiter(lines[0]);
+  const cells = (l) => (delimiter ? splitDelimited(l, delimiter) : [l]).map((c) => c.trim());
+  const first = cells(lines[0]).map((c) => c.toLowerCase());
+  const header = LIST_HEADERS.identifier.includes(first[0]);
+  let cols = { identifier: 0, value: null, category: null };
+  if (header) {
+    const find = (aliases) => { const i = first.findIndex((h) => aliases.includes(h)); return i >= 0 ? i : null; };
+    cols = { identifier: find(LIST_HEADERS.identifier) ?? 0, value: find(LIST_HEADERS.value), category: find(LIST_HEADERS.category) };
+    if (cols.value === null && cols.category === null) {
+      if (first.length === 2) cols.value = cols.identifier === 0 ? 1 : 0;
+      else if (first.length >= 3) { cols.category = 1; cols.value = 2; }
+    }
+  } else {
+    const width = cells(lines[0]).length;
+    if (width === 2) cols.value = 1;
+    else if (width >= 3) { cols.category = 1; cols.value = 2; }
+  }
+  const rows = [];
+  for (const line of lines.slice(header ? 1 : 0)) {
+    const c = cells(line);
+    const identifier = c[cols.identifier] || '';
+    if (!identifier) continue;
+    const row = { identifier, value: cols.value !== null ? (c[cols.value] || '') : '' };
+    if (cols.category !== null && c[cols.category]) row.category = c[cols.category];
+    rows.push(row);
+  }
+  return { rows, category: fileStem, delimiter, header };
+}
+
+// ---- identity resolution ----------------------------------------------------
+
+function openLabelOf(identity) {
+  const tl = identity.timelines.get('label');
+  const open = tl ? openInterval(tl) : null;
+  return open ? open.value : undefined;
+}
+
+function openPropOf(identity, name) {
+  const tl = identity.timelines.get(`props.${name}`);
+  const open = tl ? openInterval(tl) : null;
+  return open ? open.value : undefined;
+}
+
+// Resolver over the OPEN identities of `type` (FR-10.4 semantics in-app):
+// exact hit on id or any registry identifier path (case-insensitive) — an
+// identifier value shared by several identities is ambiguous, never a silent
+// pick; otherwise fuzzy candidates (normalized Levenshtein <= threshold on
+// label, identifier values and the e-mail local part read as a name), one
+// unambiguous candidate becomes a PROPOSAL (status 'fuzzy'), several stay
+// 'ambiguous', none 'unmatched'.
+function buildIdentityResolver(store, registry, type, { threshold = 0.3 } = {}) {
+  const decl = (registry.nodeTypes || {})[type] || {};
+  const paths = (decl.identifiers || []).map((p) => /^props\.([^.]+)$/.exec(String(p))).filter(Boolean).map((m) => m[1]);
+  const persons = [];
+  const exact = new Map();     // lower-cased key -> id | false (ambiguous)
+  const put = (key, id) => {
+    const k = String(key).trim().toLowerCase();
+    if (!k) return;
+    const prev = exact.get(k);
+    if (prev === undefined) exact.set(k, id);
+    else if (prev !== id) exact.set(k, false);
+  };
+  for (const identity of store.nodes.values()) {
+    if (identity.type !== type || !nodeOpenNow(identity)) continue;
+    const label = openLabelOf(identity);
+    const idents = [];
+    for (const p of paths) {
+      const v = openPropOf(identity, p);
+      if (typeof v === 'string' && v) { idents.push(v); put(v, identity.id); }
+    }
+    put(identity.id, identity.id);
+    persons.push({ id: identity.id, label: label === undefined ? identity.id : String(label), idents });
+  }
+  const byId = new Map(persons.map((p) => [p.id, p]));
+  const resolve = (identifier) => {
+    const raw = String(identifier || '').trim();
+    const lower = raw.toLowerCase();
+    if (!lower) return { status: 'unmatched', candidates: [] };
+    const hit = exact.get(lower);
+    if (typeof hit === 'string') return { status: 'exact', id: hit, label: byId.get(hit).label, candidates: [] };
+    const asName = lower.split('@')[0].replace(/[._-]+/g, ' ');
+    const candidates = [];
+    for (const p of persons) {
+      const label = p.label.toLowerCase();
+      let d = Math.min(normalizedDistance(asName, label), normalizedDistance(lower, label));
+      for (const v of p.idents) d = Math.min(d, normalizedDistance(lower, v.toLowerCase()));
+      if (d <= threshold) candidates.push({ id: p.id, label: p.label, dist: Number(d.toFixed(3)) });
+    }
+    candidates.sort((a, b) => a.dist - b.dist || (a.id < b.id ? -1 : 1));
+    if (hit === false) return { status: 'ambiguous', candidates: candidates.slice(0, 5) };
+    if (candidates.length === 1 || (candidates.length > 1 && candidates[0].dist === 0 && candidates[1].dist > 0)) {
+      return { status: 'fuzzy', id: candidates[0].id, label: candidates[0].label, candidates: candidates.slice(0, 5) };
+    }
+    return { status: candidates.length ? 'ambiguous' : 'unmatched', candidates: candidates.slice(0, 5) };
+  };
+  return { resolve, persons, labelOf: (id) => (byId.get(id) || {}).label };
+}
+
+// ---- model helpers ------------------------------------------------------------
+
+// Canonical source id of a list (E62 pattern ^[a-z][a-z0-9-]*$): the prefix
+// guarantees the leading letter even for numeric categories.
+function listSourceId(category) {
+  return `liste-${slug(category) || 'ohne-name'}`;
+}
+
+// E72: container node identity = category + value; an empty value falls
+// back to the category (node = the category itself). Source-namespaced
+// fallback id per E41/E56. Shared with the legacy migration.
+function containerNodeOf(source, type, category, value, categoryProp) {
+  const val = String(value || '').trim();
+  const id = val
+    ? `${source}:${type}:${slug(category)}--${slug(val)}`
+    : `${source}:${type}:${slug(category)}`;
+  const node = { id, type, label: val || category, props: {} };
+  if (categoryProp) node.props[categoryProp] = category;
+  return node;
+}
+
+function groupPropName(typeDecl) {
+  const m = typeDecl && typeDecl.groupProp ? /^props\.([^.]+)$/.exec(String(typeDecl.groupProp)) : null;
+  return m ? m[1] : null;
+}
+
+// Members whose open edges of `edgeType` carry this source's provenance —
+// they were visited by an earlier list of the same source and must stay in
+// edgeSources so that leaving the list closes the edge (full-state semantics).
+function priorEdgeSources(store, source, edgeType) {
+  const out = new Set();
+  for (const edge of store.edges.values()) {
+    if (edge.type !== edgeType) continue;
+    const open = openExistence(edge);
+    if (open && open.provenance && Object.prototype.hasOwnProperty.call(open.provenance, source)) out.add(edge.source);
+  }
+  return [...out].sort();
+}
+
+// Edge types a list of `memberType` members can carry: from allows the
+// member type, to is exactly one type. `hasGroup` marks targets whose type
+// groups the legend by a property (category + value lists, E74).
+function listEdgeTypes(registry, memberType) {
+  const out = [];
+  for (const [edgeType, decl] of Object.entries(registry.edgeTypes || {})) {
+    if (!endpointAllows(decl.from, memberType) || typeof decl.to !== 'string' || decl.to === '*') continue;
+    const targetDecl = (registry.nodeTypes || {})[decl.to] || {};
+    out.push({ edgeType, targetType: decl.to, groupProp: groupPropName(targetDecl) });
+  }
+  return out.sort((a, b) => (a.edgeType < b.edgeType ? -1 : 1));
+}
+
+// Open target nodes of `type` as dialog choices: { id, label, group } with the
+// group resolved like the ring legend (type name or groupProp value).
+function existingTargets(store, registry, type) {
+  const decl = (registry.nodeTypes || {})[type] || {};
+  const out = [];
+  for (const identity of store.nodes.values()) {
+    if (identity.type !== type || !nodeOpenNow(identity)) continue;
+    const stand = { label: openLabelOf(identity), props: {} };
+    for (const [prop, tl] of identity.timelines) {
+      if (!prop.startsWith('props.')) continue;
+      const open = openInterval(tl);
+      if (open) stand.props[prop.slice(6)] = open.value;
+    }
+    const label = resolveDisplayLabel(decl, stand);
+    out.push({ id: identity.id, label: label === undefined ? identity.id : String(label), group: resolveRingGroup(type, decl, stand) });
+  }
+  return out.sort((a, b) => (a.group < b.group ? -1 : a.group > b.group ? 1 : a.label < b.label ? -1 : 1));
+}
+
+// ---- snapshot builder ----------------------------------------------------------
+
+// Build the enrichment snapshot of one list. `resolveId(identifier)` returns
+// the member id or null (the dialog has already applied the user's fuzzy
+// decisions); `labelOf(id)` yields the canonical stored label reused in the
+// visited-proof stubs (E61: a stub never rewrites the label). `priorSources`
+// are members of earlier lists of this source (priorEdgeSources).
+function buildListSnapshot({ source, at, registry, rows, category, value = '', edgeType, memberType, resolveId, labelOf, priorSources = [] }) {
+  const stamp = utcMinuteOf(at);
+  if (!stamp) throw new Error(`at must be RFC3339 with offset or Z (E50): ${at}`);
+  const edgeDecl = (registry.edgeTypes || {})[edgeType];
+  if (!edgeDecl) throw new Error(`unknown edge type: ${edgeType}`);
+  const targetType = edgeDecl.to;
+  const categoryProp = groupPropName((registry.nodeTypes || {})[targetType]);
+
+  const nodes = new Map();
+  const edges = new Map();
+  const members = new Set();
+  const matched = [];
+  const unmatched = [];
+  const stub = (id) => {
+    if (nodes.has(id)) return;
+    const label = labelOf ? labelOf(id) : undefined;
+    nodes.set(id, { id, type: memberType, label: label === undefined ? id : String(label) });
+  };
+  for (const row of rows) {
+    const id = resolveId(row.identifier);
+    if (!id) { unmatched.push({ identifier: row.identifier, value: row.value || '', category: row.category || category }); continue; }
+    const container = containerNodeOf(source, targetType, row.category || category, row.value || value, categoryProp);
+    nodes.set(container.id, container);
+    stub(id);
+    members.add(id);
+    matched.push({ identifier: row.identifier, id, target: container.id });
+    const e = { type: edgeType, source: id, target: container.id };
+    edges.set(canonicalJson([e.type, e.source, e.target]), e);
+  }
+  for (const id of priorSources) { stub(id); members.add(id); }
+
+  const usedNodeTypes = sortedUnique([...nodes.values()].map((n) => n.type));
+  const schema = { nodeTypes: {}, edgeTypes: { [edgeType]: edgeDecl } };
+  for (const t of usedNodeTypes) schema.nodeTypes[t] = (registry.nodeTypes || {})[t] || {};
+
+  const snapshot = {
+    meta: {
+      source,
+      crawledAt: at,
+      snapshot: stamp,
+      registryVersion: registry.version,
+      sourceUrl: `Liste «${category}» (App-Import)`,
+      scope: { nodeTypes: [], edgeTypes: [edgeType], edgeSources: [...members].sort() },
+    },
+    schema,
+    nodes: [...nodes.values()].sort((a, b) => (a.id < b.id ? -1 : 1)),
+    edges: [...edges.values()].sort((a, b) =>
+      canonicalJson([a.type, a.source, a.target]) < canonicalJson([b.type, b.source, b.target]) ? -1 : 1),
+  };
+  return { snapshot, matched, unmatched, members: [...members].sort() };
+}
+
+// ---- view helper -----------------------------------------------------------------
+
+// Extend a view path by a ring hop for `edgeType` at its first station when
+// that station is the member type (E74: a freshly imported list must be
+// visible without hand-editing env.json). Returns the new path, or null when
+// the hop is already present or the path does not start at the member type;
+// the caller validates the result against the registry before applying it.
+function extendPathWithRing(path, memberType, edgeType, targetType) {
+  const p = String(path || '').trim();
+  if (p.includes(`--${edgeType}-->`)) return null;
+  const hop = `--${edgeType}--> ${targetType}[ring]`;
+  const head = new RegExp(`^${memberType}(?![\\p{L}\\p{N}_])`, 'u');
+  if (!head.test(p)) return null;
+  const rest = p.slice(memberType.length).trim();
+  if (!rest) return `${memberType} (${hop})`;
+  // "Type ( ... )" with the group closing the whole path → append a branch.
+  if (rest.startsWith('(') && rest.endsWith(')')) {
+    let depth = 0, closesAtEnd = false;
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '(') depth++;
+      else if (rest[i] === ')') { depth--; if (depth === 0) closesAtEnd = i === rest.length - 1; }
+    }
+    if (closesAtEnd) return `${memberType} (${rest.slice(1, -1).trim()}, ${hop})`;
+  }
+  return `${memberType} (${rest}, ${hop})`;
+}
+// OrgGraph 2.0 — list intake dialog (PRD E74): the in-app counterpart of the
+// former attribute upload. A dropped identifier list (.txt/.tsv/.csv) is
+// parked in the profile (04-storage, LIST_PREFIX) and handled here: choose
+// the target (edge type → target type), category and value — existing ones
+// offered, new ones typed —, confirm fuzzy proposals, then the list becomes
+// an enrichment snapshot (31-og2-intake) that runs through the regular import
+// with its product HIL dialogs (source registration E70, join gate E69,
+// plausibility gate FR-5.7). The store is adopted in place, no reload.
+
+let og2IntakeOpen = false;
+
+// Open the intake dialog for every parked list, one after the other.
+async function og2OpenPendingLists() {
+  if (og2IntakeOpen || !og2State()) return;
+  const pending = await getPendingLists();
+  if (!pending.length) return;
+  og2IntakeOpen = true;
+  try {
+    for (const entry of pending) {
+      await new Promise((resolve) => showListIntakeDialog(entry, resolve));
+    }
+  } finally {
+    og2IntakeOpen = false;
+  }
+}
+
+function fileStemOf(filename) {
+  return String(filename || '').replace(/\.[^.]+$/, '');
+}
+
+// Member type of a list: the edge's declared `from` when it is one type,
+// otherwise the first registry type with an `identifiers` capability.
+function memberTypeOf(registry, edgeDecl) {
+  if (edgeDecl && typeof edgeDecl.from === 'string' && edgeDecl.from !== '*') return edgeDecl.from;
+  const withIds = Object.entries(registry.nodeTypes || {}).find(([, d]) => Array.isArray(d.identifiers) && d.identifiers.length);
+  return withIds ? withIds[0] : null;
+}
+
+function downloadJson(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2) + '\n'], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function formRow(form, labelText, control, { span = false } = {}) {
+  if (span) {
+    control.classList.add('modal-form-span');
+    form.appendChild(control);
+    return control;
+  }
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  form.append(label, control);
+  return control;
+}
+
+function textInput({ value = '', placeholder = '', list = null } = {}) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'modal-input';
+  input.value = value;
+  input.placeholder = placeholder;
+  if (list) input.setAttribute('list', list);
+  return input;
+}
+
+function datalist(id, values) {
+  const dl = document.createElement('datalist');
+  dl.id = id;
+  for (const v of values) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    dl.appendChild(opt);
+  }
+  return dl;
+}
+
+function fillDatalist(dl, values) {
+  dl.innerHTML = '';
+  for (const v of values) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    dl.appendChild(opt);
+  }
+}
+
+function checkbox(labelText, checked) {
+  const wrap = document.createElement('label');
+  wrap.className = 'modal-check';
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = !!checked;
+  const text = document.createElement('span');
+  text.textContent = labelText;
+  wrap.append(box, text);
+  return { wrap, box };
+}
+
+function showListIntakeDialog(entry, onDone) {
+  const og2 = og2State();
+  const { registry, store } = og2;
+  const stem = fileStemOf(entry.filename);
+  const parsed = parseListText(entry.text, stem);
+  const rowsCarryValues = parsed.rows.some((r) => r.value);
+  const rowsCarryCategories = parsed.rows.some((r) => r.category);
+
+  // Default target: the generic attribute carrier when the registry has one
+  // (an edge whose target type groups the legend by a property), else the
+  // first edge type; the member type follows the chosen edge.
+  const allEdgeTypes = Object.entries(registry.edgeTypes || {});
+  const defaultEdge = (allEdgeTypes.find(([, d]) => {
+    const t = (registry.nodeTypes || {})[d.to] || {};
+    return typeof d.to === 'string' && t.groupProp;
+  }) || allEdgeTypes[0] || [null])[0];
+
+  const finish = (result) => { if (onDone) onDone(result); };
+  const { modal, content, close } = createModal({ id: 'listIntakeDialog', title: `Liste importieren: ${entry.filename}` });
+  modal.querySelector('.modal-container').classList.add('modal-container--wide');
+
+  const form = document.createElement('div');
+  form.className = 'modal-form';
+
+  // --- target (edge type → target type)
+  const edgeSelect = document.createElement('select');
+  edgeSelect.className = 'modal-input';
+  let memberType = memberTypeOf(registry, registry.edgeTypes[defaultEdge]);
+  const rebuildEdgeOptions = () => {
+    edgeSelect.innerHTML = '';
+    const choices = listEdgeTypes(registry, memberType);
+    for (const c of choices) {
+      const opt = document.createElement('option');
+      opt.value = c.edgeType;
+      opt.textContent = `${c.edgeType} → ${c.targetType}${c.groupProp ? ' (Kategorie + Wert)' : ''}`;
+      edgeSelect.appendChild(opt);
+    }
+    if (choices.some((c) => c.edgeType === defaultEdge)) edgeSelect.value = defaultEdge;
+  };
+  rebuildEdgeOptions();
+  formRow(form, 'Ziel', edgeSelect);
+
+  // --- category + value with existing choices
+  const catList = datalist('listIntakeCategories', []);
+  const valList = datalist('listIntakeValues', []);
+  const catInput = textInput({ value: stem, placeholder: 'Kategorie (Listenname)', list: catList.id });
+  const valInput = textInput({ value: '', placeholder: 'leer = die Kategorie selbst', list: valList.id });
+  formRow(form, 'Kategorie', catInput);
+  formRow(form, 'Wert', valInput);
+  if (rowsCarryValues) {
+    valInput.disabled = true;
+    valInput.value = `aus Datei (${new Set(parsed.rows.map((r) => r.value)).size} verschiedene)`;
+  }
+  if (rowsCarryCategories) {
+    catInput.disabled = true;
+    catInput.value = `aus Datei (${new Set(parsed.rows.map((r) => r.category || stem)).size} verschiedene)`;
+  }
+  form.append(catList, valList);
+
+  // --- source id (one source per list = full-state semantics per attribute)
+  const srcInput = textInput({ value: listSourceId(stem), placeholder: 'quelle-id' });
+  let srcTouched = false;
+  srcInput.addEventListener('input', () => { srcTouched = true; });
+  formRow(form, 'Quelle', srcInput);
+
+  const currentTargetType = () => (registry.edgeTypes[edgeSelect.value] || {}).to;
+  const targetHasGroup = () => !!((registry.nodeTypes || {})[currentTargetType()] || {}).groupProp;
+  const refreshChoices = () => {
+    const targets = existingTargets(store, registry, currentTargetType());
+    const groups = [...new Set(targets.map((t) => t.group))];
+    fillDatalist(catList, groups);
+    const cat = catInput.value.trim();
+    const labels = targets.filter((t) => !targetHasGroup() || t.group === cat).map((t) => t.label);
+    fillDatalist(valList, [...new Set(labels)]);
+    // without a grouping property the category only names the list (id/source)
+    catInput.placeholder = targetHasGroup() ? 'Kategorie (Listenname)' : 'Listenname (nur Kennung)';
+  };
+  edgeSelect.addEventListener('change', () => {
+    memberType = memberTypeOf(registry, registry.edgeTypes[edgeSelect.value]) || memberType;
+    refreshChoices();
+    rematch();
+  });
+  catInput.addEventListener('input', () => {
+    if (!srcTouched) srcInput.value = listSourceId(catInput.value.trim() || stem);
+    refreshChoices();
+  });
+  refreshChoices();
+
+  // --- matching
+  const summary = document.createElement('div');
+  summary.className = 'modal-summary';
+  const matches = document.createElement('div');
+  matches.className = 'intake-matches';
+  const decisions = new Map(); // identifier -> id | null
+  let resolver = null;
+  let resolutions = [];
+  const rematch = () => {
+    resolver = buildIdentityResolver(store, registry, memberType);
+    resolutions = parsed.rows.map((r) => ({ row: r, res: resolver.resolve(r.identifier) }));
+    decisions.clear();
+    matches.innerHTML = '';
+    let exact = 0, fuzzy = 0, open = 0;
+    for (const { row, res } of resolutions) {
+      if (res.status === 'exact') { exact++; decisions.set(row.identifier, res.id); continue; }
+      const line = document.createElement('div');
+      line.className = 'intake-match' + (res.candidates.length ? '' : ' intake-match--unmatched');
+      const id = document.createElement('span');
+      id.className = 'intake-match-id';
+      id.textContent = row.identifier;
+      id.title = row.identifier;
+      line.appendChild(id);
+      if (res.candidates.length) {
+        const sel = document.createElement('select');
+        sel.className = 'modal-input';
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = 'nicht zuordnen';
+        sel.appendChild(none);
+        for (const c of res.candidates) {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = `${c.label} (${Math.round((1 - c.dist) * 100)} %)`;
+          sel.appendChild(opt);
+        }
+        sel.value = res.status === 'fuzzy' ? res.id : '';
+        decisions.set(row.identifier, sel.value || null);
+        if (res.status === 'fuzzy') fuzzy++; else open++;
+        sel.addEventListener('change', () => { decisions.set(row.identifier, sel.value || null); updateSummary(); });
+        line.appendChild(sel);
+      } else {
+        const none = document.createElement('span');
+        none.className = 'modal-note';
+        none.textContent = 'kein Treffer';
+        line.appendChild(none);
+        decisions.set(row.identifier, null);
+        open++;
+      }
+      matches.appendChild(line);
+    }
+    matches.hidden = matches.childElementCount === 0;
+    updateSummary(exact, fuzzy, open);
+  };
+  let counts = { exact: 0, fuzzy: 0, open: 0 };
+  const updateSummary = (exact, fuzzy, open) => {
+    if (exact !== undefined) counts = { exact, fuzzy, open };
+    const assigned = [...decisions.values()].filter(Boolean).length;
+    summary.textContent = `${parsed.rows.length} Zeilen · ${counts.exact} exakt · ${counts.fuzzy} Vorschläge · ${counts.open} offen → ${assigned} werden importiert`;
+    importBtn.disabled = assigned === 0;
+  };
+
+  // --- view hop + download
+  const view = og2ActiveView(og2);
+  const extendCheck = checkbox('', true);
+  const refreshExtend = () => {
+    const edgeType = edgeSelect.value;
+    const targetType = currentTargetType();
+    const next = view ? extendPathWithRing(view.path, memberType, edgeType, targetType) : null;
+    const ok = next && validateView({ ...view, path: next }, registry).ok;
+    extendCheck.wrap.hidden = !ok;
+    extendCheck.wrap.dataset.path = ok ? next : '';
+    extendCheck.wrap.querySelector('span').textContent = `View «${og2.activeViewName}» um Ring ${edgeType} → ${targetType} erweitern`;
+  };
+  edgeSelect.addEventListener('change', refreshExtend);
+  const dlCheck = checkbox('Snapshot-Datei zusätzlich herunterladen', false);
+
+  const error = document.createElement('div');
+  error.className = 'modal-error';
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'modal-btn-row';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn';
+  cancelBtn.textContent = 'Verwerfen';
+  const importBtn = document.createElement('button');
+  importBtn.type = 'button';
+  importBtn.className = 'btn-primary';
+  importBtn.textContent = 'Importieren';
+  btnRow.append(cancelBtn, importBtn);
+
+  content.append(form, summary, matches, extendCheck.wrap, dlCheck.wrap, error, btnRow);
+  rematch();
+  refreshExtend();
+
+  const discard = async () => {
+    await delStored(entry.key);
+    showTemporaryNotification(`Liste ${entry.filename} verworfen — nichts importiert.`);
+    finish({ status: 'discarded' });
+  };
+  cancelBtn.addEventListener('click', () => { close(); discard(); });
+  modal.querySelector('.modal-close-btn').addEventListener('click', discard);
+
+  importBtn.addEventListener('click', async () => {
+    error.textContent = '';
+    importBtn.disabled = true;
+    try {
+      const edgeType = edgeSelect.value;
+      const category = rowsCarryCategories ? stem : (catInput.value.trim() || stem);
+      const value = rowsCarryValues ? '' : valInput.value.trim();
+      const source = srcInput.value.trim();
+      if (!/^[a-z][a-z0-9-]*$/.test(source)) throw new Error('Quelle muss dem Muster ^[a-z][a-z0-9-]*$ folgen (E62).');
+      const built = buildListSnapshot({
+        source, at: new Date().toISOString(), registry, rows: parsed.rows, category, value, edgeType, memberType,
+        resolveId: (identifier) => decisions.get(identifier) || null,
+        labelOf: resolver.labelOf,
+        priorSources: priorEdgeSources(store, source, edgeType),
+      });
+      const res = await importSnapshotAsync(store, registry, built.snapshot, og2UiHooks());
+      if (res.status !== 'imported') {
+        const detail = res.errors ? res.errors.slice(0, 3).join('; ') : (res.reason || '');
+        throw new Error(`${res.status === 'noop' ? 'Bereits importiert' : 'Import nicht angewendet'}${detail ? ': ' + detail : ''}`);
+      }
+      if (!extendCheck.wrap.hidden && extendCheck.box.checked && extendCheck.wrap.dataset.path) {
+        const views = { ...(og2.env.VIEWS || {}) };
+        views[og2.activeViewName] = { ...views[og2.activeViewName], path: extendCheck.wrap.dataset.path };
+        delete views[og2.activeViewName].parsed;
+        await og2ReplaceViews(views);
+      }
+      await delStored(entry.key);
+      if (dlCheck.box.checked) downloadJson(`${source}.snapshot-${built.snapshot.meta.snapshot}.json`, built.snapshot);
+      await og2AdoptStore(res.store || store);
+      const skipped = built.unmatched.length ? `, ${built.unmatched.length} ohne Zuordnung übersprungen` : '';
+      showTemporaryNotification(`Liste ${entry.filename} importiert: ${built.matched.length} Zuordnungen als ${edgeType}${skipped}.`, 'medium');
+      close();
+      finish({ status: 'imported', snapshot: built.snapshot });
+    } catch (e) {
+      console.warn('[intake] Import fehlgeschlagen:', e);
+      error.textContent = String(e.message || e);
+      importBtn.disabled = false;
+    }
+  });
 }
 
 </script>

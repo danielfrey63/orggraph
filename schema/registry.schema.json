@@ -45,6 +45,10 @@
           "type": "string",
           "description": "Path to the boolean property marking leaf nodes, in the same path notation as identifiers (e.g. \"props.isBasis\"); drives the type-agnostic leaf filter (PRD FR-8.3)."
         },
+        "groupProp": {
+          "type": "string",
+          "description": "Props path (e.g. \"props.kategorie\") whose value groups ring badges of this type in the legend instead of the type name (PRD E74); a missing or non-string value falls back to the type name."
+        },
         "pseudonymize": {
           "type": "object",
           "additionalProperties": false,
