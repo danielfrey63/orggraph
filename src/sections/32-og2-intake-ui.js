@@ -11,7 +11,7 @@ import { getPendingLists, delStored } from './04-storage.js';
 import { createModal } from './03-export-dialog.js';
 import { importSnapshotAsync } from './26-og2-import.js';
 import { validateView } from './27-og2-path.js';
-import { parseListText, buildIdentityResolver, listSourceId, priorEdgeSources, listEdgeTypes, existingTargets, buildListSnapshot, extendPathWithRing } from './31-og2-intake.js';
+import { parseListText, buildIdentifierFingerprint, buildIdentityResolver, listSourceId, priorEdgeSources, listEdgeTypes, existingTargets, buildListSnapshot, extendPathWithRing } from './31-og2-intake.js';
 import { og2State, og2ActiveView, og2UiHooks, og2AdoptStore, og2ReplaceViews } from './30-og2-ui.js';
 
 let og2IntakeOpen = false;
@@ -23,13 +23,19 @@ export async function og2OpenPendingLists() {
   if (!pending.length) return;
   og2IntakeOpen = true;
   try {
+    // The identifier column is found by fingerprint (E74): exact known
+    // identifiers and patterns derived from them, learned from the stock of
+    // the type carrying an `identifiers` capability.
+    const { registry, store } = og2State();
+    const fpType = (Object.entries(registry.nodeTypes || {}).find(([, d]) => Array.isArray(d.identifiers) && d.identifiers.length) || [null])[0];
+    const fingerprint = fpType ? buildIdentifierFingerprint(store, registry, fpType) : null;
     for (const entry of pending) {
       // one dialog per list: a wide table (E74) yields one list per
       // attribute column; the parked file is consumed once all are handled
-      const { lists } = parseListText(entry.text, fileStemOf(entry.filename));
+      const { lists, detected } = parseListText(entry.text, fileStemOf(entry.filename), fingerprint);
       if (!lists.length) showTemporaryNotification(`Liste ${entry.filename}: keine Einträge gefunden.`, 'medium');
       for (let i = 0; i < lists.length; i++) {
-        await new Promise((resolve) => showListIntakeDialog(entry, lists[i], { index: i + 1, total: lists.length }, resolve));
+        await new Promise((resolve) => showListIntakeDialog(entry, lists[i], { index: i + 1, total: lists.length, detected }, resolve));
       }
       await delStored(entry.key);
     }
@@ -209,6 +215,13 @@ export function showListIntakeDialog(entry, list, meta, onDone) {
   // --- matching
   const summary = document.createElement('div');
   summary.className = 'modal-summary';
+  // how the identifier column was found (fingerprint vs. header/position)
+  const detectNote = document.createElement('div');
+  detectNote.className = 'modal-note';
+  const det = meta && meta.detected;
+  detectNote.textContent = det
+    ? `Identifikator-Spalte erkannt: «${det.header ? det.label : `Spalte ${det.column + 1}`}» — ${det.exact} bekannt, ${det.pattern} nach Muster, von ${det.nonEmpty}.`
+    : 'Identifikator-Spalte nach Kopfzeile bzw. Position gewählt (keine Muster aus dem Bestand anwendbar).';
   const matches = document.createElement('div');
   matches.className = 'intake-matches';
   const decisions = new Map(); // identifier -> id | null
@@ -298,7 +311,7 @@ export function showListIntakeDialog(entry, list, meta, onDone) {
   importBtn.textContent = 'Importieren';
   btnRow.append(cancelBtn, importBtn);
 
-  content.append(form, summary, matches, extendCheck.wrap, dlCheck.wrap, error, btnRow);
+  content.append(form, summary, detectNote, matches, extendCheck.wrap, dlCheck.wrap, error, btnRow);
   rematch();
   refreshExtend();
 

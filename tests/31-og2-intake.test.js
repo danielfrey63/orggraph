@@ -7,7 +7,7 @@ import { importSnapshot } from '../src/sections/26-og2-import.js';
 import { validateView } from '../src/sections/27-og2-path.js';
 import { resolveRingGroup } from '../src/sections/29-og2-app.js';
 import {
-  parseListText, buildIdentityResolver, listSourceId, containerNodeOf, priorEdgeSources,
+  parseListText, derivePatterns, buildIdentifierFingerprint, buildIdentityResolver, listSourceId, containerNodeOf, priorEdgeSources,
   listEdgeTypes, existingTargets, buildListSnapshot, extendPathWithRing,
 } from '../src/sections/31-og2-intake.js';
 
@@ -60,7 +60,7 @@ describe('E74 — list parsing', () => {
     expect(category).toBe('Newsletter');
     expect(kind).toBe('list');
     expect(header).toBe(false);
-    expect(parseListText('', 'x')).toEqual({ lists: [], delimiter: null, header: false });
+    expect(parseListText('', 'x')).toEqual({ lists: [], delimiter: null, header: false, detected: null });
   });
 
   it('maps the legacy two- and three-column TSV shapes', () => {
@@ -104,6 +104,53 @@ describe('E74 — list parsing', () => {
     expect(lists).toEqual([{ category: 'Aktiv', kind: 'boolean', rows: [{ identifier: 'Anna Boss', value: '' }] }]);
     const names = parseListText('E-Mail,Name\na@x.ch,Anna\nb@x.ch,Ben\n', 'Kohorte VII');
     expect(names.lists).toEqual([{ category: 'Kohorte VII', kind: 'list', rows: [{ identifier: 'a@x.ch', value: '' }, { identifier: 'b@x.ch', value: '' }] }]);
+  });
+});
+
+describe('E74 — identifier fingerprint: patterns from real ids, column detection', () => {
+  it('derives anchored patterns from real values and drops unanchored ones', () => {
+    expect(derivePatterns(['p-4889730', 'p-20J5K845J', 'p-77', 'a@x.ch', 'b.c@y.admin.ch', 'Anna', 'Ben'])).toEqual([
+      '^[\\w.+-]+@([\\w-]+\\.)+[\\w-]{2,}$',
+      '^p-[A-Za-z0-9]+$', // digits and alphanumerics behind the same prefix widen to one pattern
+    ]);
+    expect(derivePatterns(['P00123', 'P00456'])).toEqual(['^P\\d+$']);
+    expect(derivePatterns(['123', '456'])).toEqual(['^\\d+$']);
+    expect(derivePatterns(['p-1'])).toEqual([]); // a single value is no pattern
+  });
+
+  it('finds the identifier column by fingerprint regardless of header names, the id tail resolves exactly', () => {
+    const store = createTenantStore();
+    const base = JSON.parse(JSON.stringify(BASE));
+    base.nodes = base.nodes.map((n) => (n.type === 'Person' ? { ...n, id: `stock:${n.id}` } : n));
+    base.edges = [{ type: 'mitgliedIn', source: 'stock:p1', target: 'o1' }];
+    expect(importSnapshot(store, registry, base, YES).status).toBe('imported');
+    const fp = buildIdentifierFingerprint(store, registry, 'Person');
+    expect(fp.exact.has('p1')).toBe(true);
+    expect(fp.exact.has('anna.boss@x.ch')).toBe(true);
+    expect(fp.patterns.map(String)).toContain('/^p\\d+$/i');
+    expect(fp.hit('P9')).toBe('pattern');
+    expect(fp.hit('Ben Dev')).toBeNull();
+
+    // no usable header, e-mail in the third column: fingerprint wins over position
+    const text = 'Vorname;Nachname;Mailadresse Geschäft;Team\nAnna;Boss;anna.boss@x.ch;Rot\nBen;Dev;ben.dev@x.ch;Blau\nNeu;Person;neu.person@x.ch;Rot\n';
+    const { lists, header, detected } = parseListText(text, 'export', fp);
+    expect(header).toBe(true);
+    expect(detected).toMatchObject({ column: 2, label: 'Mailadresse Geschäft', exact: 2, pattern: 1, nonEmpty: 3 });
+    expect(lists).toEqual([{ category: 'Team', kind: 'value', rows: [
+      { identifier: 'anna.boss@x.ch', value: 'Rot' }, { identifier: 'ben.dev@x.ch', value: 'Blau' }, { identifier: 'neu.person@x.ch', value: 'Rot' },
+    ] }]);
+
+    // header-less two columns with the raw key in the SECOND column
+    const raw = parseListText('Gold\tp1\nSilber\tp2\n', 'Stufe', fp);
+    expect(raw.header).toBe(false);
+    expect(raw.lists[0].rows).toEqual([{ identifier: 'p1', value: 'Gold' }, { identifier: 'p2', value: 'Silber' }]);
+    const { resolve } = buildIdentityResolver(store, registry, 'Person');
+    expect(resolve('p1')).toMatchObject({ status: 'exact', id: 'stock:p1' });
+
+    // an empty fingerprint changes nothing
+    const none = buildIdentifierFingerprint(createTenantStore(), registry, 'Person');
+    expect(none.empty).toBe(true);
+    expect(parseListText('a@x.ch\tGold', 'S', none).lists[0].rows).toEqual([{ identifier: 'a@x.ch', value: 'Gold' }]);
   });
 });
 

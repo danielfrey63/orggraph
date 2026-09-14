@@ -64,46 +64,161 @@ function detectDelimiter(line) {
   return null;
 }
 
+// ---- identifier fingerprint ---------------------------------------------------
+
+const EMAIL_RE = /^[\w.+-]+@([\w-]+\.)+[\w-]{2,}$/i;
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Generalize REAL identifier values into a few anchored regexes: every
+// value containing "@" contributes to the e-mail pattern; the others are
+// grouped by their literal prefix (letters/punctuation before the variable
+// part, e.g. "p-" of "p-4889730") and the character class of the rest
+// ("\d+", "[A-Za-z0-9]+", "[\w.-]+"). A group needs two values, and a
+// pattern without any literal anchor that would match arbitrary words is
+// dropped — patterns decide which COLUMN holds identifiers, never a single
+// row's assignment (that stays exact or user-confirmed).
+export function derivePatterns(values) {
+  const vals = [...new Set(values.map((v) => String(v ?? '').trim()).filter(Boolean))];
+  // one group per literal prefix; the rest widens to the broadest class seen
+  // (digits ⊂ alphanumerics ⊂ word characters), so "p-4889730" and
+  // "p-20J5K845J" yield ONE pattern ^p-[A-Za-z0-9]+$
+  const CLASSES = ['\\d+', '[A-Za-z0-9]+', '[\\w.-]+'];
+  const groups = new Map(); // prefix -> { rank, n }
+  let emails = 0;
+  for (const v of vals) {
+    if (v.includes('@')) { emails++; continue; }
+    const m = /^(?:[^\p{N}]*?[^\p{L}\p{N}]|\p{L}+(?=\p{N}))/u.exec(v);
+    const prefix = m ? m[0] : '';
+    const rest = v.slice(prefix.length);
+    const rank = /^\d+$/.test(rest) ? 0 : /^[A-Za-z0-9]+$/.test(rest) ? 1 : 2;
+    const g = groups.get(prefix) || { rank: 0, n: 0 };
+    g.rank = Math.max(g.rank, rank);
+    g.n++;
+    groups.set(prefix, g);
+  }
+  const out = [];
+  if (emails >= 2) out.push(EMAIL_RE.source);
+  for (const [prefix, g] of groups) {
+    if (g.n < 2) continue;
+    if (!prefix && g.rank > 0) continue; // no anchor: would match any word
+    out.push(`^${escapeRe(prefix)}${CLASSES[g.rank]}$`);
+  }
+  return out.sort();
+}
+
+// Fingerprint of the open identities of `type`: exact values (id, id tail
+// without the source namespace, identifier props — lower-cased) and the
+// patterns derived from them. Used to find the identifier column of a
+// table without relying on header names.
+export function buildIdentifierFingerprint(store, registry, type) {
+  const decl = (registry.nodeTypes || {})[type] || {};
+  const paths = (decl.identifiers || []).map((p) => /^props\.([^.]+)$/.exec(String(p))).filter(Boolean).map((m) => m[1]);
+  const exact = new Set();
+  const raw = [];
+  for (const identity of store.nodes.values()) {
+    if (identity.type !== type || !nodeOpenNow(identity)) continue;
+    const tail = identity.id.includes(':') ? identity.id.slice(identity.id.lastIndexOf(':') + 1) : identity.id;
+    exact.add(identity.id.toLowerCase());
+    exact.add(tail.toLowerCase());
+    raw.push(tail);
+    for (const p of paths) {
+      const v = openPropOf(identity, p);
+      if (typeof v === 'string' && v) { exact.add(v.toLowerCase()); raw.push(v); }
+    }
+  }
+  const patterns = derivePatterns(raw).map((src) => new RegExp(src, 'i'));
+  const hit = (cell) => {
+    const v = String(cell ?? '').trim();
+    if (!v) return null;
+    if (exact.has(v.toLowerCase())) return 'exact';
+    return patterns.some((re) => re.test(v)) ? 'pattern' : null;
+  };
+  return { type, exact, patterns, hit, empty: exact.size === 0 };
+}
+
+// Score every column of a cell matrix: exact hits count fully, pattern hits
+// half, over the non-empty cells. Returns the columns sorted best first.
+export function scoreColumns(matrix, fingerprint) {
+  const width = Math.max(0, ...matrix.map((r) => r.length));
+  const out = [];
+  for (let col = 0; col < width; col++) {
+    let nonEmpty = 0, exact = 0, pattern = 0;
+    for (const row of matrix) {
+      const v = String(row[col] ?? '').trim();
+      if (!v) continue;
+      nonEmpty++;
+      const h = fingerprint.hit(v);
+      if (h === 'exact') exact++; else if (h === 'pattern') pattern++;
+    }
+    out.push({ col, nonEmpty, exact, pattern, score: nonEmpty ? (exact + 0.5 * pattern) / nonEmpty : 0 });
+  }
+  return out.sort((a, b) => b.score - a.score || b.exact - a.exact || a.col - b.col);
+}
+
+// ---- list parsing ---------------------------------------------------------------
+
 // Parse a list file into lists [{ category, kind, rows: [{ identifier,
 // value, category? }] }]. `fileStem` (file name without extension) is the
 // default category, like the legacy attribute files whose name was the
 // category (README v1). kind: 'list' (long form / no header), 'boolean'
 // (membership column) or 'value' (text column) — wide files yield one list
-// per attribute column.
-export function parseListText(text, fileStem = '') {
+// per attribute column. With a `fingerprint` (buildIdentifierFingerprint)
+// the identifier column is the one whose cells look like known identifiers
+// (exact values or derived patterns); header aliases only break ties. The
+// result reports the detection (`detected`) for the dialog.
+export function parseListText(text, fileStem = '', fingerprint = null) {
   const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/)
     .map((l) => l.replace(/\s+$/, ''))
     .filter((l) => l.trim() && !l.trim().startsWith('#'));
-  if (!lines.length) return { lists: [], delimiter: null, header: false };
+  if (!lines.length) return { lists: [], delimiter: null, header: false, detected: null };
   const delimiter = detectDelimiter(lines[0]);
   const cells = (l) => (delimiter ? splitDelimited(l, delimiter) : [l]).map((c) => c.trim());
-  const headerCells = cells(lines[0]);
+  const matrix = lines.map(cells);
+  const headerCells = matrix[0];
   const first = headerCells.map((c) => c.toLowerCase());
   const find = (aliases) => { const i = first.findIndex((h) => aliases.includes(h)); return i >= 0 ? i : null; };
   const keyCol = find(LIST_HEADERS.key);
   const nameCol = find(LIST_HEADERS.name);
-  const header = keyCol !== null || nameCol !== null;
-  const body = lines.slice(header ? 1 : 0).map(cells);
+  const aliasHeader = keyCol !== null || nameCol !== null;
+
+  // Fingerprint detection: best-scoring column with at least two hits and
+  // half of its cells recognized; the first row is a header when its cell
+  // in that column is no identifier while the column otherwise is.
+  let detected = null;
+  if (fingerprint && !fingerprint.empty) {
+    const best = scoreColumns(matrix, fingerprint)[0];
+    if (best && best.exact + best.pattern >= 2 && best.score >= 0.5) {
+      const firstHit = fingerprint.hit(headerCells[best.col]);
+      const isHeader = aliasHeader || !firstHit;
+      // report the data cells only (the header cell is no identifier)
+      const headerCell = isHeader && String(headerCells[best.col] || '').trim() ? 1 : 0;
+      detected = { column: best.col, header: isHeader, label: headerCells[best.col], exact: best.exact, pattern: best.pattern, nonEmpty: best.nonEmpty - headerCell };
+    }
+  }
+  const header = detected ? detected.header : aliasHeader;
+  const body = matrix.slice(header ? 1 : 0);
+  const identifier = detected ? detected.column : (keyCol ?? nameCol ?? 0); // key column beats a name column
 
   const longForm = (cols, category) => {
     const rows = [];
     for (const c of body) {
-      const identifier = c[cols.identifier] || '';
-      if (!identifier) continue;
-      const row = { identifier, value: cols.value !== null ? (c[cols.value] || '') : '' };
+      const id = c[cols.identifier] || '';
+      if (!id) continue;
+      const row = { identifier: id, value: cols.value !== null ? (c[cols.value] || '') : '' };
       if (cols.category !== null && c[cols.category]) row.category = c[cols.category];
       rows.push(row);
     }
-    return { lists: [{ category, kind: 'list', rows }], delimiter, header };
+    return { lists: [{ category, kind: 'list', rows }], delimiter, header, detected };
   };
 
   if (!header) {
     const width = headerCells.length;
-    const cols = { identifier: 0, value: width === 2 ? 1 : width >= 3 ? 2 : null, category: width >= 3 ? 1 : null };
+    let cols;
+    if (identifier === 0) cols = { identifier: 0, value: width === 2 ? 1 : width >= 3 ? 2 : null, category: width >= 3 ? 1 : null };
+    else cols = { identifier, value: width >= 2 ? (identifier === 1 ? 0 : 1) : null, category: null };
     return longForm(cols, fileStem);
   }
 
-  const identifier = keyCol ?? nameCol; // key column beats a name column
   const valueCol = find(LIST_HEADERS.value);
   const categoryCol = find(LIST_HEADERS.category);
   if (valueCol !== null || categoryCol !== null) {
@@ -129,7 +244,7 @@ export function parseListText(text, fileStem = '') {
   }
   // a header with only identifier/name columns is a plain member list
   if (!lists.length) lists.push({ category: fileStem, kind: 'list', rows: body.filter((c) => c[identifier]).map((c) => ({ identifier: c[identifier], value: '' })) });
-  return { lists, delimiter, header };
+  return { lists, delimiter, header, detected };
 }
 
 // ---- identity resolution ----------------------------------------------------
@@ -147,9 +262,10 @@ function openPropOf(identity, name) {
 }
 
 // Resolver over the OPEN identities of `type` (FR-10.4 semantics in-app):
-// exact hit on id or any registry identifier path (case-insensitive) — an
-// identifier value shared by several identities is ambiguous, never a silent
-// pick; otherwise fuzzy candidates (normalized Levenshtein <= threshold on
+// exact hit on id, on the id tail without its source namespace (the raw
+// key a source export carries, e.g. "p-4889730") or any registry identifier
+// path (case-insensitive) — an identifier value shared by several
+// identities is ambiguous, never a silent pick; otherwise fuzzy candidates (normalized Levenshtein <= threshold on
 // label, identifier values and the e-mail local part read as a name), one
 // unambiguous candidate becomes a PROPOSAL (status 'fuzzy'), several stay
 // 'ambiguous', none 'unmatched'.
@@ -174,6 +290,7 @@ export function buildIdentityResolver(store, registry, type, { threshold = 0.3 }
       if (typeof v === 'string' && v) { idents.push(v); put(v, identity.id); }
     }
     put(identity.id, identity.id);
+    if (identity.id.includes(':')) put(identity.id.slice(identity.id.lastIndexOf(':') + 1), identity.id);
     persons.push({ id: identity.id, label: label === undefined ? identity.id : String(label), idents });
   }
   const byId = new Map(persons.map((p) => [p.id, p]));
