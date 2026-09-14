@@ -191,6 +191,23 @@ export function renderGraph(sub) {
   const personIdsInSub = new Set(sub.nodes.filter(n => drawKindOf(byId.get(String(n.id)) || n) === 'node').map(n => String(n.id)));
   const linksPP = sub.links.filter(l => personIdsInSub.has(idOf(l.source)) && personIdsInSub.has(idOf(l.target)));
 
+  // Manager -> reports and report -> managers of the drawn scene, in
+  // hierarchy direction (hierarchyPairOf owns the v2 inversion, FR-7.2a):
+  // the radial build-up walks DOWN from a positioned manager to its unplaced
+  // reports, so they spawn on the circle around it (live-test 2026-09-14).
+  const hierarchyMaps = () => {
+    const childrenOf = new Map();
+    const parentsOf = new Map();
+    for (const l of linksPP) {
+      const { manager, report } = hierarchyPairOf(l);
+      if (!childrenOf.has(manager)) childrenOf.set(manager, []);
+      childrenOf.get(manager).push(report);
+      if (!parentsOf.has(report)) parentsOf.set(report, []);
+      parentsOf.get(report).push(manager);
+    }
+    return { childrenOf, parentsOf };
+  };
+
   // Cluster-Ebene (hinter Links und Knoten)
     const gClusters = ensureLayer(gZoom, "g.clusters");
   clusterLayer = gClusters;
@@ -276,19 +293,9 @@ export function renderGraph(sub) {
     if (rootIds.length === 0) return false;
     
     Logger.log('[Layout] Radiales Initial-Layout', { rootIds, nodeCount: personNodes.length });
-    
-    // Build parent-child map
-    const childrenOf = new Map();
-    const parentsOf = new Map();
-    
-    linksPP.forEach(l => {
-      const s = idOf(l.source), t = idOf(l.target);
-      if (!childrenOf.has(s)) childrenOf.set(s, []);
-      childrenOf.get(s).push(t);
-      if (!parentsOf.has(t)) parentsOf.set(t, []);
-      parentsOf.get(t).push(s);
-    });
-    
+
+    const { childrenOf, parentsOf } = hierarchyMaps();
+
     // Track welche Knoten bereits positioniert wurden
     const positioned = new Set();
     
@@ -330,18 +337,8 @@ export function renderGraph(sub) {
    * Neue Knoten werden Generation für Generation hinzugefügt
    */
   const extendLayoutWithNewNodes = () => {
-    // Build parent-child map
-    const childrenOf = new Map();
-    const parentsOf = new Map();
-    
-    linksPP.forEach(l => {
-      const s = idOf(l.source), t = idOf(l.target);
-      if (!childrenOf.has(s)) childrenOf.set(s, []);
-      childrenOf.get(s).push(t);
-      if (!parentsOf.has(t)) parentsOf.set(t, []);
-      parentsOf.get(t).push(s);
-    });
-    
+    const { childrenOf, parentsOf } = hierarchyMaps();
+
     // Identifiziere neue Knoten
     const newNodeIds = new Set();
     personNodes.forEach(n => {

@@ -4,7 +4,7 @@ import { idOf, drawKindOf } from '../src/sections/09-data-load.js';
 import { cssNumber, jitterAround, getNodeFillByLevel, countVisibleAttributeRings } from '../src/sections/08-color-geometry.js';
 
 const BFS_DELAY = cssNumber('--bfs-level-delay-ms');
-import { setDepth } from '../src/sections/19-layout-bootstrap.js';
+import { setDepth, hierarchyPairOf } from '../src/sections/19-layout-bootstrap.js';
 import {
     SVG_ID, WIDTH, HEIGHT,
 } from '../src/sections/01-config-status.js';
@@ -35,6 +35,7 @@ beforeEach(() => {
         globalThis.cssNumber = cssNumber;
     globalThis.jitterAround = jitterAround;
   globalThis.setDepth = setDepth;
+  globalThis.hierarchyPairOf = hierarchyPairOf;
   globalThis.renderClusterHulls = sim13.renderClusterHulls;
   globalThis.getNodeFillByLevel = getNodeFillByLevel;
   globalThis.SVG_ID = SVG_ID;
@@ -193,5 +194,44 @@ describe('transitionGraph', () => {
     await done;
     vi.useRealTimers();
     expect(nodeIds()).toEqual(['p1', 'p2']);
+  });
+});
+
+describe('radial layout follows the hierarchy direction (FR-7.2a, live-test finding 2026-09-14)', () => {
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const CENTRE = { x: WIDTH / 2, y: HEIGHT / 2 };
+  // a child sits on the circle around its manager: node radius (+ rings,
+  // none here) plus the radial padding — generous bound
+  const RING_MAX = cssNumber('--node-radius') * 3 + cssNumber('--radial-child-padding');
+  const sim = (id) => globalThis.simAllById.get(id);
+
+  afterEach(() => { delete globalThis.og2Active; });
+
+  it('v2 (report -> manager edges): every generation spawns around its manager on first render', () => {
+    globalThis.og2Active = () => true;
+    mod.renderGraph(SUB(['p1', 'p2', 'p3'], [{ source: 'p2', target: 'p1' }, { source: 'p3', target: 'p2' }]));
+    expect(dist(sim('p1'), CENTRE)).toBe(0); // root exactly in the centre
+    expect(dist(sim('p2'), sim('p1'))).toBeGreaterThan(0);
+    expect(dist(sim('p2'), sim('p1'))).toBeLessThan(RING_MAX);
+    expect(dist(sim('p3'), sim('p2'))).toBeGreaterThan(0);
+    expect(dist(sim('p3'), sim('p2'))).toBeLessThan(RING_MAX); // grandchild: around p2, not scattered
+  });
+
+  it('v2: reports entering with a deeper scene spawn on their manager\'s circle, not in the centre', () => {
+    globalThis.og2Active = () => true;
+    mod.renderGraph(SUB(['p1', 'p2'], [{ source: 'p2', target: 'p1' }]));
+    globalThis.currentSimulation?.stop?.();
+    // move the manager away from the centre so the spawn point is unambiguous
+    const p2 = sim('p2');
+    p2.x = 900; p2.y = 700; p2.vx = 0; p2.vy = 0;
+    mod.renderGraph(SUB(['p1', 'p2', 'p3'], [{ source: 'p2', target: 'p1' }, { source: 'p3', target: 'p2' }]));
+    const p3 = sim('p3');
+    expect(dist(p3, { x: 900, y: 700 })).toBeLessThan(RING_MAX);
+    expect(dist(p3, CENTRE)).toBeGreaterThan(200);
+  });
+
+  it('legacy (manager -> report edges) keeps the stored direction', () => {
+    mod.renderGraph(SUB(['p1', 'p2', 'p3'], [{ source: 'p1', target: 'p2' }, { source: 'p2', target: 'p3' }]));
+    expect(dist(sim('p3'), sim('p2'))).toBeLessThan(RING_MAX);
   });
 });

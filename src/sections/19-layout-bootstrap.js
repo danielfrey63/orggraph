@@ -33,22 +33,30 @@ export function syncGraphAndLegendColors() {
 /**
  * Berechnet Hierarchieebenen für Knoten
  */
+// Hierarchy direction of a drawn node->node link (FR-7.2a): v2 descent edges
+// are stored subordinate -> superior (source reports to target); legacy
+// stored manager -> report. Single owner of the inversion — the level
+// computation, the parent map and the radial layout (14) all read it here;
+// without it the hierarchy is upside down and new reports cannot find the
+// positioned manager they should spawn around (live-test finding 2026-09-14).
+export function hierarchyPairOf(link) {
+  const s = idOf(link.source), t = idOf(link.target);
+  const v2 = typeof og2Active === 'function' && og2Active();
+  return v2 ? { manager: t, report: s } : { manager: s, report: t };
+}
+
 export function computeHierarchyLevels(nodes, links) {
   const levels = new Map();
   const nodeSet = new Set(nodes.map(n => String(n.id)));
-  
+
   // Build parent map (manager relationships for persons)
   const managerOf = new Map(); // personId -> managerId
-  const v2 = typeof og2Active === 'function' && og2Active();
   for (const l of links) {
     const s = idOf(l.source), t = idOf(l.target);
     const sNode = byId.get(s), tNode = byId.get(t);
     if (drawKindOf(sNode) === 'node' && drawKindOf(tNode) === 'node' && nodeSet.has(s) && nodeSet.has(t)) {
-      // Stored edge direction (FR-7.2a): v2 descent edges point subordinate
-      // -> superior (source reports to target); legacy stored manager ->
-      // report. Without the inversion the hierarchy layout is upside down.
-      if (v2) managerOf.set(s, t);
-      else managerOf.set(t, s);
+      const { manager, report } = hierarchyPairOf(l);
+      managerOf.set(report, manager);
     }
   }
 
@@ -118,13 +126,14 @@ export function configureLayout(nodes, links, simulation, mode) {
     const LEVEL_HEIGHT = cssNumber('--level-height'); // Vertikaler Abstand zwischen Hierarchie-Ebenen
   const LEVEL_FORCE_STRENGTH = cssNumber('--level-force-strength'); // Stärke der vertikalen Anziehungskraft
   
-  // Manager-Parent-Map aufbauen für radiales Layout
+  // Report -> manager map of the drawn scene (hierarchy direction)
   const pMap = new Map();
   for (const l of links) {
     const s = idOf(l.source), t = idOf(l.target);
     const sNode = byId.get(s), tNode = byId.get(t);
     if (drawKindOf(sNode) === 'node' && drawKindOf(tNode) === 'node') {
-      pMap.set(t, s);
+      const { manager, report } = hierarchyPairOf(l);
+      pMap.set(report, manager);
     }
   }
   parentOf = pMap;
