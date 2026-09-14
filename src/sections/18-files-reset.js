@@ -301,10 +301,12 @@ window.addEventListener("DOMContentLoaded", async () => {
         allowedOrgs.clear();
         showTemporaryNotification('Alle Cluster abgewählt');
       } else {
-        // Keine OE ist ausgewählt -> Alle auswählen
-        raw.orgs.forEach(o => {
-          if (o && o.id) allowedOrgs.add(String(o.id));
-        });
+        // Keine OE ist ausgewählt -> Alle auswählen: die Cluster der aktuellen
+        // Szene (Legenden-Scope, FR-8.2); ohne Scope der ganze Bestand
+        const scope = typeof currentLegendScope !== 'undefined' && currentLegendScope.size > 0
+          ? [...currentLegendScope]
+          : raw.orgs.filter(o => o && o.id).map(o => String(o.id));
+        for (const id of scope) allowedOrgs.add(String(id));
         showTemporaryNotification('Alle Cluster ausgewählt');
       }
       

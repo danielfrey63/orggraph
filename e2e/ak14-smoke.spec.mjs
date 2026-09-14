@@ -12,10 +12,30 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator(NODE_CIRCLES)).toHaveCount(5, { timeout: 30_000 });
 });
 
-test('start view renders nodes, cluster hulls and ring badges', async ({ page }) => {
-  await expect(page.locator('path.cluster')).toHaveCount(2);
-  await expect(page.locator('circle.attribute-circle').first()).toBeVisible();
+test('start view renders nodes and links; hulls and rings are opt-in (E75)', async ({ page }) => {
   await expect(page.locator('g.links line')).toHaveCount(4);
+  // nothing is selected by default: the legends list the clusters and ring
+  // groups, the scene shows neither hulls nor badges until the user chooses
+  await expect(page.locator('#legend .legend-row')).toHaveCount(2);
+  await expect(page.locator('#attributeLegend .legend-row[data-attribute-color]')).toHaveCount(3);
+  await expect(page.locator('path.cluster')).toHaveCount(0);
+  await expect(page.locator('circle.attribute-circle')).toHaveCount(0);
+  await page.locator('#toggleAllOes').click({ force: true });
+  await expect(page.locator('path.cluster')).toHaveCount(2);
+  await page.locator('#toggleAllAttributes').click({ force: true });
+  await expect(page.locator('circle.attribute-circle').first()).toBeVisible();
+  await expect(page.locator('circle.attribute-circle')).toHaveCount(5);
+});
+
+test('E75: selecting one ring group highlights exactly its members', async ({ page }) => {
+  const teamRow = page.locator('#attributeLegend .legend-row[data-attribute-color]', { hasText: 'Team Rom' });
+  await teamRow.click();
+  await expect(page.locator('circle.attribute-circle[data-attribute="Team::Team Rom"]')).toHaveCount(2);
+  await expect(page.locator('circle.attribute-circle')).toHaveCount(2);
+  await expect(page.locator('g.nodes .node.attr-dimmed')).toHaveCount(3);
+  await teamRow.click();
+  await expect(page.locator('circle.attribute-circle')).toHaveCount(0);
+  await expect(page.locator('g.nodes .node.attr-dimmed')).toHaveCount(0);
 });
 
 test('Entfällt (E22/E23): direction toggle and apply button do not exist', async ({ page }) => {
@@ -63,12 +83,17 @@ test('AK 97: views legend is the topmost section and switches views (FR-7.5)', a
   const rows = page.locator('#viewsLegend .legend-row');
   await expect(rows).toHaveCount(3);
   await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Start');
+  // select the clusters in Start, so the round trip has a context to restore
+  // (the cluster legend is built after the enter transition — wait for it)
+  await expect(page.locator('#legend .legend-row')).toHaveCount(2);
+  await page.locator('#toggleAllOes').click({ force: true });
+  await expect(page.locator('path.cluster')).toHaveCount(2);
   await rows.filter({ hasText: 'Nur Hierarchie' }).click();
   await expect(page.locator('path.cluster')).toHaveCount(0); // no cluster station in that path
   await expect(page.locator(NODE_CIRCLES)).toHaveCount(5);
   await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Nur Hierarchie');
   await page.locator('#viewsLegend .legend-row').filter({ hasText: 'Start' }).click();
-  await expect(page.locator('path.cluster')).toHaveCount(2);
+  await expect(page.locator('path.cluster')).toHaveCount(2); // FR-7.5b: the context comes back
 });
 
 test('AK 98: save current scene as a named view, survives reload (FR-7.5a)', async ({ page }) => {
@@ -90,18 +115,23 @@ test('AK 98: save current scene as a named view, survives reload (FR-7.5a)', asy
 });
 
 test('AK 99: session state survives a reload (FR-8.14)', async ({ page }) => {
-  // deselect one cluster, let the debounced state write land, reload
+  // select one cluster and one ring group, let the debounced state write
+  // land, reload: exactly that selection comes back (E75: opt-in)
   const firstRow = page.locator('#legend .legend-row').first();
   await firstRow.waitFor();
-  const before = await page.locator('path.cluster').count();
+  await expect(page.locator('path.cluster')).toHaveCount(0);
   await firstRow.click();
+  await page.locator('#attributeLegend .legend-row[data-attribute-color]', { hasText: 'Lead' }).click();
   await page.waitForTimeout(500);
-  const afterDeselect = await page.locator('path.cluster').count();
-  expect(afterDeselect).toBeLessThan(before);
+  const afterSelect = await page.locator('path.cluster').count();
+  expect(afterSelect).toBe(1);
+  await expect(page.locator('circle.attribute-circle[data-attribute="Rolle::Lead"]')).toHaveCount(1);
   await page.waitForTimeout(700);
   await page.reload();
   await expect(page.locator(NODE_CIRCLES)).toHaveCount(5, { timeout: 30_000 });
-  await expect(page.locator('path.cluster')).toHaveCount(afterDeselect, { timeout: 15_000 });
+  await expect(page.locator('path.cluster')).toHaveCount(afterSelect, { timeout: 15_000 });
+  await expect(page.locator('circle.attribute-circle[data-attribute="Rolle::Lead"]')).toHaveCount(1);
+  await expect(page.locator('circle.attribute-circle')).toHaveCount(1);
   // now change the depth and reload again: the depth is restored too
   await page.locator('#depthControl .depth-down').click();
   await page.locator('#depthControl .depth-down').click();
@@ -156,25 +186,31 @@ test('pseudo mode is fail-closed in the browser (FR-8.5, E48 — AK 27 basis)', 
   }
 });
 
-test('AK 93: legend deselection survives a depth change (FR-8.2a)', async ({ page }) => {
-  // deselect one cluster by clicking its legend row (the checkbox itself is
-  // a hidden styled input)
-  const firstRow = page.locator('#legend .legend-row').first();
-  await firstRow.waitFor();
-  const before = await page.locator('path.cluster').count();
-  await firstRow.click();
-  await page.waitForTimeout(500);
-  const afterDeselect = await page.locator('path.cluster').count();
-  expect(afterDeselect).toBeLessThan(before);
-  // change the depth: the deselection must survive (no auto re-enable)
+test('AK 93: legend selection survives a depth change; late clusters start off (FR-8.2a/E75)', async ({ page }) => {
+  // depth 1: only the root cluster is in scope — select it
+  await page.locator('#depthControl .depth-down').click();
+  await page.locator('#depthControl .depth-down').click();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(3);
+  await expect(page.locator('#legend .legend-row')).toHaveCount(1);
+  await page.locator('#legend .legend-row').first().click();
+  await expect(page.locator('path.cluster')).toHaveCount(1);
+  // depth 3: the second cluster enters the scope — and stays off; the
+  // chosen one stays on
   await page.locator('#depthControl .depth-up').click();
+  await page.locator('#depthControl .depth-up').click();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(5);
+  await expect(page.locator('#legend .legend-row')).toHaveCount(2);
   await page.waitForTimeout(800);
-  expect(await page.locator('path.cluster').count()).toBe(afterDeselect);
+  await expect(page.locator('path.cluster')).toHaveCount(1);
+  await expect(page.locator('#legend .legend-row.active')).toHaveCount(1);
+  // the same for rings: nothing was chosen, nothing appears
+  await expect(page.locator('circle.attribute-circle')).toHaveCount(0);
 });
 
 test('AK 94: attribute focus prunes the projected scene (FR-8.10a)', async ({ page }) => {
   const circles = page.locator('g.nodes circle:not(.attribute-circle)');
   const before = await circles.count();
+  await page.locator('#toggleAllAttributes').click({ force: true }); // E75: rings are opt-in
   // hide the Team category via its eye toggle, then focus: members whose
   // only badge is a Team ring must disappear together with their branches
   const teamRow = page.locator('#attributeLegend .legend-row', { hasText: 'Team' }).first();

@@ -27,6 +27,14 @@ test('start view on the SEM reference: node layer matches AK 1 exactly', async (
   // level by level (animated transition) — wait for the final node count.
   const circles = page.locator('g.nodes circle:not(.attribute-circle)');
   await expect(circles).toHaveCount(432, { timeout: 240_000 });
+  // E75: hulls and rings are opt-in — the v1 reference scene had every
+  // cluster and attribute type on, so select all before counting (the
+  // cluster legend is built after the enter transition — wait for it)
+  await expect(page.locator('#legend .legend-row').first()).toBeVisible({ timeout: 30_000 });
+  await page.locator('#toggleAllOes').click({ force: true });
+  await page.locator('#toggleAllAttributes').click({ force: true });
+  await expect(page.locator('path.cluster')).toHaveCount(48, { timeout: 30_000 });
+  await page.waitForTimeout(1000);
 
   const nodeCount = await circles.count();
   const clusterCount = await page.locator('path.cluster').count();

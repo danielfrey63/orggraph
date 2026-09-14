@@ -62,7 +62,7 @@ test('file:// drop intake: registry + env + small snapshot boot into a rendered 
   // snapshot (with the accepted E70 dialog) and renders the start view
   // (fixture: 5 persons, 2 OE hulls)
   await expect(page.locator('g.nodes circle:not(.attribute-circle)')).toHaveCount(5, { timeout: 60_000 });
-  await expect(page.locator('path.cluster')).toHaveCount(2);
+  await expect(page.locator('path.cluster')).toHaveCount(0); // E75: hulls are opt-in
   await expect(page.locator('.dz-overlay')).toBeHidden();
 
   // NFR-8: the offline single-file mode stays console-clean — no fetch/CORS
@@ -83,7 +83,7 @@ test('file:// drop intake: one tenant ZIP boots the whole tenant (FR-6.7)', asyn
   await expect(page.locator('.dz-overlay')).toBeVisible();
   await dropFiles(page, [zipPath]);
   await expect(page.locator('g.nodes circle:not(.attribute-circle)')).toHaveCount(5, { timeout: 60_000 });
-  await expect(page.locator('path.cluster')).toHaveCount(2);
+  await expect(page.locator('path.cluster')).toHaveCount(0); // E75: hulls are opt-in
 });
 
 test('file:// drop intake: env-only re-drop updates the ACTIVE tenant, no phantom profile (FR-8.9, AK 100)', async ({ page }) => {

@@ -114,10 +114,10 @@ describe('FR-7.1a — registry-aware view validation', () => {
     const ok = validateView({
       ...base,
       defaults: {
-        attributesOff: ['Rolle::Lead'],
+        attributesOn: ['Rolle::Lead'],
         hiddenCategories: ['Rolle'],
         attributeFocus: true,
-        clustersOff: ['o1'],
+        clustersOn: ['o1'],
         asOf: '2026-01-01T00:00:00Z',
         diff: { t1: 'a', t2: 'b' },
       },
@@ -126,6 +126,10 @@ describe('FR-7.1a — registry-aware view validation', () => {
     const unknownKey = validateView({ ...base, defaults: { attributFocus: true } }, REGISTRY);
     expect(unknownKey.ok).toBe(false);
     expect(unknownKey.errors.join(' ')).toContain('unknown defaults key "attributFocus"');
+    // the pre-E75 off-set keys are no longer known: nothing is on by default
+    const offKeys = validateView({ ...base, defaults: { attributesOff: [], clustersOff: [] } }, REGISTRY);
+    expect(offKeys.ok).toBe(false);
+    expect(offKeys.errors.join(' ')).toContain('unknown defaults key "attributesOff"');
     const wrongType = validateView({ ...base, defaults: { hiddenCategories: 'Team' } }, REGISTRY);
     expect(wrongType.ok).toBe(false);
     expect(wrongType.errors.join(' ')).toContain('hiddenCategories must be an array of strings');

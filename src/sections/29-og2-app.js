@@ -219,39 +219,34 @@ export function adaptProjection(projection, registry) {
   };
 }
 
-// --- Ring selection across scene changes (FR-8.2a for rings) -------------------
-// The ring legend's selection is a runtime override that survives every
-// parameter change (depth, time, filter, roots): `off` holds the keys the
-// user (or the rule below) switched off and is NOT pruned when a group
-// leaves the scene — a group hidden at depth 2 stays hidden when it comes
-// back at depth 4. Groups arriving AFTER the seeded initial scene start off
-// (live-test finding 2026-09-14: extra rings never appear on their own);
-// only the first non-empty scene of a view context, or a restored context,
-// seeds everything on except the stored off-set.
-export function og2CreateRingSelection(pendingOff = null) {
-  return { off: new Set(pendingOff || []), seen: new Set(), seeded: false };
+// --- Legend selection across scene changes (FR-8.2a, E75) -------------------
+// One model for both legends (cluster hulls and ring groups): NOTHING is
+// selected by default; the selection is an opt-in runtime override that
+// survives every parameter change (depth, time, filter, roots). `on` holds
+// the keys the user switched on and is NOT pruned when a key leaves the
+// scene — a group chosen at depth 3 comes back chosen at depth 5, a group
+// never chosen never appears on its own (live-test findings 2026-09-14).
+// `pendingOn` seeds the selection from a view context or env defaults.
+export function og2CreateLegendSelection(pendingOn = null) {
+  return { on: new Set(pendingOn || []), seen: new Set(), revealNext: false };
 }
 
-// Fold the user's toggles of the previous scene into `off` (the legend
+// Fold the user's toggles of the previous scene into `on` (the legend
 // mutates the active set directly), then derive the active set of the next
 // scene. Returns the new active set; `sel` is updated in place.
-export function og2NextRingSelection(sel, nextKeys, prevKeys, prevActive) {
+export function og2NextLegendSelection(sel, nextKeys, prevKeys, prevActive) {
   for (const key of prevKeys) {
-    if (prevActive.has(key)) sel.off.delete(key); else sel.off.add(key);
+    if (prevActive.has(key)) sel.on.add(key); else sel.on.delete(key);
   }
   const keys = [...nextKeys];
-  if (!sel.seeded) {
-    if (keys.length) sel.seeded = true;
-  } else if (sel.revealNext) {
-    // an explicit user action (list import) reveals the groups it brings
-    // in — once; later arrivals follow the start-off rule again
-    for (const key of keys) if (!sel.seen.has(key)) sel.off.delete(key);
-  } else {
-    for (const key of keys) if (!sel.seen.has(key)) sel.off.add(key);
+  if (sel.revealNext) {
+    // an explicit user action (list import) reveals the keys it brings in
+    // — once; later arrivals follow the start-off rule again
+    for (const key of keys) if (!sel.seen.has(key)) sel.on.add(key);
+    sel.revealNext = false;
   }
-  sel.revealNext = false;
   for (const key of keys) sel.seen.add(key);
-  return new Set(keys.filter((k) => !sel.off.has(k)));
+  return new Set(keys.filter((k) => sel.on.has(k)));
 }
 
 // --- App view state (FR-7.5/7.6/7.7, §7) ------------------------------------

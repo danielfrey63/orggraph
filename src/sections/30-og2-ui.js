@@ -3,7 +3,7 @@
 // §1.5), translation of stock + projection into the globals the layout/render
 // machinery consumes (§9.2), and the reactive apply path (FR-8.11).
 import { KEY_STORE, KEY_STORE_PART_PREFIX, KEY_REGISTRY, KEY_ENV, KEY_UI_STATE, getStoredText, getStoredJson, getPendingSnapshots, putStored, delStored, looksLikeRegistry, looksLikeSnapshot } from './04-storage.js';
-import { deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff, og2CreateRingSelection, og2NextRingSelection } from './29-og2-app.js';
+import { deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff, og2CreateLegendSelection, og2NextLegendSelection } from './29-og2-app.js';
 import { createTenantStore } from './23-og2-store.js';
 import { importSnapshotAsync } from './26-og2-import.js';
 import { validateViews } from './27-og2-path.js';
@@ -251,9 +251,8 @@ function og2NormalizeUiState(state) {
     depth: state.depth,
     asOf: state.asOf || null,
     diff: state.diff || null,
-    scopeOrgs: state.scopeOrgs || null,
-    allowedOrgs: state.allowedOrgs || [],
-    attributesOff: state.attributesOff || [],
+    clustersOn: state.allowedOrgs || [],
+    attributesOn: [],
     hiddenCategories: state.hiddenCategories || [],
     attributeFocus: !!state.attributeFocus,
   };
@@ -293,6 +292,14 @@ export async function og2PreloadUiState() {
   if (g.pseudo === true) envConfig.TOOLBAR_PSEUDO_ACTIVE = true;
 }
 
+// Keys currently on in a legend selection: the persistent on-set folded with
+// the toggles of the current scene (the legend mutates the active set).
+function og2LegendOnKeys(sel, sceneKeys, active) {
+  const on = new Set(sel ? sel.on : []);
+  for (const key of sceneKeys) { if (active.has(key)) on.add(key); else on.delete(key); }
+  return [...on];
+}
+
 // Capture the ACTIVE view's runtime context (FR-7.5b) into og2.viewContexts.
 function og2CaptureViewContext() {
   if (!og2 || !og2.activeViewName) return;
@@ -306,13 +313,9 @@ function og2CaptureViewContext() {
     depth: Number.isFinite(uiDepth) ? uiDepth : og2.runtimeDepth,
     asOf: og2.asOf,
     diff: og2.diff,
-    scopeOrgs: og2.lastScopeOrgs ? [...og2.lastScopeOrgs] : null,
-    allowedOrgs: [...allowedOrgs],
-    // the persistent off-set plus the toggles since the last apply
-    attributesOff: [...new Set([
-      ...(og2.ringSelection ? [...og2.ringSelection.off].filter(k => !attributeTypes.has(k) || !activeAttributes.has(k)) : []),
-      ...[...attributeTypes.keys()].filter(k => !activeAttributes.has(k)),
-    ])],
+    // E75: the persistent on-sets plus the toggles since the last apply
+    clustersOn: og2LegendOnKeys(og2.clusterSelection, og2.lastScopeOrgs || [], allowedOrgs),
+    attributesOn: og2LegendOnKeys(og2.ringSelection, attributeTypes.keys(), activeAttributes),
     hiddenCategories: [...hiddenCategories],
     attributeFocus: !!attributeFocusEnabled,
   };
@@ -327,16 +330,16 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
   const ctx = name && og2.viewContexts ? og2.viewContexts[name] : null;
   const knownId = (id) => !validateIds || (typeof byId !== 'undefined' && byId.has(String(id)));
 
-  // fresh-view defaults (FR-8.2a: all clusters visible, no overrides)
+  // fresh-view defaults (FR-8.2a/E75: nothing selected, no overrides)
   og2.runtimeRoots = null;
   og2.runtimeDepth = null;
   og2.asOf = null;
   og2.diff = null;
   og2.lastScopeOrgs = null;
-  og2.pendingClustersOff = null;
+  og2.pendingClustersOn = new Set();
   selectedRootIds = [];
   currentSelectedId = null;
-  og2.pendingAttributesOff = new Set();
+  og2.pendingAttributesOn = new Set();
   hiddenCategories = new Set();
   attributeFocusEnabled = false;
   let depth = view && view.depth != null ? view.depth : null;
@@ -357,11 +360,10 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
     if (ctx.diff && ctx.diff.t1 && ctx.diff.t2 && instants.includes(ctx.diff.t1) && instants.includes(ctx.diff.t2)) {
       og2.diff = { t1: ctx.diff.t1, t2: ctx.diff.t2 };
     }
-    if (Array.isArray(ctx.scopeOrgs)) {
-      og2.lastScopeOrgs = new Set(ctx.scopeOrgs.map(String));
-      allowedOrgs = new Set((ctx.allowedOrgs || []).map(String));
-    }
-    og2.pendingAttributesOff = new Set((ctx.attributesOff || []).map(String));
+    // pre-E75 contexts carried `allowedOrgs` (same meaning) and an off-set
+    // for rings, which no longer applies — nothing is on by default
+    og2.pendingClustersOn = new Set((ctx.clustersOn || ctx.allowedOrgs || []).map(String));
+    og2.pendingAttributesOn = new Set((ctx.attributesOn || []).map(String));
     hiddenCategories = new Set((ctx.hiddenCategories || []).map(String));
     attributeFocusEnabled = !!ctx.attributeFocus;
   } else if (view && view.defaults) {
@@ -369,12 +371,10 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
     // in its configured context; a captured runtime context takes over from
     // the first user change on. Unresolvable parts fall back individually.
     const d = view.defaults;
-    og2.pendingAttributesOff = new Set((d.attributesOff || []).map(String));
+    og2.pendingAttributesOn = new Set((d.attributesOn || []).map(String));
+    og2.pendingClustersOn = new Set((d.clustersOn || []).map(String));
     hiddenCategories = new Set((d.hiddenCategories || []).map(String));
     attributeFocusEnabled = !!d.attributeFocus;
-    if (Array.isArray(d.clustersOff) && d.clustersOff.length) {
-      og2.pendingClustersOff = new Set(d.clustersOff.map(String));
-    }
     const instants = og2TimeInstants(og2);
     if (d.asOf && instants.includes(d.asOf) && d.asOf !== instants[instants.length - 1]) og2.asOf = d.asOf;
     if (d.diff && instants.includes(d.diff.t1) && instants.includes(d.diff.t2)) {
@@ -741,15 +741,15 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
     }
     // FR-7.5b/FR-8.14: on the first apply after a view switch or session
     // restore, the view context's ring selection replaces the carried-over
-    // one — exactly the stored off-set is deselected, everything else is on.
-    // Otherwise the selection is a runtime override (FR-8.2a): deselections
-    // survive scene changes, groups arriving later start off.
-    if (og2.pendingAttributesOff || !og2.ringSelection) {
-      og2.ringSelection = og2CreateRingSelection(og2.pendingAttributesOff);
-      og2.pendingAttributesOff = null;
-      activeAttributes = og2NextRingSelection(og2.ringSelection, nextTypes.keys(), [], new Set());
+    // one — exactly the stored on-set is selected, nothing else. Otherwise
+    // the selection is a runtime override (FR-8.2a/E75): the user's choice
+    // survives scene changes, groups arriving later start off.
+    if (og2.pendingAttributesOn || !og2.ringSelection) {
+      og2.ringSelection = og2CreateLegendSelection(og2.pendingAttributesOn);
+      og2.pendingAttributesOn = null;
+      activeAttributes = og2NextLegendSelection(og2.ringSelection, nextTypes.keys(), [], new Set());
     } else {
-      activeAttributes = og2NextRingSelection(og2.ringSelection, nextTypes.keys(), attributeTypes.keys(), activeAttributes);
+      activeAttributes = og2NextLegendSelection(og2.ringSelection, nextTypes.keys(), attributeTypes.keys(), activeAttributes);
     }
     personAttributes = nextByHost;
     attributeTypes = nextTypes;
@@ -767,22 +767,17 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
   }
 
   // Cluster scope: hull roots = projected cluster nodes (FR-8.2). The user's
-  // legend deselection is a runtime override (FR-8.2a): it survives every
-  // parameter change (depth/time/filter/focus) — only clusters NEW to the
-  // scope start visible; a view switch resets the override (FR-7.5).
+  // legend selection is a runtime override (FR-8.2a/E75), same model as the
+  // rings above: nothing is selected by default, the choice survives every
+  // parameter change (depth/time/filter/focus), clusters NEW to the scope
+  // start off; a view switch or restore seeds it from the view context.
   const scopeOrgs = new Set(sub.nodes.filter(n => n.kind === 'cluster').map(n => String(n.id)));
-  if (og2.pendingClustersOff) {
-    // FR-7.5b: env-declared start deselection for a first-time entered view
-    allowedOrgs = new Set([...scopeOrgs].filter(id => !og2.pendingClustersOff.has(id)));
-    og2.pendingClustersOff = null;
-  } else if (!og2.lastScopeOrgs) {
-    allowedOrgs = new Set(scopeOrgs);
+  if (og2.pendingClustersOn || !og2.clusterSelection) {
+    og2.clusterSelection = og2CreateLegendSelection(og2.pendingClustersOn);
+    og2.pendingClustersOn = null;
+    allowedOrgs = og2NextLegendSelection(og2.clusterSelection, scopeOrgs, [], new Set());
   } else {
-    const next = new Set();
-    for (const id of scopeOrgs) {
-      if (!og2.lastScopeOrgs.has(id) || allowedOrgs.has(id)) next.add(id);
-    }
-    allowedOrgs = next;
+    allowedOrgs = og2NextLegendSelection(og2.clusterSelection, scopeOrgs, og2.lastScopeOrgs || [], allowedOrgs);
   }
   og2.lastScopeOrgs = scopeOrgs;
 

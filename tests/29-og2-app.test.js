@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parsePathExpression } from '../src/sections/27-og2-path.js';
 import { createTenantStore, createNodeIdentity, createEdgeIdentity, edgeKeyOf, startInterval } from '../src/sections/23-og2-store.js';
 import { projectView } from '../src/sections/28-og2-project.js';
-import { serializeTenantStore, deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff, og2CreateRingSelection, og2NextRingSelection } from '../src/sections/29-og2-app.js';
+import { serializeTenantStore, deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff, og2CreateLegendSelection, og2NextLegendSelection } from '../src/sections/29-og2-app.js';
 import { looksLikeSnapshot, looksLikeRegistry, looksLikeData } from '../src/sections/04-storage.js';
 
 // Type names are fixture data (E14, NFR-5 exception).
@@ -358,54 +358,55 @@ describe('time navigation and diff projection (FR-8.6, §5, AK 4)', () => {
   });
 });
 
-describe('ring selection across scene changes (FR-8.2a for rings, live-test finding 2026-09-14)', () => {
+describe('legend selection across scene changes (FR-8.2a/E75, live-test findings 2026-09-14)', () => {
   const keys = (...k) => new Set(k);
 
-  it('seeds the first non-empty scene all-on except the stored off-set', () => {
-    const sel = og2CreateRingSelection(['Rolle::PO']);
-    expect(og2NextRingSelection(sel, [], [], new Set())).toEqual(keys()); // empty scene does not seed
-    expect(sel.seeded).toBe(false);
-    const active = og2NextRingSelection(sel, ['Rolle::PO', 'Rolle::SM', 'Team::A'], [], new Set());
-    expect(active).toEqual(keys('Rolle::SM', 'Team::A'));
-    expect(sel.seeded).toBe(true);
+  it('nothing is selected by default; a stored on-set seeds exactly those keys', () => {
+    expect(og2NextLegendSelection(og2CreateLegendSelection(), ['Rolle::PO', 'Team::A'], [], new Set())).toEqual(keys());
+    const sel = og2CreateLegendSelection(['Rolle::PO', 'o9']);
+    expect(og2NextLegendSelection(sel, [], [], new Set())).toEqual(keys());
+    const active = og2NextLegendSelection(sel, ['Rolle::PO', 'Rolle::SM', 'Team::A'], [], new Set());
+    expect(active).toEqual(keys('Rolle::PO'));
+    expect(sel.on.has('o9')).toBe(true); // keys outside the scene stay remembered
   });
 
-  it('keeps a deselection while the group is out of the scene and brings it back deselected', () => {
-    const sel = og2CreateRingSelection();
-    let active = og2NextRingSelection(sel, ['Rolle::PO', 'Team::A'], [], new Set());
-    active.delete('Rolle::PO'); // user toggles the legend row off
+  it('keeps a choice while the key is out of the scene and brings it back chosen', () => {
+    const sel = og2CreateLegendSelection();
+    let active = og2NextLegendSelection(sel, ['Rolle::PO', 'Team::A'], [], new Set());
+    active.add('Rolle::PO'); // user toggles the legend row on
     // depth 1: the role group leaves the scene
-    active = og2NextRingSelection(sel, ['Team::A'], ['Rolle::PO', 'Team::A'], active);
-    expect(active).toEqual(keys('Team::A'));
-    // depth 3: it comes back — still off
-    active = og2NextRingSelection(sel, ['Rolle::PO', 'Team::A'], ['Team::A'], active);
-    expect(active).toEqual(keys('Team::A'));
-    // the user turns it on again → stays on afterwards
-    active.add('Rolle::PO');
-    active = og2NextRingSelection(sel, ['Rolle::PO', 'Team::A'], ['Rolle::PO', 'Team::A'], active);
-    expect(active).toEqual(keys('Rolle::PO', 'Team::A'));
+    active = og2NextLegendSelection(sel, ['Team::A'], ['Rolle::PO', 'Team::A'], active);
+    expect(active).toEqual(keys());
+    // depth 3: it comes back — still on
+    active = og2NextLegendSelection(sel, ['Rolle::PO', 'Team::A'], ['Team::A'], active);
+    expect(active).toEqual(keys('Rolle::PO'));
+    // the user turns it off again → stays off afterwards
+    active.delete('Rolle::PO');
+    active = og2NextLegendSelection(sel, ['Rolle::PO', 'Team::A'], ['Rolle::PO', 'Team::A'], active);
+    expect(active).toEqual(keys());
   });
 
-  it('groups arriving after the seeded scene start off; the selection stays as chosen', () => {
-    const sel = og2CreateRingSelection();
-    let active = og2NextRingSelection(sel, ['Team::A'], [], new Set());
-    active = og2NextRingSelection(sel, ['Team::A', 'Rolle::PO', 'Gremium::X'], ['Team::A'], active);
-    expect(active).toEqual(keys('Team::A'));
-    expect(sel.off).toEqual(keys('Rolle::PO', 'Gremium::X'));
-    // toggling a late group on is a user choice that survives the next change
-    active.add('Rolle::PO');
-    active = og2NextRingSelection(sel, ['Team::A', 'Rolle::PO'], ['Team::A', 'Rolle::PO', 'Gremium::X'], active);
-    expect(active).toEqual(keys('Team::A', 'Rolle::PO'));
+  it('keys arriving with a deeper scene start off; the selection stays as chosen', () => {
+    const sel = og2CreateLegendSelection();
+    let active = og2NextLegendSelection(sel, ['o1'], [], new Set());
+    active.add('o1');
+    active = og2NextLegendSelection(sel, ['o1', 'o2', 'o3'], ['o1'], active);
+    expect(active).toEqual(keys('o1'));
+    expect(sel.on).toEqual(keys('o1'));
+    // toggling a late key on is a user choice that survives the next change
+    active.add('o2');
+    active = og2NextLegendSelection(sel, ['o1', 'o2'], ['o1', 'o2', 'o3'], active);
+    expect(active).toEqual(keys('o1', 'o2'));
   });
 
-  it('an explicit import reveals the groups it brings in — once', () => {
-    const sel = og2CreateRingSelection();
-    let active = og2NextRingSelection(sel, ['Team::A'], [], new Set());
+  it('an explicit import reveals the keys it brings in — once', () => {
+    const sel = og2CreateLegendSelection();
+    let active = og2NextLegendSelection(sel, ['Team::A'], [], new Set());
     sel.revealNext = true; // og2AdoptStore(..., { revealRings: true })
-    active = og2NextRingSelection(sel, ['Team::A', 'Newsletter::Newsletter'], ['Team::A'], active);
-    expect(active).toEqual(keys('Team::A', 'Newsletter::Newsletter'));
+    active = og2NextLegendSelection(sel, ['Team::A', 'Newsletter::Newsletter'], ['Team::A'], active);
+    expect(active).toEqual(keys('Newsletter::Newsletter')); // Team::A was seen before: stays off
     expect(sel.revealNext).toBe(false);
-    active = og2NextRingSelection(sel, ['Team::A', 'Newsletter::Newsletter', 'Rolle::PO'], ['Team::A', 'Newsletter::Newsletter'], active);
-    expect(active).toEqual(keys('Team::A', 'Newsletter::Newsletter')); // later arrival stays off
+    active = og2NextLegendSelection(sel, ['Team::A', 'Newsletter::Newsletter', 'Rolle::PO'], ['Team::A', 'Newsletter::Newsletter'], active);
+    expect(active).toEqual(keys('Newsletter::Newsletter')); // later arrival stays off
   });
 });

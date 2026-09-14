@@ -215,12 +215,13 @@ export function validateView(view, registry) {
     if (!d || typeof d !== 'object' || Array.isArray(d)) {
       errors.push('defaults must be an object');
     } else {
-      const KNOWN = ['attributesOff', 'hiddenCategories', 'attributeFocus', 'clustersOff', 'asOf', 'diff'];
+      // E75: selections are opt-in — the defaults name what starts ON
+      const KNOWN = ['attributesOn', 'hiddenCategories', 'attributeFocus', 'clustersOn', 'asOf', 'diff'];
       for (const key of Object.keys(d)) {
         if (!KNOWN.includes(key)) errors.push(`unknown defaults key "${key}" (known: ${KNOWN.join(', ')})`);
       }
       const isStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
-      for (const key of ['attributesOff', 'hiddenCategories', 'clustersOff']) {
+      for (const key of ['attributesOn', 'hiddenCategories', 'clustersOn']) {
         if (d[key] !== undefined && !isStringArray(d[key])) errors.push(`defaults.${key} must be an array of strings`);
       }
       if (d.attributeFocus !== undefined && typeof d.attributeFocus !== 'boolean') {
