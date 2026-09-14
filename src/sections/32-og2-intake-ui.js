@@ -350,7 +350,7 @@ export function showListIntakeDialog(entry, list, meta, onDone) {
         await og2ReplaceViews(views);
       }
       if (dlCheck.box.checked) downloadJson(`${source}.snapshot-${built.snapshot.meta.snapshot}.json`, built.snapshot);
-      await og2AdoptStore(res.store || store);
+      await og2AdoptStore(res.store || store, { revealRings: true });
       const skipped = built.unmatched.length ? `, ${built.unmatched.length} ohne Zuordnung übersprungen` : '';
       showTemporaryNotification(`Liste ${entry.filename}${titleSuffix} importiert: ${built.matched.length} Zuordnungen als ${edgeType}${skipped}.`, 'medium');
       close();

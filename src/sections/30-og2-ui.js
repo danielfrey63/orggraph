@@ -3,7 +3,7 @@
 // §1.5), translation of stock + projection into the globals the layout/render
 // machinery consumes (§9.2), and the reactive apply path (FR-8.11).
 import { KEY_STORE, KEY_STORE_PART_PREFIX, KEY_REGISTRY, KEY_ENV, KEY_UI_STATE, getStoredText, getStoredJson, getPendingSnapshots, putStored, delStored, looksLikeRegistry, looksLikeSnapshot } from './04-storage.js';
-import { deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff } from './29-og2-app.js';
+import { deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff, og2CreateRingSelection, og2NextRingSelection } from './29-og2-app.js';
 import { createTenantStore } from './23-og2-store.js';
 import { importSnapshotAsync } from './26-og2-import.js';
 import { validateViews } from './27-og2-path.js';
@@ -190,12 +190,15 @@ export async function og2PersistStore(store) {
 // Replace the tenant store after an in-app import (E74): persist, re-sync
 // the stock globals and re-render reactively (FR-8.11); the time controls
 // pick up the new instant.
-export async function og2AdoptStore(store) {
+export async function og2AdoptStore(store, { revealRings = false } = {}) {
   if (!og2) return;
   og2.store = store;
   await og2PersistStore(store);
   og2SyncStockGlobals();
   og2BuildTimeControls();
+  // ring groups the adopted store brings in are shown once (the import was
+  // the user's explicit action); the start-off rule applies afterwards
+  if (revealRings && og2.ringSelection) og2.ringSelection.revealNext = true;
   og2ApplyFromUI('store-adopted');
 }
 
@@ -305,7 +308,11 @@ function og2CaptureViewContext() {
     diff: og2.diff,
     scopeOrgs: og2.lastScopeOrgs ? [...og2.lastScopeOrgs] : null,
     allowedOrgs: [...allowedOrgs],
-    attributesOff: [...attributeTypes.keys()].filter(k => !activeAttributes.has(k)),
+    // the persistent off-set plus the toggles since the last apply
+    attributesOff: [...new Set([
+      ...(og2.ringSelection ? [...og2.ringSelection.off].filter(k => !attributeTypes.has(k) || !activeAttributes.has(k)) : []),
+      ...[...attributeTypes.keys()].filter(k => !activeAttributes.has(k)),
+    ])],
     hiddenCategories: [...hiddenCategories],
     attributeFocus: !!attributeFocusEnabled,
   };
@@ -732,18 +739,17 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
       }
       nextByHost.set(String(host), perHost);
     }
-    for (const key of nextTypes.keys()) {
-      if (!attributeTypes.has(key)) activeAttributes.add(key); // new groups start visible
-    }
-    for (const key of [...activeAttributes]) {
-      if (!nextTypes.has(key)) activeAttributes.delete(key);
-    }
     // FR-7.5b/FR-8.14: on the first apply after a view switch or session
     // restore, the view context's ring selection replaces the carried-over
     // one — exactly the stored off-set is deselected, everything else is on.
-    if (og2.pendingAttributesOff) {
-      activeAttributes = new Set([...nextTypes.keys()].filter(k => !og2.pendingAttributesOff.has(k)));
+    // Otherwise the selection is a runtime override (FR-8.2a): deselections
+    // survive scene changes, groups arriving later start off.
+    if (og2.pendingAttributesOff || !og2.ringSelection) {
+      og2.ringSelection = og2CreateRingSelection(og2.pendingAttributesOff);
       og2.pendingAttributesOff = null;
+      activeAttributes = og2NextRingSelection(og2.ringSelection, nextTypes.keys(), [], new Set());
+    } else {
+      activeAttributes = og2NextRingSelection(og2.ringSelection, nextTypes.keys(), attributeTypes.keys(), activeAttributes);
     }
     personAttributes = nextByHost;
     attributeTypes = nextTypes;

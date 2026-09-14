@@ -1571,7 +1571,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.200.267';
+const APP_VERSION = '1.202.276';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -11323,6 +11323,41 @@ function adaptProjection(projection, registry) {
   };
 }
 
+// --- Ring selection across scene changes (FR-8.2a for rings) -------------------
+// The ring legend's selection is a runtime override that survives every
+// parameter change (depth, time, filter, roots): `off` holds the keys the
+// user (or the rule below) switched off and is NOT pruned when a group
+// leaves the scene — a group hidden at depth 2 stays hidden when it comes
+// back at depth 4. Groups arriving AFTER the seeded initial scene start off
+// (live-test finding 2026-09-14: extra rings never appear on their own);
+// only the first non-empty scene of a view context, or a restored context,
+// seeds everything on except the stored off-set.
+function og2CreateRingSelection(pendingOff = null) {
+  return { off: new Set(pendingOff || []), seen: new Set(), seeded: false };
+}
+
+// Fold the user's toggles of the previous scene into `off` (the legend
+// mutates the active set directly), then derive the active set of the next
+// scene. Returns the new active set; `sel` is updated in place.
+function og2NextRingSelection(sel, nextKeys, prevKeys, prevActive) {
+  for (const key of prevKeys) {
+    if (prevActive.has(key)) sel.off.delete(key); else sel.off.add(key);
+  }
+  const keys = [...nextKeys];
+  if (!sel.seeded) {
+    if (keys.length) sel.seeded = true;
+  } else if (sel.revealNext) {
+    // an explicit user action (list import) reveals the groups it brings
+    // in — once; later arrivals follow the start-off rule again
+    for (const key of keys) if (!sel.seen.has(key)) sel.off.delete(key);
+  } else {
+    for (const key of keys) if (!sel.seen.has(key)) sel.off.add(key);
+  }
+  sel.revealNext = false;
+  for (const key of keys) sel.seen.add(key);
+  return new Set(keys.filter((k) => !sel.off.has(k)));
+}
+
 // --- App view state (FR-7.5/7.6/7.7, §7) ------------------------------------
 // One state object per tenant session: validated views, active view, runtime
 // overrides (roots/depth/time). Views come from env.VIEWS; zero valid views
@@ -11772,12 +11807,15 @@ async function og2PersistStore(store) {
 // Replace the tenant store after an in-app import (E74): persist, re-sync
 // the stock globals and re-render reactively (FR-8.11); the time controls
 // pick up the new instant.
-async function og2AdoptStore(store) {
+async function og2AdoptStore(store, { revealRings = false } = {}) {
   if (!og2) return;
   og2.store = store;
   await og2PersistStore(store);
   og2SyncStockGlobals();
   og2BuildTimeControls();
+  // ring groups the adopted store brings in are shown once (the import was
+  // the user's explicit action); the start-off rule applies afterwards
+  if (revealRings && og2.ringSelection) og2.ringSelection.revealNext = true;
   og2ApplyFromUI('store-adopted');
 }
 
@@ -11887,7 +11925,11 @@ function og2CaptureViewContext() {
     diff: og2.diff,
     scopeOrgs: og2.lastScopeOrgs ? [...og2.lastScopeOrgs] : null,
     allowedOrgs: [...allowedOrgs],
-    attributesOff: [...attributeTypes.keys()].filter(k => !activeAttributes.has(k)),
+    // the persistent off-set plus the toggles since the last apply
+    attributesOff: [...new Set([
+      ...(og2.ringSelection ? [...og2.ringSelection.off].filter(k => !attributeTypes.has(k) || !activeAttributes.has(k)) : []),
+      ...[...attributeTypes.keys()].filter(k => !activeAttributes.has(k)),
+    ])],
     hiddenCategories: [...hiddenCategories],
     attributeFocus: !!attributeFocusEnabled,
   };
@@ -12314,18 +12356,17 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
       }
       nextByHost.set(String(host), perHost);
     }
-    for (const key of nextTypes.keys()) {
-      if (!attributeTypes.has(key)) activeAttributes.add(key); // new groups start visible
-    }
-    for (const key of [...activeAttributes]) {
-      if (!nextTypes.has(key)) activeAttributes.delete(key);
-    }
     // FR-7.5b/FR-8.14: on the first apply after a view switch or session
     // restore, the view context's ring selection replaces the carried-over
     // one — exactly the stored off-set is deselected, everything else is on.
-    if (og2.pendingAttributesOff) {
-      activeAttributes = new Set([...nextTypes.keys()].filter(k => !og2.pendingAttributesOff.has(k)));
+    // Otherwise the selection is a runtime override (FR-8.2a): deselections
+    // survive scene changes, groups arriving later start off.
+    if (og2.pendingAttributesOff || !og2.ringSelection) {
+      og2.ringSelection = og2CreateRingSelection(og2.pendingAttributesOff);
       og2.pendingAttributesOff = null;
+      activeAttributes = og2NextRingSelection(og2.ringSelection, nextTypes.keys(), [], new Set());
+    } else {
+      activeAttributes = og2NextRingSelection(og2.ringSelection, nextTypes.keys(), attributeTypes.keys(), activeAttributes);
     }
     personAttributes = nextByHost;
     attributeTypes = nextTypes;
@@ -13235,7 +13276,7 @@ function showListIntakeDialog(entry, list, meta, onDone) {
         await og2ReplaceViews(views);
       }
       if (dlCheck.box.checked) downloadJson(`${source}.snapshot-${built.snapshot.meta.snapshot}.json`, built.snapshot);
-      await og2AdoptStore(res.store || store);
+      await og2AdoptStore(res.store || store, { revealRings: true });
       const skipped = built.unmatched.length ? `, ${built.unmatched.length} ohne Zuordnung übersprungen` : '';
       showTemporaryNotification(`Liste ${entry.filename}${titleSuffix} importiert: ${built.matched.length} Zuordnungen als ${edgeType}${skipped}.`, 'medium');
       close();
