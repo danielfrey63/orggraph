@@ -24,7 +24,14 @@ export async function og2OpenPendingLists() {
   og2IntakeOpen = true;
   try {
     for (const entry of pending) {
-      await new Promise((resolve) => showListIntakeDialog(entry, resolve));
+      // one dialog per list: a wide table (E74) yields one list per
+      // attribute column; the parked file is consumed once all are handled
+      const { lists } = parseListText(entry.text, fileStemOf(entry.filename));
+      if (!lists.length) showTemporaryNotification(`Liste ${entry.filename}: keine Einträge gefunden.`, 'medium');
+      for (let i = 0; i < lists.length; i++) {
+        await new Promise((resolve) => showListIntakeDialog(entry, lists[i], { index: i + 1, total: lists.length }, resolve));
+      }
+      await delStored(entry.key);
     }
   } finally {
     og2IntakeOpen = false;
@@ -110,13 +117,14 @@ function checkbox(labelText, checked) {
   return { wrap, box };
 }
 
-export function showListIntakeDialog(entry, onDone) {
+export function showListIntakeDialog(entry, list, meta, onDone) {
   const og2 = og2State();
   const { registry, store } = og2;
-  const stem = fileStemOf(entry.filename);
-  const parsed = parseListText(entry.text, stem);
+  const stem = list.category || fileStemOf(entry.filename);
+  const parsed = { rows: list.rows };
   const rowsCarryValues = parsed.rows.some((r) => r.value);
   const rowsCarryCategories = parsed.rows.some((r) => r.category);
+  const titleSuffix = meta && meta.total > 1 ? ` — Spalte «${list.category}» (${meta.index}/${meta.total})` : '';
 
   // Default target: the generic attribute carrier when the registry has one
   // (an edge whose target type groups the legend by a property), else the
@@ -128,7 +136,7 @@ export function showListIntakeDialog(entry, onDone) {
   }) || allEdgeTypes[0] || [null])[0];
 
   const finish = (result) => { if (onDone) onDone(result); };
-  const { modal, content, close } = createModal({ id: 'listIntakeDialog', title: `Liste importieren: ${entry.filename}` });
+  const { modal, content, close } = createModal({ id: 'listIntakeDialog', title: `Liste importieren: ${entry.filename}${titleSuffix}` });
   modal.querySelector('.modal-container').classList.add('modal-container--wide');
 
   const form = document.createElement('div');
@@ -294,9 +302,8 @@ export function showListIntakeDialog(entry, onDone) {
   rematch();
   refreshExtend();
 
-  const discard = async () => {
-    await delStored(entry.key);
-    showTemporaryNotification(`Liste ${entry.filename} verworfen — nichts importiert.`);
+  const discard = () => {
+    showTemporaryNotification(`Liste ${entry.filename}${titleSuffix} verworfen — nichts importiert.`);
     finish({ status: 'discarded' });
   };
   cancelBtn.addEventListener('click', () => { close(); discard(); });
@@ -316,6 +323,7 @@ export function showListIntakeDialog(entry, onDone) {
         resolveId: (identifier) => decisions.get(identifier) || null,
         labelOf: resolver.labelOf,
         priorSources: priorEdgeSources(store, source, edgeType),
+        existing: existingTargets(store, registry, currentTargetType()),
       });
       const res = await importSnapshotAsync(store, registry, built.snapshot, og2UiHooks());
       if (res.status !== 'imported') {
@@ -328,11 +336,10 @@ export function showListIntakeDialog(entry, onDone) {
         delete views[og2.activeViewName].parsed;
         await og2ReplaceViews(views);
       }
-      await delStored(entry.key);
       if (dlCheck.box.checked) downloadJson(`${source}.snapshot-${built.snapshot.meta.snapshot}.json`, built.snapshot);
       await og2AdoptStore(res.store || store);
       const skipped = built.unmatched.length ? `, ${built.unmatched.length} ohne Zuordnung übersprungen` : '';
-      showTemporaryNotification(`Liste ${entry.filename} importiert: ${built.matched.length} Zuordnungen als ${edgeType}${skipped}.`, 'medium');
+      showTemporaryNotification(`Liste ${entry.filename}${titleSuffix} importiert: ${built.matched.length} Zuordnungen als ${edgeType}${skipped}.`, 'medium');
       close();
       finish({ status: 'imported', snapshot: built.snapshot });
     } catch (e) {

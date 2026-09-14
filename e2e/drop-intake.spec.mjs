@@ -177,3 +177,44 @@ test('file:// drop intake: an identifier list opens the intake dialog and import
   const pending = await page.evaluate(() => getPendingLists().then((l) => l.length));
   expect(pending).toBe(0);
 });
+
+test('file:// drop intake: a wide Excel-style table yields one dialog per attribute column (E74)', async ({ page }) => {
+  test.setTimeout(120_000);
+  page.on('dialog', (d) => d.accept());
+  await page.goto(appUrl);
+  await expect(page.locator('.dz-overlay')).toBeVisible();
+  await dropFiles(page, DROP_FILES);
+  await expect(page.locator('g.nodes circle:not(.attribute-circle)')).toHaveCount(5, { timeout: 60_000 });
+
+  // Name/Nachname/E-Mail/Besucht/Rolle — the e-mail column is the key, the
+  // boolean column is a membership, the text column category + value
+  const csvPath = join(mkdtempSync(join(tmpdir(), 'og2-wide-')), 'export.csv');
+  writeFileSync(csvPath, [
+    'Name;Nachname;E-Mail;Besucht;Rolle',
+    'Vera;Chefin;vera@example.org;WAHR;Sektionsleiter',
+    'Max;Mittel;MAX@example.org;FALSCH;',
+    'Nina;Mittel;nina@example.org;WAHR;AG',
+    'Ben;Blatt;ben@example.org;FALSCH;',
+  ].join('\r\n'));
+  await dropFiles(page, [csvPath]);
+  const dialog = page.locator('#listIntakeDialog');
+
+  // 1/2: Besucht — two true rows
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  await expect(dialog.locator('h2')).toContainText('«Besucht» (1/2)');
+  await expect(dialog.locator('.modal-summary')).toContainText('2 Zeilen · 2 exakt');
+  await dialog.locator('button.btn-primary').click();
+
+  // 2/2: Rolle — values from the file, the value field is locked
+  await expect(dialog.locator('h2')).toContainText('«Rolle» (2/2)', { timeout: 30_000 });
+  await expect(dialog.locator('.modal-summary')).toContainText('2 Zeilen · 2 exakt');
+  await expect(dialog.locator('input.modal-input').nth(1)).toBeDisabled();
+  await dialog.locator('button.btn-primary').click();
+  await expect(dialog).toBeHidden({ timeout: 30_000 });
+
+  await expect(page.locator('g.nodes circle.attribute-circle[data-attribute="Besucht::Besucht"]')).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.locator('g.nodes circle.attribute-circle[data-attribute="Rolle::AG"]')).toHaveCount(1);
+  await expect(page.locator('g.nodes circle.attribute-circle[data-attribute="Rolle::Sektionsleiter"]')).toHaveCount(1);
+  const pending = await page.evaluate(() => getPendingLists().then((l) => l.length));
+  expect(pending).toBe(0);
+});

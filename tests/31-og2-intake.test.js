@@ -48,24 +48,62 @@ const stockStore = () => {
 };
 
 describe('E74 — list parsing', () => {
+  const single = (text, stem) => {
+    const { lists, header } = parseListText(text, stem);
+    expect(lists).toHaveLength(1);
+    return { ...lists[0], header };
+  };
+
   it('reads one identifier per line, skips blanks and comments, BOM-safe', () => {
-    const { rows, category, header } = parseListText('﻿a@x.ch\n\n# comment\nb@x.ch \n', 'Newsletter');
+    const { rows, category, header, kind } = single('﻿a@x.ch\n\n# comment\nb@x.ch \n', 'Newsletter');
     expect(rows).toEqual([{ identifier: 'a@x.ch', value: '' }, { identifier: 'b@x.ch', value: '' }]);
     expect(category).toBe('Newsletter');
+    expect(kind).toBe('list');
     expect(header).toBe(false);
+    expect(parseListText('', 'x')).toEqual({ lists: [], delimiter: null, header: false });
   });
 
   it('maps the legacy two- and three-column TSV shapes', () => {
-    expect(parseListText('a@x.ch\tGold\nb@x.ch\tSilber', 'Stufe').rows).toEqual([
+    expect(single('a@x.ch\tGold\nb@x.ch\tSilber', 'Stufe').rows).toEqual([
       { identifier: 'a@x.ch', value: 'Gold' }, { identifier: 'b@x.ch', value: 'Silber' },
     ]);
-    expect(parseListText('a@x.ch\tKohorte\tVII\n', 'x').rows).toEqual([{ identifier: 'a@x.ch', value: 'VII', category: 'Kohorte' }]);
+    expect(single('a@x.ch\tKohorte\tVII\n', 'x').rows).toEqual([{ identifier: 'a@x.ch', value: 'VII', category: 'Kohorte' }]);
   });
 
-  it('honours a header row and Excel-style semicolons with quotes', () => {
-    const { rows, header } = parseListText('E-Mail;Wert\n"a@x.ch";"Gold; fein"\nb@x.ch;Silber\n', 'S');
+  it('honours a header row (long form) and Excel-style semicolons with quotes', () => {
+    const { rows, header } = single('E-Mail;Wert\n"a@x.ch";"Gold; fein"\nb@x.ch;Silber\n', 'S');
     expect(header).toBe(true);
     expect(rows).toEqual([{ identifier: 'a@x.ch', value: 'Gold; fein' }, { identifier: 'b@x.ch', value: 'Silber' }]);
+  });
+
+  it('wide table: the key column beats name columns, boolean columns mean membership, text columns category + value', () => {
+    const text = [
+      'Name;Nachname;E-Mail;Besucht;Rolle',
+      'Minh;Trang Trinh;minhtrang.trinh@sem.admin.ch;FALSCH;',
+      'Lionel;Kapff;lionel.kapff@sem.admin.ch;WAHR;Sektionsleiter',
+      'Priyanka;Theenesh;priyanka.theenesh@sem.admin.ch;FALSCH;',
+      'Eric;Baltisberger;Eric.Baltisberger@sem.admin.ch;WAHR;AG',
+      'Helena;Schaer;helena.schaer@sem.admin.ch;WAHR;',
+    ].join('\r\n');
+    const { lists, header } = parseListText(text, 'export');
+    expect(header).toBe(true);
+    expect(lists.map((l) => [l.category, l.kind])).toEqual([['Besucht', 'boolean'], ['Rolle', 'value']]);
+    expect(lists[0].rows).toEqual([
+      { identifier: 'lionel.kapff@sem.admin.ch', value: '' },
+      { identifier: 'Eric.Baltisberger@sem.admin.ch', value: '' },
+      { identifier: 'helena.schaer@sem.admin.ch', value: '' },
+    ]);
+    expect(lists[1].rows).toEqual([
+      { identifier: 'lionel.kapff@sem.admin.ch', value: 'Sektionsleiter' },
+      { identifier: 'Eric.Baltisberger@sem.admin.ch', value: 'AG' },
+    ]);
+  });
+
+  it('wide table without a key column falls back to the name column; header with names only is a member list', () => {
+    const { lists } = parseListText('Person\tAktiv\nAnna Boss\tx\nBen Dev\t\n', 'Team');
+    expect(lists).toEqual([{ category: 'Aktiv', kind: 'boolean', rows: [{ identifier: 'Anna Boss', value: '' }] }]);
+    const names = parseListText('E-Mail,Name\na@x.ch,Anna\nb@x.ch,Ben\n', 'Kohorte VII');
+    expect(names.lists).toEqual([{ category: 'Kohorte VII', kind: 'list', rows: [{ identifier: 'a@x.ch', value: '' }, { identifier: 'b@x.ch', value: '' }] }]);
   });
 });
 
@@ -176,6 +214,33 @@ describe('E74 — snapshot builder and full-state semantics per list source', ()
     // existing targets for the dialog: grouped by kategorie, labels resolved
     const targets = existingTargets(store, registry, 'Attribut');
     expect(targets.map((t) => `${t.group}/${t.label}`)).toEqual(['Newsletter/Gold', 'Newsletter/Newsletter', 'Newsletter/Silber']);
+  });
+});
+
+describe('E74 — typed targets: existing nodes are reused, identity props delivered explicitly', () => {
+  it('a value matching an existing role reuses its identity and hatRolle carries kontext: null', () => {
+    const store = stockStore();
+    const roles = {
+      meta: { source: 'stock', crawledAt: '2026-01-02T12:00:00Z', snapshot: '20260102-1200', registryVersion: registry.version,
+        scope: { nodeTypes: ['Rolle'], edgeTypes: ['hatRolle'], edgeSources: ['p1'] } },
+      schema: { nodeTypes: { Rolle: registry.nodeTypes.Rolle, Person: registry.nodeTypes.Person }, edgeTypes: { hatRolle: registry.edgeTypes.hatRolle } },
+      nodes: [{ id: 'stock:Rolle:sektionsleiter', type: 'Rolle', label: 'Sektionsleiter', props: {} }, { id: 'p1', type: 'Person', label: 'Anna Boss' }],
+      edges: [{ type: 'hatRolle', source: 'p1', target: 'stock:Rolle:sektionsleiter', props: { kontext: null } }],
+    };
+    expect(importSnapshot(store, registry, roles, YES).status).toBe('imported');
+    const { resolve, labelOf } = buildIdentityResolver(store, registry, 'Person');
+    const built = buildListSnapshot({
+      source: 'liste-rolle', at: '2026-09-14T08:00:00Z', registry, category: 'Rolle', edgeType: 'hatRolle', memberType: 'Person',
+      rows: [{ identifier: 'p2', value: 'Sektionsleiter' }, { identifier: 'p1', value: 'AG' }],
+      resolveId: (id) => resolve(id).id || null, labelOf,
+      existing: existingTargets(store, registry, 'Rolle'),
+    });
+    expect(built.snapshot.edges).toEqual([
+      { type: 'hatRolle', source: 'p1', target: 'liste-rolle:Rolle:rolle--ag', props: { kontext: null } },
+      { type: 'hatRolle', source: 'p2', target: 'stock:Rolle:sektionsleiter', props: { kontext: null } },
+    ]);
+    expect(importSnapshot(store, registry, built.snapshot, YES).status).toBe('imported');
+    expect([...store.nodes.values()].filter((n) => n.type === 'Rolle').map((n) => n.id).sort()).toEqual(['liste-rolle:Rolle:rolle--ag', 'stock:Rolle:sektionsleiter']);
   });
 });
 

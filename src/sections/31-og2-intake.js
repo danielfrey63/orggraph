@@ -21,15 +21,23 @@ import { resolveRingGroup } from './29-og2-app.js';
 
 // ---- list parsing ---------------------------------------------------------
 
-// Header aliases (lower-case). A first row whose identifier cell is one of
-// the identifier aliases is a header and maps the columns; without a header
+// Header aliases (lower-case). A first row carrying an identifier alias in
+// ANY cell is a header. Identifier priority: a key column (e-mail, id) beats
+// a name column wherever it stands; name columns are never attributes.
+// With explicit value/category columns the file is the LONG form (one list,
+// value/category per row); otherwise every remaining column is its own list
+// (WIDE form): boolean columns (WAHR/FALSCH, ja/nein, x/leer …) mean
+// membership, text columns mean category + value per row. Without a header
 // the columns are positional: [identifier], [identifier, value] or
 // [identifier, category, value] (the legacy attribute-TSV shapes).
 const LIST_HEADERS = {
-  identifier: ['email', 'e-mail', 'mail', 'mailadresse', 'e-mail-adresse', 'id', 'identifier', 'kennung', 'person', 'name', 'teilnehmer', 'teilnehmerin', 'mitglied'],
+  key: ['email', 'e-mail', 'mail', 'mailadresse', 'e-mail-adresse', 'id', 'identifier', 'kennung'],
+  name: ['name', 'person', 'teilnehmer', 'teilnehmerin', 'mitglied', 'vorname', 'nachname', 'vorname nachname', 'nachname vorname'],
   value: ['wert', 'value', 'attribut', 'attribute', 'label', 'bezeichnung'],
   category: ['kategorie', 'category', 'klasse', 'kohorte', 'cohort', 'kurs', 'training', 'liste'],
 };
+const BOOL_TRUE = new Set(['wahr', 'true', 'ja', 'yes', 'x', '1', 'y', 'j']);
+const BOOL_FALSE = new Set(['falsch', 'false', 'nein', 'no', '0', '', 'n', '-']);
 
 function splitDelimited(line, delim) {
   if (delim === '\t') return line.split('\t');
@@ -56,41 +64,72 @@ function detectDelimiter(line) {
   return null;
 }
 
-// Parse a list file into rows { identifier, value, category? }. `fileStem`
-// (file name without extension) is the default category, like the legacy
-// attribute files whose name was the category (README v1).
+// Parse a list file into lists [{ category, kind, rows: [{ identifier,
+// value, category? }] }]. `fileStem` (file name without extension) is the
+// default category, like the legacy attribute files whose name was the
+// category (README v1). kind: 'list' (long form / no header), 'boolean'
+// (membership column) or 'value' (text column) — wide files yield one list
+// per attribute column.
 export function parseListText(text, fileStem = '') {
   const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/)
     .map((l) => l.replace(/\s+$/, ''))
     .filter((l) => l.trim() && !l.trim().startsWith('#'));
-  if (!lines.length) return { rows: [], category: fileStem, delimiter: null, header: false };
+  if (!lines.length) return { lists: [], delimiter: null, header: false };
   const delimiter = detectDelimiter(lines[0]);
   const cells = (l) => (delimiter ? splitDelimited(l, delimiter) : [l]).map((c) => c.trim());
-  const first = cells(lines[0]).map((c) => c.toLowerCase());
-  const header = LIST_HEADERS.identifier.includes(first[0]);
-  let cols = { identifier: 0, value: null, category: null };
-  if (header) {
-    const find = (aliases) => { const i = first.findIndex((h) => aliases.includes(h)); return i >= 0 ? i : null; };
-    cols = { identifier: find(LIST_HEADERS.identifier) ?? 0, value: find(LIST_HEADERS.value), category: find(LIST_HEADERS.category) };
-    if (cols.value === null && cols.category === null) {
-      if (first.length === 2) cols.value = cols.identifier === 0 ? 1 : 0;
-      else if (first.length >= 3) { cols.category = 1; cols.value = 2; }
+  const headerCells = cells(lines[0]);
+  const first = headerCells.map((c) => c.toLowerCase());
+  const find = (aliases) => { const i = first.findIndex((h) => aliases.includes(h)); return i >= 0 ? i : null; };
+  const keyCol = find(LIST_HEADERS.key);
+  const nameCol = find(LIST_HEADERS.name);
+  const header = keyCol !== null || nameCol !== null;
+  const body = lines.slice(header ? 1 : 0).map(cells);
+
+  const longForm = (cols, category) => {
+    const rows = [];
+    for (const c of body) {
+      const identifier = c[cols.identifier] || '';
+      if (!identifier) continue;
+      const row = { identifier, value: cols.value !== null ? (c[cols.value] || '') : '' };
+      if (cols.category !== null && c[cols.category]) row.category = c[cols.category];
+      rows.push(row);
     }
-  } else {
-    const width = cells(lines[0]).length;
-    if (width === 2) cols.value = 1;
-    else if (width >= 3) { cols.category = 1; cols.value = 2; }
+    return { lists: [{ category, kind: 'list', rows }], delimiter, header };
+  };
+
+  if (!header) {
+    const width = headerCells.length;
+    const cols = { identifier: 0, value: width === 2 ? 1 : width >= 3 ? 2 : null, category: width >= 3 ? 1 : null };
+    return longForm(cols, fileStem);
   }
-  const rows = [];
-  for (const line of lines.slice(header ? 1 : 0)) {
-    const c = cells(line);
-    const identifier = c[cols.identifier] || '';
-    if (!identifier) continue;
-    const row = { identifier, value: cols.value !== null ? (c[cols.value] || '') : '' };
-    if (cols.category !== null && c[cols.category]) row.category = c[cols.category];
-    rows.push(row);
+
+  const identifier = keyCol ?? nameCol; // key column beats a name column
+  const valueCol = find(LIST_HEADERS.value);
+  const categoryCol = find(LIST_HEADERS.category);
+  if (valueCol !== null || categoryCol !== null) {
+    return longForm({ identifier, value: valueCol, category: categoryCol }, fileStem);
   }
-  return { rows, category: fileStem, delimiter, header };
+
+  // Wide form: every column that is neither the identifier nor a name is an
+  // attribute of its own; the header text is the category.
+  const lists = [];
+  const isName = (i) => LIST_HEADERS.name.includes(first[i]) || LIST_HEADERS.key.includes(first[i]);
+  for (let col = 0; col < headerCells.length; col++) {
+    if (col === identifier || isName(col) || !headerCells[col]) continue;
+    const values = body.map((c) => (c[col] || '').toLowerCase());
+    const boolean = values.every((v) => BOOL_TRUE.has(v) || BOOL_FALSE.has(v)) && values.some((v) => BOOL_TRUE.has(v));
+    const rows = [];
+    body.forEach((c, i) => {
+      const id = c[identifier] || '';
+      if (!id) return;
+      if (boolean) { if (BOOL_TRUE.has(values[i])) rows.push({ identifier: id, value: '' }); }
+      else if (c[col]) rows.push({ identifier: id, value: c[col] });
+    });
+    lists.push({ category: headerCells[col], kind: boolean ? 'boolean' : 'value', rows });
+  }
+  // a header with only identifier/name columns is a plain member list
+  if (!lists.length) lists.push({ category: fileStem, kind: 'list', rows: body.filter((c) => c[identifier]).map((c) => ({ identifier: c[identifier], value: '' })) });
+  return { lists, delimiter, header };
 }
 
 // ---- identity resolution ----------------------------------------------------
@@ -240,13 +279,22 @@ export function existingTargets(store, registry, type) {
 // decisions); `labelOf(id)` yields the canonical stored label reused in the
 // visited-proof stubs (E61: a stub never rewrites the label). `priorSources`
 // are members of earlier lists of this source (priorEdgeSources).
-export function buildListSnapshot({ source, at, registry, rows, category, value = '', edgeType, memberType, resolveId, labelOf, priorSources = [] }) {
+// `existing` (existingTargets of the target type) lets a chosen value reuse
+// the stock's node instead of minting a source-namespaced twin: same group
+// and label → same identity (the Rolle concept space is tenant-wide, E73).
+// Edges carry every identity prop of the type explicitly as null (E15: an
+// omitted identity prop is rejected by the preflight).
+export function buildListSnapshot({ source, at, registry, rows, category, value = '', edgeType, memberType, resolveId, labelOf, priorSources = [], existing = [] }) {
   const stamp = utcMinuteOf(at);
   if (!stamp) throw new Error(`at must be RFC3339 with offset or Z (E50): ${at}`);
   const edgeDecl = (registry.edgeTypes || {})[edgeType];
   if (!edgeDecl) throw new Error(`unknown edge type: ${edgeType}`);
   const targetType = edgeDecl.to;
   const categoryProp = groupPropName((registry.nodeTypes || {})[targetType]);
+  const identityProps = {};
+  for (const p of edgeDecl.identityProps || []) identityProps[p] = null;
+  const reuse = new Map();
+  for (const t of existing) reuse.set(categoryProp ? `${t.group}::${t.label}` : t.label, t);
 
   const nodes = new Map();
   const edges = new Map();
@@ -258,15 +306,22 @@ export function buildListSnapshot({ source, at, registry, rows, category, value 
     const label = labelOf ? labelOf(id) : undefined;
     nodes.set(id, { id, type: memberType, label: label === undefined ? id : String(label) });
   };
+  const targetOf = (cat, val) => {
+    const fresh = containerNodeOf(source, targetType, cat, val, categoryProp);
+    const hit = reuse.get(categoryProp ? `${cat}::${fresh.label}` : fresh.label);
+    if (!hit) return fresh;
+    return { ...fresh, id: hit.id, label: hit.label };
+  };
   for (const row of rows) {
     const id = resolveId(row.identifier);
     if (!id) { unmatched.push({ identifier: row.identifier, value: row.value || '', category: row.category || category }); continue; }
-    const container = containerNodeOf(source, targetType, row.category || category, row.value || value, categoryProp);
+    const container = targetOf(row.category || category, row.value || value);
     nodes.set(container.id, container);
     stub(id);
     members.add(id);
     matched.push({ identifier: row.identifier, id, target: container.id });
     const e = { type: edgeType, source: id, target: container.id };
+    if (Object.keys(identityProps).length) e.props = { ...identityProps };
     edges.set(canonicalJson([e.type, e.source, e.target]), e);
   }
   for (const id of priorSources) { stub(id); members.add(id); }
