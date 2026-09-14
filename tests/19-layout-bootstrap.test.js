@@ -35,6 +35,7 @@ beforeEach(() => {
   globalThis.idOf = idOf;
   globalThis.drawKindOf = drawKindOf;
   globalThis.orgDepth = orgDepth;
+  globalThis.orgParent = new Map();
         globalThis.cssNumber = cssNumber;
     globalThis.jitterAround = jitterAround;
   globalThis.setLegendIconButtonState = setLegendIconButtonState;
@@ -48,7 +49,6 @@ beforeEach(() => {
     ['b', { id: 'b', type: 'person' }],
     ['o1', { id: 'o1', type: 'org' }],
   ]);
-  globalThis.parentOf = new Map();
   globalThis.hierarchyLevels = new Map();
   globalThis.raw = { links: [{ source: 'a', target: 'o1' }] };
   globalThis.allowedOrgs = new Set(['o1']);
@@ -102,7 +102,6 @@ describe('configureLayout', () => {
     expect(byLevelY[0]).toBeLessThan(byLevelY[1]);
     expect(byLevelY[1]).toBeLessThan(byLevelY[2]);
     expect(nodes[0].level).toBe(0);
-    expect(globalThis.parentOf.get('a')).toBe('m');
   });
 
   it('force mode: installs cluster forces around allowed org centers', () => {

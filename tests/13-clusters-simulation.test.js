@@ -29,7 +29,6 @@ beforeEach(() => {
   globalThis.clusterLayer = d3.select('#clusters');
   globalThis.allowedOrgs = new Set();
   globalThis.clusterPolygons = new Map();
-  globalThis.parentOf = new Map();
   globalThis.orgChildren = new Map([['o1', new Set(['o2'])]]);
   globalThis.raw = {
     orgs: [{ id: 'o1' }, { id: 'o2' }],

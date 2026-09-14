@@ -53,7 +53,6 @@ beforeEach(() => {
   globalThis.colorForOrg = colorForOrg;
   globalThis.pseudonymizationEnabled = false;
   globalThis.pseudoData = null;
-  globalThis.parentOf = new Map();
   globalThis.selectedRootIds = [];
   globalThis.removeRoot = () => {};
   globalThis.allowedOrgs = new Set();

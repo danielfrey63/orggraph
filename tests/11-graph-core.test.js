@@ -12,7 +12,7 @@ import {
 // Cross-section references resolve via globals in the built classic script;
 // tests reproduce that contract (see tests/09-data-load.test.js).
 const STATE_GLOBALS = [
-  'raw', 'byId', 'allNodesUnique', 'parentOf', 'orgParent', 'orgChildren',
+  'raw', 'byId', 'allNodesUnique', 'orgParent', 'orgChildren',
   'orgRoots', 'hiddenNodes', 'hiddenByRoot', 'attributeTypes',
   'activeAttributes', 'emptyCategories', 'categorySourceFiles', 'modifiedCategories',
 ];
@@ -67,13 +67,11 @@ function applySample(data) {
   globalThis.byId = new Map(nodes.map(n => [n.id, n]));
   globalThis.allNodesUnique = nodes.slice();
   const orgIds = new Set(orgs.map(o => o.id));
-  globalThis.parentOf = new Map();
   globalThis.orgParent = new Map();
   globalThis.orgChildren = new Map();
   const hasParent = new Set();
   for (const l of links) {
     if (!orgIds.has(l.source) || !orgIds.has(l.target)) continue;
-    globalThis.parentOf.set(l.target, l.source);
     globalThis.orgParent.set(l.target, l.source);
     if (!globalThis.orgChildren.has(l.source)) globalThis.orgChildren.set(l.source, new Set());
     globalThis.orgChildren.get(l.source).add(l.target);

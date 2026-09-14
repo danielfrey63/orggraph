@@ -100,7 +100,7 @@ export function computeSubgraph(startId, depth, mode) {
   
   // Build set of OEs that have children (are not leaf nodes)
   const orgsWithChildren = new Set();
-  for (const [child, parent] of parentOf.entries()) {
+  for (const [child, parent] of orgParent.entries()) {
     if (parent) orgsWithChildren.add(parent);
   }
   
@@ -117,7 +117,7 @@ export function computeSubgraph(startId, depth, mode) {
         // Check if this OE is a leaf (has no children in the person's org hierarchy)
         let isLowest = true;
         for (const otherOid of orgs) {
-          if (otherOid !== oid && parentOf.get(otherOid) === oid) {
+          if (otherOid !== oid && orgParent.get(otherOid) === oid) {
             // otherOid is a child of oid, so oid is not the lowest
             isLowest = false;
             break;

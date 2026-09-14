@@ -253,7 +253,7 @@ export function getActiveAncestorChain(oid) {
   let cur = String(oid);
   while (cur) {
     if (allowedOrgs.has(cur)) active.add(cur);
-    const p = parentOf.get(cur);
+    const p = orgParent.get(cur);
     if (!p) break;
     cur = p;
   }
@@ -515,10 +515,10 @@ export function orgDepth(oid){
   let d = 0;
   let cur = String(oid);
   const seen = new Set();
-  while (parentOf && parentOf.has(cur)) {
+  while (orgParent && orgParent.has(cur)) {
     if (seen.has(cur)) break;
     seen.add(cur);
-    cur = parentOf.get(cur);
+    cur = orgParent.get(cur);
     d++;
   }
   return d;

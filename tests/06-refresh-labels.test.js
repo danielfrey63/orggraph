@@ -24,8 +24,8 @@ beforeEach(() => {
   globalThis.debugMode = false;
   globalThis.pseudonymizationEnabled = false;
   globalThis.pseudoData = null;
-  globalThis.parentOf = new Map();
   globalThis.orgDepth = orgDepth;
+  globalThis.orgParent = new Map();
   globalThis.getDisplayLabel = undefined; // module uses its own local
   globalThis.hideTooltip = vi.fn();
   globalThis.Logger = { log: () => {} };

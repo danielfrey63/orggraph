@@ -18,7 +18,7 @@ beforeEach(() => {
   globalThis.pseudoOrgIndices = new Map();
   globalThis.pseudonymizationEnabled = false;
   globalThis.orgDepth = orgDepth;
-  globalThis.parentOf = new Map([['o2', 'o1']]);
+  globalThis.orgParent = new Map([['o2', 'o1']]);
   globalThis.byId = new Map([
     ['p1', { id: 'p1', label: 'Alice', type: 'person' }],
     ['o1', { id: 'o1', label: 'Company', type: 'org' }],

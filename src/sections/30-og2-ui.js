@@ -473,7 +473,6 @@ export function og2SyncStockGlobals() {
   orgParent = data.orgParent;
   orgChildren = data.orgChildren;
   orgRoots = data.orgRoots;
-  parentOf = new Map(data.orgParent);
   hiddenNodes = hiddenNodes || new Set();
   hiddenByRoot = hiddenByRoot || new Map();
 }

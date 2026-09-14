@@ -348,7 +348,6 @@ let debugMode = false;
 let continuousSimulation = false; // Kontinuierliche Animation aktiviert
 let nodeMenuEl = null;
 let simAllById = new Map();
-let parentOf = new Map();
 let orgParent = new Map();      // childOrgId -> parentOrgId
 let orgChildren = new Map();    // parentOrgId -> Set(childOrgId)
 let orgRoots = [];              // Array der Wurzel-OEs (ohne Eltern)

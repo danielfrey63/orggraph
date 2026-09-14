@@ -29,7 +29,6 @@ beforeEach(() => {
   globalThis.pseudoData = null;
   globalThis.d3 = { polygonContains };
   globalThis.hierarchyLevels = new Map();
-  globalThis.parentOf = new Map([['o2', 'o1'], ['o3', 'o2']]);
   globalThis.orgParent = new Map([['o2', 'o1'], ['o3', 'o2']]);
   globalThis.allowedOrgs = new Set();
   globalThis.clusterPolygons = new Map();

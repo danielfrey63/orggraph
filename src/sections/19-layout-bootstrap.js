@@ -126,18 +126,6 @@ export function configureLayout(nodes, links, simulation, mode) {
     const LEVEL_HEIGHT = cssNumber('--level-height'); // Vertikaler Abstand zwischen Hierarchie-Ebenen
   const LEVEL_FORCE_STRENGTH = cssNumber('--level-force-strength'); // Stärke der vertikalen Anziehungskraft
   
-  // Report -> manager map of the drawn scene (hierarchy direction)
-  const pMap = new Map();
-  for (const l of links) {
-    const s = idOf(l.source), t = idOf(l.target);
-    const sNode = byId.get(s), tNode = byId.get(t);
-    if (drawKindOf(sNode) === 'node' && drawKindOf(tNode) === 'node') {
-      const { manager, report } = hierarchyPairOf(l);
-      pMap.set(report, manager);
-    }
-  }
-  parentOf = pMap;
-  
   // IMMER Hierarchie-Ebenen berechnen (für Farb-Gradienten) [SF]
   hierarchyLevels = computeHierarchyLevels(nodes, links);
   

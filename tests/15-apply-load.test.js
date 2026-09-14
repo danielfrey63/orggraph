@@ -62,7 +62,7 @@ beforeEach(() => {
   globalThis.activeAttributes = new Set();
   globalThis.emptyCategories = new Set();
   globalThis.categorySourceFiles = new Map();
-  for (const k of ['raw', 'byId', 'allNodesUnique', 'parentOf', 'orgParent', 'orgChildren', 'orgRoots', 'hiddenNodes', 'hiddenByRoot']) {
+  for (const k of ['raw', 'byId', 'allNodesUnique', 'orgParent', 'orgChildren', 'orgRoots', 'hiddenNodes', 'hiddenByRoot']) {
     globalThis[k] = undefined;
   }
   applyStock();
@@ -88,7 +88,6 @@ function applyStock() {
   globalThis.raw = { nodes: persons, links, persons, orgs: [] };
   globalThis.byId = new Map(persons.map(n => [n.id, n]));
   globalThis.allNodesUnique = persons.slice();
-  globalThis.parentOf = new Map();
   globalThis.orgParent = new Map();
   globalThis.orgChildren = new Map();
   globalThis.orgRoots = [];

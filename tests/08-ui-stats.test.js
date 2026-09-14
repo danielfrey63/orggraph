@@ -20,7 +20,6 @@ beforeEach(() => {
   globalThis.personAttributes = new Map();
   globalThis.clusterPolygons = new Map();
   globalThis.allowedOrgs = new Set();
-  globalThis.parentOf = new Map();
   globalThis.orgParent = new Map();
   globalThis.orgDepth = orgDepth;
   globalThis.getDisplayLabel = getDisplayLabel;

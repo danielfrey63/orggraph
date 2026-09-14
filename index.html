@@ -1571,7 +1571,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.206.296';
+const APP_VERSION = '1.208.305';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -3161,7 +3161,6 @@ let debugMode = false;
 let continuousSimulation = false; // Kontinuierliche Animation aktiviert
 let nodeMenuEl = null;
 let simAllById = new Map();
-let parentOf = new Map();
 let orgParent = new Map();      // childOrgId -> parentOrgId
 let orgChildren = new Map();    // parentOrgId -> Set(childOrgId)
 let orgRoots = [];              // Array der Wurzel-OEs (ohne Eltern)
@@ -3782,7 +3781,7 @@ function getActiveAncestorChain(oid) {
   let cur = String(oid);
   while (cur) {
     if (allowedOrgs.has(cur)) active.add(cur);
-    const p = parentOf.get(cur);
+    const p = orgParent.get(cur);
     if (!p) break;
     cur = p;
   }
@@ -4044,10 +4043,10 @@ function orgDepth(oid){
   let d = 0;
   let cur = String(oid);
   const seen = new Set();
-  while (parentOf && parentOf.has(cur)) {
+  while (orgParent && orgParent.has(cur)) {
     if (seen.has(cur)) break;
     seen.add(cur);
-    cur = parentOf.get(cur);
+    cur = orgParent.get(cur);
     d++;
   }
   return d;
@@ -4700,7 +4699,7 @@ function computeSubgraph(startId, depth, mode) {
   
   // Build set of OEs that have children (are not leaf nodes)
   const orgsWithChildren = new Set();
-  for (const [child, parent] of parentOf.entries()) {
+  for (const [child, parent] of orgParent.entries()) {
     if (parent) orgsWithChildren.add(parent);
   }
   
@@ -4717,7 +4716,7 @@ function computeSubgraph(startId, depth, mode) {
         // Check if this OE is a leaf (has no children in the person's org hierarchy)
         let isLowest = true;
         for (const otherOid of orgs) {
-          if (otherOid !== oid && parentOf.get(otherOid) === oid) {
+          if (otherOid !== oid && orgParent.get(otherOid) === oid) {
             // otherOid is a child of oid, so oid is not the lowest
             isLowest = false;
             break;
@@ -8018,18 +8017,6 @@ function configureLayout(nodes, links, simulation, mode) {
   // Spezifische Parameter für Hierarchie-Layout
     const LEVEL_HEIGHT = cssNumber('--level-height'); // Vertikaler Abstand zwischen Hierarchie-Ebenen
   const LEVEL_FORCE_STRENGTH = cssNumber('--level-force-strength'); // Stärke der vertikalen Anziehungskraft
-  
-  // Report -> manager map of the drawn scene (hierarchy direction)
-  const pMap = new Map();
-  for (const l of links) {
-    const s = idOf(l.source), t = idOf(l.target);
-    const sNode = byId.get(s), tNode = byId.get(t);
-    if (drawKindOf(sNode) === 'node' && drawKindOf(tNode) === 'node') {
-      const { manager, report } = hierarchyPairOf(l);
-      pMap.set(report, manager);
-    }
-  }
-  parentOf = pMap;
   
   // IMMER Hierarchie-Ebenen berechnen (für Farb-Gradienten) [SF]
   hierarchyLevels = computeHierarchyLevels(nodes, links);
@@ -12094,7 +12081,6 @@ function og2SyncStockGlobals() {
   orgParent = data.orgParent;
   orgChildren = data.orgChildren;
   orgRoots = data.orgRoots;
-  parentOf = new Map(data.orgParent);
   hiddenNodes = hiddenNodes || new Set();
   hiddenByRoot = hiddenByRoot || new Map();
 }

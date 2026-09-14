@@ -44,7 +44,7 @@ beforeEach(() => {
   globalThis.collapsedCategories = new Set();
   globalThis.fetch = vi.fn(async () => httpError);
   globalThis.og2TryBoot = undefined;
-  for (const k of ['raw', 'byId', 'allNodesUnique', 'parentOf', 'orgParent', 'orgChildren', 'orgRoots', 'hiddenNodes', 'hiddenByRoot']) {
+  for (const k of ['raw', 'byId', 'allNodesUnique', 'orgParent', 'orgChildren', 'orgRoots', 'hiddenNodes', 'hiddenByRoot']) {
     globalThis[k] = undefined;
   }
 });
