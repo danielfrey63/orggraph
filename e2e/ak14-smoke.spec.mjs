@@ -27,6 +27,19 @@ test('start view renders nodes and links; hulls and rings are opt-in (E75)', asy
   await expect(page.locator('circle.attribute-circle')).toHaveCount(5);
 });
 
+test('choosing a ring row of an eye-hidden category reveals the category (live-test 2026-09-15)', async ({ page }) => {
+  // Team-Fokus starts with the Team category eye-hidden (env defaults)
+  await page.locator('#viewsLegend .legend-row').filter({ hasText: 'Team-Fokus' }).click();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(1); // focus mode: nothing chosen → root only
+  const teamRow = page.locator('#attributeLegend .legend-row[data-attribute-color]', { hasText: 'Team Rom' });
+  await expect(teamRow).toHaveCount(1);
+  await expect(page.locator('#attributeLegend .legend-icon-btn[title="Kategorie einblenden"]')).toHaveCount(1);
+  await teamRow.click();
+  // the category is revealed, the rings draw, the focus scene follows
+  await expect(page.locator('#attributeLegend .legend-icon-btn[title="Kategorie einblenden"]')).toHaveCount(0);
+  await expect(page.locator('circle.attribute-circle[data-attribute="Team::Team Rom"]')).toHaveCount(2, { timeout: 15_000 });
+});
+
 test('E75: selecting one ring group highlights exactly its members', async ({ page }) => {
   const teamRow = page.locator('#attributeLegend .legend-row[data-attribute-color]', { hasText: 'Team Rom' });
   await teamRow.click();

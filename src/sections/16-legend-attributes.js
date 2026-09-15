@@ -1,3 +1,10 @@
+// Lift the eye-hidden state of a ring category; true when it was hidden.
+export function revealCategory(cat) {
+  if (!hiddenCategories.has(cat)) return false;
+  hiddenCategories.delete(cat);
+  return true;
+}
+
 /**
  * Erstellt die Attribut-Legende mit einheitlichem legend-row Layout (wie OEs)
  */
@@ -75,6 +82,7 @@ export function buildAttributeLegend() {
             if (anyActive) activeAttributes.delete(it.key);
             else activeAttributes.add(it.key);
           }
+          if (!anyActive) revealCategory(cat);
           buildAttributeLegend();
           updateAttributeCircles();
           notifyAttributeVisibilityChanged();
@@ -137,12 +145,19 @@ export function buildAttributeLegend() {
       // Ganze Zeile klickbar für Toggle
       itemRow.addEventListener('click', (e) => {
         const isActive = activeAttributes.has(it.key);
-        
+
         if (isActive) activeAttributes.delete(it.key);
         else activeAttributes.add(it.key);
         setLegendRowActive(itemRow, !isActive);
 
-        updateAttributeStats();
+        // Choosing a group means wanting to see it: an eye-hidden category
+        // is revealed again (live-test 2026-09-15 — the hidden state
+        // survives reloads and silently swallowed the selection twice).
+        if (!isActive && revealCategory(cat)) {
+          buildAttributeLegend();
+        } else {
+          updateAttributeStats();
+        }
         updateAttributeCircles();
         notifyAttributeVisibilityChanged();
       });

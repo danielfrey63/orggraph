@@ -100,6 +100,33 @@ describe('buildAttributeLegend', () => {
     expect(globalThis.updateAttributeCircles).toHaveBeenCalledTimes(2);
   });
 
+  it('choosing a row of an eye-hidden category reveals the category (live-test 2026-09-15)', () => {
+    setupAttrs();
+    globalThis.activeAttributes = new Set(); // E75: nothing chosen
+    globalThis.hiddenCategories = new Set(['Rolle', 'Team']);
+    buildAttributeLegend();
+    const devRow = Array.from(document.querySelectorAll('#attributeLegend ul ul .legend-row'))
+      .find((r) => r.textContent.includes('Dev'));
+    devRow.click();
+    expect(globalThis.activeAttributes.has('Rolle::Dev')).toBe(true);
+    expect(globalThis.hiddenCategories.has('Rolle')).toBe(false); // revealed
+    expect(globalThis.hiddenCategories.has('Team')).toBe(true); // untouched
+    // the legend was rebuilt: the Rolle eye is open again, Team stays dimmed
+    const eyes = Array.from(document.querySelectorAll('#attributeLegend .legend-icon-btn[title*="Kategorie"]'));
+    expect(eyes.map((b) => b.className)).toEqual(['legend-icon-btn', 'legend-icon-btn dimmed']);
+    // deselecting never touches the eye state
+    const devRowAgain = Array.from(document.querySelectorAll('#attributeLegend ul ul .legend-row'))
+      .find((r) => r.textContent.includes('Dev'));
+    devRowAgain.click();
+    expect(globalThis.hiddenCategories.has('Team')).toBe(true);
+    // the category-wide "check all" reveals as well when it switches on
+    const teamCheckAll = Array.from(document.querySelectorAll('#attributeLegend .legend-icon-btn'))
+      .find((b) => b.title.startsWith('Alle Attribute in "Team"'));
+    teamCheckAll.click();
+    expect(globalThis.activeAttributes.has('Team::Coach')).toBe(true);
+    expect(globalThis.hiddenCategories.size).toBe(0);
+  });
+
   it('toggles category visibility via the eye button', () => {
     setupAttrs();
     buildAttributeLegend();
