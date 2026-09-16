@@ -8,6 +8,7 @@ import { createTenantStore } from './23-og2-store.js';
 import { importSnapshotAsync } from './26-og2-import.js';
 import { validateViews } from './27-og2-path.js';
 import { createLegendRow } from './12-legend-org.js';
+import { createModal } from './03-export-dialog.js';
 
 let og2 = null;
 
@@ -20,22 +21,112 @@ export function og2State() {
 }
 
 /* v8 ignore start */
-// Product HIL dialogs (FR-5.7, E46, E69, E70, FR-6.8): plain confirm dialogs
-// for now — every decision point is injectable and covered by fixture tests
-// at the engine level (E71); these are the interactive counterparts.
+// Product HIL dialogs (FR-5.7, E46, E69, E70, FR-6.8) as the app's own modal
+// (E76): the decision detail is shown in full, selectable and copyable — a
+// browser confirm() truncates and locks the text away (live-test 2026-09-16).
+// Every decision point stays injectable and fixture-tested at the engine
+// level (E71); these are the interactive counterparts. Resolves to the answer.
+export function og2AskDialog({ title, intro, detail, confirmLabel = 'Anwenden' }) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (answer) => { if (settled) return; settled = true; close(); resolve(answer); };
+    const { modal, content, close } = createModal({ id: 'og2ConfirmDialog', title, onClose: () => done(false) });
+    modal.querySelector('.modal-container').classList.add('modal-container--wide');
+    const summary = document.createElement('p');
+    summary.className = 'modal-summary';
+    summary.textContent = intro;
+    const pre = document.createElement('pre');
+    pre.className = 'modal-detail';
+    pre.textContent = detail;
+    const btnRow = document.createElement('div');
+    btnRow.className = 'modal-btn-row';
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'btn';
+    copyBtn.textContent = 'Detail kopieren';
+    copyBtn.addEventListener('click', async () => {
+      const text = `${title}\n${intro}\n\n${detail}`;
+      let ok = false;
+      try { await navigator.clipboard.writeText(text); ok = true; } catch { /* clipboard blocked: fall back to selection */ }
+      if (!ok) { const range = document.createRange(); range.selectNodeContents(pre); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
+      copyBtn.textContent = ok ? 'Kopiert' : 'Markiert — Ctrl+C';
+      setTimeout(() => { copyBtn.textContent = 'Detail kopieren'; }, 1500);
+    });
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = 'Abbrechen';
+    cancelBtn.addEventListener('click', () => done(false));
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.className = 'btn-primary';
+    okBtn.textContent = confirmLabel;
+    okBtn.addEventListener('click', () => done(true));
+    btnRow.append(copyBtn, cancelBtn, okBtn);
+    content.append(summary, pre, btnRow);
+    okBtn.focus();
+  });
+}
+
 export function og2UiHooks() {
-  const ask = (title, detail) => window.confirm(`${title}\n\n${detail}`);
+  const json = (v) => JSON.stringify(v ?? {}, null, 2);
   return {
-    confirmSourceRegistration: (info) => ({
-      ok: ask('Neue Quelle registrieren?', `Quelle "${info && info.source}" ist diesem Mandanten unbekannt. Import nur nach bestätigter Registrierung (E70).`),
+    confirmSourceRegistration: async (info) => ({
+      ok: await og2AskDialog({ title: 'Neue Quelle registrieren?', intro: `Quelle «${info && info.source}» ist diesem Mandanten unbekannt. Import nur nach bestätigter Registrierung (E70).`, detail: json(info), confirmLabel: 'Registrieren und importieren' }),
       moveOutEdgeTypes: [],
     }),
-    confirmJoin: (info) => ask('Cross-Source-Join freigeben?', `Erstmaliger Anschluss an bestehende Identitäten (E69):\n${JSON.stringify(info && info.pairs || info || {}, null, 2).slice(0, 800)}`),
-    confirmGate: (info) => ask('Plausibilitäts-Gate', `Der Import überschreitet eine 20%-Schwelle (FR-5.7):\n${JSON.stringify(info || {}, null, 2).slice(0, 800)}\nTrotzdem anwenden?`),
-    confirmDestructive: (info) => ask('Destruktive Wirkungen bestätigen', `Bestätigungspflichtige Schliessungen (E70/FR-6.8):\n${JSON.stringify(info || {}, null, 2).slice(0, 800)}`),
-    confirmAuthority: (info) => ask('Autoritäts-Antrag bestätigen', `Der Snapshot beansprucht Autorität über fremde Quellen (E46):\n${JSON.stringify(info || {}, null, 2).slice(0, 800)}`),
+    confirmJoin: (info) => og2AskDialog({ title: 'Cross-Source-Join freigeben?', intro: 'Erstmaliger Anschluss an bestehende Identitäten (E69).', detail: json(info && info.joins || info), confirmLabel: 'Freigeben' }),
+    confirmGate: (info) => og2AskDialog({ title: 'Plausibilitäts-Gate', intro: 'Der Import überschreitet eine 20%-Schwelle (FR-5.7). Zähler: a Provenienz-Entzüge, b beendete Properties, c geschlossene Kanten, d geschlossene Knoten, e neue Knoten, f geänderte Werte — jeweils gegen den Bestand im Scope. Trotzdem anwenden?', detail: json(info), confirmLabel: 'Trotzdem anwenden' }),
+    confirmDestructive: (info) => og2AskDialog({ title: 'Destruktive Wirkungen bestätigen', intro: 'Bestätigungspflichtige Schliessungen (E70/FR-6.8).', detail: json(info), confirmLabel: 'Anwenden' }),
+    confirmAuthority: (info) => og2AskDialog({ title: 'Autoritäts-Antrag bestätigen', intro: 'Der Snapshot beansprucht Autorität über fremde Quellen (E46).', detail: json(info), confirmLabel: 'Autorität gewähren' }),
   };
 }
+
+// Import progress in the footer (NFR-3): a bar under the status line fed by
+// the generator's checkpoints, so a long import visibly moves.
+const OG2_PHASE_LABELS = {
+  validate: 'prüfen', identity: 'Identität', clone: 'Bestand kopieren', nodes: 'Knoten', 'node-closure': 'Knoten-Abgleich',
+  edges: 'Kanten', 'edge-closure': 'Kanten-Abgleich', projection: 'Projektion', gate: 'Plausibilität',
+};
+function og2ProgressEl() {
+  let el = document.getElementById('importProgress');
+  if (el) return el;
+  const status = document.querySelector(STATUS_ID);
+  if (!status || !status.parentNode) return null;
+  el = document.createElement('div');
+  el.id = 'importProgress';
+  el.className = 'import-progress';
+  el.hidden = true;
+  const bar = document.createElement('div');
+  bar.className = 'import-progress-bar';
+  el.appendChild(bar);
+  status.parentNode.appendChild(el);
+  return el;
+}
+export function og2ImportProgress(message, p) {
+  const el = og2ProgressEl();
+  if (!el) return;
+  const phase = p ? (OG2_PHASE_LABELS[p.phase] || p.phase) : '';
+  const fmt = (n) => n.toLocaleString('de-CH');
+  const hasTotal = !!(p && p.total > 0);
+  setStatus(hasTotal ? `${message} — ${phase} ${fmt(Math.min(p.done, p.total))}/${fmt(p.total)}` : (phase ? `${message} — ${phase}` : message));
+  el.hidden = false;
+  el.classList.toggle('import-progress--busy', !hasTotal);
+  el.firstChild.style.width = hasTotal ? `${Math.round(100 * Math.min(p.done, p.total) / p.total)}%` : '';
+}
+export function og2ImportProgressDone() {
+  const el = document.getElementById('importProgress');
+  if (el) { el.hidden = true; el.classList.remove('import-progress--busy'); el.firstChild.style.width = ''; }
+}
+// yieldFn for importSnapshotAsync: paints the progress, then hands the event loop back
+export function og2ImportYield(message) {
+  og2ImportProgress(message, null);
+  return (p) => { og2ImportProgress(message, p); return og2FrameYield(); };
+}
+export const og2FrameYield = () => new Promise((resolve) => {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+  else setTimeout(resolve, 0);
+});
 
 // Boot the v2 tenant: registry + persisted store + pending dropped snapshots.
 // Returns true when the v2 path owns this tenant (a registry is present).
@@ -78,21 +169,16 @@ export async function og2TryBoot() {
 
   // NFR-3: guarantee a painted progress hint before the import starts. The
   // import itself runs batched (importSnapshotAsync yields to the event loop
-  // every 2000 entries and at phase boundaries); the residual single blocks
-  // are deepClone/validate (~1-2s on the 62k reference) — noted for AK 10.
+  // every 2000 entries and at phase boundaries, feeding the footer progress
+  // bar); the residual single blocks are deepClone/validate (~1-2s on the
+  // 62k reference) — noted for AK 10.
   const og2YieldPaint = async (message) => {
-    setStatus(message);
+    og2ImportProgress(message, null);
     await new Promise((resolve) => {
       if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
       else setTimeout(resolve, 0);
     });
   };
-  // NFR-3 frame yield for the batched import: hand control back to the event
-  // loop at every generator checkpoint so paints and input stay live.
-  const og2FrameYield = () => new Promise((resolve) => {
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
-    else setTimeout(resolve, 0);
-  });
 
   // Import snapshots dropped before this boot, with their dialogs (E25).
   const pending = await getPendingSnapshots();
@@ -102,7 +188,8 @@ export async function og2TryBoot() {
     try { snapshot = JSON.parse(p.text); } catch { /* classified as snapshot, so parseable — defensive */ }
     if (snapshot) {
       await og2YieldPaint(`Importiere ${p.filename} …`);
-      const res = await importSnapshotAsync(store, registry, snapshot, og2UiHooks(), og2FrameYield);
+      const res = await importSnapshotAsync(store, registry, snapshot, og2UiHooks(), og2ImportYield(`Importiere ${p.filename} …`));
+      og2ImportProgressDone();
       if (res.status === 'imported') {
         store = res.store || store;
         imported++;
@@ -139,7 +226,8 @@ export async function og2TryBoot() {
             confirmAuthority: () => true,
           };
           await og2YieldPaint(`Importiere Snapshot (${seedUrl}) …`);
-          const imp = await importSnapshotAsync(store, registry, snapshot, seedHooks, og2FrameYield);
+          const imp = await importSnapshotAsync(store, registry, snapshot, seedHooks, og2ImportYield(`Importiere Snapshot (${seedUrl}) …`));
+          og2ImportProgressDone();
           if (imp.status === 'imported') {
             store = imp.store || store;
             imported++;

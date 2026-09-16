@@ -4,7 +4,7 @@
 // visible persons, Kohorte-I stuck at 5). With hidden subtrees excluded from
 // the projection, depth 4 shows the full uncapped scene: 1585 persons, 152
 // hulls, Kohorte-I 18/19; depth 5 caps honestly at 2000.
-import { test, expect } from './base.mjs';
+import { test, expect, autoConfirmDialogs } from './base.mjs';
 import { join, dirname } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
@@ -58,7 +58,7 @@ async function sceneStats(page) {
 
 test('repro: deepen OrgChart to 4 and 5 — do Kohorte-I ring badges follow?', async ({ page }) => {
   test.setTimeout(900_000);
-  page.on('dialog', (d) => d.accept());
+  await autoConfirmDialogs(page);
   page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 400)));
   page.on('console', (m) => {
     if (m.type() === 'error' || m.type() === 'warning') console.log(`[console.${m.type()}]`, m.text().slice(0, 300));

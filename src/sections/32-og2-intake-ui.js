@@ -12,7 +12,7 @@ import { createModal } from './03-export-dialog.js';
 import { importSnapshotAsync } from './26-og2-import.js';
 import { validateView } from './27-og2-path.js';
 import { parseListText, buildIdentifierFingerprint, buildIdentityResolver, listSourceId, priorEdgeSources, listEdgeTypes, existingTargets, buildListSnapshot, extendPathWithRing } from './31-og2-intake.js';
-import { og2State, og2ActiveView, og2UiHooks, og2AdoptStore, og2ReplaceViews } from './30-og2-ui.js';
+import { og2State, og2ActiveView, og2UiHooks, og2AdoptStore, og2ReplaceViews, og2ImportYield, og2ImportProgressDone } from './30-og2-ui.js';
 
 let og2IntakeOpen = false;
 
@@ -352,7 +352,8 @@ export function showListIntakeDialog(entry, list, meta, onDone) {
         priorSources: priorEdgeSources(store, source, edgeType),
         existing: existingTargets(store, registry, currentTargetType()),
       });
-      const res = await importSnapshotAsync(store, registry, built.snapshot, og2UiHooks());
+      const res = await importSnapshotAsync(store, registry, built.snapshot, og2UiHooks(), og2ImportYield(`Importiere ${entry.filename} …`));
+      og2ImportProgressDone();
       if (res.status !== 'imported') {
         const detail = res.errors ? res.errors.slice(0, 3).join('; ') : (res.reason || '');
         throw new Error(`${res.status === 'noop' ? 'Bereits importiert' : 'Import nicht angewendet'}${detail ? ': ' + detail : ''}`);

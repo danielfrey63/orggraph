@@ -24,22 +24,37 @@ export const FAIL_CLOSED_HOOKS = Object.freeze({
 export function importSnapshot(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS) {
   const gen = importSnapshotGen(store, registry, snapshot, hooks);
   let r = gen.next();
-  while (!r.done) r = gen.next();
-  return r.value;
-}
-
-// Async wrapper (NFR-3): awaits `yieldFn` at the generator's checkpoints so
-// the browser boot can hand control back to the event loop between batches
-// instead of blocking the main thread for the whole import.
-export async function importSnapshotAsync(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS, yieldFn = null) {
-  const gen = importSnapshotGen(store, registry, snapshot, hooks);
-  let r = gen.next();
   while (!r.done) {
-    if (yieldFn) await yieldFn();
+    if (isThenable(r.value)) throw new Error('a HIL hook answered asynchronously — drive the import with importSnapshotAsync');
     r = gen.next();
   }
   return r.value;
 }
+
+// Async wrapper (NFR-3): awaits `yieldFn(progress)` at the generator's
+// checkpoints so the browser boot can hand control back to the event loop
+// between batches instead of blocking the main thread for the whole import;
+// `progress` = { phase, done, total } (total 0 = phase without a count).
+// HIL hooks may answer with a promise (product dialogs): the generator yields
+// it and receives the resolved answer.
+export async function importSnapshotAsync(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS, yieldFn = null) {
+  const gen = importSnapshotGen(store, registry, snapshot, hooks);
+  let r = gen.next();
+  while (!r.done) {
+    if (isThenable(r.value)) { r = gen.next(await r.value); continue; }
+    if (yieldFn) await yieldFn(r.value);
+    r = gen.next();
+  }
+  return r.value;
+}
+
+const isThenable = (v) => !!v && typeof v.then === 'function';
+// a hook's answer: synchronous values pass through, promises are yielded to
+// the async driver and come back resolved
+function* decide(answer) {
+  return isThenable(answer) ? yield answer : answer;
+}
+const progress = (phase, done = 0, total = 0) => ({ phase, done, total });
 
 // Generator core: yields at phase boundaries and every BATCH entries inside
 // the large merge loops (checkpoints cost nothing when driven synchronously).
@@ -53,9 +68,9 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   const report = { warnings: [], conflicts: [], counters: null, journal: null };
 
   // ---- 1) preflight validation (FR-6.8), no mutation ----
-  yield;
+  yield progress('validate');
   const val = validateSnapshot(snapshot, registry, store);
-  yield;
+  yield progress('identity');
   report.warnings.push(...val.warnings);
   if (val.errors.length) return { status: 'rejected', reason: 'validation', errors: val.errors, report };
 
@@ -109,7 +124,7 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   // mutation may reach the real store before the commit swap (FR-6.9a).
   let book = store.sourceBook.has(source) ? deepClone(store.sourceBook.get(source)) : null;
   if (!book) {
-    const dec = h.confirmSourceRegistration({ source, sourceUrl: meta.sourceUrl, harvestSpecVersion: meta.harvestSpecVersion ?? null });
+    const dec = yield* decide(h.confirmSourceRegistration({ source, sourceUrl: meta.sourceUrl, harvestSpecVersion: meta.harvestSpecVersion ?? null }));
     if (!dec || dec.ok === false) return { status: 'aborted', reason: 'source registration not confirmed (E70)', report };
     book = {
       registeredAt: t,
@@ -147,7 +162,7 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
     }
   }
   if (joins.size) {
-    const ok = h.confirmJoin({ source, joins: [...joins.values()] });
+    const ok = yield* decide(h.confirmJoin({ source, joins: [...joins.values()] }));
     if (!ok) return { status: 'aborted', reason: 'cross-source join not confirmed (E69) — nothing mutated (FR-6.9a)', report };
   }
 
@@ -156,7 +171,7 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   let authorityStatus = null;
   if (scope.authoritativeForSources && scope.authoritativeForSources.length) {
     const affected = scope.authoritativeForSources.includes('*') ? '*' : scope.authoritativeForSources;
-    const ok = h.confirmAuthority({ source, requested: affected });
+    const ok = yield* decide(h.confirmAuthority({ source, requested: affected }));
     if (ok) { authoritySources = affected; authorityStatus = { requested: affected, confirmed: true, at: t }; }
     else { authorityStatus = { requested: affected, confirmed: false, open: true }; report.warnings.push('authority request left OPEN — imported with standard source partition (E46)'); }
   }
@@ -168,9 +183,9 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   };
 
   // ---- 6) build the new stand on a CLONE (atomicity, FR-6.9a) ----
-  yield;
+  yield progress('clone');
   const work = deepClone(store);
-  yield;
+  yield progress('nodes', 0, val.nodesById.size);
   const journal = [];
   // Confirmations dominate a full-state re-import (~380k positions on the
   // SEM reference). The NORMATIVE position set stays intact (FR-6.9b/AK 86),
@@ -205,7 +220,7 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   let batchTick = 0;
   try {
   for (const [id, rec] of val.nodesById) {
-    if (++batchTick % IMPORT_BATCH === 0) yield;
+    if (++batchTick % IMPORT_BATCH === 0) yield progress('nodes', batchTick, val.nodesById.size);
     const inNodeScope = nodeScopeTypes.has(rec.type);
     let identity = work.nodes.get(id);
     if (!identity) {
@@ -234,9 +249,10 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   }
 
   // -- node deletion candidates (only root-free full states, E39) --
+  batchTick = 0;
   if (membership.nodeDeletionCandidatesAllowed) {
     for (const id of membership.nodeScope) {
-      if (++batchTick % IMPORT_BATCH === 0) yield;
+      if (++batchTick % IMPORT_BATCH === 0) yield progress('node-closure', batchTick, membership.nodeScope.size || membership.nodeScope.length || 0);
       if (val.nodesById.has(id)) continue;
       const identity = work.nodes.get(id);
       const open = identity && openExistence(identity);
@@ -249,8 +265,10 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   }
 
   // -- delivered edges --
+  batchTick = 0;
+  yield progress('edges', 0, val.edgesByKey.size);
   for (const [key, rec] of val.edgesByKey) {
-    if (++batchTick % IMPORT_BATCH === 0) yield;
+    if (++batchTick % IMPORT_BATCH === 0) yield progress('edges', batchTick, val.edgesByKey.size);
     const decl = (registry.edgeTypes || {})[rec.type];
     let identity = work.edges.get(key);
     if (!identity) {
@@ -278,8 +296,9 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   }
 
   // -- edge deletion candidates (FR-5.5a(2)) --
+  batchTick = 0;
   for (const [key] of candidates) {
-    if (++batchTick % IMPORT_BATCH === 0) yield;
+    if (++batchTick % IMPORT_BATCH === 0) yield progress('edge-closure', batchTick, candidates.size || 0);
     if (val.edgesByKey.has(key)) continue;
     const identity = work.edges.get(key);
     const open = identity && identity.existence.find((iv) => iv.to === null);
@@ -291,9 +310,9 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   }
 
   // -- implied projection (E33/E52): recompute deterministically --
-  yield;
+  yield progress('projection');
   recomputeProjections(work, registry);
-  yield;
+  yield progress('gate');
   } catch (err) {
     if (err instanceof BundleValidationError) {
       return { status: 'rejected', reason: err.message, report };
@@ -315,7 +334,7 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   }
   let gateAudit = null;
   if (gate.exceeded.length || cumulativeExceeded) {
-    const ok = h.confirmGate({ counters, denominators, exceeded: gate.exceeded, cumulative, cumulativeExceeded });
+    const ok = yield* decide(h.confirmGate({ counters, denominators, exceeded: gate.exceeded, cumulative, cumulativeExceeded }));
     if (!ok) return { status: 'aborted', reason: `plausibility gate not confirmed (FR-5.7): ${gate.exceeded.join(', ') || 'cumulative'}`, report };
     gateAudit = { counters: { ...counters }, denominators, exceeded: gate.exceeded, cumulativeExceeded, confirmedAt: t };
   }
@@ -323,7 +342,7 @@ function* importSnapshotGen(store, registry, snapshot, hooks = FAIL_CLOSED_HOOKS
   // ---- 8) destructive confirmation (E70 spec mismatch / opt-in fail-safe) ----
   const destructiveCount = counters.a + counters.b + counters.c + counters.d;
   if (destructiveCount > 0 && (specMismatch || store.options.IMPORT_CONFIRM_DESTRUCTIVE)) {
-    const ok = h.confirmDestructive({ source, specMismatch, counters: { ...counters } });
+    const ok = yield* decide(h.confirmDestructive({ source, specMismatch, counters: { ...counters } }));
     if (!ok) return { status: 'aborted', reason: specMismatch ? 'destructive effects with harvest-spec mismatch not confirmed (E70)' : 'destructive effects not confirmed (IMPORT_CONFIRM_DESTRUCTIVE)', report };
     if (specMismatch) book.harvestSpecVersion = meta.harvestSpecVersion ?? null;
   }

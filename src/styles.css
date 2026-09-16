@@ -899,6 +899,50 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   color: var(--text-muted);
 }
 
+/* HIL dialogs (E76): full decision detail, selectable and copyable */
+.modal-detail {
+  max-height: 50vh;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+  background: var(--control-bg);
+  color: var(--text);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+/* Import progress under the footer status (NFR-3) */
+.import-progress {
+  flex-basis: 100%;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  overflow: hidden;
+}
+.import-progress-bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent-color);
+  transition: width 0.15s ease-out;
+}
+.import-progress--busy .import-progress-bar {
+  width: 30%;
+  animation: import-progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes import-progress-slide {
+  0% { margin-left: 0; }
+  50% { margin-left: 70%; }
+  100% { margin-left: 0; }
+}
+
 /* Intake: undecided identifier rows (fuzzy proposals, no hits) */
 .intake-matches {
   max-height: 220px;

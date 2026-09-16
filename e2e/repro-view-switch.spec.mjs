@@ -1,7 +1,7 @@
 // Repro of the manual live-test sequence (2026-07-08): SEM ZIP -> screenshot
 // -> drop the edited env (new views) -> switch to the new view -> switch back
 // -> compare the scenes. Diagnostic only, not part of the suites.
-import { test, expect } from './base.mjs';
+import { test, expect, autoConfirmDialogs } from './base.mjs';
 import { join, dirname } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
@@ -40,7 +40,7 @@ async function sceneStats(page) {
 
 test('repro: SEM zip -> env update -> view switch roundtrip', async ({ page }) => {
   test.setTimeout(600_000);
-  page.on('dialog', (d) => d.accept());
+  await autoConfirmDialogs(page);
   page.on('console', (m) => {
     const t = m.text();
     if (m.type() === 'error' || m.type() === 'warning') console.log(`[console.${m.type()}]`, t.slice(0, 300));

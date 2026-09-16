@@ -2,7 +2,7 @@
 // does selecting a single Team ring row highlight its members? Prints the
 // badge/dimming state with everything on (boot default) and after clearing
 // all rings first.
-import { test, expect } from './base.mjs';
+import { test, expect, autoConfirmDialogs } from './base.mjs';
 import { join, dirname } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
@@ -45,7 +45,7 @@ async function state(page) {
 
 test('repro SEM: Team ring row selection with everything on vs. nothing on', async ({ page }) => {
   test.setTimeout(600_000);
-  page.on('dialog', (d) => d.accept());
+  await autoConfirmDialogs(page);
   page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 400)));
   await page.goto(appUrl);
   await expect(page.locator('.dz-overlay')).toBeVisible();

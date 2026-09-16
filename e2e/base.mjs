@@ -29,4 +29,18 @@ export const test = base.extend({
   },
 });
 
+// Auto-confirm the app's HIL dialogs (E76: own modal, no browser confirm) —
+// an init script survives the app's self-reload after a tenant drop. Call
+// BEFORE page.goto. Tests that assert on a dialog must not use it.
+export async function autoConfirmDialogs(page) {
+  await page.addInitScript(() => {
+    const clickPrimary = () => {
+      const btn = document.querySelector('#og2ConfirmDialog .btn-primary');
+      if (btn && !btn.dataset.autoConfirmed) { btn.dataset.autoConfirmed = '1'; btn.click(); }
+    };
+    const start = () => new MutationObserver(clickPrimary).observe(document.body, { childList: true, subtree: true });
+    if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+  });
+}
+
 export { expect };

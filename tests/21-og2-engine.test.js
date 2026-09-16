@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createTenantStore, deriveVersions, recordStandAt, edgeKeyOf, nodeOpenNow, openExistence } from '../src/sections/23-og2-store.js';
 import { scopeFingerprint, observationFingerprint } from '../src/sections/24-og2-scope.js';
 import { validateSnapshot } from '../src/sections/25-og2-validate.js';
-import { importSnapshot, importBundle } from '../src/sections/26-og2-import.js';
+import { importSnapshot, importSnapshotAsync, importBundle } from '../src/sections/26-og2-import.js';
 import { registryConsistencyProblems } from '../src/sections/22-og2-registry.js';
 
 // Type names in fixtures are data-level illustration (PRD E14, NFR-5
@@ -729,5 +729,48 @@ describe('validateSnapshot degradation (FR-5.5)', () => {
     expect(res.status).toBe('imported');
     const entry = [...store.snapshots.values()].find((e) => e.stamp === '20260201-1200');
     expect(entry.degraded).toBe(true);
+  });
+});
+
+describe('E76 — asynchronous HIL answers and import progress', () => {
+  it('importSnapshotAsync awaits promise-valued hook answers (gate declined, then confirmed)', async () => {
+    importBase();
+    const empty = mkSnap('hrm', '20260201-1200', FULL_SCOPE, [], []);
+    const declined = await importSnapshotAsync(store, REGISTRY, empty, { ...YES, confirmGate: () => Promise.resolve(false) });
+    expect(declined.status).toBe('aborted');
+    expect(nodeOpenNow(store.nodes.get('p1'))).toBe(true);
+    const asked = [];
+    const confirmed = await importSnapshotAsync(store, REGISTRY, empty, { ...YES, confirmGate: (info) => { asked.push(info); return Promise.resolve(true); } });
+    expect(confirmed.status).toBe('imported');
+    expect(asked).toHaveLength(1);
+    expect(asked[0].exceeded.length).toBeGreaterThan(0);
+    expect(nodeOpenNow(store.nodes.get('p1'))).toBe(false);
+  });
+
+  it('a promise-valued registration answer is awaited as well', async () => {
+    const snap = mkSnap('hrm', '20260101-1200', FULL_SCOPE, [{ id: 'p1', type: 'Person', label: 'Boss', props: {} }], []);
+    const res = await importSnapshotAsync(store, REGISTRY, snap, { ...YES, confirmSourceRegistration: async () => ({ ok: true, moveOutEdgeTypes: [] }) });
+    expect(res.status).toBe('imported');
+    const res2 = await importSnapshotAsync(createTenantStore(), REGISTRY, snap, { ...YES, confirmSourceRegistration: async () => ({ ok: false }) });
+    expect(res2.status).toBe('aborted');
+  });
+
+  it('the synchronous driver refuses an asynchronous answer instead of treating the promise as "yes"', () => {
+    importBase();
+    const empty = mkSnap('hrm', '20260201-1200', FULL_SCOPE, [], []);
+    expect(() => importSnapshot(store, REGISTRY, empty, { ...YES, confirmGate: () => Promise.resolve(true) })).toThrow(/importSnapshotAsync/);
+    expect(nodeOpenNow(store.nodes.get('p1'))).toBe(true); // nothing mutated
+  });
+
+  it('yieldFn receives phase progress with counts for the merge loops', async () => {
+    const seen = [];
+    const snap = mkSnap('hrm', '20260101-1200', FULL_SCOPE, [{ id: 'p1', type: 'Person', label: 'Boss', props: {} }], []);
+    const res = await importSnapshotAsync(store, REGISTRY, snap, YES, async (p) => { seen.push(p); });
+    expect(res.status).toBe('imported');
+    const phases = seen.map((p) => p && p.phase);
+    for (const ph of ['validate', 'identity', 'clone', 'nodes', 'edges', 'projection', 'gate']) expect(phases).toContain(ph);
+    const nodes = seen.find((p) => p.phase === 'nodes');
+    expect(nodes.total).toBe(1);
+    expect(nodes.done).toBeLessThanOrEqual(nodes.total);
   });
 });

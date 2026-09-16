@@ -5,7 +5,7 @@
 // app's self-reload. Also locks the failure modes that used to end silently:
 // a clean console under file://, a visible hint for an empty drop, and the
 // legacy-v1 env rejection.
-import { test, expect } from './base.mjs';
+import { test, expect, autoConfirmDialogs } from './base.mjs';
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -46,7 +46,7 @@ test('file:// drop intake: registry + env + small snapshot boot into a rendered 
   test.setTimeout(120_000);
   const consoleErrors = [];
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
-  page.on('dialog', (d) => d.accept()); // E70 source registration
+  await autoConfirmDialogs(page); // E70 source registration (E76 modal)
 
   await page.goto(appUrl);
   // pristine profile: the app asks for files instead of fetching anything,
@@ -73,7 +73,7 @@ test('file:// drop intake: registry + env + small snapshot boot into a rendered 
 
 test('file:// drop intake: one tenant ZIP boots the whole tenant (FR-6.7)', async ({ page }) => {
   test.setTimeout(60_000);
-  page.on('dialog', (d) => d.accept());
+  await autoConfirmDialogs(page);
   // small on-the-fly ZIP from the same fixtures, written like package-tenants
   const zip = buildZip(DROP_FILES.map((f) => ({ name: f.split(/[\/]/).pop(), data: readFileSync(f) })));
   const zipPath = join(mkdtempSync(join(tmpdir(), 'og2-zip-')), 'tenant.zip');
@@ -88,7 +88,7 @@ test('file:// drop intake: one tenant ZIP boots the whole tenant (FR-6.7)', asyn
 
 test('file:// drop intake: env-only re-drop updates the ACTIVE tenant, no phantom profile (FR-8.9, AK 100)', async ({ page }) => {
   test.setTimeout(120_000);
-  page.on('dialog', (d) => d.accept());
+  await autoConfirmDialogs(page);
   await page.goto(appUrl);
   await expect(page.locator('.dz-overlay')).toBeVisible();
   await dropFiles(page, DROP_FILES);
@@ -114,7 +114,7 @@ test('file:// drop intake: env-only re-drop updates the ACTIVE tenant, no phanto
 
 test('file:// drop intake: env+snapshot without a registry names the missing piece', async ({ page }) => {
   test.setTimeout(60_000);
-  page.on('dialog', (d) => d.accept());
+  await autoConfirmDialogs(page);
   await page.goto(appUrl);
   await expect(page.locator('.dz-overlay')).toBeVisible();
   await dropFiles(page, [DROP_FILES[1], DROP_FILES[2]]); // env + snapshot only
@@ -147,7 +147,7 @@ test('file:// drop intake: empty and legacy drops never end silently', async ({ 
 
 test('file:// drop intake: an identifier list opens the intake dialog and imports as ring attribute (E74)', async ({ page }) => {
   test.setTimeout(120_000);
-  page.on('dialog', (d) => d.accept()); // E70 source registration, E69 join
+  await autoConfirmDialogs(page); // E70 source registration (E76 modal), E69 join
   await page.goto(appUrl);
   await expect(page.locator('.dz-overlay')).toBeVisible();
   await dropFiles(page, DROP_FILES);
@@ -180,7 +180,7 @@ test('file:// drop intake: an identifier list opens the intake dialog and import
 
 test('file:// drop intake: a wide Excel-style table yields one dialog per attribute column (E74)', async ({ page }) => {
   test.setTimeout(120_000);
-  page.on('dialog', (d) => d.accept());
+  await autoConfirmDialogs(page);
   await page.goto(appUrl);
   await expect(page.locator('.dz-overlay')).toBeVisible();
   await dropFiles(page, DROP_FILES);
@@ -217,4 +217,25 @@ test('file:// drop intake: a wide Excel-style table yields one dialog per attrib
   await expect(page.locator('g.nodes circle.attribute-circle[data-attribute="Rolle::Sektionsleiter"]')).toHaveCount(1);
   const pending = await page.evaluate(() => getPendingLists().then((l) => l.length));
   expect(pending).toBe(0);
+});
+
+test('file:// drop intake: the E70 decision is an app modal with copyable detail (E76)', async ({ page }) => {
+  test.setTimeout(120_000);
+  // NO auto-confirm here: the dialog itself is under test
+  await page.goto(appUrl);
+  await expect(page.locator('.dz-overlay')).toBeVisible();
+  await dropFiles(page, DROP_FILES);
+  const dialog = page.locator('#og2ConfirmDialog');
+  await expect(dialog).toBeVisible({ timeout: 60_000 });
+  await expect(dialog.locator('h2')).toContainText('Neue Quelle registrieren');
+  // the full decision detail is in a selectable block (no browser confirm)
+  const detail = dialog.locator('.modal-detail');
+  await expect(detail).toContainText('"source"');
+  await expect(await detail.evaluate((el) => getComputedStyle(el).userSelect)).not.toBe('none');
+  await expect(dialog.locator('button', { hasText: 'Detail kopieren' })).toBeVisible();
+  await dialog.locator('button.btn-primary').click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('g.nodes circle:not(.attribute-circle)')).toHaveCount(5, { timeout: 60_000 });
+  // the footer progress bar exists and is hidden again after the import
+  await expect(page.locator('#importProgress')).toBeHidden();
 });
