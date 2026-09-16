@@ -1349,3 +1349,10 @@ body.dz-dragging::after {
 /* Views legend (FR-7.5): topmost sidebar section, one row per view */
 #viewsLegend .legend-row { padding: 3px 6px 3px 3px; }
 #viewsLegend .view-row-invalid { opacity: 0.45; cursor: not-allowed; }
+
+/* Hub sync indicator in the footer (E77) */
+.sync-status { cursor: pointer; }
+.sync-status[data-level="busy"] { color: var(--text-muted); font-style: italic; }
+.sync-status[data-level="ok"] { color: var(--text-strong); }
+.sync-status[data-level="warn"] { color: var(--accent-color); }
+.sync-status[data-level="error"] { color: var(--error-color); }

@@ -21,6 +21,8 @@ export default defineConfig({
   projects: [
     { name: 'smoke', testMatch: /ak14-smoke\.spec\.mjs|drop-intake\.spec\.mjs/ },
     { name: 'acceptance', testMatch: /ak1-reference\.spec\.mjs/ },
+    // E77 hub loop: needs python + pyrage + git (spawns tools/hub.py itself)
+    { name: 'hub', testMatch: /hub-sync\.spec\.mjs/ },
     // ad-hoc live-test reproductions; never part of smoke/acceptance gates
     { name: 'repro', testMatch: /repro-.*\.spec\.mjs/ },
   ],

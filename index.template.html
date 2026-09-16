@@ -243,6 +243,11 @@
             
             <button id="downloadPng" class="export-btn-large">PNG herunterladen</button>
           </div>
+
+          <div id="tenantOptions" class="export-option-group">
+            <h3>Mandant</h3>
+            <button id="downloadTenant" class="export-btn-large" title="Registry, Views und der ganze Store als ZIP — per Drop wiederherstellbar (E77)">Mandant exportieren (ZIP)</button>
+          </div>
         </div>
       </div>
     </div>
@@ -253,7 +258,7 @@
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.216.328';
+const APP_VERSION = '1.218.337';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 @@APP@@
 </script>

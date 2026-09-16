@@ -226,7 +226,10 @@ export async function og2TryBoot() {
       }
     } catch (e) { console.warn('DATA_URL-Snapshot nicht ladbar:', e); }
   }
-  if (imported > 0) await og2PersistStore(store);
+  if (imported > 0) {
+    await og2PersistStore(store);
+    if (typeof og2SyncPushSoon === 'function') og2SyncPushSoon(`import ${pending.map((p) => p.filename).join(', ')}`.slice(0, 120));
+  }
 
   og2 = createOg2State({ store, registry, env: envConfig || {} });
   const rejectedNames = Object.keys(og2.rejectedViews);
@@ -270,6 +273,7 @@ export async function og2AdoptStore(store, { revealRings = false } = {}) {
   if (!og2) return;
   og2.store = store;
   await og2PersistStore(store);
+  if (typeof og2SyncPushSoon === 'function') og2SyncPushSoon('store adopted (in-app import)');
   og2SyncStockGlobals();
   og2BuildTimeControls();
   // ring groups the adopted store brings in are shown once (the import was
@@ -291,6 +295,7 @@ export async function og2ReplaceViews(views) {
   if (!og2.views[og2.activeViewName]) og2.activeViewName = next.activeViewName;
   envConfig = env;
   await putStored(KEY_ENV, JSON.stringify(env, null, 2));
+  if (typeof og2SyncPushSoon === 'function') og2SyncPushSoon('views replaced');
   og2BuildViewsLegend();
 }
 
@@ -666,6 +671,7 @@ export async function og2SaveCurrentView() {
   og2.views[name] = valid[name];
   try {
     await putStored(KEY_ENV, JSON.stringify(og2.env));
+    if (typeof og2SyncPushSoon === 'function') og2SyncPushSoon(`view saved: ${name}`);
   } catch (e) {
     console.error('View-Persistenz fehlgeschlagen:', e);
     showTemporaryNotification('View konnte nicht gespeichert werden — Details in der Konsole.', 'medium');

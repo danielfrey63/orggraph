@@ -27,6 +27,24 @@ async function detectConfigDrop(entryList) {
 }
 
 export async function handleDroppedFiles(entryList) {
+  // A tenant export (E77: manifest.json + registry + env + store parts) is a
+  // 1:1 restore into the ACTIVE profile — no import pipeline, no dialogs.
+  if (typeof og2TenantManifestOf === 'function') {
+    let manifest = null;
+    try { manifest = await og2TenantManifestOf(entryList); } catch (e) { console.error(e); }
+    if (manifest) {
+      try {
+        await og2RestoreTenant(entryList);
+        hideDropZone();
+        setStatus(`Mandant «${manifest.tenant || '?'}» (Stand ${manifest.exportedAt}) wiederhergestellt – lade neu …`);
+        location.reload();
+      } catch (e) {
+        console.error('[Drop] Tenant-Export nicht wiederherstellbar:', e);
+        showTemporaryNotification(`Tenant-Export nicht wiederherstellbar: ${e.message}`, 'long');
+      }
+      return;
+    }
+  }
   // A drop carrying a configuration (env/data) becomes its own profile so that
   // multiple configurations can coexist; attribute-only drops extend the active
   // profile. Detection is best-effort and must never block the import.
@@ -52,6 +70,15 @@ export async function handleDroppedFiles(entryList) {
 
   const summary = await storeEntries(entryList);
   await requestPersistence();
+  // E77: raw inputs (snapshot files, lists) are archived in the tenant repo
+  if (typeof og2SyncArchiveRaw === 'function' && summary.stored && summary.stored.length) {
+    const archive = new Set(summary.stored.filter((s) => s.kind === 'snapshot' || s.kind === 'list').map((s) => s.filename));
+    for (const raw of Array.from(entryList || [])) {
+      const file = raw && raw.file ? raw.file : raw;
+      const name = (file && file.name) || (raw && raw.path && raw.path.split('/').pop());
+      if (file && archive.has(name)) { try { await og2SyncArchiveRaw(name, await file.text()); } catch (e) { console.warn('[sync] archive', e); } }
+    }
+  }
   // Every drop outcome is visible (live-test finding): an empty or fully
   // unrecognized drop must never end silently.
   console.info('[Drop] Ergebnis:', JSON.stringify({
@@ -104,6 +131,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Persistenz früh anfragen und globales Drag&Drop installieren.
   requestPersistence();
   installGlobalDrop(handleDroppedFiles);
+
+  // E77: served by the hub → pull the tenant repo's state before anything
+  // reads the profile (a newer export is restored into the profile).
+  if (typeof og2SyncPull === 'function') {
+    try { await og2SyncPull(); } catch (e) { console.warn('Hub-Sync (Pull) fehlgeschlagen:', e); }
+  }
 
   await loadEnvConfig();
 

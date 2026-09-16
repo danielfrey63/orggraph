@@ -249,6 +249,21 @@ IndexedDB; der `fetch` auf `./env.json` ist nur noch Fallback für den
 Dev-Server-Betrieb ohne importierte Daten. «Daten zurücksetzen» im Footer
 leert den lokalen Speicher wieder.
 
+## Mandanten-Repo und Hub (E77)
+
+Der Tenant-Store der App ist die Wahrheit; dauerhaft aufbewahrt wird er pro Mandant in einem eigenen privaten Git-Repo, age-verschlüsselt, nach dem PMO-Muster: bei jeder Änderung Commit und Push, bei jedem Laden ein Pull. Das erledigt ein lokaler Hub, weil die Datei-App kein Git ausführen kann (Python 3 mit `pyrage`, sonst nur Standardbibliothek).
+
+```bash
+python tools/hub.py keygen                                              # age-Identität der Maschine (einmalig)
+python tools/hub.py init sem --repo ../orggraph-sem --remote <url> --create-remote --app .
+python tools/hub.py serve                                               # http://127.0.0.1:8644/t/sem/
+python tools/hub.py push sem <datei>                                    # manuell: Tenant-ZIP oder Rohdatei
+python tools/hub.py restore sem --out <ordner>                          # entschlüsseln
+python tools/hub.py status
+```
+
+Unter `/t/<mandant>/` zieht die App beim Laden den Stand aus dem Repo (ein neuerer Export wird 1:1 ins Profil gestellt) und pusht nach jedem Import, Intake und jeder View-Änderung; der Footer zeigt den Sync-Stand. Das Repo enthält `config.json` (Empfänger), `manifest.json` (Klartext), `tenant.zip.age` (Registry, env, Store) und `snapshots/*.age` (Rohdateien). Unter `file://` läuft kein Sync: dort exportiert «Grafik exportieren → Mandant exportieren (ZIP)» den ganzen Mandanten, und ein gedropptes Tenant-ZIP stellt ihn wieder her.
+
 ## Nutzung
 
 - **Suchfeld**: Namen oder ID eingeben (min. 2 Zeichen für große Datensätze)

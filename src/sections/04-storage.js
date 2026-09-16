@@ -23,6 +23,8 @@ export const LIST_PREFIX = 'og2List::';
 // Per-tenant UI session state (FR-8.14): persisted reactively on every
 // parameter change, restored on boot before the first render.
 export const KEY_UI_STATE = 'og2UiState';
+// Hub sync marker (E77): which tenant export this profile last pulled/pushed.
+export const KEY_SYNC = 'og2Sync';
 
 let _dbPromise = null;
 

@@ -117,6 +117,13 @@ export function initializeExport() {
   
   // SVG-Download
   downloadSvgBtn.addEventListener('click', exportAsSvg);
+  // E77: the whole tenant as one ZIP (registry, env, store) — restorable by drop
+  const tenantBtn = document.getElementById('downloadTenant');
+  if (tenantBtn) tenantBtn.addEventListener('click', async () => {
+    tenantBtn.disabled = true;
+    try { await og2DownloadTenantZip(); } catch (e) { console.error(e); showTemporaryNotification(`Mandant-Export fehlgeschlagen: ${e.message}`, 'medium'); }
+    finally { tenantBtn.disabled = false; }
+  });
   
   // PNG-Download
   downloadPngBtn.addEventListener('click', exportAsPng);

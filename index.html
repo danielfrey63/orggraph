@@ -1358,6 +1358,13 @@ body.dz-dragging::after {
 #viewsLegend .legend-row { padding: 3px 6px 3px 3px; }
 #viewsLegend .view-row-invalid { opacity: 0.45; cursor: not-allowed; }
 
+/* Hub sync indicator in the footer (E77) */
+.sync-status { cursor: pointer; }
+.sync-status[data-level="busy"] { color: var(--text-muted); font-style: italic; }
+.sync-status[data-level="ok"] { color: var(--text-strong); }
+.sync-status[data-level="warn"] { color: var(--accent-color); }
+.sync-status[data-level="error"] { color: var(--error-color); }
+
   </style>
 </head>
 <body>
@@ -1594,6 +1601,11 @@ body.dz-dragging::after {
             
             <button id="downloadPng" class="export-btn-large">PNG herunterladen</button>
           </div>
+
+          <div id="tenantOptions" class="export-option-group">
+            <h3>Mandant</h3>
+            <button id="downloadTenant" class="export-btn-large" title="Registry, Views und der ganze Store als ZIP — per Drop wiederherstellbar (E77)">Mandant exportieren (ZIP)</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1605,7 +1617,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.216.328';
+const APP_VERSION = '1.218.337';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -1864,6 +1876,13 @@ function initializeExport() {
   
   // SVG-Download
   downloadSvgBtn.addEventListener('click', exportAsSvg);
+  // E77: the whole tenant as one ZIP (registry, env, store) — restorable by drop
+  const tenantBtn = document.getElementById('downloadTenant');
+  if (tenantBtn) tenantBtn.addEventListener('click', async () => {
+    tenantBtn.disabled = true;
+    try { await og2DownloadTenantZip(); } catch (e) { console.error(e); showTemporaryNotification(`Mandant-Export fehlgeschlagen: ${e.message}`, 'medium'); }
+    finally { tenantBtn.disabled = false; }
+  });
   
   // PNG-Download
   downloadPngBtn.addEventListener('click', exportAsPng);
@@ -2201,6 +2220,8 @@ const LIST_PREFIX = 'og2List::';
 // Per-tenant UI session state (FR-8.14): persisted reactively on every
 // parameter change, restored on boot before the first render.
 const KEY_UI_STATE = 'og2UiState';
+// Hub sync marker (E77): which tenant export this profile last pulled/pushed.
+const KEY_SYNC = 'og2Sync';
 
 let _dbPromise = null;
 
@@ -7155,6 +7176,24 @@ async function detectConfigDrop(entryList) {
 }
 
 async function handleDroppedFiles(entryList) {
+  // A tenant export (E77: manifest.json + registry + env + store parts) is a
+  // 1:1 restore into the ACTIVE profile — no import pipeline, no dialogs.
+  if (typeof og2TenantManifestOf === 'function') {
+    let manifest = null;
+    try { manifest = await og2TenantManifestOf(entryList); } catch (e) { console.error(e); }
+    if (manifest) {
+      try {
+        await og2RestoreTenant(entryList);
+        hideDropZone();
+        setStatus(`Mandant «${manifest.tenant || '?'}» (Stand ${manifest.exportedAt}) wiederhergestellt – lade neu …`);
+        location.reload();
+      } catch (e) {
+        console.error('[Drop] Tenant-Export nicht wiederherstellbar:', e);
+        showTemporaryNotification(`Tenant-Export nicht wiederherstellbar: ${e.message}`, 'long');
+      }
+      return;
+    }
+  }
   // A drop carrying a configuration (env/data) becomes its own profile so that
   // multiple configurations can coexist; attribute-only drops extend the active
   // profile. Detection is best-effort and must never block the import.
@@ -7180,6 +7219,15 @@ async function handleDroppedFiles(entryList) {
 
   const summary = await storeEntries(entryList);
   await requestPersistence();
+  // E77: raw inputs (snapshot files, lists) are archived in the tenant repo
+  if (typeof og2SyncArchiveRaw === 'function' && summary.stored && summary.stored.length) {
+    const archive = new Set(summary.stored.filter((s) => s.kind === 'snapshot' || s.kind === 'list').map((s) => s.filename));
+    for (const raw of Array.from(entryList || [])) {
+      const file = raw && raw.file ? raw.file : raw;
+      const name = (file && file.name) || (raw && raw.path && raw.path.split('/').pop());
+      if (file && archive.has(name)) { try { await og2SyncArchiveRaw(name, await file.text()); } catch (e) { console.warn('[sync] archive', e); } }
+    }
+  }
   // Every drop outcome is visible (live-test finding): an empty or fully
   // unrecognized drop must never end silently.
   console.info('[Drop] Ergebnis:', JSON.stringify({
@@ -7232,6 +7280,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Persistenz früh anfragen und globales Drag&Drop installieren.
   requestPersistence();
   installGlobalDrop(handleDroppedFiles);
+
+  // E77: served by the hub → pull the tenant repo's state before anything
+  // reads the profile (a newer export is restored into the profile).
+  if (typeof og2SyncPull === 'function') {
+    try { await og2SyncPull(); } catch (e) { console.warn('Hub-Sync (Pull) fehlgeschlagen:', e); }
+  }
 
   await loadEnvConfig();
 
@@ -11904,7 +11958,10 @@ async function og2TryBoot() {
       }
     } catch (e) { console.warn('DATA_URL-Snapshot nicht ladbar:', e); }
   }
-  if (imported > 0) await og2PersistStore(store);
+  if (imported > 0) {
+    await og2PersistStore(store);
+    if (typeof og2SyncPushSoon === 'function') og2SyncPushSoon(`import ${pending.map((p) => p.filename).join(', ')}`.slice(0, 120));
+  }
 
   og2 = createOg2State({ store, registry, env: envConfig || {} });
   const rejectedNames = Object.keys(og2.rejectedViews);
@@ -11948,6 +12005,7 @@ async function og2AdoptStore(store, { revealRings = false } = {}) {
   if (!og2) return;
   og2.store = store;
   await og2PersistStore(store);
+  if (typeof og2SyncPushSoon === 'function') og2SyncPushSoon('store adopted (in-app import)');
   og2SyncStockGlobals();
   og2BuildTimeControls();
   // ring groups the adopted store brings in are shown once (the import was
@@ -11969,6 +12027,7 @@ async function og2ReplaceViews(views) {
   if (!og2.views[og2.activeViewName]) og2.activeViewName = next.activeViewName;
   envConfig = env;
   await putStored(KEY_ENV, JSON.stringify(env, null, 2));
+  if (typeof og2SyncPushSoon === 'function') og2SyncPushSoon('views replaced');
   og2BuildViewsLegend();
 }
 
@@ -12344,6 +12403,7 @@ async function og2SaveCurrentView() {
   og2.views[name] = valid[name];
   try {
     await putStored(KEY_ENV, JSON.stringify(og2.env));
+    if (typeof og2SyncPushSoon === 'function') og2SyncPushSoon(`view saved: ${name}`);
   } catch (e) {
     console.error('View-Persistenz fehlgeschlagen:', e);
     showTemporaryNotification('View konnte nicht gespeichert werden — Details in der Konsole.', 'medium');
@@ -13458,6 +13518,359 @@ function showListIntakeDialog(entry, list, meta, onDone) {
       importBtn.disabled = false;
     }
   });
+}
+// OrgGraph 2.0 — in-app ZIP writer (E77): the counterpart of the drop zone's
+// reader (05). Entries are deflated with the platform's CompressionStream
+// ('deflate-raw'); the result is a plain ZIP with a central directory that
+// readZipEntries, package-tenants and every archiver understand.
+const ZIP_TEXT = new TextEncoder();
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+async function deflateRaw(bytes) {
+  // a hand-made ReadableStream (Blob.stream() is missing in jsdom)
+  const source = new ReadableStream({ start(c) { c.enqueue(bytes); c.close(); } });
+  const reader = source.pipeThrough(new CompressionStream('deflate-raw')).getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    chunks.push(value); total += value.length;
+  }
+  const out = new Uint8Array(total);
+  let pos = 0;
+  for (const c of chunks) { out.set(c, pos); pos += c.length; }
+  return out;
+}
+
+// DOS date/time fields of a Date (ZIP has no better clock)
+function dosDateTime(d) {
+  const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  return { time, date };
+}
+
+const toBytes = (data) => (typeof data === 'string' ? ZIP_TEXT.encode(data) : data instanceof Uint8Array ? data : new Uint8Array(data));
+
+// entries: [{ name, data: string | Uint8Array | ArrayBuffer }] → Uint8Array (ZIP bytes)
+async function buildZip(entries, { now = new Date() } = {}) {
+  const { time, date } = dosDateTime(now);
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  const u16 = (v) => [v & 0xff, (v >>> 8) & 0xff];
+  const u32 = (v) => [v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff];
+  for (const entry of entries) {
+    const name = ZIP_TEXT.encode(entry.name);
+    const raw = toBytes(entry.data);
+    const crc = crc32(raw);
+    const packed = raw.length ? await deflateRaw(raw) : raw;
+    const stored = packed.length >= raw.length;   // incompressible: store as-is
+    const body = stored ? raw : packed;
+    const method = stored ? 0 : 8;
+    const flags = 0x0800;                            // UTF-8 names
+    const local = new Uint8Array([
+      ...u32(0x04034b50), ...u16(20), ...u16(flags), ...u16(method), ...u16(time), ...u16(date),
+      ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0), ...name,
+    ]);
+    central.push(new Uint8Array([
+      ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(flags), ...u16(method), ...u16(time), ...u16(date),
+      ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0), ...u32(0), ...u32(offset), ...name,
+    ]));
+    chunks.push(local, body);
+    offset += local.length + body.length;
+  }
+  const cdSize = central.reduce((n, c) => n + c.length, 0);
+  const eocd = new Uint8Array([
+    ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(central.length), ...u16(central.length),
+    ...u32(cdSize), ...u32(offset), ...u16(0),
+  ]);
+  const total = offset + cdSize + eocd.length;
+  const out = new Uint8Array(total);
+  let pos = 0;
+  for (const c of [...chunks, ...central, eocd]) { out.set(c, pos); pos += c.length; }
+  return out;
+}
+// OrgGraph 2.0 — tenant export and restore (E77). One ZIP carries the whole
+// tenant: registry, env (views), the store in its chunked persistence layout
+// (header + parts, exactly what the profile holds — no re-encoding) and a
+// plain manifest. Dropping such a ZIP restores the tenant 1:1; the hub (tools/
+// hub.py) keeps the same ZIP age-encrypted in the tenant's git repo.
+
+const TENANT_FORMAT = 'orggraph-tenant-2';
+const MANIFEST = 'manifest.json';
+const STORE_HEADER = 'store.json';
+const storePartName = (i) => `store.part${i}.json`;
+
+const rfc3339Now = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+async function og2TenantName() {
+  const id = await getActiveProfileId();
+  const p = (await listProfiles()).find((x) => x.id === id);
+  return (p && p.name) || id || 'tenant';
+}
+
+// What the export says about itself (plain in the ZIP and in the hub repo).
+function og2TenantManifest(state, { tenant, exportedAt = rfc3339Now(), parts = 0 } = {}) {
+  const store = state && state.store;
+  return {
+    format: TENANT_FORMAT,
+    exportedAt,
+    tenant,
+    appVersion: typeof APP_VERSION === 'string' ? APP_VERSION : null,
+    registryVersion: state && state.registry ? state.registry.version || null : null,
+    counts: store ? { nodes: store.nodes.size, edges: store.edges.size, snapshots: store.snapshots.size } : null,
+    sources: store && store.sourceBook ? [...store.sourceBook.keys()].sort() : [],
+    lastSnapshot: store ? [...store.snapshots.values()].map((s) => s.stamp).filter(Boolean).sort().pop() || null : null,
+    storeParts: parts,
+    views: state && state.env && state.env.VIEWS ? Object.keys(state.env.VIEWS) : [],
+  };
+}
+
+// Build the tenant ZIP of the running tenant: { name, bytes, manifest }.
+async function og2BuildTenantZip() {
+  const state = og2State();
+  if (!state || !state.store || !state.registry) throw new Error('kein geladener Mandant');
+  const tenant = await og2TenantName();
+  const { header, parts } = serializeTenantStoreParts(state.store);
+  const manifest = og2TenantManifest(state, { tenant, parts: parts.length });
+  const entries = [
+    { name: MANIFEST, data: JSON.stringify(manifest, null, 2) },
+    { name: 'registry.json', data: JSON.stringify(state.registry, null, 2) },
+    { name: 'env.json', data: JSON.stringify(state.env || {}, null, 2) },
+    { name: STORE_HEADER, data: header },
+    ...parts.map((p, i) => ({ name: storePartName(i), data: p })),
+  ];
+  const bytes = await buildZip(entries);
+  const stamp = manifest.exportedAt.replace(/[-:]/g, '').replace('T', '-').slice(0, 13);
+  return { name: `tenant-${tenant}-${stamp}.zip`, bytes, manifest };
+}
+
+// Dropped entries [{ path, file }] (already ZIP-expanded): is this a tenant export?
+async function og2TenantManifestOf(entries) {
+  const hit = (entries || []).find((e) => /(^|\/)manifest\.json$/i.test(e.path || ''));
+  if (!hit || !hit.file) return null;
+  try {
+    const m = JSON.parse(await hit.file.text());
+    return m && m.format === TENANT_FORMAT ? m : null;
+  } catch { return null; }
+}
+
+// Restore a tenant export into the ACTIVE profile: registry, env, store parts.
+// Caller reloads afterwards. Returns the manifest.
+async function og2RestoreTenant(entries) {
+  const byName = new Map((entries || []).map((e) => [String(e.path || '').split('/').pop(), e.file]));
+  const text = async (name) => { const f = byName.get(name); return f ? f.text() : null; };
+  const manifestText = await text(MANIFEST);
+  const manifest = manifestText ? JSON.parse(manifestText) : null;
+  if (!manifest || manifest.format !== TENANT_FORMAT) throw new Error('kein Tenant-Export (manifest.json fehlt)');
+  const registry = await text('registry.json');
+  const env = await text('env.json');
+  const header = await text(STORE_HEADER);
+  if (!registry || !header || !isChunkedStoreHeader(header)) throw new Error('Tenant-Export unvollständig (registry.json / store.json)');
+  const partCount = JSON.parse(header).parts;
+  const parts = [];
+  for (let i = 0; i < partCount; i++) {
+    const p = await text(storePartName(i));
+    if (p == null) throw new Error(`Tenant-Export unvollständig: ${storePartName(i)} fehlt`);
+    parts.push(p);
+  }
+  const prev = await getStoredText(KEY_STORE);
+  const prevParts = prev != null && isChunkedStoreHeader(prev) ? JSON.parse(prev).parts : 0;
+  await putStored(KEY_REGISTRY, registry);
+  if (env) await putStored(KEY_ENV, env);
+  for (let i = 0; i < parts.length; i++) await putStored(KEY_STORE_PART_PREFIX + i, parts[i]);
+  await putStored(KEY_STORE, header);
+  for (let i = parts.length; i < prevParts; i++) await delStored(KEY_STORE_PART_PREFIX + i);
+  return manifest;
+}
+
+async function og2DownloadTenantZip() {
+  const { name, bytes, manifest } = await og2BuildTenantZip();
+  const blob = new Blob([bytes], { type: 'application/zip' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  showTemporaryNotification(`Mandant exportiert: ${name} (${manifest.counts.nodes} Knoten, ${manifest.counts.edges} Kanten)`);
+  return name;
+}
+// OrgGraph 2.0 — hub sync (E77): when the app is served by tools/hub.py under
+// /t/<tenant>/, the tenant's git repo is the durable truth. Every load pulls
+// (the hub pulls, the app compares the manifest with what it last synced and
+// restores a newer export before booting); every change pushes (the app
+// builds the tenant ZIP, the hub encrypts, commits and pushes). Under file://
+// nothing here runs — the offline single file stays as it is.
+
+const PUSH_DEBOUNCE_MS = 1500;
+let _hub = null;          // { origin, tenant } or false (no hub)
+let _pushTimer = null;
+let _pushing = null;      // in-flight push promise
+let _pushAgain = null;    // reason queued while a push runs
+
+// Tenant from the served path (/t/<name>/…); null under file:// or plain /.
+function og2HubTenantOf(loc = typeof location !== 'undefined' ? location : null) {
+  if (!loc || !/^https?:$/.test(loc.protocol)) return null;
+  const m = /^\/t\/([^/]+)\/?/.exec(loc.pathname || '');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+// Pure decision: restore the hub export when it is newer than what this
+// profile last synced (or the profile never synced and the hub has one).
+function og2SyncDecision(marker, manifest) {
+  if (!manifest || !manifest.exportedAt) return { restore: false, reason: 'hub has no export' };
+  if (!marker || !marker.exportedAt) return { restore: true, reason: 'never synced' };
+  if (manifest.exportedAt > marker.exportedAt) return { restore: true, reason: 'hub is newer' };
+  return { restore: false, reason: manifest.exportedAt === marker.exportedAt ? 'in sync' : 'local is newer' };
+}
+
+async function hub() {
+  if (_hub !== null) return _hub || null;
+  const tenant = og2HubTenantOf();
+  if (!tenant) { _hub = false; return null; }
+  try {
+    const res = await fetch(`${location.origin}/api/hub`, { cache: 'no-store' });
+    const info = res.ok ? await res.json() : null;
+    _hub = info && Array.isArray(info.tenants) && info.tenants.includes(tenant) ? { origin: location.origin, tenant } : false;
+    if (!_hub) og2SyncStatus('error', `Hub kennt Mandant «${tenant}» nicht`);
+  } catch { _hub = false; }
+  return _hub || null;
+}
+function og2HubActive() { return !!_hub; }
+
+const api = (h, path) => `${h.origin}/api/tenants/${encodeURIComponent(h.tenant)}${path}`;
+
+// Make the served tenant the ACTIVE profile (created when missing), so a hub
+// tenant never lands in whatever profile was active last.
+async function ensureTenantProfile(tenant) {
+  const list = await listProfiles();
+  const hit = list.find((p) => p.id === tenant || p.name === tenant);
+  const active = await getActiveProfileId();
+  if (hit) { if (hit.id !== active) await switchProfile(hit.id); return hit.id; }
+  return createProfile(tenant, { activate: true, source: 'hub' });
+}
+
+// Boot: pull. Returns { hub, restored, reason }.
+async function og2SyncPull() {
+  const h = await hub();
+  if (!h) return { hub: false };
+  await ensureTenantProfile(h.tenant);
+  og2SyncStatus('busy', 'Sync: hole Stand …');
+  try {
+    const res = await fetch(api(h, '/manifest'), { cache: 'no-store' });
+    if (!res.ok) throw new Error(`manifest ${res.status}`);
+    const { manifest, pull } = await res.json();
+    const marker = await getStoredJson(KEY_SYNC);
+    const decision = og2SyncDecision(marker, manifest);
+    if (!decision.restore) {
+      og2SyncStatus('ok', `Sync: ${decision.reason === 'in sync' ? 'aktuell' : decision.reason === 'local is newer' ? 'lokal neuer' : 'kein Export im Repo'}${pull && pull.pulled ? ' (gepullt)' : ''}`);
+      return { hub: true, restored: false, reason: decision.reason };
+    }
+    og2SyncStatus('busy', 'Sync: lade Export …');
+    const zip = await fetch(api(h, '/export'), { cache: 'no-store' });
+    if (!zip.ok) throw new Error(`export ${zip.status}`);
+    const file = new File([await zip.arrayBuffer()], 'tenant.zip', { type: 'application/zip' });
+    const entries = await readZipEntries(file);
+    const restored = await og2RestoreTenant(entries);
+    await putStored(KEY_SYNC, JSON.stringify({ tenant: h.tenant, exportedAt: restored.exportedAt, syncedAt: new Date().toISOString() }));
+    og2SyncStatus('ok', `Sync: Stand ${restored.exportedAt} übernommen`);
+    return { hub: true, restored: true, reason: decision.reason, manifest: restored };
+  } catch (err) {
+    console.error('[sync] pull', err);
+    og2SyncStatus('error', `Sync: Pull fehlgeschlagen (${err.message})`);
+    return { hub: true, restored: false, error: String(err) };
+  }
+}
+
+// After a change: push (debounced; a change during a push queues one more).
+function og2SyncPushSoon(reason = 'change') {
+  if (_hub === false) return;
+  if (_pushing) { _pushAgain = reason; return; }
+  clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(() => { og2SyncPush(reason); }, PUSH_DEBOUNCE_MS);
+}
+
+async function og2SyncPush(reason = 'change') {
+  const h = await hub();
+  if (!h) return null;
+  if (_pushing) { _pushAgain = reason; return _pushing; }
+  _pushing = (async () => {
+    og2SyncStatus('busy', 'Sync: sende …');
+    try {
+      const { bytes, manifest } = await og2BuildTenantZip();
+      const res = await fetch(`${api(h, '/export')}?reason=${encodeURIComponent(reason)}`, { method: 'PUT', body: bytes, headers: { 'Content-Type': 'application/zip' } });
+      const out = res.ok ? await res.json() : null;
+      if (!res.ok) throw new Error((out && out.error) || `PUT ${res.status}`);
+      await putStored(KEY_SYNC, JSON.stringify({ tenant: h.tenant, exportedAt: manifest.exportedAt, syncedAt: new Date().toISOString() }));
+      const git = out.git || {};
+      const at = manifest.exportedAt.slice(11, 16);
+      if (git.pushed) og2SyncStatus('ok', `Sync: gepusht ${at} UTC`);
+      else if (git.committed && git.remote === false) og2SyncStatus('ok', `Sync: committet ${at} UTC (kein Remote)`);
+      else if (git.committed) og2SyncStatus('warn', `Sync: committet, Push offen${git.pushError ? ' (' + git.pushError.slice(0, 60) + ')' : ''}`);
+      else og2SyncStatus('ok', 'Sync: unverändert');
+      return out;
+    } catch (err) {
+      console.error('[sync] push', err);
+      og2SyncStatus('error', `Sync: Push fehlgeschlagen (${err.message})`);
+      return null;
+    } finally {
+      _pushing = null;
+      if (_pushAgain) { const again = _pushAgain; _pushAgain = null; og2SyncPushSoon(again); }
+    }
+  })();
+  return _pushing;
+}
+
+// Raw inputs the app received (snapshot files, lists) go to the repo as well.
+async function og2SyncArchiveRaw(filename, text) {
+  const h = await hub();
+  if (!h) return null;
+  try {
+    const res = await fetch(api(h, `/snapshots/${encodeURIComponent(filename)}`), { method: 'POST', body: text, headers: { 'Content-Type': 'application/octet-stream' } });
+    if (!res.ok) throw new Error(`POST ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('[sync] archive', filename, err);
+    og2SyncStatus('warn', `Sync: Rohdatei ${filename} nicht archiviert`);
+    return null;
+  }
+}
+
+// Footer indicator next to the status line.
+function og2SyncStatus(level, text) {
+  if (typeof document === 'undefined') return;
+  let el = document.getElementById('syncStatus');
+  if (!el) {
+    const status = document.querySelector(typeof STATUS_ID === 'string' ? STATUS_ID : '#status');
+    if (!status || !status.parentNode) return;
+    const sep = document.createElement('span');
+    sep.className = 'stat-separator';
+    sep.textContent = '|';
+    el = document.createElement('span');
+    el.id = 'syncStatus';
+    el.className = 'sync-status';
+    el.title = 'Mandanten-Repo (Hub): Pull beim Laden, Push nach jeder Änderung — Klick: jetzt pushen';
+    el.addEventListener('click', () => og2SyncPush('manual'));
+    status.parentNode.insertBefore(sep, status.nextSibling);
+    status.parentNode.insertBefore(el, sep.nextSibling);
+  }
+  el.dataset.level = level;
+  el.textContent = text;
 }
 
 </script>
