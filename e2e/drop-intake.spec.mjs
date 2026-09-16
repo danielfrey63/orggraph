@@ -236,6 +236,6 @@ test('file:// drop intake: the E70 decision is an app modal with copyable detail
   await dialog.locator('button.btn-primary').click();
   await expect(dialog).toBeHidden();
   await expect(page.locator('g.nodes circle:not(.attribute-circle)')).toHaveCount(5, { timeout: 60_000 });
-  // the footer progress bar exists and is hidden again after the import
-  await expect(page.locator('#importProgress')).toBeHidden();
+  // the status fill is gone again after the import
+  await expect(page.locator('#status')).not.toHaveClass(/import-progress/);
 });

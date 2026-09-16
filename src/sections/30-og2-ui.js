@@ -82,41 +82,29 @@ export function og2UiHooks() {
   };
 }
 
-// Import progress in the footer (NFR-3): a bar under the status line fed by
-// the generator's checkpoints, so a long import visibly moves.
+// Import progress in the footer (NFR-3): the status text itself carries a
+// light fill behind it (between the footer pipes) that grows with the
+// generator's checkpoints — no extra bar, no running animation (the first
+// version was "too nervous", live-test 2026-09-16). Phases without a count
+// show a faint full fill.
 const OG2_PHASE_LABELS = {
   validate: 'prüfen', identity: 'Identität', clone: 'Bestand kopieren', nodes: 'Knoten', 'node-closure': 'Knoten-Abgleich',
   edges: 'Kanten', 'edge-closure': 'Kanten-Abgleich', projection: 'Projektion', gate: 'Plausibilität',
 };
-function og2ProgressEl() {
-  let el = document.getElementById('importProgress');
-  if (el) return el;
-  const status = document.querySelector(STATUS_ID);
-  if (!status || !status.parentNode) return null;
-  el = document.createElement('div');
-  el.id = 'importProgress';
-  el.className = 'import-progress';
-  el.hidden = true;
-  const bar = document.createElement('div');
-  bar.className = 'import-progress-bar';
-  el.appendChild(bar);
-  status.parentNode.appendChild(el);
-  return el;
-}
 export function og2ImportProgress(message, p) {
-  const el = og2ProgressEl();
+  const el = document.querySelector(STATUS_ID);
   if (!el) return;
   const phase = p ? (OG2_PHASE_LABELS[p.phase] || p.phase) : '';
   const fmt = (n) => n.toLocaleString('de-CH');
   const hasTotal = !!(p && p.total > 0);
   setStatus(hasTotal ? `${message} — ${phase} ${fmt(Math.min(p.done, p.total))}/${fmt(p.total)}` : (phase ? `${message} — ${phase}` : message));
-  el.hidden = false;
+  el.classList.add('import-progress');
   el.classList.toggle('import-progress--busy', !hasTotal);
-  el.firstChild.style.width = hasTotal ? `${Math.round(100 * Math.min(p.done, p.total) / p.total)}%` : '';
+  el.style.setProperty('--import-progress', hasTotal ? `${Math.round(100 * Math.min(p.done, p.total) / p.total)}%` : '100%');
 }
 export function og2ImportProgressDone() {
-  const el = document.getElementById('importProgress');
-  if (el) { el.hidden = true; el.classList.remove('import-progress--busy'); el.firstChild.style.width = ''; }
+  const el = document.querySelector(STATUS_ID);
+  if (el) { el.classList.remove('import-progress', 'import-progress--busy'); el.style.removeProperty('--import-progress'); }
 }
 // yieldFn for importSnapshotAsync: paints the progress, then hands the event loop back
 export function og2ImportYield(message) {

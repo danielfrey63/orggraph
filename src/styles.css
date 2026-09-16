@@ -917,30 +917,20 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   user-select: text;
 }
 
-/* Import progress under the footer status (NFR-3) */
-.import-progress {
-  flex-basis: 100%;
-  height: 6px;
-  margin-top: 6px;
+/* Import progress (NFR-3): a light fill behind the footer status text that
+   grows with the import; phases without a count show a fainter full fill */
+.app-footer #status.import-progress {
+  --import-progress: 0%;
+  padding: 2px 6px;
+  margin: -2px -6px;
   border-radius: 3px;
-  background: var(--control-bg);
-  border: 1px solid var(--control-border);
-  overflow: hidden;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent-color) 22%, transparent) var(--import-progress),
+    transparent var(--import-progress));
+  transition: background 0.2s ease-out;
 }
-.import-progress-bar {
-  height: 100%;
-  width: 0;
-  background: var(--accent-color);
-  transition: width 0.15s ease-out;
-}
-.import-progress--busy .import-progress-bar {
-  width: 30%;
-  animation: import-progress-slide 1.2s ease-in-out infinite;
-}
-@keyframes import-progress-slide {
-  0% { margin-left: 0; }
-  50% { margin-left: 70%; }
-  100% { margin-left: 0; }
+.app-footer #status.import-progress--busy {
+  background: color-mix(in srgb, var(--accent-color) 9%, transparent);
 }
 
 /* Intake: undecided identifier rows (fuzzy proposals, no hits) */
