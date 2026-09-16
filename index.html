@@ -1571,7 +1571,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.210.310';
+const APP_VERSION = '1.212.319';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -6719,7 +6719,10 @@ function renderGraph(sub) {
       currentZoomTransform = event.transform;
       gZoom.attr("transform", event.transform);
       updateDebugZoomDisplay();
-    });
+    })
+    // wheel/drag never fire click/change: persist the viewport explicitly
+    // (FR-8.14, debounced; the zoom is part of the view context)
+    .on("end", () => { if (typeof og2PersistUiStateSoon === 'function') og2PersistUiStateSoon(); });
   svg.call(zoomBehavior);
   // Label-Sichtbarkeitsklassen setzen [SF]
   setLabelVisibility(labelsVisible);
@@ -11941,7 +11944,19 @@ function og2CaptureViewContext() {
     attributesOn: og2LegendOnKeys(og2.ringSelection, attributeTypes.keys(), activeAttributes),
     hiddenCategories: [...hiddenCategories],
     attributeFocus: !!attributeFocusEnabled,
+    // viewport zoom/pan (live-test 2026-09-16): part of the view's scene
+    zoom: currentZoomTransform && Number.isFinite(currentZoomTransform.k)
+      ? { k: currentZoomTransform.k, x: currentZoomTransform.x, y: currentZoomTransform.y }
+      : null,
   };
+}
+
+// Zoom transform of a stored context, or null (renderGraph then falls back
+// to TOOLBAR_ZOOM_DEFAULT / identity).
+function og2ZoomOf(ctx) {
+  const z = ctx && ctx.zoom;
+  if (!z || ![z.k, z.x, z.y].every(Number.isFinite) || z.k <= 0) return null;
+  return d3.zoomIdentity.translate(z.x, z.y).scale(z.k);
 }
 
 // Apply a view's stored context — or its definition defaults when the view is
@@ -11965,6 +11980,9 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
   og2.pendingAttributesOn = new Set();
   hiddenCategories = new Set();
   attributeFocusEnabled = false;
+  // the next render restores this zoom (renderGraph keeps the current
+  // transform); a fresh view starts from the env default
+  currentZoomTransform = og2ZoomOf(ctx);
   let depth = view && view.depth != null ? view.depth : null;
 
   if (ctx) {
@@ -12668,13 +12686,21 @@ function parseListText(text, fileStem = '', fingerprint = null) {
   }
 
   // Wide form: every column that is neither the identifier nor a name is an
-  // attribute of its own; the header text is the category.
+  // attribute of its own; the header text is the category — except for a
+  // single Ja/Nein column, whose membership the FILE names (the file is the
+  // subject "Kohorte VII", the header only the predicate "Besucht"; live-test
+  // 2026-09-16). Several Ja/Nein columns keep their headers as categories.
   const lists = [];
   const isName = (i) => LIST_HEADERS.name.includes(first[i]) || LIST_HEADERS.key.includes(first[i]);
+  const columns = [];
   for (let col = 0; col < headerCells.length; col++) {
     if (col === identifier || isName(col) || !headerCells[col]) continue;
     const values = body.map((c) => (c[col] || '').toLowerCase());
     const boolean = values.every((v) => BOOL_TRUE.has(v) || BOOL_FALSE.has(v)) && values.some((v) => BOOL_TRUE.has(v));
+    columns.push({ col, values, boolean });
+  }
+  const singleBoolean = columns.filter((c) => c.boolean).length === 1;
+  for (const { col, values, boolean } of columns) {
     const rows = [];
     body.forEach((c, i) => {
       const id = c[identifier] || '';
@@ -12682,7 +12708,7 @@ function parseListText(text, fileStem = '', fingerprint = null) {
       if (boolean) { if (BOOL_TRUE.has(values[i])) rows.push({ identifier: id, value: '' }); }
       else if (c[col]) rows.push({ identifier: id, value: c[col] });
     });
-    lists.push({ category: headerCells[col], kind: boolean ? 'boolean' : 'value', rows });
+    lists.push({ category: boolean && singleBoolean ? fileStem : headerCells[col], kind: boolean ? 'boolean' : 'value', rows });
   }
   // a header with only identifier/name columns is a plain member list
   if (!lists.length) lists.push({ category: fileStem, kind: 'list', rows: body.filter((c) => c[identifier]).map((c) => ({ identifier: c[identifier], value: '' })) });
@@ -12748,7 +12774,9 @@ function buildIdentityResolver(store, registry, type, { threshold = 0.3 } = {}) 
       const label = p.label.toLowerCase();
       let d = Math.min(normalizedDistance(asName, label), normalizedDistance(lower, label));
       for (const v of p.idents) d = Math.min(d, normalizedDistance(lower, v.toLowerCase()));
-      if (d <= threshold) candidates.push({ id: p.id, label: p.label, dist: Number(d.toFixed(3)) });
+      // idents: the stored identifier values, so the dialog can show WHY a
+      // 100 % name match is still only a proposal (e.g. another e-mail domain)
+      if (d <= threshold) candidates.push({ id: p.id, label: p.label, dist: Number(d.toFixed(3)), idents: p.idents.slice() });
     }
     candidates.sort((a, b) => a.dist - b.dist || (a.id < b.id ? -1 : 1));
     if (hit === false) return { status: 'ambiguous', candidates: candidates.slice(0, 5) };
@@ -13114,6 +13142,12 @@ function showListIntakeDialog(entry, list, meta, onDone) {
   let srcTouched = false;
   srcInput.addEventListener('input', () => { srcTouched = true; });
   formRow(form, 'Quelle', srcInput);
+  // what the fields mean for the chosen target (live-test 2026-09-16: with a
+  // Training target the value list showed the cohort names, the category
+  // seemed to be "Besucht" — and the source follows the category)
+  const fieldNote = document.createElement('div');
+  fieldNote.className = 'modal-note';
+  formRow(form, '', fieldNote, { span: true });
 
   const currentTargetType = () => (registry.edgeTypes[edgeSelect.value] || {}).to;
   const targetHasGroup = () => !!((registry.nodeTypes || {})[currentTargetType()] || {}).groupProp;
@@ -13125,7 +13159,12 @@ function showListIntakeDialog(entry, list, meta, onDone) {
     const labels = targets.filter((t) => !targetHasGroup() || t.group === cat).map((t) => t.label);
     fillDatalist(valList, [...new Set(labels)]);
     // without a grouping property the category only names the list (id/source)
-    catInput.placeholder = targetHasGroup() ? 'Kategorie (Listenname)' : 'Listenname (nur Kennung)';
+    const type = currentTargetType();
+    catInput.placeholder = targetHasGroup() ? 'Kategorie (Legenden-Gruppe)' : 'Listenname';
+    if (!rowsCarryValues) valInput.placeholder = targetHasGroup() ? 'leer = die Kategorie selbst' : `Name des ${type}-Knotens (leer = Kategorie)`;
+    fieldNote.textContent = targetHasGroup()
+      ? `Kategorie = Gruppe in der Ring-Legende, Wert = Name des Rings darin. Die Quelle folgt der Kategorie: gleiche Kategorie = dieselbe Liste (Vollstand).`
+      : `Ziel «${type}» hat keine Gruppierung: Wert = Name des ${type}-Knotens, leer = die Kategorie. Die Quelle folgt der Kategorie: gleiche Kategorie = dieselbe Liste (Vollstand) — pro Liste eine eigene Kategorie wählen.`;
   };
   edgeSelect.addEventListener('change', () => {
     memberType = memberTypeOf(registry, registry.edgeTypes[edgeSelect.value]) || memberType;
@@ -13178,7 +13217,10 @@ function showListIntakeDialog(entry, list, meta, onDone) {
         for (const c of res.candidates) {
           const opt = document.createElement('option');
           opt.value = c.id;
-          opt.textContent = `${c.label} (${Math.round((1 - c.dist) * 100)} %)`;
+          // a proposal is a NAME similarity — the stored identifier is shown
+          // so a 100 % name hit with another e-mail is a conscious decision
+          const stored = (c.idents || []).length ? `gespeichert: ${c.idents.join(', ')}` : 'keine Kennung gespeichert';
+          opt.textContent = `${c.label} (Name ${Math.round((1 - c.dist) * 100)} %, ${stored})`;
           sel.appendChild(opt);
         }
         sel.value = res.status === 'fuzzy' ? res.id : '';

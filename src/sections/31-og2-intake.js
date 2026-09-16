@@ -226,13 +226,21 @@ export function parseListText(text, fileStem = '', fingerprint = null) {
   }
 
   // Wide form: every column that is neither the identifier nor a name is an
-  // attribute of its own; the header text is the category.
+  // attribute of its own; the header text is the category — except for a
+  // single Ja/Nein column, whose membership the FILE names (the file is the
+  // subject "Kohorte VII", the header only the predicate "Besucht"; live-test
+  // 2026-09-16). Several Ja/Nein columns keep their headers as categories.
   const lists = [];
   const isName = (i) => LIST_HEADERS.name.includes(first[i]) || LIST_HEADERS.key.includes(first[i]);
+  const columns = [];
   for (let col = 0; col < headerCells.length; col++) {
     if (col === identifier || isName(col) || !headerCells[col]) continue;
     const values = body.map((c) => (c[col] || '').toLowerCase());
     const boolean = values.every((v) => BOOL_TRUE.has(v) || BOOL_FALSE.has(v)) && values.some((v) => BOOL_TRUE.has(v));
+    columns.push({ col, values, boolean });
+  }
+  const singleBoolean = columns.filter((c) => c.boolean).length === 1;
+  for (const { col, values, boolean } of columns) {
     const rows = [];
     body.forEach((c, i) => {
       const id = c[identifier] || '';
@@ -240,7 +248,7 @@ export function parseListText(text, fileStem = '', fingerprint = null) {
       if (boolean) { if (BOOL_TRUE.has(values[i])) rows.push({ identifier: id, value: '' }); }
       else if (c[col]) rows.push({ identifier: id, value: c[col] });
     });
-    lists.push({ category: headerCells[col], kind: boolean ? 'boolean' : 'value', rows });
+    lists.push({ category: boolean && singleBoolean ? fileStem : headerCells[col], kind: boolean ? 'boolean' : 'value', rows });
   }
   // a header with only identifier/name columns is a plain member list
   if (!lists.length) lists.push({ category: fileStem, kind: 'list', rows: body.filter((c) => c[identifier]).map((c) => ({ identifier: c[identifier], value: '' })) });
@@ -306,7 +314,9 @@ export function buildIdentityResolver(store, registry, type, { threshold = 0.3 }
       const label = p.label.toLowerCase();
       let d = Math.min(normalizedDistance(asName, label), normalizedDistance(lower, label));
       for (const v of p.idents) d = Math.min(d, normalizedDistance(lower, v.toLowerCase()));
-      if (d <= threshold) candidates.push({ id: p.id, label: p.label, dist: Number(d.toFixed(3)) });
+      // idents: the stored identifier values, so the dialog can show WHY a
+      // 100 % name match is still only a proposal (e.g. another e-mail domain)
+      if (d <= threshold) candidates.push({ id: p.id, label: p.label, dist: Number(d.toFixed(3)), idents: p.idents.slice() });
     }
     candidates.sort((a, b) => a.dist - b.dist || (a.id < b.id ? -1 : 1));
     if (hit === false) return { status: 'ambiguous', candidates: candidates.slice(0, 5) };

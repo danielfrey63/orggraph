@@ -318,7 +318,19 @@ function og2CaptureViewContext() {
     attributesOn: og2LegendOnKeys(og2.ringSelection, attributeTypes.keys(), activeAttributes),
     hiddenCategories: [...hiddenCategories],
     attributeFocus: !!attributeFocusEnabled,
+    // viewport zoom/pan (live-test 2026-09-16): part of the view's scene
+    zoom: currentZoomTransform && Number.isFinite(currentZoomTransform.k)
+      ? { k: currentZoomTransform.k, x: currentZoomTransform.x, y: currentZoomTransform.y }
+      : null,
   };
+}
+
+// Zoom transform of a stored context, or null (renderGraph then falls back
+// to TOOLBAR_ZOOM_DEFAULT / identity).
+function og2ZoomOf(ctx) {
+  const z = ctx && ctx.zoom;
+  if (!z || ![z.k, z.x, z.y].every(Number.isFinite) || z.k <= 0) return null;
+  return d3.zoomIdentity.translate(z.x, z.y).scale(z.k);
 }
 
 // Apply a view's stored context — or its definition defaults when the view is
@@ -342,6 +354,9 @@ function og2ApplyViewContext(name, { validateIds = true } = {}) {
   og2.pendingAttributesOn = new Set();
   hiddenCategories = new Set();
   attributeFocusEnabled = false;
+  // the next render restores this zoom (renderGraph keeps the current
+  // transform); a fresh view starts from the env default
+  currentZoomTransform = og2ZoomOf(ctx);
   let depth = view && view.depth != null ? view.depth : null;
 
   if (ctx) {

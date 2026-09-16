@@ -188,6 +188,12 @@ export function showListIntakeDialog(entry, list, meta, onDone) {
   let srcTouched = false;
   srcInput.addEventListener('input', () => { srcTouched = true; });
   formRow(form, 'Quelle', srcInput);
+  // what the fields mean for the chosen target (live-test 2026-09-16: with a
+  // Training target the value list showed the cohort names, the category
+  // seemed to be "Besucht" — and the source follows the category)
+  const fieldNote = document.createElement('div');
+  fieldNote.className = 'modal-note';
+  formRow(form, '', fieldNote, { span: true });
 
   const currentTargetType = () => (registry.edgeTypes[edgeSelect.value] || {}).to;
   const targetHasGroup = () => !!((registry.nodeTypes || {})[currentTargetType()] || {}).groupProp;
@@ -199,7 +205,12 @@ export function showListIntakeDialog(entry, list, meta, onDone) {
     const labels = targets.filter((t) => !targetHasGroup() || t.group === cat).map((t) => t.label);
     fillDatalist(valList, [...new Set(labels)]);
     // without a grouping property the category only names the list (id/source)
-    catInput.placeholder = targetHasGroup() ? 'Kategorie (Listenname)' : 'Listenname (nur Kennung)';
+    const type = currentTargetType();
+    catInput.placeholder = targetHasGroup() ? 'Kategorie (Legenden-Gruppe)' : 'Listenname';
+    if (!rowsCarryValues) valInput.placeholder = targetHasGroup() ? 'leer = die Kategorie selbst' : `Name des ${type}-Knotens (leer = Kategorie)`;
+    fieldNote.textContent = targetHasGroup()
+      ? `Kategorie = Gruppe in der Ring-Legende, Wert = Name des Rings darin. Die Quelle folgt der Kategorie: gleiche Kategorie = dieselbe Liste (Vollstand).`
+      : `Ziel «${type}» hat keine Gruppierung: Wert = Name des ${type}-Knotens, leer = die Kategorie. Die Quelle folgt der Kategorie: gleiche Kategorie = dieselbe Liste (Vollstand) — pro Liste eine eigene Kategorie wählen.`;
   };
   edgeSelect.addEventListener('change', () => {
     memberType = memberTypeOf(registry, registry.edgeTypes[edgeSelect.value]) || memberType;
@@ -252,7 +263,10 @@ export function showListIntakeDialog(entry, list, meta, onDone) {
         for (const c of res.candidates) {
           const opt = document.createElement('option');
           opt.value = c.id;
-          opt.textContent = `${c.label} (${Math.round((1 - c.dist) * 100)} %)`;
+          // a proposal is a NAME similarity — the stored identifier is shown
+          // so a 100 % name hit with another e-mail is a conscious decision
+          const stored = (c.idents || []).length ? `gespeichert: ${c.idents.join(', ')}` : 'keine Kennung gespeichert';
+          opt.textContent = `${c.label} (Name ${Math.round((1 - c.dist) * 100)} %, ${stored})`;
           sel.appendChild(opt);
         }
         sel.value = res.status === 'fuzzy' ? res.id : '';

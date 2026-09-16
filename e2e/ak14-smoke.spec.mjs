@@ -155,6 +155,28 @@ test('AK 99: session state survives a reload (FR-8.14)', async ({ page }) => {
   await expect(page.locator('#depthControl .depth-value')).toHaveText('1');
 });
 
+test('viewport zoom survives a reload and belongs to the view context (FR-8.14, live-test 2026-09-16)', async ({ page }) => {
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    d3.select(SVG_ID).call(zoomBehavior.transform, d3.zoomIdentity.translate(120, 80).scale(1.7));
+  });
+  await page.waitForTimeout(900); // debounced state write
+  await page.reload();
+  await expect(page.locator(NODE_CIRCLES)).toHaveCount(5, { timeout: 30_000 });
+  const restored = await page.evaluate(() => ({ k: currentZoomTransform.k, x: currentZoomTransform.x, y: currentZoomTransform.y }));
+  expect(restored.k).toBeCloseTo(1.7, 5);
+  expect(restored.x).toBeCloseTo(120, 5);
+  expect(restored.y).toBeCloseTo(80, 5);
+  // another view starts from its own (default) zoom, coming back restores ours
+  await page.locator('#viewsLegend .legend-row').filter({ hasText: 'Nur Hierarchie' }).click();
+  await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Nur Hierarchie');
+  const other = await page.evaluate(() => currentZoomTransform.k);
+  expect(other).not.toBeCloseTo(1.7, 5);
+  await page.locator('#viewsLegend .legend-row').filter({ hasText: 'Start' }).click();
+  await expect(page.locator('#viewsLegend .legend-row.active .legend-label-chip')).toHaveText('Start');
+  expect(await page.evaluate(() => currentZoomTransform.k)).toBeCloseTo(1.7, 5);
+});
+
 test('toolbar toggles exist and stay operable (§9.4)', async ({ page }) => {
   for (const id of ['#toggleHierarchy', '#toggleLabels', '#fit', '#toggleSimulation', '#togglePseudonymization', '#debugBtn']) {
     await expect(page.locator(id)).toHaveCount(1);

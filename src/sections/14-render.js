@@ -646,7 +646,10 @@ export function renderGraph(sub) {
       currentZoomTransform = event.transform;
       gZoom.attr("transform", event.transform);
       updateDebugZoomDisplay();
-    });
+    })
+    // wheel/drag never fire click/change: persist the viewport explicitly
+    // (FR-8.14, debounced; the zoom is part of the view context)
+    .on("end", () => { if (typeof og2PersistUiStateSoon === 'function') og2PersistUiStateSoon(); });
   svg.call(zoomBehavior);
   // Label-Sichtbarkeitsklassen setzen [SF]
   setLabelVisibility(labelsVisible);

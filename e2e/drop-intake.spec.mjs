@@ -201,7 +201,7 @@ test('file:// drop intake: a wide Excel-style table yields one dialog per attrib
 
   // 1/2: Besucht — two true rows
   await expect(dialog).toBeVisible({ timeout: 10_000 });
-  await expect(dialog.locator('h2')).toContainText('«Besucht» (1/2)');
+  await expect(dialog.locator('h2')).toContainText('«export» (1/2)');
   await expect(dialog.locator('.modal-summary')).toContainText('2 Zeilen · 2 exakt');
   await dialog.locator('button.btn-primary').click();
 
@@ -212,7 +212,7 @@ test('file:// drop intake: a wide Excel-style table yields one dialog per attrib
   await dialog.locator('button.btn-primary').click();
   await expect(dialog).toBeHidden({ timeout: 30_000 });
 
-  await expect(page.locator('g.nodes circle.attribute-circle[data-attribute="Besucht::Besucht"]')).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.locator('g.nodes circle.attribute-circle[data-attribute="export::export"]')).toHaveCount(2, { timeout: 30_000 });
   await expect(page.locator('g.nodes circle.attribute-circle[data-attribute="Rolle::AG"]')).toHaveCount(1);
   await expect(page.locator('g.nodes circle.attribute-circle[data-attribute="Rolle::Sektionsleiter"]')).toHaveCount(1);
   const pending = await page.evaluate(() => getPendingLists().then((l) => l.length));

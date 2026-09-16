@@ -85,9 +85,11 @@ describe('E74 — list parsing', () => {
       'Eric;Baltisberger;Eric.Baltisberger@sem.admin.ch;WAHR;AG',
       'Helena;Schaer;helena.schaer@sem.admin.ch;WAHR;',
     ].join('\r\n');
-    const { lists, header } = parseListText(text, 'export');
+    const { lists, header } = parseListText(text, 'Kohorte IX - LS');
     expect(header).toBe(true);
-    expect(lists.map((l) => [l.category, l.kind])).toEqual([['Besucht', 'boolean'], ['Rolle', 'value']]);
+    // the single Ja/Nein column is the FILE's membership (category = file
+    // name, live-test 2026-09-16); the text column keeps its header
+    expect(lists.map((l) => [l.category, l.kind])).toEqual([['Kohorte IX - LS', 'boolean'], ['Rolle', 'value']]);
     expect(lists[0].rows).toEqual([
       { identifier: 'lionel.kapff@sem.admin.ch', value: '' },
       { identifier: 'Eric.Baltisberger@sem.admin.ch', value: '' },
@@ -101,7 +103,10 @@ describe('E74 — list parsing', () => {
 
   it('wide table without a key column falls back to the name column; header with names only is a member list', () => {
     const { lists } = parseListText('Person\tAktiv\nAnna Boss\tx\nBen Dev\t\n', 'Team');
-    expect(lists).toEqual([{ category: 'Aktiv', kind: 'boolean', rows: [{ identifier: 'Anna Boss', value: '' }] }]);
+    expect(lists).toEqual([{ category: 'Team', kind: 'boolean', rows: [{ identifier: 'Anna Boss', value: '' }] }]);
+    // several Ja/Nein columns keep their headers as categories
+    const two = parseListText('E-Mail;Besucht;Bezahlt\na@x.ch;Ja;Nein\nb@x.ch;Nein;Ja\n', 'Kurs');
+    expect(two.lists.map((l) => [l.category, l.rows.map((r) => r.identifier)])).toEqual([['Besucht', ['a@x.ch']], ['Bezahlt', ['b@x.ch']]]);
     const names = parseListText('E-Mail,Name\na@x.ch,Anna\nb@x.ch,Ben\n', 'Kohorte VII');
     expect(names.lists).toEqual([{ category: 'Kohorte VII', kind: 'list', rows: [{ identifier: 'a@x.ch', value: '' }, { identifier: 'b@x.ch', value: '' }] }]);
   });
@@ -162,6 +167,9 @@ describe('E74 — identity resolution before the export (FR-4.2 identifiers)', (
     expect(resolve('ben.dev@x.ch ')).toMatchObject({ status: 'exact', id: 'p2' });
     // local part read as a name: "anna boss" ~ "Anna Boss"
     expect(resolve('anna.boss@other.org')).toMatchObject({ status: 'fuzzy', id: 'p1' });
+    // the proposal carries the stored identifiers, so the dialog can show
+    // why a 100 % name hit is not an exact match (other e-mail domain)
+    expect(resolve('anna.boss@other.org').candidates[0].idents).toEqual(['Anna.Boss@x.ch']); // as stored
     // two persons with the same label: never a silent pick
     const cara = resolve('cara.lead@x.ch');
     expect(cara.status).toBe('ambiguous');
