@@ -21,6 +21,7 @@
  *   await cfx.run({ maxAttachmentBytes: 10 * 1024 * 1024 })
  *   await cfx.run({ types: ['page', 'blogpost'] })
  *   await cfx.run({ target: 'opfs' })          // 'file' | 'opfs' | 'memory' (default: first that works)
+ *   await cfx.run({ traversal: 'flat' })       // old flat space listing instead of the hierarchy walk
  *   cfx.stop()                                 // stop a running export; the archive is closed as a
  *                                              // valid partial ZIP (index.xml carries partial="stopped")
  *   await cfx.cleanup()                        // drop archives left in browser storage (opfs)
@@ -46,6 +47,11 @@
  * storage XHTML uses HTML entities (&nbsp;, …) and ac:/ri: prefixes that would
  * not be well-formed on their own. Consumers take <body> text as-is.
  *
+ * Pages are collected by walking the hierarchy (space root pages → children of
+ * every page that has some), because the flat space listing gets slower the
+ * deeper its start offset is (measured: 1.3 s per call at the start, 20 s around
+ * offset 4500). The walk keeps offsets shallow and never enters excluded subtrees.
+ *
  * Works on Confluence Server / Data Center (/rest/api) and Cloud (/wiki/rest/api);
  * the base path is detected from the page. Re-running is harmless: the script
  * only reads and produces a fresh download.
@@ -59,6 +65,7 @@
     MAX_RETRIES: 4,         // on 429 / 5xx / network errors
     RETRY_BASE_MS: 1500,
     EXPAND: 'body.storage,version,ancestors,metadata.labels,history,space',
+    TRAVERSAL: 'tree',                    // 'tree' = hierarchy walk (shallow offsets), 'flat' = space listing
     ATTACHMENTS: true,                    // download attachments into attachments/<pageId>/
     MAX_ATTACHMENT_BYTES: 50 * 1024 * 1024, // larger files are listed as metadata only
     ZIP_MAX_ENTRIES: 65535,               // classic ZIP limit (no ZIP64)
@@ -174,21 +181,15 @@
   }
 
   /**
-   * Iterate every content item of a space and type, following start/limit
-   * pagination. With `root` the CQL search endpoint is used (root + descendants),
-   * otherwise the plain content listing.
+   * Walk a start/limit-paginated listing; `urlFor(start)` builds the request URL.
+   * Timing goes to STATS.list.
    */
-  async function* listContent(apiBase, spaceKey, type, root) {
+  async function* pagedList(urlFor) {
     let start = 0;
     for (;;) {
-      const url = root
-        ? `${apiBase}/content/search?cql=${encodeURIComponent(spaceCql(spaceKey, type, rootCql(root)))}` +
-          `&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${encodeURIComponent(CONFIG.EXPAND)}`
-        : `${apiBase}/content?spaceKey=${encodeURIComponent(spaceKey)}&type=${type}` +
-          `&status=current&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${encodeURIComponent(CONFIG.EXPAND)}`;
       checkStop();
       const t0 = Date.now();
-      const json = await getJson(url);
+      const json = await getJson(urlFor(start));
       STATS.list += Date.now() - t0;
       STATS.listCalls++;
       const results = json.results || [];
@@ -199,6 +200,57 @@
       start += size;
       await sleep(CONFIG.DELAY_MS);
     }
+  }
+
+  /**
+   * Flat listing of every content item of a space and type. With `root` the CQL
+   * search endpoint is used (root + descendants). Its `start` offset grows with the
+   * space and Confluence gets slower the deeper it is — used for blog posts and as
+   * traversal: 'flat' fallback; pages default to walkPages().
+   */
+  function listContent(apiBase, spaceKey, type, root) {
+    const expand = encodeURIComponent(CONFIG.EXPAND);
+    return pagedList((start) => root
+      ? `${apiBase}/content/search?cql=${encodeURIComponent(spaceCql(spaceKey, type, rootCql(root)))}` +
+        `&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${expand}`
+      : `${apiBase}/content?spaceKey=${encodeURIComponent(spaceKey)}&type=${type}` +
+        `&status=current&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${expand}`);
+  }
+
+  /** childTypes.page tells whether a page has child pages; unknown → look. */
+  function hasChildPages(item) {
+    const ct = item.childTypes && item.childTypes.page;
+    return ct && typeof ct.value === 'boolean' ? ct.value : true;
+  }
+
+  /**
+   * Hierarchy walk for pages: the space's root pages (or the given root page),
+   * then depth-first the children of every page that has some. Offsets stay
+   * shallow (per parent), so large spaces do not slow down as the flat listing
+   * does. `descend(item)` decides whether a page's subtree is entered — false for
+   * excluded roots, whose subtrees then cost no requests at all.
+   */
+  async function* walkPages(apiBase, spaceKey, root, descend) {
+    const expand = encodeURIComponent(`${CONFIG.EXPAND},childTypes.page`);
+    async function* subtree(item) {
+      yield item;
+      if (!hasChildPages(item) || !descend(item)) return;
+      const children = pagedList((start) =>
+        `${apiBase}/content/${encodeURIComponent(item.id)}/child/page?start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${expand}`);
+      for await (const child of children) yield* subtree(child);
+    }
+    if (root) {
+      const item = await getJson(`${apiBase}/content/${encodeURIComponent(root)}?expand=${expand}`);
+      if (item.space && item.space.key && item.space.key !== spaceKey) {
+        throw new Error(`root ${root} lives in space ${item.space.key}, not ${spaceKey}`);
+      }
+      if (item.type !== 'page') throw new Error(`root ${root} is a ${item.type}, not a page`);
+      yield* subtree(item);
+      return;
+    }
+    const roots = pagedList((start) =>
+      `${apiBase}/space/${encodeURIComponent(spaceKey)}/content/page?depth=root&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${expand}`);
+    for await (const item of roots) yield* subtree(item);
   }
 
   /** Fetch a binary (attachment download) with the session; retries like getJson. */
@@ -770,6 +822,11 @@
     const withAttachments = attachmentMode !== false;
     const maxBytes = opts.maxAttachmentBytes ?? CONFIG.MAX_ATTACHMENT_BYTES;
     const exclude = new Set((opts.exclude || []).map(String));
+    const traversal = opts.traversal ?? CONFIG.TRAVERSAL;
+    if (!['tree', 'flat'].includes(traversal)) throw new Error(`traversal must be 'tree' or 'flat' — got ${JSON.stringify(traversal)}`);
+    // Excluded subtree: the page itself or any ancestor is on the exclude list → the hit root.
+    const excludedHit = (item) => exclude.has(String(item.id))
+      ? item : (item.ancestors || []).find((a) => exclude.has(String(a.id)));
     const root = resolveRoot(opts.root);
     const filename = opts.filename || `${spaceKey}${root ? `-${root}` : ''}-${stamp(started)}.zip`;
 
@@ -803,7 +860,10 @@
         const typeStarted = Date.now();
         let n = 0;
         let skippedSoFar = 0;
-        for await (const item of listContent(apiBase, spaceKey, type, root)) {
+        const source = type === 'page' && traversal === 'tree'
+          ? walkPages(apiBase, spaceKey, root, (item) => !excludedHit(item))
+          : listContent(apiBase, spaceKey, type, root);
+        for await (const item of source) {
           checkStop();
           if (seen.has(item.id)) continue; // pagination overlap guard
           seen.add(item.id);
@@ -811,7 +871,7 @@
           const parent = ancestors.length ? ancestors[ancestors.length - 1] : null;
 
           // Excluded subtree: the page itself or any ancestor is on the exclude list.
-          const hit = exclude.has(String(item.id)) ? item : ancestors.find((a) => exclude.has(String(a.id)));
+          const hit = excludedHit(item);
           if (hit) {
             const root = excludedRoots.get(String(hit.id)) || { id: String(hit.id), title: hit.title, skipped: 0 };
             root.skipped++;
@@ -854,7 +914,13 @@
         console.error(`[cfx] failed: ${err.message} — closing the archive with what was exported so far`);
       }
     }
-    ctx.excluded = [...excludedRoots.values()];
+    // In tree traversal an excluded subtree is never entered, so the walk only ever
+    // sees its root; the descendant count comes from the CQL scope instead.
+    ctx.excluded = [...excludedRoots.values()].map((row) => {
+      const known = scope.excluded.find((e) => e.id === row.id);
+      const counted = known ? types.reduce((n, t) => n + (typeof known[t] === 'number' ? known[t] : 0), 0) : 0;
+      return { ...row, skipped: Math.max(row.skipped, counted) };
+    });
     for (const ex of ctx.excluded) console.log(`[cfx] excluded ${ex.id} "${ex.title || ''}": ${ex.skipped} item(s) skipped`);
     for (const id of exclude) if (!excludedRoots.has(id)) console.warn(`[cfx] exclude id ${id} matched nothing`);
     if (withAttachments) {
@@ -879,7 +945,8 @@
   globalThis.cfx = {
     probe, run, stop, cleanup, CONFIG,
     // exposed for tests
-    buildPageXml, buildIndexXml, createZipWriter, sinks, crc32, slug, safeFileName, referencedAttachmentNames, listContent,
+    buildPageXml, buildIndexXml, createZipWriter, sinks, crc32, slug, safeFileName, referencedAttachmentNames,
+    listContent, walkPages, pagedList,
     listAttachments, detectApiBase, detectSpaceKey, detectPageId,
   };
   if (hasDom) console.log('[cfx] ready — await cfx.probe() or await cfx.run()');
