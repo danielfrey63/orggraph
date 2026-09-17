@@ -409,6 +409,16 @@
 
   // ---------------------------------------------------------------- orchestration
 
+  /** ", ETA 14:37:05" from the rate so far; date is added when the finish falls on another day. */
+  function eta(startedMs, done, total) {
+    if (!total || done <= 0 || done >= total) return '';
+    const elapsed = Date.now() - startedMs;
+    const finish = new Date(Date.now() + (elapsed / done) * (total - done));
+    const sameDay = finish.toDateString() === new Date().toDateString();
+    const time = finish.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return `, ETA ${sameDay ? '' : `${finish.toLocaleDateString('de-CH')} `}${time}`;
+  }
+
   function stamp(d) {
     const p = (n) => String(n).padStart(2, '0');
     return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}-${p(d.getUTCHours())}${p(d.getUTCMinutes())}`;
@@ -542,6 +552,7 @@
     for (const type of types) {
       const total = scope.expected[type];
       const folder = type === 'page' ? 'pages' : `${type}s`;
+      const typeStarted = Date.now();
       let n = 0;
       let skippedSoFar = 0;
       for await (const item of listContent(apiBase, spaceKey, type)) {
@@ -571,7 +582,8 @@
           version: (item.version && item.version.number) ?? '', path, attachments: attachments.length,
         });
         if (n % 25 === 0 || n === total) {
-          console.log(`[cfx] ${type} ${n}${total !== null ? `/${total}` : ''}${skippedSoFar ? ` (${skippedSoFar} excluded skipped)` : ''}`);
+          console.log(`[cfx] ${type} ${n}${total !== null ? `/${total}` : ''}` +
+            `${skippedSoFar ? ` (${skippedSoFar} excluded skipped)` : ''}${eta(typeStarted, n, total)}`);
         }
       }
       console.log(`[cfx] ${type}: ${n} exported, ${skippedSoFar} excluded` +
