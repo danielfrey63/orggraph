@@ -13,19 +13,28 @@
  *   await cfx.run()                            // export the space of the open page
  *   await cfx.run({ spaceKey: 'ISC' })         // export a specific space
  *   await cfx.run({ exclude: ['123456'] })     // skip a parent page and its whole subtree
+ *   await cfx.run({ root: true })              // only the open page and its descendants
+ *   await cfx.run({ root: '123456' })          // only that page and its descendants
  *   await cfx.run({ attachments: false })      // page XML only, attachments listed as metadata
  *   await cfx.run({ maxAttachmentBytes: 10 * 1024 * 1024 })
  *   await cfx.run({ types: ['page', 'blogpost'] })
+ *   await cfx.run({ target: 'opfs' })          // 'file' | 'opfs' | 'memory' (default: first that works)
+ *   await cfx.cleanup()                        // drop archives left in browser storage (opfs)
  *
- * Archive layout (<spaceKey>-<yyyymmdd-hhmm>.zip):
- *   index.xml                        manifest: page tree (id, parentId, title, path), excluded roots
+ * Archive layout (<spaceKey>[-<rootId>]-<yyyymmdd-hhmm>.zip):
  *   pages/<id>-<slug>.xml            one document per page, incl. its attachment list
  *   attachments/<pageId>/<filename>  the attachment binaries (images, PDFs, Office, …)
  *   blogposts/<id>-<slug>.xml        only with types: ['page', 'blogpost']
+ *   index.xml                        manifest: page tree (id, parentId, title, path), excluded roots
  *
  * Attachments above maxAttachmentBytes (default 50 MB) or failing to download stay
- * listed in the page XML with a `skipped` attribute. The whole ZIP is assembled in
- * browser memory, so keep an eye on the attachment volume of very large spaces.
+ * listed in the page XML with a `skipped` attribute.
+ *
+ * Memory: the ZIP is streamed entry by entry. Default target is a save dialog
+ * (File System Access API — the file grows on disk while the export runs); without
+ * it the archive is written to the origin-private file system and downloaded at
+ * the end; only as last resort is it assembled in memory. At any time only the
+ * current page with its attachments is held in RAM.
  *
  * The storage-format body is embedded verbatim inside a CDATA section: Confluence
  * storage XHTML uses HTML entities (&nbsp;, …) and ac:/ri: prefixes that would
@@ -85,6 +94,27 @@
     return m ? decodeURIComponent(m[1]) : null;
   }
 
+  /** ID of the page open in the browser (Server/DC meta tag, Cloud URL, or ?pageId=). */
+  function detectPageId() {
+    if (!hasDom) return null;
+    const meta = metaContent('ajs-page-id');
+    if (meta) return meta;
+    const m = location.pathname.match(/\/pages\/(\d+)/);
+    if (m) return m[1];
+    return new URLSearchParams(location.search).get('pageId');
+  }
+
+  /** root option → page id: true/'current' = open page, otherwise the given id; '' = whole space. */
+  function resolveRoot(opt) {
+    if (opt === undefined || opt === null || opt === false || opt === '') return '';
+    if (opt === true || opt === 'current') {
+      const id = detectPageId();
+      if (!id) throw new Error('root: id of the open page not found — pass the page id explicitly');
+      return id;
+    }
+    return String(opt);
+  }
+
   // ---------------------------------------------------------------- http
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -108,16 +138,27 @@
     throw new Error(`HTTP ${res.status} for ${url}${text ? ` — ${text.slice(0, 200)}` : ''}`);
   }
 
-  /** Iterate every content item of a space and type, following start/limit pagination. */
-  async function* listContent(apiBase, spaceKey, type, onPage) {
+  /** CQL fragment restricting to a root page and its descendants ('' = whole space). */
+  function rootCql(root) {
+    return root ? `(ancestor=${root} or id=${root})` : '';
+  }
+
+  /**
+   * Iterate every content item of a space and type, following start/limit
+   * pagination. With `root` the CQL search endpoint is used (root + descendants),
+   * otherwise the plain content listing.
+   */
+  async function* listContent(apiBase, spaceKey, type, root) {
     let start = 0;
     for (;;) {
-      const url = `${apiBase}/content?spaceKey=${encodeURIComponent(spaceKey)}&type=${type}` +
-        `&status=current&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${encodeURIComponent(CONFIG.EXPAND)}`;
+      const url = root
+        ? `${apiBase}/content/search?cql=${encodeURIComponent(spaceCql(spaceKey, type, rootCql(root)))}` +
+          `&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${encodeURIComponent(CONFIG.EXPAND)}`
+        : `${apiBase}/content?spaceKey=${encodeURIComponent(spaceKey)}&type=${type}` +
+          `&status=current&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${encodeURIComponent(CONFIG.EXPAND)}`;
       const json = await getJson(url);
       const results = json.results || [];
       for (const item of results) yield item;
-      if (onPage) onPage(results.length, start);
       const size = json.size ?? results.length;
       const hasNext = Boolean(json._links && json._links.next) || size >= (json.limit ?? CONFIG.PAGE_SIZE);
       if (!hasNext || size === 0) return;
@@ -173,12 +214,14 @@
     }
   }
 
-  function spaceCql(spaceKey, type, extra) {
-    return `space="${spaceKey.replace(/"/g, '\\"')}" and type=${type}${extra ? ` and ${extra}` : ''}`;
+  /** space + type + any number of extra CQL fragments (empty ones ignored), joined with `and`. */
+  function spaceCql(spaceKey, type, ...extras) {
+    const parts = [`space="${spaceKey.replace(/"/g, '\\"')}"`, `type=${type}`, ...extras.filter(Boolean)];
+    return parts.join(' and ');
   }
 
-  async function countContent(apiBase, spaceKey, type, extra) {
-    return countCql(apiBase, spaceCql(spaceKey, type, extra));
+  async function countContent(apiBase, spaceKey, type, ...extras) {
+    return countCql(apiBase, spaceCql(spaceKey, type, ...extras));
   }
 
   // ---------------------------------------------------------------- xml
@@ -274,8 +317,8 @@
   function buildIndexXml(entries, ctx) {
     const lines = [XML_DECL];
     lines.push(`<space key="${esc(ctx.spaceKey)}" name="${esc(ctx.spaceName || '')}"` +
-      ` base="${esc(ctx.webBase)}" exportedAt="${esc(ctx.crawledAt)}" count="${entries.length}"` +
-      ` attachments="${ctx.attachmentCount ?? 0}">`);
+      ` base="${esc(ctx.webBase)}" exportedAt="${esc(ctx.crawledAt)}"${ctx.root ? ` root="${esc(ctx.root)}"` : ''}` +
+      ` count="${entries.length}" attachments="${ctx.attachmentCount ?? 0}">`);
     for (const ex of ctx.excluded || []) {
       lines.push(`  <excluded id="${esc(ex.id)}" skipped="${ex.skipped}">${esc(ex.title || '')}</excluded>`);
     }
@@ -322,25 +365,105 @@
   }
 
   /**
-   * Build a ZIP archive from { name, text } entries. Deflate when the engine
-   * offers CompressionStream('deflate-raw'), otherwise stored. Names are UTF-8 (flag bit 11).
+   * Where the ZIP bytes go. Each sink offers write(Uint8Array) and close();
+   * close() resolves to a Blob/File for the download, or null when the bytes
+   * already landed in a user-chosen file.
    */
-  async function buildZip(files, now = new Date()) {
-    if (files.length > CONFIG.ZIP_MAX_ENTRIES) {
-      throw new Error(`ZIP would have ${files.length} entries (limit ${CONFIG.ZIP_MAX_ENTRIES}); export with exclude or attachments: false`);
+  const sinks = {
+    /** Everything in memory (fallback; needs RAM for the whole archive). */
+    memory() {
+      const parts = [];
+      return {
+        kind: 'memory',
+        write: async (u8) => { parts.push(u8); },
+        close: async () => new Blob(parts, { type: 'application/zip' }),
+      };
+    },
+    /** Streams straight into a file the user picks (File System Access API, needs a user gesture). */
+    async picker(filename) {
+      const handle = await showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }],
+      });
+      const writable = await handle.createWritable();
+      return {
+        kind: 'file',
+        write: (u8) => writable.write(u8),
+        close: async () => { await writable.close(); return null; },
+      };
+    },
+    /** Streams into the origin-private file system (disk-backed), downloaded as a File afterwards. */
+    async opfs(filename) {
+      const dir = await navigator.storage.getDirectory();
+      const handle = await dir.getFileHandle(filename, { create: true });
+      const writable = await handle.createWritable();
+      return {
+        kind: 'opfs',
+        write: (u8) => writable.write(u8),
+        close: async () => { await writable.close(); return handle.getFile(); },
+      };
+    },
+  };
+
+  /** Remove leftover archives of earlier runs from the origin-private file system. */
+  async function cleanup() {
+    if (typeof navigator === 'undefined' || !navigator.storage || !navigator.storage.getDirectory) return 0;
+    const dir = await navigator.storage.getDirectory();
+    let removed = 0;
+    for await (const [name] of dir.entries()) {
+      if (name.endsWith('.zip')) { await dir.removeEntry(name); removed++; }
     }
+    if (removed) console.log(`[cfx] removed ${removed} leftover archive(s) from browser storage`);
+    return removed;
+  }
+
+  /**
+   * Pick the sink: 'file' (save dialog, streamed), 'opfs' (browser storage, streamed,
+   * then downloaded), 'memory'. Default: file → opfs → memory, whichever works.
+   */
+  async function openSink(target, filename) {
+    const wanted = target || 'auto';
+    if (wanted === 'memory') return sinks.memory();
+    if ((wanted === 'auto' || wanted === 'file') && typeof showSaveFilePicker === 'function') {
+      try {
+        return await sinks.picker(filename);
+      } catch (err) {
+        if (err && err.name === 'AbortError') throw new Error('save dialog cancelled');
+        if (wanted === 'file') throw err;
+        console.warn(`[cfx] save dialog unavailable (${err.message}) — streaming into browser storage instead`);
+      }
+    }
+    if ((wanted === 'auto' || wanted === 'opfs') && typeof navigator !== 'undefined' &&
+      navigator.storage && navigator.storage.getDirectory) {
+      await cleanup();
+      return sinks.opfs(filename);
+    }
+    if (wanted !== 'auto') throw new Error(`target '${wanted}' not available in this browser`);
+    console.warn('[cfx] no streaming target available — building the archive in memory');
+    return sinks.memory();
+  }
+
+  /**
+   * Incremental ZIP writer: each add() writes local header + payload straight to
+   * the sink, only the central-directory records stay in memory. Text entries are
+   * deflated (CompressionStream 'deflate-raw'), binaries stored. Names UTF-8 (flag bit 11).
+   */
+  function createZipWriter(sink, now = new Date()) {
     const enc = new TextEncoder();
     const { time, date } = dosDateTime(now);
-    const parts = [];
     const central = [];
     let offset = 0;
+    let count = 0;
 
-    for (const f of files) {
-      const name = enc.encode(f.name);
-      const data = typeof f.text === 'string' ? enc.encode(f.text) : f.bytes;
+    async function add(entryName, content) {
+      if (count >= CONFIG.ZIP_MAX_ENTRIES) {
+        throw new Error(`ZIP entry limit ${CONFIG.ZIP_MAX_ENTRIES} reached; export with exclude or attachments: false`);
+      }
+      const name = enc.encode(entryName);
+      const data = typeof content === 'string' ? enc.encode(content) : content;
       const crc = crc32(data);
       // Text entries are deflated; binary attachments (images, PDFs, Office) are already compressed → store.
-      const packed = data.length && typeof f.text === 'string' ? await deflateRaw(data) : null;
+      const packed = data.length && typeof content === 'string' ? await deflateRaw(data) : null;
       const useDeflate = packed && packed.length < data.length;
       const payload = useDeflate ? packed : data;
       const method = useDeflate ? 8 : 0;
@@ -377,23 +500,34 @@
       cd.setUint32(38, 0, true);
       cd.setUint32(42, offset, true);
 
-      parts.push(new Uint8Array(local.buffer), name, payload);
+      await sink.write(new Uint8Array(local.buffer));
+      await sink.write(name);
+      await sink.write(payload);
       central.push(new Uint8Array(cd.buffer), name);
       offset += 30 + name.length + payload.length;
+      count++;
+      return payload.length;
     }
 
-    const cdSize = central.reduce((n, p) => n + p.length, 0);
-    const eocd = new DataView(new ArrayBuffer(22));
-    eocd.setUint32(0, 0x06054b50, true);
-    eocd.setUint16(4, 0, true);
-    eocd.setUint16(6, 0, true);
-    eocd.setUint16(8, files.length, true);
-    eocd.setUint16(10, files.length, true);
-    eocd.setUint32(12, cdSize, true);
-    eocd.setUint32(16, offset, true);
-    eocd.setUint16(20, 0, true);
+    /** Write central directory + end record, close the sink; resolves to its Blob/File or null. */
+    async function close() {
+      const cdSize = central.reduce((n, p) => n + p.length, 0);
+      for (const part of central) await sink.write(part);
+      const eocd = new DataView(new ArrayBuffer(22));
+      eocd.setUint32(0, 0x06054b50, true);
+      eocd.setUint16(4, 0, true);
+      eocd.setUint16(6, 0, true);
+      eocd.setUint16(8, count, true);
+      eocd.setUint16(10, count, true);
+      eocd.setUint32(12, cdSize, true);
+      eocd.setUint32(16, offset, true);
+      eocd.setUint16(20, 0, true);
+      await sink.write(new Uint8Array(eocd.buffer));
+      central.length = 0;
+      return sink.close();
+    }
 
-    return new Blob([...parts, ...central, new Uint8Array(eocd.buffer)], { type: 'application/zip' });
+    return { add, close, get count() { return count; }, get bytes() { return offset; }, kind: sink.kind };
   }
 
   function download(blob, filename) {
@@ -425,11 +559,11 @@
   }
 
   /**
-   * List the attachments of one content item, download those within the size
-   * limit into `files` (attachments/<pageId>/<filename>) and return the metadata
+   * List the attachments of one content item, stream those within the size
+   * limit into the zip (attachments/<pageId>/<filename>) and return the metadata
    * rows for the page XML. Oversized or failed downloads stay listed with `skipped`.
    */
-  async function collectAttachments(apiBase, webBase, item, maxBytes, files) {
+  async function collectAttachments(apiBase, webBase, item, maxBytes, zip) {
     const rows = [];
     const usedNames = new Set();
     for (const a of await listAttachments(apiBase, item.id)) {
@@ -452,7 +586,7 @@
           const bytes = await getBytes(url);
           row.path = `attachments/${item.id}/${filename}`;
           row.size = bytes.length;
-          files.push({ name: row.path, bytes });
+          await zip.add(row.path, bytes);
         } catch (err) {
           row.skipped = `error: ${err.message}`.slice(0, 200);
           console.warn(`[cfx] attachment ${a.id} (${a.title}) on ${item.id}: ${err.message}`);
@@ -470,9 +604,9 @@
    * space) the root itself plus all descendants via CQL `ancestor=`.
    * Returns { counts, skipped, expected, excluded } per type.
    */
-  async function countScope(apiBase, spaceKey, types, exclude) {
+  async function countScope(apiBase, spaceKey, types, exclude, rootId) {
     const counts = {};
-    for (const t of types) counts[t] = await countContent(apiBase, spaceKey, t);
+    for (const t of types) counts[t] = await countContent(apiBase, spaceKey, t, rootCql(rootId));
 
     const excluded = [];
     const skipped = {};
@@ -485,13 +619,16 @@
         excluded.push({ id, error: err.message });
         continue;
       }
-      const nested = (root.ancestors || []).some((a) => exclude.includes(String(a.id)));
+      const ancestorIds = (root.ancestors || []).map((a) => String(a.id));
+      const nested = ancestorIds.some((a) => exclude.includes(a));
       const inSpace = !root.space || root.space.key === spaceKey;
+      // The excluded page itself only counts when it lies inside the root scope.
+      const selfInScope = !rootId || id === rootId || ancestorIds.includes(rootId);
       const row = { id, title: root.title, type: root.type, nested, inSpace };
       if (!nested && inSpace) {
         for (const t of types) {
-          const descendants = await countContent(apiBase, spaceKey, t, `ancestor=${id}`);
-          const self = t === root.type ? 1 : 0;
+          const descendants = await countContent(apiBase, spaceKey, t, `ancestor=${id}`, rootCql(rootId));
+          const self = t === root.type && selfInScope ? 1 : 0;
           row[t] = descendants === null ? null : descendants + self;
           if (descendants !== null) skipped[t] = (skipped[t] || 0) + descendants + self;
         }
@@ -510,9 +647,10 @@
     const space = await getJson(`${apiBase}/space/${encodeURIComponent(spaceKey)}`);
     const types = [...(opts.types || ['page']), 'attachment'];
     const exclude = [...new Set((opts.exclude || []).map(String))];
-    const { counts, skipped, expected, excluded } = await countScope(apiBase, spaceKey, types, exclude);
+    const root = resolveRoot(opts.root);
+    const { counts, skipped, expected, excluded } = await countScope(apiBase, spaceKey, types, exclude, root);
 
-    const info = { apiBase, spaceKey, spaceName: space.name, counts, excluded, expected };
+    const info = { apiBase, spaceKey, spaceName: space.name, root: root || null, counts, excluded, expected };
     console.log('[cfx] probe', info);
     for (const t of types) console.log(`[cfx] ${t}: ${counts[t]} in space, ${skipped[t] || 0} excluded → ${expected[t]} to export`);
     return info;
@@ -532,20 +670,27 @@
     const withAttachments = opts.attachments ?? CONFIG.ATTACHMENTS;
     const maxBytes = opts.maxAttachmentBytes ?? CONFIG.MAX_ATTACHMENT_BYTES;
     const exclude = new Set((opts.exclude || []).map(String));
+    const root = resolveRoot(opts.root);
+    const filename = opts.filename || `${spaceKey}${root ? `-${root}` : ''}-${stamp(started)}.zip`;
+
+    // Open the output first: the save dialog needs the user gesture of the console call,
+    // and from here on every entry streams to disk instead of piling up in memory.
+    const sink = await openSink(opts.target, filename);
+    const zip = createZipWriter(sink, started);
+    console.log(`[cfx] writing ${filename} via ${zip.kind}`);
 
     const space = await getJson(`${apiBase}/space/${encodeURIComponent(spaceKey)}`);
-    const ctx = { spaceKey, spaceName: space.name, webBase, crawledAt: started.toISOString(), excluded: [], attachmentCount: 0 };
-    console.log(`[cfx] space ${spaceKey} (${space.name}) via ${apiBase}` +
+    const ctx = { spaceKey, spaceName: space.name, webBase, crawledAt: started.toISOString(), root, excluded: [], attachmentCount: 0 };
+    console.log(`[cfx] space ${spaceKey} (${space.name}) via ${apiBase}${root ? `, subtree of ${root}` : ''}` +
       `${exclude.size ? `, excluding subtree(s) ${[...exclude].join(', ')}` : ''}`);
 
     // Expected sizes up front (space total minus excluded subtrees) so the progress
     // counter runs against the realistic target, not the whole space.
-    const scope = await countScope(apiBase, spaceKey, types, [...exclude]);
+    const scope = await countScope(apiBase, spaceKey, types, [...exclude], root);
     for (const type of types) {
       console.log(`[cfx] ${type}: ${scope.counts[type]} in space, ${scope.skipped[type] || 0} excluded → ${scope.expected[type]} to export`);
     }
 
-    const files = [];
     const entries = [];
     const seen = new Set();
     const excludedRoots = new Map(); // id → { id, title, skipped }
@@ -555,7 +700,7 @@
       const typeStarted = Date.now();
       let n = 0;
       let skippedSoFar = 0;
-      for await (const item of listContent(apiBase, spaceKey, type)) {
+      for await (const item of listContent(apiBase, spaceKey, type, root)) {
         if (seen.has(item.id)) continue; // pagination overlap guard
         seen.add(item.id);
         const ancestors = item.ancestors || [];
@@ -574,9 +719,9 @@
 
         n++;
         const path = `${folder}/${item.id}-${slug(item.title)}.xml`;
-        const attachments = withAttachments ? await collectAttachments(apiBase, webBase, item, maxBytes, files) : [];
+        const attachments = withAttachments ? await collectAttachments(apiBase, webBase, item, maxBytes, zip) : [];
         ctx.attachmentCount += attachments.length;
-        files.push({ name: path, text: buildPageXml(item, ctx, attachments) });
+        await zip.add(path, buildPageXml(item, ctx, attachments));
         entries.push({
           type, id: item.id, parentId: parent ? parent.id : '', title: item.title,
           version: (item.version && item.version.number) ?? '', path, attachments: attachments.length,
@@ -595,20 +740,22 @@
     if (withAttachments) console.log(`[cfx] attachments: ${ctx.attachmentCount}`);
 
     entries.sort((a, b) => a.path.localeCompare(b.path));
-    files.unshift({ name: 'index.xml', text: buildIndexXml(entries, ctx) });
+    await zip.add('index.xml', buildIndexXml(entries, ctx));
 
-    const blob = await buildZip(files, started);
-    const filename = opts.filename || `${spaceKey}-${stamp(started)}.zip`;
-    if (opts.download !== false && hasDom) download(blob, filename);
-    console.log(`[cfx] ${files.length} files, ${(blob.size / 1024 / 1024).toFixed(1)} MB → ${filename}`);
-    return { files, entries, blob, filename };
+    const count = zip.count;
+    const bytes = zip.bytes;
+    const result = await zip.close(); // Blob (memory) / File (opfs) / null (already in the picked file)
+    if (result && opts.download !== false && hasDom) download(result, filename);
+    console.log(`[cfx] ${count} entries, ${(bytes / 1024 / 1024).toFixed(1)} MB → ${filename}` +
+      `${zip.kind === 'file' ? ' (saved)' : zip.kind === 'opfs' ? ' (download started; run cfx.cleanup() once it is saved)' : ''}`);
+    return { entries, count, bytes, filename, target: zip.kind, blob: result };
   }
 
   globalThis.cfx = {
-    probe, run, CONFIG,
+    probe, run, cleanup, CONFIG,
     // exposed for tests
-    buildPageXml, buildIndexXml, buildZip, crc32, slug, safeFileName, listContent, listAttachments,
-    detectApiBase, detectSpaceKey,
+    buildPageXml, buildIndexXml, createZipWriter, sinks, crc32, slug, safeFileName, listContent,
+    listAttachments, detectApiBase, detectSpaceKey, detectPageId,
   };
   if (hasDom) console.log('[cfx] ready — await cfx.probe() or await cfx.run()');
 })();
