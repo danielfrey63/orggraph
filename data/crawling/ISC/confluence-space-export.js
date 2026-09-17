@@ -15,6 +15,7 @@
  *   await cfx.run({ exclude: ['123456'] })     // skip a parent page and its whole subtree
  *   await cfx.run({ root: true })              // only the open page and its descendants
  *   await cfx.run({ root: '123456' })          // only that page and its descendants
+ *   await cfx.run({ attachments: 'referenced' }) // only attachments the page body embeds or links
  *   await cfx.run({ attachments: 'list' })     // no binaries; attachments listed as metadata in the page XML
  *   await cfx.run({ attachments: false })      // page XML only, attachments not even queried (fastest)
  *   await cfx.run({ maxAttachmentBytes: 10 * 1024 * 1024 })
@@ -31,7 +32,9 @@
  *   index.xml                        manifest: page tree (id, parentId, title, path), excluded roots
  *
  * Attachments above maxAttachmentBytes (default 50 MB) or failing to download stay
- * listed in the page XML with a `skipped` attribute.
+ * listed in the page XML with a `skipped` attribute. Every row carries
+ * referenced="true|false" (does the body embed/link it). Confluence lists only
+ * the current version of each attachment, so older versions are never exported.
  *
  * Memory: the ZIP is streamed entry by entry. Default target is a save dialog
  * (File System Access API — the file grows on disk while the export runs); without
@@ -275,6 +278,29 @@
     return webui ? `${webBase}${webui}` : '';
   }
 
+  /** Decode the XML entities Confluence uses in attribute values. */
+  function decodeXmlEntities(s) {
+    return String(s)
+      .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/&amp;/g, '&');
+  }
+
+  /**
+   * Attachment file names referenced by the storage-format body: images, links and
+   * file macros all point at attachments through <ri:attachment ri:filename="…"/>.
+   * References to attachments of other pages (with a nested <ri:page/>) resolve to
+   * names that simply do not occur in this page's attachment list.
+   */
+  function referencedAttachmentNames(body) {
+    const names = new Set();
+    const re = /ri:filename="([^"]*)"/g;
+    let m;
+    while ((m = re.exec(String(body || '')))) names.add(decodeXmlEntities(m[1]));
+    return names;
+  }
+
   /** File name safe for a ZIP entry: no path separators, no control characters. */
   function safeFileName(name) {
     const cleaned = Array.from(String(name || ''), (ch) => {
@@ -322,6 +348,7 @@
     for (const a of attachments) {
       lines.push(`    <attachment id="${esc(a.id)}" filename="${esc(a.filename)}" mediaType="${esc(a.mediaType)}"` +
         ` size="${esc(a.size)}" version="${esc(a.version)}" modified="${esc(a.modified)}"` +
+        ` referenced="${a.referenced ? 'true' : 'false'}"` +
         `${a.path ? ` path="${esc(a.path)}"` : ''}${a.skipped ? ` skipped="${esc(a.skipped)}"` : ''}` +
         ` url="${esc(a.url)}"${a.comment ? ` comment="${esc(a.comment)}"` : ''}/>`);
     }
@@ -582,9 +609,11 @@
    * limit into the zip (attachments/<pageId>/<filename>) and return the metadata
    * rows for the page XML. Oversized or failed downloads stay listed with `skipped`.
    */
-  async function collectAttachments(apiBase, webBase, item, maxBytes, zip, download = true) {
+  async function collectAttachments(apiBase, webBase, item, maxBytes, zip, mode = true) {
     const rows = [];
     const usedNames = new Set();
+    const body = (item.body && item.body.storage && item.body.storage.value) || '';
+    const referenced = referencedAttachmentNames(body);
     for (const a of await listAttachments(apiBase, item.id)) {
       checkStop();
       const ext = a.extensions || {};
@@ -594,12 +623,14 @@
       let filename = safeFileName(a.title);
       if (usedNames.has(filename)) filename = `${a.id}-${filename}`;
       usedNames.add(filename);
+      const isReferenced = referenced.has(a.title);
       const row = {
-        id: a.id, filename, mediaType: ext.mediaType || '', size, url,
+        id: a.id, filename, mediaType: ext.mediaType || '', size, url, referenced: isReferenced,
         version: (a.version && a.version.number) ?? '', modified: (a.version && a.version.when) || '',
         comment: (a.metadata && a.metadata.comment) || ext.comment || '', path: '', skipped: '',
       };
-      if (!download) row.skipped = 'not-requested';
+      if (mode === 'list') row.skipped = 'not-requested';
+      else if (mode === 'referenced' && !isReferenced) row.skipped = 'not-referenced';
       else if (!url) row.skipped = 'no-download-link';
       else if (size > maxBytes) row.skipped = 'size';
       else {
@@ -688,10 +719,13 @@
     const spaceKey = opts.spaceKey || detectSpaceKey();
     if (!spaceKey) throw new Error('No space key: open a page of the space or pass { spaceKey }');
     const types = opts.types || ['page'];
-    // attachments: true = download, 'list' = metadata only, false = do not query at all
+    // attachments: true = download all, 'referenced' = only those the body embeds/links,
+    // 'list' = metadata only, false = do not query at all
     const attachmentMode = opts.attachments ?? CONFIG.ATTACHMENTS;
+    if (![true, false, 'list', 'referenced'].includes(attachmentMode)) {
+      throw new Error(`attachments must be true, 'referenced', 'list' or false — got ${JSON.stringify(attachmentMode)}`);
+    }
     const withAttachments = attachmentMode !== false;
-    const downloadAttachments = attachmentMode === true;
     const maxBytes = opts.maxAttachmentBytes ?? CONFIG.MAX_ATTACHMENT_BYTES;
     const exclude = new Set((opts.exclude || []).map(String));
     const root = resolveRoot(opts.root);
@@ -748,7 +782,7 @@
           n++;
           const path = `${folder}/${item.id}-${slug(item.title)}.xml`;
           const attachments = withAttachments
-            ? await collectAttachments(apiBase, webBase, item, maxBytes, zip, downloadAttachments) : [];
+            ? await collectAttachments(apiBase, webBase, item, maxBytes, zip, attachmentMode) : [];
           ctx.attachmentCount += attachments.length;
           await zip.add(path, buildPageXml(item, ctx, attachments));
           entries.push({
@@ -776,7 +810,11 @@
     ctx.excluded = [...excludedRoots.values()];
     for (const ex of ctx.excluded) console.log(`[cfx] excluded ${ex.id} "${ex.title || ''}": ${ex.skipped} item(s) skipped`);
     for (const id of exclude) if (!excludedRoots.has(id)) console.warn(`[cfx] exclude id ${id} matched nothing`);
-    if (withAttachments) console.log(`[cfx] attachments: ${ctx.attachmentCount}${downloadAttachments ? '' : ' (listed only, no binaries)'}`);
+    if (withAttachments) {
+      const note = attachmentMode === 'list' ? ' (listed only, no binaries)'
+        : attachmentMode === 'referenced' ? ' (only the ones referenced by the page body downloaded)' : '';
+      console.log(`[cfx] attachments: ${ctx.attachmentCount}${note}`);
+    }
 
     entries.sort((a, b) => a.path.localeCompare(b.path));
     await zip.add('index.xml', buildIndexXml(entries, ctx));
@@ -794,7 +832,7 @@
   globalThis.cfx = {
     probe, run, stop, cleanup, CONFIG,
     // exposed for tests
-    buildPageXml, buildIndexXml, createZipWriter, sinks, crc32, slug, safeFileName, listContent,
+    buildPageXml, buildIndexXml, createZipWriter, sinks, crc32, slug, safeFileName, referencedAttachmentNames, listContent,
     listAttachments, detectApiBase, detectSpaceKey, detectPageId,
   };
   if (hasDom) console.log('[cfx] ready — await cfx.probe() or await cfx.run()');
