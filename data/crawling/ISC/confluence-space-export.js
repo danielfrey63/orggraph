@@ -19,6 +19,8 @@
  *   await cfx.run({ maxAttachmentBytes: 10 * 1024 * 1024 })
  *   await cfx.run({ types: ['page', 'blogpost'] })
  *   await cfx.run({ target: 'opfs' })          // 'file' | 'opfs' | 'memory' (default: first that works)
+ *   cfx.stop()                                 // stop a running export; the archive is closed as a
+ *                                              // valid partial ZIP (index.xml carries partial="stopped")
  *   await cfx.cleanup()                        // drop archives left in browser storage (opfs)
  *
  * Archive layout (<spaceKey>[-<rootId>]-<yyyymmdd-hhmm>.zip):
@@ -119,6 +121,20 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // Cooperative stop: cfx.stop() flips the flag, the loops check it before the next
+  // request and run() then closes the archive with what has been written so far.
+  let stopRequested = false;
+  function stop() {
+    stopRequested = true;
+    console.log('[cfx] stop requested — finishing the current item, then closing the archive');
+  }
+  function checkStop() {
+    if (!stopRequested) return;
+    const err = new Error('stopped by cfx.stop()');
+    err.name = 'CfxStop';
+    throw err;
+  }
+
   async function getJson(url, attempt = 0) {
     let res;
     try {
@@ -156,6 +172,7 @@
           `&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${encodeURIComponent(CONFIG.EXPAND)}`
         : `${apiBase}/content?spaceKey=${encodeURIComponent(spaceKey)}&type=${type}` +
           `&status=current&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${encodeURIComponent(CONFIG.EXPAND)}`;
+      checkStop();
       const json = await getJson(url);
       const results = json.results || [];
       for (const item of results) yield item;
@@ -318,7 +335,8 @@
     const lines = [XML_DECL];
     lines.push(`<space key="${esc(ctx.spaceKey)}" name="${esc(ctx.spaceName || '')}"` +
       ` base="${esc(ctx.webBase)}" exportedAt="${esc(ctx.crawledAt)}"${ctx.root ? ` root="${esc(ctx.root)}"` : ''}` +
-      ` count="${entries.length}" attachments="${ctx.attachmentCount ?? 0}">`);
+      ` count="${entries.length}" attachments="${ctx.attachmentCount ?? 0}"` +
+      `${ctx.partial ? ` partial="${esc(ctx.partial)}"` : ''}>`);
     for (const ex of ctx.excluded || []) {
       lines.push(`  <excluded id="${esc(ex.id)}" skipped="${ex.skipped}">${esc(ex.title || '')}</excluded>`);
     }
@@ -567,6 +585,7 @@
     const rows = [];
     const usedNames = new Set();
     for (const a of await listAttachments(apiBase, item.id)) {
+      checkStop();
       const ext = a.extensions || {};
       const size = Number(ext.fileSize ?? 0);
       const downloadLink = a._links && a._links.download;
@@ -694,45 +713,59 @@
     const entries = [];
     const seen = new Set();
     const excludedRoots = new Map(); // id → { id, title, skipped }
-    for (const type of types) {
-      const total = scope.expected[type];
-      const folder = type === 'page' ? 'pages' : `${type}s`;
-      const typeStarted = Date.now();
-      let n = 0;
-      let skippedSoFar = 0;
-      for await (const item of listContent(apiBase, spaceKey, type, root)) {
-        if (seen.has(item.id)) continue; // pagination overlap guard
-        seen.add(item.id);
-        const ancestors = item.ancestors || [];
-        const parent = ancestors.length ? ancestors[ancestors.length - 1] : null;
+    stopRequested = false;
+    let failure = null;
+    try {
+      for (const type of types) {
+        const total = scope.expected[type];
+        const folder = type === 'page' ? 'pages' : `${type}s`;
+        const typeStarted = Date.now();
+        let n = 0;
+        let skippedSoFar = 0;
+        for await (const item of listContent(apiBase, spaceKey, type, root)) {
+          checkStop();
+          if (seen.has(item.id)) continue; // pagination overlap guard
+          seen.add(item.id);
+          const ancestors = item.ancestors || [];
+          const parent = ancestors.length ? ancestors[ancestors.length - 1] : null;
 
-        // Excluded subtree: the page itself or any ancestor is on the exclude list.
-        const hit = exclude.has(String(item.id)) ? item : ancestors.find((a) => exclude.has(String(a.id)));
-        if (hit) {
-          const root = excludedRoots.get(String(hit.id)) || { id: String(hit.id), title: hit.title, skipped: 0 };
-          root.skipped++;
-          skippedSoFar++;
-          if (String(hit.id) === String(item.id)) root.title = item.title;
-          excludedRoots.set(root.id, root);
-          continue;
-        }
+          // Excluded subtree: the page itself or any ancestor is on the exclude list.
+          const hit = exclude.has(String(item.id)) ? item : ancestors.find((a) => exclude.has(String(a.id)));
+          if (hit) {
+            const root = excludedRoots.get(String(hit.id)) || { id: String(hit.id), title: hit.title, skipped: 0 };
+            root.skipped++;
+            skippedSoFar++;
+            if (String(hit.id) === String(item.id)) root.title = item.title;
+            excludedRoots.set(root.id, root);
+            continue;
+          }
 
-        n++;
-        const path = `${folder}/${item.id}-${slug(item.title)}.xml`;
-        const attachments = withAttachments ? await collectAttachments(apiBase, webBase, item, maxBytes, zip) : [];
-        ctx.attachmentCount += attachments.length;
-        await zip.add(path, buildPageXml(item, ctx, attachments));
-        entries.push({
-          type, id: item.id, parentId: parent ? parent.id : '', title: item.title,
-          version: (item.version && item.version.number) ?? '', path, attachments: attachments.length,
-        });
-        if (n % 25 === 0 || n === total) {
-          console.log(`[cfx] ${type} ${n}${total !== null ? `/${total}` : ''}` +
-            `${skippedSoFar ? ` (${skippedSoFar} excluded skipped)` : ''}${eta(typeStarted, n, total)}`);
+          n++;
+          const path = `${folder}/${item.id}-${slug(item.title)}.xml`;
+          const attachments = withAttachments ? await collectAttachments(apiBase, webBase, item, maxBytes, zip) : [];
+          ctx.attachmentCount += attachments.length;
+          await zip.add(path, buildPageXml(item, ctx, attachments));
+          entries.push({
+            type, id: item.id, parentId: parent ? parent.id : '', title: item.title,
+            version: (item.version && item.version.number) ?? '', path, attachments: attachments.length,
+          });
+          if (n % 25 === 0 || n === total) {
+            console.log(`[cfx] ${type} ${n}${total !== null ? `/${total}` : ''}` +
+              `${skippedSoFar ? ` (${skippedSoFar} excluded skipped)` : ''}${eta(typeStarted, n, total)}`);
+          }
         }
+        console.log(`[cfx] ${type}: ${n} exported, ${skippedSoFar} excluded` +
+          `${total !== null && total !== n ? ` (expected ${total} — restricted or moved pages?)` : ''}`);
       }
-      console.log(`[cfx] ${type}: ${n} exported, ${skippedSoFar} excluded` +
-        `${total !== null && total !== n ? ` (expected ${total} — restricted or moved pages?)` : ''}`);
+    } catch (err) {
+      if (err && err.name === 'CfxStop') {
+        ctx.partial = 'stopped';
+        console.warn('[cfx] stopped — closing the archive with what was exported so far');
+      } else {
+        failure = err;
+        ctx.partial = `error: ${err.message}`.slice(0, 300);
+        console.error(`[cfx] failed: ${err.message} — closing the archive with what was exported so far`);
+      }
     }
     ctx.excluded = [...excludedRoots.values()];
     for (const ex of ctx.excluded) console.log(`[cfx] excluded ${ex.id} "${ex.title || ''}": ${ex.skipped} item(s) skipped`);
@@ -748,11 +781,12 @@
     if (result && opts.download !== false && hasDom) download(result, filename);
     console.log(`[cfx] ${count} entries, ${(bytes / 1024 / 1024).toFixed(1)} MB → ${filename}` +
       `${zip.kind === 'file' ? ' (saved)' : zip.kind === 'opfs' ? ' (download started; run cfx.cleanup() once it is saved)' : ''}`);
-    return { entries, count, bytes, filename, target: zip.kind, blob: result };
+    if (failure) throw failure;
+    return { entries, count, bytes, filename, target: zip.kind, blob: result, partial: ctx.partial || null };
   }
 
   globalThis.cfx = {
-    probe, run, cleanup, CONFIG,
+    probe, run, stop, cleanup, CONFIG,
     // exposed for tests
     buildPageXml, buildIndexXml, createZipWriter, sinks, crc32, slug, safeFileName, listContent,
     listAttachments, detectApiBase, detectSpaceKey, detectPageId,
