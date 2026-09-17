@@ -62,7 +62,17 @@
     ATTACHMENTS: true,                    // download attachments into attachments/<pageId>/
     MAX_ATTACHMENT_BYTES: 50 * 1024 * 1024, // larger files are listed as metadata only
     ZIP_MAX_ENTRIES: 65535,               // classic ZIP limit (no ZIP64)
+    WRITE_BUFFER_BYTES: 8 * 1024 * 1024,  // ZIP bytes are handed to the sink in blocks of this size
   };
+
+  // Timing per progress batch (ms), printed with every progress line and then reset.
+  const STATS = { list: 0, listCalls: 0, attachments: 0, zip: 0 };
+  function takeStats() {
+    const s = { ...STATS };
+    STATS.list = 0; STATS.listCalls = 0; STATS.attachments = 0; STATS.zip = 0;
+    return s;
+  }
+  const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
 
   // ---------------------------------------------------------------- environment
 
@@ -177,7 +187,10 @@
         : `${apiBase}/content?spaceKey=${encodeURIComponent(spaceKey)}&type=${type}` +
           `&status=current&start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=${encodeURIComponent(CONFIG.EXPAND)}`;
       checkStop();
+      const t0 = Date.now();
       const json = await getJson(url);
+      STATS.list += Date.now() - t0;
+      STATS.listCalls++;
       const results = json.results || [];
       for (const item of results) yield item;
       const size = json.size ?? results.length;
@@ -501,7 +514,35 @@
     let offset = 0;
     let count = 0;
 
+    // Small writes are coalesced into WRITE_BUFFER_BYTES blocks: every sink.write() is a
+    // round trip (IPC for file/opfs), three per entry would be tens of thousands of them.
+    let chunks = [];
+    let buffered = 0;
+    async function flush() {
+      if (!chunks.length) return;
+      const block = new Uint8Array(buffered);
+      let p = 0;
+      for (const c of chunks) { block.set(c, p); p += c.length; }
+      chunks = [];
+      buffered = 0;
+      await sink.write(block);
+    }
+    async function put(u8) {
+      chunks.push(u8);
+      buffered += u8.length;
+      if (buffered >= CONFIG.WRITE_BUFFER_BYTES) await flush();
+    }
+
     async function add(entryName, content) {
+      const t0 = Date.now();
+      try {
+        return await addEntry(entryName, content);
+      } finally {
+        STATS.zip += Date.now() - t0;
+      }
+    }
+
+    async function addEntry(entryName, content) {
       if (count >= CONFIG.ZIP_MAX_ENTRIES) {
         throw new Error(`ZIP entry limit ${CONFIG.ZIP_MAX_ENTRIES} reached; export with exclude or attachments: false`);
       }
@@ -546,9 +587,9 @@
       cd.setUint32(38, 0, true);
       cd.setUint32(42, offset, true);
 
-      await sink.write(new Uint8Array(local.buffer));
-      await sink.write(name);
-      await sink.write(payload);
+      await put(new Uint8Array(local.buffer));
+      await put(name);
+      await put(payload);
       central.push(new Uint8Array(cd.buffer), name);
       offset += 30 + name.length + payload.length;
       count++;
@@ -558,7 +599,7 @@
     /** Write central directory + end record, close the sink; resolves to its Blob/File or null. */
     async function close() {
       const cdSize = central.reduce((n, p) => n + p.length, 0);
-      for (const part of central) await sink.write(part);
+      for (const part of central) await put(part);
       const eocd = new DataView(new ArrayBuffer(22));
       eocd.setUint32(0, 0x06054b50, true);
       eocd.setUint16(4, 0, true);
@@ -568,7 +609,8 @@
       eocd.setUint32(12, cdSize, true);
       eocd.setUint32(16, offset, true);
       eocd.setUint16(20, 0, true);
-      await sink.write(new Uint8Array(eocd.buffer));
+      await put(new Uint8Array(eocd.buffer));
+      await flush();
       central.length = 0;
       return sink.close();
     }
@@ -781,8 +823,11 @@
 
           n++;
           const path = `${folder}/${item.id}-${slug(item.title)}.xml`;
+          const tAtt = Date.now();
+          const zipBefore = STATS.zip;
           const attachments = withAttachments
             ? await collectAttachments(apiBase, webBase, item, maxBytes, zip, attachmentMode) : [];
+          STATS.attachments += Date.now() - tAtt - (STATS.zip - zipBefore); // network/listing only
           ctx.attachmentCount += attachments.length;
           await zip.add(path, buildPageXml(item, ctx, attachments));
           entries.push({
@@ -790,8 +835,10 @@
             version: (item.version && item.version.number) ?? '', path, attachments: attachments.length,
           });
           if (n % 25 === 0 || n === total) {
+            const s = takeStats();
             console.log(`[cfx] ${type} ${n}${total !== null ? `/${total}` : ''}` +
-              `${skippedSoFar ? ` (${skippedSoFar} excluded skipped)` : ''}${eta(typeStarted, n, total)}`);
+              `${skippedSoFar ? ` (${skippedSoFar} excluded skipped)` : ''}${eta(typeStarted, n, total)}` +
+              ` | last batch: list ${secs(s.list)} (${s.listCalls} calls), attachments ${secs(s.attachments)}, zip ${secs(s.zip)}`);
           }
         }
         console.log(`[cfx] ${type}: ${n} exported, ${skippedSoFar} excluded` +
