@@ -15,7 +15,8 @@
  *   await cfx.run({ exclude: ['123456'] })     // skip a parent page and its whole subtree
  *   await cfx.run({ root: true })              // only the open page and its descendants
  *   await cfx.run({ root: '123456' })          // only that page and its descendants
- *   await cfx.run({ attachments: false })      // page XML only, attachments listed as metadata
+ *   await cfx.run({ attachments: 'list' })     // no binaries; attachments listed as metadata in the page XML
+ *   await cfx.run({ attachments: false })      // page XML only, attachments not even queried (fastest)
  *   await cfx.run({ maxAttachmentBytes: 10 * 1024 * 1024 })
  *   await cfx.run({ types: ['page', 'blogpost'] })
  *   await cfx.run({ target: 'opfs' })          // 'file' | 'opfs' | 'memory' (default: first that works)
@@ -581,7 +582,7 @@
    * limit into the zip (attachments/<pageId>/<filename>) and return the metadata
    * rows for the page XML. Oversized or failed downloads stay listed with `skipped`.
    */
-  async function collectAttachments(apiBase, webBase, item, maxBytes, zip) {
+  async function collectAttachments(apiBase, webBase, item, maxBytes, zip, download = true) {
     const rows = [];
     const usedNames = new Set();
     for (const a of await listAttachments(apiBase, item.id)) {
@@ -598,7 +599,8 @@
         version: (a.version && a.version.number) ?? '', modified: (a.version && a.version.when) || '',
         comment: (a.metadata && a.metadata.comment) || ext.comment || '', path: '', skipped: '',
       };
-      if (!url) row.skipped = 'no-download-link';
+      if (!download) row.skipped = 'not-requested';
+      else if (!url) row.skipped = 'no-download-link';
       else if (size > maxBytes) row.skipped = 'size';
       else {
         try {
@@ -686,7 +688,10 @@
     const spaceKey = opts.spaceKey || detectSpaceKey();
     if (!spaceKey) throw new Error('No space key: open a page of the space or pass { spaceKey }');
     const types = opts.types || ['page'];
-    const withAttachments = opts.attachments ?? CONFIG.ATTACHMENTS;
+    // attachments: true = download, 'list' = metadata only, false = do not query at all
+    const attachmentMode = opts.attachments ?? CONFIG.ATTACHMENTS;
+    const withAttachments = attachmentMode !== false;
+    const downloadAttachments = attachmentMode === true;
     const maxBytes = opts.maxAttachmentBytes ?? CONFIG.MAX_ATTACHMENT_BYTES;
     const exclude = new Set((opts.exclude || []).map(String));
     const root = resolveRoot(opts.root);
@@ -742,7 +747,8 @@
 
           n++;
           const path = `${folder}/${item.id}-${slug(item.title)}.xml`;
-          const attachments = withAttachments ? await collectAttachments(apiBase, webBase, item, maxBytes, zip) : [];
+          const attachments = withAttachments
+            ? await collectAttachments(apiBase, webBase, item, maxBytes, zip, downloadAttachments) : [];
           ctx.attachmentCount += attachments.length;
           await zip.add(path, buildPageXml(item, ctx, attachments));
           entries.push({
@@ -770,7 +776,7 @@
     ctx.excluded = [...excludedRoots.values()];
     for (const ex of ctx.excluded) console.log(`[cfx] excluded ${ex.id} "${ex.title || ''}": ${ex.skipped} item(s) skipped`);
     for (const id of exclude) if (!excludedRoots.has(id)) console.warn(`[cfx] exclude id ${id} matched nothing`);
-    if (withAttachments) console.log(`[cfx] attachments: ${ctx.attachmentCount}`);
+    if (withAttachments) console.log(`[cfx] attachments: ${ctx.attachmentCount}${downloadAttachments ? '' : ' (listed only, no binaries)'}`);
 
     entries.sort((a, b) => a.path.localeCompare(b.path));
     await zip.add('index.xml', buildIndexXml(entries, ctx));
