@@ -249,20 +249,29 @@ IndexedDB; der `fetch` auf `./env.json` ist nur noch Fallback für den
 Dev-Server-Betrieb ohne importierte Daten. «Daten zurücksetzen» im Footer
 leert den lokalen Speicher wieder.
 
-## Mandanten-Repo und Hub (E77)
+## Mandanten-Repo (E77)
 
-Der Tenant-Store der App ist die Wahrheit; dauerhaft aufbewahrt wird er pro Mandant in einem eigenen privaten Git-Repo, age-verschlüsselt, nach dem PMO-Muster: bei jeder Änderung Commit und Push, bei jedem Laden ein Pull. Das erledigt ein lokaler Hub, weil die Datei-App kein Git ausführen kann (Python 3 mit `pyrage`, sonst nur Standardbibliothek).
+Der Tenant-Store der App ist die Wahrheit; dauerhaft aufbewahrt wird er pro Mandant in einem eigenen privaten Git-Repo auf Gitea, age-verschlüsselt, nach dem PMO-Muster: bei jeder Änderung ein Commit, bei jedem Laden ein Pull. Die App macht das selbst über die Gitea-Contents-API (jeder Push ist ein serverseitiger Git-Commit), age läuft im Browser (`vendor/age.min.js`, `npm run bundle:age`). Kein lokaler Prozess nötig.
 
-```bash
-python tools/hub.py keygen                                              # age-Identität der Maschine (einmalig)
-python tools/hub.py init sem --repo ../orggraph-sem --remote <url> --create-remote --app .
-python tools/hub.py serve                                               # http://127.0.0.1:8644/t/sem/
-python tools/hub.py push sem <datei>                                    # manuell: Tenant-ZIP oder Rohdatei
-python tools/hub.py restore sem --out <ordner>                          # entschlüsseln
-python tools/hub.py status
+Bindung pro Profil über den Footer («Repo: nicht verbunden») oder das Drop-Overlay («Mandanten-Repo verbinden…»): Gitea-URL, Owner/Repo, Branch, Zugriffs-Token (Scope: Repository schreiben) und die age-Identität (privater Schlüssel; der öffentliche muss in `config.json` des Repos als Empfänger stehen, bei leerem Repo schreibt der erste Commit sie). «Verbindung testen» zeigt Repo, Empfänger und letzten Export; «Speichern und abgleichen» holt den Stand sofort. Voraussetzung auf dem Server: CORS für die API, in `app.ini` von Gitea:
+
+```ini
+[cors]
+ENABLED = true
+ALLOW_DOMAIN = *
+METHODS = GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+HEADERS = Content-Type,User-Agent,Authorization,Accept
 ```
 
-Unter `/t/<mandant>/` zieht die App beim Laden den Stand aus dem Repo (ein neuerer Export wird 1:1 ins Profil gestellt) und pusht nach jedem Import, Intake und jeder View-Änderung; der Footer zeigt den Sync-Stand. Das Repo enthält `config.json` (Empfänger), `manifest.json` (Klartext), `tenant.zip.age` (Registry, env, Store) und `snapshots/*.age` (Rohdateien). Unter `file://` läuft kein Sync: dort exportiert «Grafik exportieren → Mandant exportieren (ZIP)» den ganzen Mandanten, und ein gedropptes Tenant-ZIP stellt ihn wieder her.
+Das Repo enthält `config.json` (Empfänger), `manifest.json` (Klartext, diffbar), `tenant.zip.age` (Registry, env, Store) und `snapshots/*.age` (Rohdateien). Manuell: «Grafik exportieren → Mandant exportieren (ZIP)» lädt den ganzen Mandanten, ein gedropptes Tenant-ZIP stellt ihn wieder her; `tools/tenant_repo.py` (Python 3 + `pyrage`) legt Repos an und spielt Dateien über einen lokalen Klon ein oder aus:
+
+```bash
+python tools/tenant_repo.py keygen                                     # age-Identität der Maschine (einmalig)
+python tools/tenant_repo.py init sem --repo ../orggraph-sem --remote <url> --create-remote
+python tools/tenant_repo.py push sem <datei>                           # Tenant-ZIP oder Rohdatei
+python tools/tenant_repo.py restore sem --out <ordner>                 # entschlüsseln
+python tools/tenant_repo.py status
+```
 
 ## Nutzung
 

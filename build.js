@@ -1,6 +1,7 @@
 // Assemble the single-file deliverable index.html from template + sources.
 // Zero dependencies — runs with plain `node build.js`, no npm install needed.
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import vm from 'node:vm';
 
 const read = (path) => readFileSync(path, 'utf8');
 
@@ -23,6 +24,16 @@ const app = readdirSync('src/sections')
   .map((f) => stripModuleSyntax(read(`src/sections/${f}`)))
   .join('');
 
+// The sections share ONE classic-script scope: a top-level name declared twice
+// (or an import line the strip missed, e.g. CRLF endings) is a SyntaxError that
+// would only surface as a blank app in the browser — parse here instead.
+try {
+  new vm.Script(app, { filename: 'index.html (app sections)' });
+} catch (err) {
+  console.error(`BUILD ABORTED — the concatenated app does not parse: ${err.message}`);
+  process.exit(1);
+}
+
 // The build is fully independent of versioning: it only inlines CSS, D3 and the
 // app sections. The app version lives solely in index.template.html's
 // APP_VERSION constant (bumped by the AI-Toolbox hooks) and the header renders
@@ -30,6 +41,7 @@ const app = readdirSync('src/sections')
 const out = read('index.template.html')
   .replace('@@CSS@@', () => read('src/styles.css'))
   .replace('@@D3@@', () => read('vendor/d3.v7.min.js'))
+  .replace('@@AGE@@', () => read('vendor/age.min.js'))   // age-encryption (E77), bundled by `npm run bundle:age`
   .replace('@@APP@@', () => app);
 
 writeFileSync('index.html', out);

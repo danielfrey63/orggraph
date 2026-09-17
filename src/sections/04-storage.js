@@ -23,7 +23,9 @@ export const LIST_PREFIX = 'og2List::';
 // Per-tenant UI session state (FR-8.14): persisted reactively on every
 // parameter change, restored on boot before the first render.
 export const KEY_UI_STATE = 'og2UiState';
-// Hub sync marker (E77): which tenant export this profile last pulled/pushed.
+// Tenant repo binding (E77): Gitea URL, owner/repo, branch, token, age identity
+// of this profile — and the sync marker: which export it last pulled/pushed.
+export const KEY_REPO = 'og2Repo';
 export const KEY_SYNC = 'og2Sync';
 
 let _dbPromise = null;

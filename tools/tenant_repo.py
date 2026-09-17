@@ -1,34 +1,26 @@
 #!/usr/bin/env python3
-"""OrgGraph tenant hub (E77): one private git repo per tenant, age-encrypted.
+"""OrgGraph tenant repo CLI (E77): one private git repo per tenant, age-encrypted.
 
-The single-file app cannot run git. This local hub does what the PMO does for
-its tasks: every change is committed and pushed, every reload pulls first.
+The app itself syncs through Gitea's REST API (see src/sections/35-og2-sync.js):
+every change is a server-side commit, every load pulls. This CLI is the
+command-line side of the same repo — creating it, archiving files by hand,
+decrypting a stand, checking the state — through a local clone.
 
-  python tools/hub.py keygen                       # age identity (once per machine)
-  python tools/hub.py init sem --repo <dir> [--remote <url>] [--create-remote]
-  python tools/hub.py serve [--port 8644]          # http://127.0.0.1:8644/t/sem/
-  python tools/hub.py push sem <file>              # manual: tenant ZIP or raw snapshot
-  python tools/hub.py restore sem --out <dir>      # decrypt the latest tenant ZIP + snapshots
-  python tools/hub.py status sem
-  python tools/hub.py selftest
+  python tools/tenant_repo.py keygen                     # age identity (once per machine)
+  python tools/tenant_repo.py init sem --repo <dir> [--remote <url>] [--create-remote]
+  python tools/tenant_repo.py push sem <file>            # tenant ZIP (export) or raw snapshot
+  python tools/tenant_repo.py restore sem --out <dir>    # decrypt the latest tenant ZIP + snapshots
+  python tools/tenant_repo.py status [sem]
+  python tools/tenant_repo.py selftest
 
-Tenant repo layout:
+Tenant repo layout (identical to what the app writes through the API):
   config.json        tenant name + age recipients (plain)
   manifest.json      what the latest export is (plain, diffable)
   tenant.zip.age     the app's tenant export (registry, env, store, manifest)
   snapshots/*.age    raw inputs the app received (crawl exports, lists)
 
-HTTP (served for the app; CORS open, bound to 127.0.0.1):
-  GET  /t/<tenant>/                      the app (index.html of the configured app root)
-  GET  /api/hub                          { tenants, version }
-  GET  /api/tenants/<t>/manifest         pulls first (throttled), then the manifest
-  GET  /api/tenants/<t>/export           the decrypted tenant ZIP
-  PUT  /api/tenants/<t>/export?reason=…  store a new tenant ZIP: encrypt, commit, push
-  POST /api/tenants/<t>/snapshots/<name> archive a raw input: encrypt, commit, push
-
 Config: ~/.config/orggraph/hub.json (override: ORGGRAPH_HUB_CONFIG)
-  { "identity": "<age key file>", "app": "<app repo root>", "port": 8644,
-    "tenants": { "sem": { "repo": "<tenant repo dir>" } } }
+  { "identity": "<age key file>", "tenants": { "sem": { "repo": "<tenant repo dir>" } } }
 """
 import argparse
 import io
@@ -42,12 +34,11 @@ import threading
 import time
 import zipfile
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-HUB_VERSION = 'hub-1'
+CLI_VERSION = 'tenant-repo-1'
 CONFIG_PATH = Path(os.environ.get('ORGGRAPH_HUB_CONFIG', str(Path.home() / '.config' / 'orggraph' / 'hub.json')))
 DEFAULT_IDENTITY = Path.home() / '.config' / 'orggraph' / 'age-identity.txt'
 PULL_THROTTLE_S = 20
@@ -69,7 +60,7 @@ def log(msg):
 def load_config():
     if CONFIG_PATH.exists():
         return json.loads(CONFIG_PATH.read_text(encoding='utf-8'))
-    return {'identity': str(DEFAULT_IDENTITY), 'app': None, 'port': 8644, 'tenants': {}}
+    return {'identity': str(DEFAULT_IDENTITY), 'tenants': {}}
 
 
 def save_config(cfg):
@@ -226,7 +217,7 @@ class Tenant:
         with self.lock:
             self.pull()
             self.encrypt_write(EXPORT_FILE, zip_bytes)
-            manifest = {**inner, 'tenant': self.name, 'storedAt': now_iso(), 'reason': reason, 'bytes': len(zip_bytes), 'hub': HUB_VERSION}
+            manifest = {**inner, 'tenant': self.name, 'storedAt': now_iso(), 'reason': reason, 'bytes': len(zip_bytes), 'cli': CLI_VERSION}
             (self.repo / MANIFEST_FILE).write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
             git = self.commit_push(f'{self.name}: {reason} ({inner.get("exportedAt", "?")})')
             return {**manifest, 'git': git}
@@ -268,8 +259,8 @@ plus die Rohdateien, die die App bekommen hat — alles age-verschlüsselt, nur 
 | `tenant.zip.age` | Tenant-Export der App: `registry.json`, `env.json`, `store.json`, `manifest.json` |
 | `snapshots/*.age` | Rohdateien (Crawl-Exporte, Listen), wie sie die App erhalten hat |
 
-Pflege ausschliesslich über `tools/hub.py` des App-Repos: `serve` bedient die App (Pull bei jedem Laden, Commit und Push bei
-jeder Änderung), `push` und `restore` sind der manuelle Weg. Entschlüsseln kann nur, wer eine Identität zu einem der Empfänger hat.
+Die App schreibt und liest dieses Repo direkt über die Gitea-API (Pull bei jedem Laden, Commit nach jeder Änderung);
+`tools/tenant_repo.py` des App-Repos ist der manuelle Weg (`push`, `restore`, `status`). Entschlüsseln kann nur, wer eine Identität zu einem der Empfänger hat.
 """
 
 
@@ -317,8 +308,6 @@ def cmd_init(args):
         (repo / 'README.md').write_text(README.format(name=args.name), encoding='utf-8')
     cfg.setdefault('tenants', {})[args.name] = {'repo': str(repo)}
     cfg['identity'] = str(ident_path)
-    if args.app:
-        cfg['app'] = str(Path(args.app).resolve())
     save_config(cfg)
     t = Tenant(args.name, repo, ident_path)
     if args.remote:
@@ -329,132 +318,6 @@ def cmd_init(args):
     res = t.commit_push(f'{args.name}: tenant repo initialised')
     log(f'Mandant «{args.name}» in {repo} — Empfänger {pub} — {res}')
     log(f'Konfiguration: {CONFIG_PATH}')
-
-
-# ---- HTTP -----------------------------------------------------------------------
-class HubHandler(BaseHTTPRequestHandler):
-    server_version = f'OrgGraphHub/{HUB_VERSION}'
-    hub = None  # set by serve()
-
-    def log_message(self, fmt, *args):  # quieter default log
-        log(f'{self.address_string()} {fmt % args}')
-
-    def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, PUT, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-
-    def _json(self, code, obj):
-        body = json.dumps(obj, ensure_ascii=False).encode('utf-8')
-        self.send_response(code)
-        self._cors()
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _bytes(self, code, data, ctype):
-        self.send_response(code)
-        self._cors()
-        self.send_header('Content-Type', ctype)
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(data)
-
-    def _body(self):
-        n = int(self.headers.get('Content-Length') or 0)
-        return self.rfile.read(n) if n else b''
-
-    def _tenant(self, name):
-        t = self.hub['tenants'].get(unquote(name))
-        if not t:
-            self._json(404, {'error': f'unbekannter Mandant: {name}'})
-        return t
-
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self._cors()
-        self.end_headers()
-
-    def do_GET(self):
-        u = urlparse(self.path)
-        path = u.path
-        m = re.fullmatch(r'/api/tenants/([^/]+)/(manifest|export)', path)
-        try:
-            if path == '/api/hub':
-                return self._json(200, {'version': HUB_VERSION, 'tenants': sorted(self.hub['tenants'].keys()), 'app': self.hub['app'] is not None})
-            if m:
-                t = self._tenant(m.group(1))
-                if not t:
-                    return None
-                if m.group(2) == 'manifest':
-                    pulled = t.pull(force='force' in parse_qs(u.query))
-                    return self._json(200, {'tenant': t.name, 'manifest': t.manifest(), 'pull': pulled})
-                data = t.export_bytes()
-                if data is None:
-                    return self._json(404, {'error': 'noch kein Export im Repo'})
-                return self._bytes(200, data, 'application/zip')
-            # the app: /t/<tenant>/ (any tenant path serves the same single file)
-            if self.hub['app'] and (path in ('/', '/index.html') or re.fullmatch(r'/t/[^/]+/(index\.html)?', path)):
-                return self._bytes(200, Path(self.hub['app']).read_bytes(), 'text/html; charset=utf-8')
-            return self._json(404, {'error': 'not found'})
-        except Exception as err:  # noqa: BLE001
-            log(f'GET {path}: {err}')
-            return self._json(500, {'error': str(err)})
-
-    def do_PUT(self):
-        u = urlparse(self.path)
-        m = re.fullmatch(r'/api/tenants/([^/]+)/export', u.path)
-        if not m:
-            return self._json(404, {'error': 'not found'})
-        t = self._tenant(m.group(1))
-        if not t:
-            return None
-        reason = (parse_qs(u.query).get('reason') or ['export'])[0][:120]
-        try:
-            return self._json(200, t.store_export(self._body(), reason))
-        except Exception as err:  # noqa: BLE001
-            log(f'PUT export {t.name}: {err}')
-            return self._json(400, {'error': str(err)})
-
-    def do_POST(self):
-        u = urlparse(self.path)
-        m = re.fullmatch(r'/api/tenants/([^/]+)/snapshots/([^/]+)', u.path)
-        if not m:
-            return self._json(404, {'error': 'not found'})
-        t = self._tenant(m.group(1))
-        if not t:
-            return None
-        try:
-            return self._json(200, t.store_snapshot(unquote(m.group(2)), self._body()))
-        except Exception as err:  # noqa: BLE001
-            log(f'POST snapshot {t.name}: {err}')
-            return self._json(400, {'error': str(err)})
-
-
-def cmd_serve(args):
-    cfg = load_config()
-    tenants = tenants_from(cfg)
-    if not tenants:
-        sys.exit('keine Mandanten konfiguriert — zuerst: hub.py init <name> --repo <dir>')
-    app = cfg.get('app')
-    app_file = Path(app) / 'index.html' if app else None
-    if app_file and not app_file.exists():
-        log(f'App nicht gefunden: {app_file} — nur API')
-        app_file = None
-    for t in tenants.values():
-        log(f'{t.name}: {t.repo} — pull: {t.pull(force=True)}')
-    HubHandler.hub = {'tenants': tenants, 'app': str(app_file) if app_file else None}
-    port = args.port or cfg.get('port') or 8644
-    srv = ThreadingHTTPServer(('127.0.0.1', port), HubHandler)
-    for name in tenants:
-        log(f'http://127.0.0.1:{port}/t/{name}/')
-    try:
-        srv.serve_forever()
-    except KeyboardInterrupt:
-        log('beendet')
 
 
 def cmd_push(args):
@@ -544,11 +407,7 @@ def main(argv=None):
     p.add_argument('--repo', required=True)
     p.add_argument('--remote')
     p.add_argument('--create-remote', action='store_true', help='Remote über die Gitea-API anlegen (Zugangsdaten aus git credential)')
-    p.add_argument('--app', help='App-Repo-Wurzel (index.html), das serve ausliefert')
     p.set_defaults(fn=cmd_init)
-    p = sub.add_parser('serve', help='Hub für die App starten')
-    p.add_argument('--port', type=int)
-    p.set_defaults(fn=cmd_serve)
     p = sub.add_parser('push', help='Tenant-ZIP oder Rohdatei manuell einspielen')
     p.add_argument('name')
     p.add_argument('file')

@@ -228,8 +228,13 @@ export function ensureOverlay(onFiles) {
         nachgereicht werden.
       </p>
       <button class="dz-pick" type="button">Dateien auswählen…</button>
+      <button class="dz-pick dz-repo" type="button" title="Stand aus dem privaten Mandanten-Repo holen (E77)">Mandanten-Repo verbinden…</button>
     </div>`;
   hydrateIcons(overlay);
+  // E77: a fresh machine binds the repo first and pulls the stand from there
+  overlay.querySelector('.dz-repo').addEventListener('click', () => {
+    if (typeof og2OpenRepoDialog === 'function') og2OpenRepoDialog();
+  });
 
   const pick = overlay.querySelector('.dz-pick');
   pick.addEventListener('click', () => {

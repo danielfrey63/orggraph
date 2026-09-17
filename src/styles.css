@@ -1071,6 +1071,7 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   cursor: pointer;
   transition: background 0.15s;
 }
+.dz-pick.dz-repo { margin-left: 8px; background: var(--control-bg); color: var(--text); border: 1px solid var(--control-border); }
 .dz-pick:hover {
   background: var(--button-primary-hover);
 }
@@ -1352,6 +1353,7 @@ body.dz-dragging::after {
 
 /* Hub sync indicator in the footer (E77) */
 .sync-status { cursor: pointer; }
+.sync-status[data-level="off"] { color: var(--text-muted); }
 .sync-status[data-level="busy"] { color: var(--text-muted); font-style: italic; }
 .sync-status[data-level="ok"] { color: var(--text-strong); }
 .sync-status[data-level="warn"] { color: var(--accent-color); }
