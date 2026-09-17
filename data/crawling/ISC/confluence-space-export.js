@@ -454,17 +454,16 @@
     return rows;
   }
 
-  async function probe(opts = {}) {
-    const apiBase = opts.apiBase || detectApiBase();
-    const spaceKey = opts.spaceKey || detectSpaceKey();
-    if (!spaceKey) throw new Error('No space key: open a page of the space or pass { spaceKey }');
-    const space = await getJson(`${apiBase}/space/${encodeURIComponent(spaceKey)}`);
-    const types = [...(opts.types || ['page']), 'attachment'];
-    const exclude = [...new Set((opts.exclude || []).map(String))];
+  /**
+   * Count what the space holds per type and what the exclude list removes:
+   * for every excluded root (not nested in another excluded root, inside the
+   * space) the root itself plus all descendants via CQL `ancestor=`.
+   * Returns { counts, skipped, expected, excluded } per type.
+   */
+  async function countScope(apiBase, spaceKey, types, exclude) {
     const counts = {};
     for (const t of types) counts[t] = await countContent(apiBase, spaceKey, t);
 
-    // Excluded subtrees: the root itself (if of a counted type) plus every descendant (CQL ancestor=).
     const excluded = [];
     const skipped = {};
     for (const id of exclude) {
@@ -491,6 +490,17 @@
     }
     const expected = {};
     for (const t of types) expected[t] = counts[t] === null ? null : counts[t] - (skipped[t] || 0);
+    return { counts, skipped, expected, excluded };
+  }
+
+  async function probe(opts = {}) {
+    const apiBase = opts.apiBase || detectApiBase();
+    const spaceKey = opts.spaceKey || detectSpaceKey();
+    if (!spaceKey) throw new Error('No space key: open a page of the space or pass { spaceKey }');
+    const space = await getJson(`${apiBase}/space/${encodeURIComponent(spaceKey)}`);
+    const types = [...(opts.types || ['page']), 'attachment'];
+    const exclude = [...new Set((opts.exclude || []).map(String))];
+    const { counts, skipped, expected, excluded } = await countScope(apiBase, spaceKey, types, exclude);
 
     const info = { apiBase, spaceKey, spaceName: space.name, counts, excluded, expected };
     console.log('[cfx] probe', info);
@@ -518,14 +528,22 @@
     console.log(`[cfx] space ${spaceKey} (${space.name}) via ${apiBase}` +
       `${exclude.size ? `, excluding subtree(s) ${[...exclude].join(', ')}` : ''}`);
 
+    // Expected sizes up front (space total minus excluded subtrees) so the progress
+    // counter runs against the realistic target, not the whole space.
+    const scope = await countScope(apiBase, spaceKey, types, [...exclude]);
+    for (const type of types) {
+      console.log(`[cfx] ${type}: ${scope.counts[type]} in space, ${scope.skipped[type] || 0} excluded → ${scope.expected[type]} to export`);
+    }
+
     const files = [];
     const entries = [];
     const seen = new Set();
     const excludedRoots = new Map(); // id → { id, title, skipped }
     for (const type of types) {
-      const total = await countContent(apiBase, spaceKey, type);
+      const total = scope.expected[type];
       const folder = type === 'page' ? 'pages' : `${type}s`;
       let n = 0;
+      let skippedSoFar = 0;
       for await (const item of listContent(apiBase, spaceKey, type)) {
         if (seen.has(item.id)) continue; // pagination overlap guard
         seen.add(item.id);
@@ -537,6 +555,7 @@
         if (hit) {
           const root = excludedRoots.get(String(hit.id)) || { id: String(hit.id), title: hit.title, skipped: 0 };
           root.skipped++;
+          skippedSoFar++;
           if (String(hit.id) === String(item.id)) root.title = item.title;
           excludedRoots.set(root.id, root);
           continue;
@@ -551,9 +570,12 @@
           type, id: item.id, parentId: parent ? parent.id : '', title: item.title,
           version: (item.version && item.version.number) ?? '', path, attachments: attachments.length,
         });
-        if (n % 25 === 0 || n === total) console.log(`[cfx] ${type} ${n}${total ? `/${total}` : ''}`);
+        if (n % 25 === 0 || n === total) {
+          console.log(`[cfx] ${type} ${n}${total !== null ? `/${total}` : ''}${skippedSoFar ? ` (${skippedSoFar} excluded skipped)` : ''}`);
+        }
       }
-      console.log(`[cfx] ${type}: ${n} exported${total !== null && total !== n ? ` (search counted ${total})` : ''}`);
+      console.log(`[cfx] ${type}: ${n} exported, ${skippedSoFar} excluded` +
+        `${total !== null && total !== n ? ` (expected ${total} — restricted or moved pages?)` : ''}`);
     }
     ctx.excluded = [...excludedRoots.values()];
     for (const ex of ctx.excluded) console.log(`[cfx] excluded ${ex.id} "${ex.title || ''}": ${ex.skipped} item(s) skipped`);
