@@ -8,15 +8,24 @@
  * storage-format body) in a small XML document and downloads everything as one
  * ZIP archive. Nothing is written to Confluence.
  *
- *   await cfx.probe()                          // detect base URL + space, count pages
+ *   await cfx.probe()                          // detect base URL + space, count pages/attachments
+ *   await cfx.probe({ exclude: ['123456'] })   // …minus the excluded subtree(s): expected export size
  *   await cfx.run()                            // export the space of the open page
  *   await cfx.run({ spaceKey: 'ISC' })         // export a specific space
+ *   await cfx.run({ exclude: ['123456'] })     // skip a parent page and its whole subtree
+ *   await cfx.run({ attachments: false })      // page XML only, attachments listed as metadata
+ *   await cfx.run({ maxAttachmentBytes: 10 * 1024 * 1024 })
  *   await cfx.run({ types: ['page', 'blogpost'] })
  *
  * Archive layout (<spaceKey>-<yyyymmdd-hhmm>.zip):
- *   index.xml                        manifest with the page tree (id, parentId, title, path)
- *   pages/<id>-<slug>.xml            one document per page
+ *   index.xml                        manifest: page tree (id, parentId, title, path), excluded roots
+ *   pages/<id>-<slug>.xml            one document per page, incl. its attachment list
+ *   attachments/<pageId>/<filename>  the attachment binaries (images, PDFs, Office, …)
  *   blogposts/<id>-<slug>.xml        only with types: ['page', 'blogpost']
+ *
+ * Attachments above maxAttachmentBytes (default 50 MB) or failing to download stay
+ * listed in the page XML with a `skipped` attribute. The whole ZIP is assembled in
+ * browser memory, so keep an eye on the attachment volume of very large spaces.
  *
  * The storage-format body is embedded verbatim inside a CDATA section: Confluence
  * storage XHTML uses HTML entities (&nbsp;, …) and ac:/ri: prefixes that would
@@ -35,6 +44,9 @@
     MAX_RETRIES: 4,         // on 429 / 5xx / network errors
     RETRY_BASE_MS: 1500,
     EXPAND: 'body.storage,version,ancestors,metadata.labels,history,space',
+    ATTACHMENTS: true,                    // download attachments into attachments/<pageId>/
+    MAX_ATTACHMENT_BYTES: 50 * 1024 * 1024, // larger files are listed as metadata only
+    ZIP_MAX_ENTRIES: 65535,               // classic ZIP limit (no ZIP64)
   };
 
   // ---------------------------------------------------------------- environment
@@ -114,14 +126,59 @@
     }
   }
 
-  async function countContent(apiBase, spaceKey, type) {
-    const cql = `space="${spaceKey.replace(/"/g, '\\"')}" and type=${type}`;
+  /** Fetch a binary (attachment download) with the session; retries like getJson. */
+  async function getBytes(url, attempt = 0) {
+    let res;
+    try {
+      res = await fetch(url, { credentials: 'include' });
+    } catch (err) {
+      if (attempt >= CONFIG.MAX_RETRIES) throw err;
+      await sleep(CONFIG.RETRY_BASE_MS * 2 ** attempt);
+      return getBytes(url, attempt + 1);
+    }
+    if (res.ok) return new Uint8Array(await res.arrayBuffer());
+    if ((res.status === 429 || res.status >= 500) && attempt < CONFIG.MAX_RETRIES) {
+      const retryAfter = Number(res.headers.get('Retry-After')) * 1000;
+      await sleep(retryAfter > 0 ? retryAfter : CONFIG.RETRY_BASE_MS * 2 ** attempt);
+      return getBytes(url, attempt + 1);
+    }
+    throw new Error(`HTTP ${res.status} for ${url}`);
+  }
+
+  /** All attachments of one content item (paginated). */
+  async function listAttachments(apiBase, contentId) {
+    const out = [];
+    let start = 0;
+    for (;;) {
+      const url = `${apiBase}/content/${encodeURIComponent(contentId)}/child/attachment` +
+        `?start=${start}&limit=${CONFIG.PAGE_SIZE}&expand=version,metadata`;
+      const json = await getJson(url);
+      const results = json.results || [];
+      out.push(...results);
+      const size = json.size ?? results.length;
+      const hasNext = Boolean(json._links && json._links.next) || size >= (json.limit ?? CONFIG.PAGE_SIZE);
+      if (!hasNext || size === 0) return out;
+      start += size;
+      await sleep(CONFIG.DELAY_MS);
+    }
+  }
+
+  /** totalSize of a CQL query, or null when the search endpoint does not answer. */
+  async function countCql(apiBase, cql) {
     try {
       const json = await getJson(`${apiBase}/content/search?cql=${encodeURIComponent(cql)}&limit=0`);
       return typeof json.totalSize === 'number' ? json.totalSize : null;
     } catch {
       return null;
     }
+  }
+
+  function spaceCql(spaceKey, type, extra) {
+    return `space="${spaceKey.replace(/"/g, '\\"')}" and type=${type}${extra ? ` and ${extra}` : ''}`;
+  }
+
+  async function countContent(apiBase, spaceKey, type, extra) {
+    return countCql(apiBase, spaceCql(spaceKey, type, extra));
   }
 
   // ---------------------------------------------------------------- xml
@@ -157,8 +214,22 @@
     return webui ? `${webBase}${webui}` : '';
   }
 
-  /** Build the XML document for one content item. */
-  function buildPageXml(item, ctx) {
+  /** File name safe for a ZIP entry: no path separators, no control characters. */
+  function safeFileName(name) {
+    const cleaned = Array.from(String(name || ''), (ch) => {
+      const c = ch.charCodeAt(0);
+      if (c < 32 || ch === '/' || ch === '\\' || ch === ':' || ch === '*' || ch === '?' ||
+        ch === '"' || ch === '<' || ch === '>' || ch === '|') return '_';
+      return ch;
+    }).join('').trim();
+    return cleaned || 'unnamed';
+  }
+
+  /**
+   * Build the XML document for one content item. `attachments` is the list
+   * prepared by collectAttachments (may be empty).
+   */
+  function buildPageXml(item, ctx, attachments = []) {
     const ancestors = item.ancestors || [];
     const parent = ancestors.length ? ancestors[ancestors.length - 1] : null;
     const labels = (item.metadata && item.metadata.labels && item.metadata.labels.results) || [];
@@ -186,6 +257,14 @@
     lines.push('  <labels>');
     for (const l of labels) lines.push(`    <label prefix="${esc(l.prefix || '')}">${esc(l.name)}</label>`);
     lines.push('  </labels>');
+    lines.push('  <attachments>');
+    for (const a of attachments) {
+      lines.push(`    <attachment id="${esc(a.id)}" filename="${esc(a.filename)}" mediaType="${esc(a.mediaType)}"` +
+        ` size="${esc(a.size)}" version="${esc(a.version)}" modified="${esc(a.modified)}"` +
+        `${a.path ? ` path="${esc(a.path)}"` : ''}${a.skipped ? ` skipped="${esc(a.skipped)}"` : ''}` +
+        ` url="${esc(a.url)}"${a.comment ? ` comment="${esc(a.comment)}"` : ''}/>`);
+    }
+    lines.push('  </attachments>');
     lines.push(`  <body representation="storage">${cdata(body)}</body>`);
     lines.push(`</${item.type || 'page'}>\n`);
     return lines.join('\n');
@@ -195,10 +274,14 @@
   function buildIndexXml(entries, ctx) {
     const lines = [XML_DECL];
     lines.push(`<space key="${esc(ctx.spaceKey)}" name="${esc(ctx.spaceName || '')}"` +
-      ` base="${esc(ctx.webBase)}" exportedAt="${esc(ctx.crawledAt)}" count="${entries.length}">`);
+      ` base="${esc(ctx.webBase)}" exportedAt="${esc(ctx.crawledAt)}" count="${entries.length}"` +
+      ` attachments="${ctx.attachmentCount ?? 0}">`);
+    for (const ex of ctx.excluded || []) {
+      lines.push(`  <excluded id="${esc(ex.id)}" skipped="${ex.skipped}">${esc(ex.title || '')}</excluded>`);
+    }
     for (const e of entries) {
       lines.push(`  <${e.type} id="${esc(e.id)}"${e.parentId ? ` parentId="${esc(e.parentId)}"` : ''}` +
-        ` version="${esc(e.version)}" path="${esc(e.path)}">${esc(e.title)}</${e.type}>`);
+        ` version="${esc(e.version)}" attachments="${e.attachments}" path="${esc(e.path)}">${esc(e.title)}</${e.type}>`);
     }
     lines.push('</space>\n');
     return lines.join('\n');
@@ -243,6 +326,9 @@
    * offers CompressionStream('deflate-raw'), otherwise stored. Names are UTF-8 (flag bit 11).
    */
   async function buildZip(files, now = new Date()) {
+    if (files.length > CONFIG.ZIP_MAX_ENTRIES) {
+      throw new Error(`ZIP would have ${files.length} entries (limit ${CONFIG.ZIP_MAX_ENTRIES}); export with exclude or attachments: false`);
+    }
     const enc = new TextEncoder();
     const { time, date } = dosDateTime(now);
     const parts = [];
@@ -251,9 +337,10 @@
 
     for (const f of files) {
       const name = enc.encode(f.name);
-      const data = typeof f.text === 'string' ? enc.encode(f.text) : f.text;
+      const data = typeof f.text === 'string' ? enc.encode(f.text) : f.bytes;
       const crc = crc32(data);
-      const packed = data.length ? await deflateRaw(data) : null;
+      // Text entries are deflated; binary attachments (images, PDFs, Office) are already compressed → store.
+      const packed = data.length && typeof f.text === 'string' ? await deflateRaw(data) : null;
       const useDeflate = packed && packed.length < data.length;
       const payload = useDeflate ? packed : data;
       const method = useDeflate ? 8 : 0;
@@ -327,16 +414,87 @@
     return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}-${p(d.getUTCHours())}${p(d.getUTCMinutes())}`;
   }
 
+  /**
+   * List the attachments of one content item, download those within the size
+   * limit into `files` (attachments/<pageId>/<filename>) and return the metadata
+   * rows for the page XML. Oversized or failed downloads stay listed with `skipped`.
+   */
+  async function collectAttachments(apiBase, webBase, item, maxBytes, files) {
+    const rows = [];
+    const usedNames = new Set();
+    for (const a of await listAttachments(apiBase, item.id)) {
+      const ext = a.extensions || {};
+      const size = Number(ext.fileSize ?? 0);
+      const downloadLink = a._links && a._links.download;
+      const url = downloadLink ? `${webBase}${downloadLink}` : '';
+      let filename = safeFileName(a.title);
+      if (usedNames.has(filename)) filename = `${a.id}-${filename}`;
+      usedNames.add(filename);
+      const row = {
+        id: a.id, filename, mediaType: ext.mediaType || '', size, url,
+        version: (a.version && a.version.number) ?? '', modified: (a.version && a.version.when) || '',
+        comment: (a.metadata && a.metadata.comment) || ext.comment || '', path: '', skipped: '',
+      };
+      if (!url) row.skipped = 'no-download-link';
+      else if (size > maxBytes) row.skipped = 'size';
+      else {
+        try {
+          const bytes = await getBytes(url);
+          row.path = `attachments/${item.id}/${filename}`;
+          row.size = bytes.length;
+          files.push({ name: row.path, bytes });
+        } catch (err) {
+          row.skipped = `error: ${err.message}`.slice(0, 200);
+          console.warn(`[cfx] attachment ${a.id} (${a.title}) on ${item.id}: ${err.message}`);
+        }
+        await sleep(CONFIG.DELAY_MS);
+      }
+      rows.push(row);
+    }
+    return rows;
+  }
+
   async function probe(opts = {}) {
     const apiBase = opts.apiBase || detectApiBase();
     const spaceKey = opts.spaceKey || detectSpaceKey();
     if (!spaceKey) throw new Error('No space key: open a page of the space or pass { spaceKey }');
     const space = await getJson(`${apiBase}/space/${encodeURIComponent(spaceKey)}`);
-    const types = opts.types || ['page'];
+    const types = [...(opts.types || ['page']), 'attachment'];
+    const exclude = [...new Set((opts.exclude || []).map(String))];
     const counts = {};
     for (const t of types) counts[t] = await countContent(apiBase, spaceKey, t);
-    const info = { apiBase, spaceKey, spaceName: space.name, counts };
+
+    // Excluded subtrees: the root itself (if of a counted type) plus every descendant (CQL ancestor=).
+    const excluded = [];
+    const skipped = {};
+    for (const id of exclude) {
+      let root;
+      try {
+        root = await getJson(`${apiBase}/content/${encodeURIComponent(id)}?expand=ancestors,space`);
+      } catch (err) {
+        console.warn(`[cfx] exclude ${id}: ${err.message}`);
+        excluded.push({ id, error: err.message });
+        continue;
+      }
+      const nested = (root.ancestors || []).some((a) => exclude.includes(String(a.id)));
+      const inSpace = !root.space || root.space.key === spaceKey;
+      const row = { id, title: root.title, type: root.type, nested, inSpace };
+      if (!nested && inSpace) {
+        for (const t of types) {
+          const descendants = await countContent(apiBase, spaceKey, t, `ancestor=${id}`);
+          const self = t === root.type ? 1 : 0;
+          row[t] = descendants === null ? null : descendants + self;
+          if (descendants !== null) skipped[t] = (skipped[t] || 0) + descendants + self;
+        }
+      }
+      excluded.push(row);
+    }
+    const expected = {};
+    for (const t of types) expected[t] = counts[t] === null ? null : counts[t] - (skipped[t] || 0);
+
+    const info = { apiBase, spaceKey, spaceName: space.name, counts, excluded, expected };
     console.log('[cfx] probe', info);
+    for (const t of types) console.log(`[cfx] ${t}: ${counts[t]} in space, ${skipped[t] || 0} excluded → ${expected[t]} to export`);
     return info;
   }
 
@@ -351,14 +509,19 @@
     const spaceKey = opts.spaceKey || detectSpaceKey();
     if (!spaceKey) throw new Error('No space key: open a page of the space or pass { spaceKey }');
     const types = opts.types || ['page'];
+    const withAttachments = opts.attachments ?? CONFIG.ATTACHMENTS;
+    const maxBytes = opts.maxAttachmentBytes ?? CONFIG.MAX_ATTACHMENT_BYTES;
+    const exclude = new Set((opts.exclude || []).map(String));
 
     const space = await getJson(`${apiBase}/space/${encodeURIComponent(spaceKey)}`);
-    const ctx = { spaceKey, spaceName: space.name, webBase, crawledAt: started.toISOString() };
-    console.log(`[cfx] space ${spaceKey} (${space.name}) via ${apiBase}`);
+    const ctx = { spaceKey, spaceName: space.name, webBase, crawledAt: started.toISOString(), excluded: [], attachmentCount: 0 };
+    console.log(`[cfx] space ${spaceKey} (${space.name}) via ${apiBase}` +
+      `${exclude.size ? `, excluding subtree(s) ${[...exclude].join(', ')}` : ''}`);
 
     const files = [];
     const entries = [];
     const seen = new Set();
+    const excludedRoots = new Map(); // id → { id, title, skipped }
     for (const type of types) {
       const total = await countContent(apiBase, spaceKey, type);
       const folder = type === 'page' ? 'pages' : `${type}s`;
@@ -366,19 +529,36 @@
       for await (const item of listContent(apiBase, spaceKey, type)) {
         if (seen.has(item.id)) continue; // pagination overlap guard
         seen.add(item.id);
-        n++;
         const ancestors = item.ancestors || [];
         const parent = ancestors.length ? ancestors[ancestors.length - 1] : null;
+
+        // Excluded subtree: the page itself or any ancestor is on the exclude list.
+        const hit = exclude.has(String(item.id)) ? item : ancestors.find((a) => exclude.has(String(a.id)));
+        if (hit) {
+          const root = excludedRoots.get(String(hit.id)) || { id: String(hit.id), title: hit.title, skipped: 0 };
+          root.skipped++;
+          if (String(hit.id) === String(item.id)) root.title = item.title;
+          excludedRoots.set(root.id, root);
+          continue;
+        }
+
+        n++;
         const path = `${folder}/${item.id}-${slug(item.title)}.xml`;
-        files.push({ name: path, text: buildPageXml(item, ctx) });
+        const attachments = withAttachments ? await collectAttachments(apiBase, webBase, item, maxBytes, files) : [];
+        ctx.attachmentCount += attachments.length;
+        files.push({ name: path, text: buildPageXml(item, ctx, attachments) });
         entries.push({
           type, id: item.id, parentId: parent ? parent.id : '', title: item.title,
-          version: (item.version && item.version.number) ?? '', path,
+          version: (item.version && item.version.number) ?? '', path, attachments: attachments.length,
         });
         if (n % 25 === 0 || n === total) console.log(`[cfx] ${type} ${n}${total ? `/${total}` : ''}`);
       }
       console.log(`[cfx] ${type}: ${n} exported${total !== null && total !== n ? ` (search counted ${total})` : ''}`);
     }
+    ctx.excluded = [...excludedRoots.values()];
+    for (const ex of ctx.excluded) console.log(`[cfx] excluded ${ex.id} "${ex.title || ''}": ${ex.skipped} item(s) skipped`);
+    for (const id of exclude) if (!excludedRoots.has(id)) console.warn(`[cfx] exclude id ${id} matched nothing`);
+    if (withAttachments) console.log(`[cfx] attachments: ${ctx.attachmentCount}`);
 
     entries.sort((a, b) => a.path.localeCompare(b.path));
     files.unshift({ name: 'index.xml', text: buildIndexXml(entries, ctx) });
@@ -393,7 +573,8 @@
   globalThis.cfx = {
     probe, run, CONFIG,
     // exposed for tests
-    buildPageXml, buildIndexXml, buildZip, crc32, slug, listContent, detectApiBase, detectSpaceKey,
+    buildPageXml, buildIndexXml, buildZip, crc32, slug, safeFileName, listContent, listAttachments,
+    detectApiBase, detectSpaceKey,
   };
   if (hasDom) console.log('[cfx] ready — await cfx.probe() or await cfx.run()');
 })();
