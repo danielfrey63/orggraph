@@ -36,7 +36,7 @@ export const CSS_NUMBER_DEFAULTS = {
   '--viewport-fit-pad': 20,
   '--radial-fallback-radius': 40,
   '--root-spacing-radius-factor': 1.5,
-  '--tooltip-cursor-offset': 12,
+  '--tooltip-corner-margin': 12,
     '--toast-fade-ms': 300,
   '--depth-pulse-ms': 300,
     '--node-hover-tolerance': 6,
@@ -207,8 +207,9 @@ export function getNodeFillByLevel(node) {
   }
 }
 
-export function clustersAtPoint(p) {
-  // Sammle OEs mit ihren IDs und Labels
+// Clusters under a point, innermost (deepest) first, with their ids — the id
+// is what the hover context queries need (FR-7.9).
+export function clusterItemsAtPoint(p) {
   const orgItems = [];
   for (const [oid, poly] of clusterPolygons.entries()) {
     if (!allowedOrgs.has(oid)) continue;
@@ -222,9 +223,11 @@ export function clustersAtPoint(p) {
   
   // Sortiere nach Tiefe absteigend (höhere Tiefe = kleinere OE kommt zuerst)
   orgItems.sort((a, b) => b.depth - a.depth || a.label.localeCompare(b.label));
-  
-  // Gib nur die Labels zurück
-  return orgItems.map(item => item.label);
+  return orgItems;
+}
+
+export function clustersAtPoint(p) {
+  return clusterItemsAtPoint(p).map((item) => item.label);
 }
 
 export function computeClusterPolygon(nodes, pad) {
@@ -268,11 +271,23 @@ export function ensureTooltip() {
   tooltipEl.className = 'cluster-tooltip';
   document.body.appendChild(tooltipEl);
 }
+// The tooltip carries the view's context tree (FR-7.9), so it can grow tall —
+// it sits in the free upper corner opposite the pointer (E78) instead of
+// covering the very spot being hovered.
+export function tooltipCorner(x, viewportWidth) {
+  return x > viewportWidth / 2 ? 'left' : 'right';
+}
 export function showTooltip(x, y, lines) {
-  const offset = cssNumber('--tooltip-cursor-offset');
+  const margin = cssNumber('--tooltip-corner-margin');
   tooltipEl.textContent = lines.join('\n');
-  tooltipEl.style.left = `${x + offset}px`;
-  tooltipEl.style.top = `${y + offset}px`;
+  tooltipEl.style.top = `${margin}px`;
+  if (tooltipCorner(x, window.innerWidth) === 'left') {
+    tooltipEl.style.left = `${margin}px`;
+    tooltipEl.style.right = 'auto';
+  } else {
+    tooltipEl.style.right = `${margin}px`;
+    tooltipEl.style.left = 'auto';
+  }
   tooltipEl.style.display = 'block';
 }
 export function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
@@ -304,9 +319,10 @@ export function updateDebugZoomDisplay() {
  * @param {Array} visibleOrgs - Array von sichtbaren OE-Labels am Cursor
  * @returns {Array} Array von Tooltip-Zeilen
  */
-export function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
+export function buildNodeTooltipLines(nodeId, nodeLabel, visibleOrgs = []) {
   const lines = [];
-  const node = byId.get(String(personId));
+  const personId = String(nodeId);
+  const node = byId.get(personId);
 
   // Header: registry type name instead of a fixed emoji (FR-4.2a); legacy
   // structural tags keep a neutral header.
@@ -350,32 +366,54 @@ export function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
     }
   }
 
-  // Ring badges of this node (grouped '<Typ>::<Label>' keys)
-  if (personId && personAttributes.has(personId)) {
-    const attrs = personAttributes.get(personId);
-    let hasAttributes = false;
-    for (const [attrName, attrValue] of attrs.entries()) {
-      if (activeAttributes.has(attrName)) {
-        if (!hasAttributes) lines.push('Ringe:');
-        const displayValue = attrValue && attrValue !== '1' ? `: ${attrValue}` : '';
-        lines.push(`  • ${attrName}${displayValue}`);
-        hasAttributes = true;
-      }
-    }
-  }
+  // Relations the view does not draw, as an indented tree (FR-7.9/E78). The
+  // sections come from the view's `context` queries — or, when it declares
+  // none, from the queries derived from its path, which reproduce the v1
+  // "Ringe"/"Zugehörigkeiten" sections without any type knowledge here.
+  lines.push(...buildContextLines(personId, node));
 
-  // Cluster memberships: at the cursor and the full upward chain
-  const allPersonOrgs = findAllPersonOrgs(personId);
+  // Clusters under the cursor: a display fact, not a graph relation.
   if (visibleOrgs.length > 0) {
     lines.push('Am Cursor:');
     visibleOrgs.forEach(org => lines.push(`  • ${org}`));
   }
-  if (allPersonOrgs.length > 0) {
-    lines.push('Zugehörigkeiten:');
-    allPersonOrgs.forEach(org => lines.push(`  • ${org}`));
-  }
 
   return lines;
+}
+
+// Context sections of one node, already through the privacy gate (E48): the
+// engine hands back raw labels, masking and display ordering happen here.
+export function buildContextLines(nodeId, node) {
+  if (typeof og2Active !== 'function' || !og2Active() || !og2State()) return [];
+  let sections = [];
+  try {
+    sections = og2ContextSections(og2State(), nodeId, node && node.type);
+  } catch (err) {
+    console.warn('[og2] context query failed', err);
+    return [];
+  }
+  const lines = [];
+  for (const section of sections) {
+    const rendered = renderContextEntries(section.entries);
+    if (!rendered.length) continue;
+    lines.push(`${section.label}:`);
+    lines.push(...rendered);
+    if (section.more) lines.push('  … weitere ausgeblendet');
+  }
+  return lines;
+}
+
+// Entry tree → indented bullet lines; siblings are sorted by the label the
+// user actually sees, which only exists after masking.
+export function renderContextEntries(entries, depth = 0) {
+  const out = [];
+  const labelled = entries.map((e) => ({ ...e, text: String(getDisplayLabel({ id: e.id, type: e.type, label: e.label })) }));
+  labelled.sort((a, b) => a.text.localeCompare(b.text, 'de'));
+  for (const entry of labelled) {
+    out.push(`${'  '.repeat(depth + 1)}• ${entry.text}`);
+    out.push(...renderContextEntries(entry.children || [], depth + 1));
+  }
+  return out;
 }
 
 /**
@@ -404,18 +442,19 @@ export function handleClusterHover(event, svgSel) {
     }
   }
   
-  // Verwende die sortierte clustersAtPoint Funktion
-  const hits = clustersAtPoint(p);
-  
+  const items = clusterItemsAtPoint(p);
+  const hits = items.map((item) => item.label);
+
   let lines = [];
-  
-  // Person information or cluster information
+
   if (nodeLabel) {
-    lines = buildPersonTooltipLines(personId, nodeLabel, hits);
-  } else if (hits.length) {
-    // Display cluster information with header
-    lines.push('Cluster:');
-    hits.forEach(hit => lines.push(`  • ${hit}`));
+    lines = buildNodeTooltipLines(personId, nodeLabel, hits);
+  } else if (items.length) {
+    // A cluster is a node too (FR-7.9): the innermost one under the cursor
+    // gets the full tooltip incl. its own context sections, the enclosing
+    // ones stay the plain "at the cursor" list.
+    const [innermost, ...enclosing] = items;
+    lines = buildNodeTooltipLines(innermost.id, innermost.label, enclosing.map((item) => item.label));
   }
   
   if (lines.length) {
@@ -426,73 +465,6 @@ export function handleClusterHover(event, svgSel) {
 }
 
 // Color mapping for OEs (harmonious palette)
-/**
- * Finds all organizational units a person belongs to
- * @param {string} personId - ID of the person
- * @returns {string[]} - Array of organization labels ordered by hierarchy (smallest/lowest unit first)
- */
-export function findAllPersonOrgs(personId) {
-  if (!personId || !raw || !Array.isArray(raw.links) || !Array.isArray(raw.orgs)) return [];
-
-  const pid = String(personId);
-  const orgIds = new Set(raw.orgs.map(o => String(o.id)));
-
-  // Basis-OEs der Person: direkte Person->Org Kanten
-  const baseOrgs = new Set();
-  for (const link of raw.links) {
-    if (!link) continue;
-    const s = idOf(link.source);
-    const t = idOf(link.target);
-    if (s === pid && orgIds.has(t)) {
-      baseOrgs.add(t);
-    }
-  }
-
-  // Alle OEs entlang der Aufwärts-Kette (Basis-OE + alle Eltern) einsammeln
-  const orgMap = new Map(); // label -> { id, depth }
-
-  // Tiefe innerhalb der OE-Hierarchie cachen (Abstand zur Wurzel)
-  const depthCache = new Map();
-  const computeDepth = (oid) => {
-    const key = String(oid);
-    if (depthCache.has(key)) return depthCache.get(key);
-    let d = 0;
-    let cur = key;
-    const seen = new Set();
-    while (orgParent.has(cur) && !seen.has(cur)) {
-      seen.add(cur);
-      cur = orgParent.get(cur);
-      d++;
-    }
-    depthCache.set(key, d);
-    return d;
-  };
-
-  for (const baseId of baseOrgs) {
-    let cur = String(baseId);
-    const chainSeen = new Set();
-    while (cur && !chainSeen.has(cur)) {
-      chainSeen.add(cur);
-      const node = byId.get(cur);
-      if (node && node.type === 'org') {
-        const label = node.label || cur;
-        if (!orgMap.has(label)) {
-          orgMap.set(label, { id: cur, depth: computeDepth(cur) });
-        }
-      }
-      cur = orgParent.get(cur);
-    }
-  }
-
-  // Nach Tiefe sortieren (kleinere/basisnähere OEs haben eine höhere Tiefe)
-  return Array.from(orgMap.values())
-    .sort((a, b) => b.depth - a.depth || String(a.id).localeCompare(String(b.id)))
-    .map(item => {
-      const node = byId.get(String(item.id));
-      return getDisplayLabel(node, item.depth);
-    });
-}
-
 export function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; } return h>>>0; }
 export const orgColorCache = new Map();
 

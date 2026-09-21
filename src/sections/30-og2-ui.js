@@ -3,7 +3,7 @@
 // §1.5), translation of stock + projection into the globals the layout/render
 // machinery consumes (§9.2), and the reactive apply path (FR-8.11).
 import { KEY_STORE, KEY_STORE_PART_PREFIX, KEY_REGISTRY, KEY_ENV, KEY_UI_STATE, getStoredText, getStoredJson, getPendingSnapshots, putStored, delStored, looksLikeRegistry, looksLikeSnapshot } from './04-storage.js';
-import { deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff, og2CreateLegendSelection, og2NextLegendSelection } from './29-og2-app.js';
+import { deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, createOg2State, og2ActiveView, og2Project, og2BuildGlobalsData, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff, og2CreateLegendSelection, og2NextLegendSelection, og2InvalidateContext } from './29-og2-app.js';
 import { createTenantStore } from './23-og2-store.js';
 import { importSnapshotAsync } from './26-og2-import.js';
 import { validateViews } from './27-og2-path.js';
@@ -798,6 +798,10 @@ export function og2ApplyFromUI(triggerSource = 'unknown') {
   // pruned afterwards — the E67 cap budget belongs to the visible scene
   // (AK 103); temporarily shown subtrees rejoin the projection.
   og2.excludedIds = og2EffectiveHiddenIds();
+  // Hover context is derived from the same stock (FR-7.9): drop its cache
+  // whenever the scene is rebuilt, so an import or a time change never leaves
+  // a stale tree behind.
+  og2InvalidateContext();
   const res = og2.diff ? og2ProjectDiff(og2, og2.diff.t1, og2.diff.t2) : og2Project(og2);
   const projection = res.projection;
   og2.lastDiff = res.diff || null;

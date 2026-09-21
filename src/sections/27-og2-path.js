@@ -138,25 +138,11 @@ export function validateView(view, registry) {
   const nodeTypes = registry.nodeTypes || {};
   const edgeTypes = registry.edgeTypes || {};
 
+  // Types and hop endpoints (shared with the context queries, FR-7.9).
+  checkHopTypes(parsed, nodeTypes, edgeTypes, errors, 'path');
+
   const checkNode = (node, prevVisible) => {
-    if (!isPathSafeTypeName(node.type) || !nodeTypes[node.type]) {
-      errors.push(`unknown node type "${node.type}" (not in tenant registry)`);
-    }
     for (const hop of node.hops) {
-      const decl = edgeTypes[hop.edgeType];
-      if (!decl) {
-        errors.push(`unknown edge type "${hop.edgeType}" (not in tenant registry)`);
-      } else {
-        // <--E-- B : stored edge points from B (source) to the LEFT node
-        // (target); --E--> B : stored edge points from the left node to B.
-        const [fromType, toType] = hop.dir === '<--' ? [hop.target.type, node.type] : [node.type, hop.target.type];
-        if (nodeTypes[fromType] && !endpointAllows(decl.from, fromType)) {
-          errors.push(`hop ${node.type} ${hop.dir}${hop.edgeType}: "${fromType}" is no valid from-type of "${hop.edgeType}"`);
-        }
-        if (nodeTypes[toType] && !endpointAllows(decl.to, toType)) {
-          errors.push(`hop ${node.type} ${hop.dir}${hop.edgeType}: "${toType}" is no valid to-type of "${hop.edgeType}"`);
-        }
-      }
       // only node/cluster stations count as ring attachment targets (E21)
       checkNode(hop.target, node.render === 'node' || node.render === 'cluster' ? true : prevVisible);
     }
@@ -236,7 +222,93 @@ export function validateView(view, registry) {
     }
   }
 
-  return { ok: errors.length === 0, errors, parsed };
+  // Hover context queries (FR-7.9/E78): same grammar and registry rules as
+  // `path`, but they never render a scene — no roots, no __auto__, no ring
+  // attachment constraint (E21 is a layout concern; in the tooltip a ring
+  // station is an ordinary tree entry). An invalid query invalidates the view.
+  const contextParsed = [];
+  if (view.context !== undefined) {
+    if (!Array.isArray(view.context) || view.context.length === 0) {
+      errors.push('context must be a non-empty array of { label, path }');
+    } else {
+      const seenLabels = new Set();
+      view.context.forEach((query, i) => {
+        const at = `context[${i}]`;
+        if (!query || typeof query !== 'object' || Array.isArray(query)) { errors.push(`${at} must be an object { label, path }`); return; }
+        for (const key of Object.keys(query)) {
+          if (!['label', 'path', 'limit'].includes(key)) errors.push(`${at}: unknown key "${key}" (known: label, path, limit)`);
+        }
+        if (typeof query.label !== 'string' || !query.label) errors.push(`${at}.label must be a non-empty string`);
+        else if (seenLabels.has(query.label)) errors.push(`${at}.label "${query.label}" is used twice`);
+        else seenLabels.add(query.label);
+        if (query.limit !== undefined && (!Number.isInteger(query.limit) || query.limit < 1)) {
+          errors.push(`${at}.limit must be a positive integer`);
+        }
+        if (typeof query.path !== 'string' || !query.path) { errors.push(`${at}.path must be a non-empty string`); return; }
+        let qParsed = null;
+        try {
+          qParsed = parsePathExpression(query.path);
+        } catch (err) {
+          errors.push(`${at} path grammar: ${err.message}`);
+          return;
+        }
+        const before = errors.length;
+        checkHopTypes(qParsed, nodeTypes, edgeTypes, errors, at);
+        if (errors.length === before) contextParsed.push({ label: query.label, limit: query.limit, parsed: qParsed });
+      });
+    }
+  }
+
+  return { ok: errors.length === 0, errors, parsed, contextParsed };
+}
+
+// Type and endpoint checks of a parsed path, shared by `path` and the context
+// queries (FR-7.9). Ring attachment (E21) and __auto__ (E45) are scene-only
+// concerns and stay in validateView.
+function checkHopTypes(node, nodeTypes, edgeTypes, errors, at) {
+  if (!isPathSafeTypeName(node.type) || !nodeTypes[node.type]) {
+    errors.push(`${at}: unknown node type "${node.type}" (not in tenant registry)`);
+  }
+  for (const hop of node.hops) {
+    const decl = edgeTypes[hop.edgeType];
+    if (!decl) {
+      errors.push(`${at}: unknown edge type "${hop.edgeType}" (not in tenant registry)`);
+    } else {
+      const [fromType, toType] = hop.dir === '<--' ? [hop.target.type, node.type] : [node.type, hop.target.type];
+      if (nodeTypes[fromType] && !endpointAllows(decl.from, fromType)) {
+        errors.push(`${at}: hop ${node.type} ${hop.dir}${hop.edgeType}: "${fromType}" is no valid from-type of "${hop.edgeType}"`);
+      }
+      if (nodeTypes[toType] && !endpointAllows(decl.to, toType)) {
+        errors.push(`${at}: hop ${node.type} ${hop.dir}${hop.edgeType}: "${toType}" is no valid to-type of "${hop.edgeType}"`);
+      }
+    }
+    checkHopTypes(hop.target, nodeTypes, edgeTypes, errors, at);
+  }
+}
+
+// Fallback context queries derived from the view path (E78): one section per
+// ring hop and per cluster hop starting at the anchor, so the v1 tooltip
+// sections "Ringe" and "Zugehörigkeiten" survive without type knowledge in the
+// renderer. A cluster section keeps the cluster's transitive self-hop (the
+// upward chain), but drops everything else hanging off it.
+export function derivedContextQueries(parsed) {
+  const out = [];
+  if (!parsed) return out;
+  for (const hop of parsed.hops) {
+    if (hop.selfHop) continue;
+    const target = hop.target;
+    const isRing = target.render === 'ring:prev' || target.render === 'ring:next';
+    const isCluster = target.render === 'cluster';
+    if (!isRing && !isCluster) continue;
+    const keptHops = isCluster ? target.hops.filter((h) => h.selfHop) : [];
+    const query = {
+      type: parsed.type,
+      render: 'node',
+      hops: [{ dir: hop.dir, edgeType: hop.edgeType, selfHop: false, target: { ...target, render: 'node', hops: keptHops } }],
+    };
+    out.push({ label: target.type, parsed: query, derived: true });
+  }
+  return out;
 }
 
 // Validate a whole VIEWS object (FR-7.1a): invalid views are rejected with a
@@ -247,7 +319,18 @@ export function validateViews(views, registry) {
   const rejected = {};
   for (const [name, view] of Object.entries(views || {})) {
     const res = validateView(view, registry);
-    if (res.ok) valid[name] = { ...view, parsed: res.parsed };
+    // Views without `context` fall back to the queries derived from the path
+    // (E78) — resolved once here so the hover path never re-derives them.
+    // The resolved queries live in their OWN field: `context` stays the raw
+    // declaration, exactly like `path` survives next to `parsed`, so a
+    // validated view can be re-validated (the intake offer does that).
+    if (res.ok) {
+      valid[name] = {
+        ...view,
+        parsed: res.parsed,
+        contextQueries: res.contextParsed && res.contextParsed.length ? res.contextParsed : derivedContextQueries(res.parsed),
+      };
+    }
     else rejected[name] = res.errors;
   }
   return { valid, rejected, anyValid: Object.keys(valid).length > 0 };

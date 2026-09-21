@@ -3,8 +3,10 @@ import {
   getNodeFillByLevel,
   clustersAtPoint,
   getActiveAncestorChain,
-  buildPersonTooltipLines,
-  findAllPersonOrgs,
+  buildNodeTooltipLines,
+  buildContextLines,
+  renderContextEntries,
+  clusterItemsAtPoint,
   orgDepth,
 } from '../src/sections/08-color-geometry.js';
 import { getDisplayLabel } from '../src/sections/06-pseudo-labels.js';
@@ -97,41 +99,38 @@ describe('clustersAtPoint', () => {
     ]);
     expect(clustersAtPoint([0, 0])).toEqual([]);
   });
+
+  // FR-7.9: the hover context needs the cluster ID, not just its label
+  it('exposes the cluster ids alongside the labels, deepest first', () => {
+    globalThis.allowedOrgs = new Set(['o1', 'o3']);
+    globalThis.clusterPolygons = new Map([
+      ['o1', square(0, 0, 100)],
+      ['o3', square(0, 0, 10)],
+    ]);
+    expect(clusterItemsAtPoint([0, 0]).map((i) => i.id)).toEqual(['o3', 'o1']);
+    expect(clusterItemsAtPoint([0, 0]).map((i) => i.label)).toEqual(clustersAtPoint([0, 0]));
+  });
 });
 
-describe('findAllPersonOrgs', () => {
-  it('returns the full upward org chain, base org first', () => {
-    expect(findAllPersonOrgs('p1')).toEqual(['Team', 'Division', 'Company']);
-  });
-
-  it('returns empty for missing person or malformed state', () => {
-    expect(findAllPersonOrgs(null)).toEqual([]);
-    expect(findAllPersonOrgs('ghost')).toEqual([]);
-  });
-});
-
-describe('buildPersonTooltipLines', () => {
-  it('starts with the person header and lists all org memberships', () => {
-    const lines = buildPersonTooltipLines('p1', 'Alice');
+describe('buildNodeTooltipLines', () => {
+  it('starts with the person header', () => {
+    const lines = buildNodeTooltipLines('p1', 'Alice');
     expect(lines[0]).toBe('Alice'); // FR-4.2a: no emoji, registry type name when typed
-    expect(lines).toContain('Zugehörigkeiten:');
-    expect(lines).toContain('  • Team');
   });
 
-  it('lists active attributes with values and flags inactive-only sets', () => {
-    globalThis.personAttributes = new Map([['p1', new Map([['Coach', '1'], ['Level', 'Senior']])]]);
-    globalThis.activeAttributes = new Set(['Coach', 'Level']);
-    const lines = buildPersonTooltipLines('p1', 'Alice');
-    expect(lines).toContain('  • Coach');
-    expect(lines).toContain('  • Level: Senior');
-
-    globalThis.activeAttributes = new Set();
-    const none = buildPersonTooltipLines('p1', 'Alice');
-    expect(none).not.toContain('Ringe:'); // no active badges, no empty section
+  // E78: memberships and ring badges are no longer built here — they arrive as
+  // context sections of the view (FR-7.9), so without an active v2 tenant the
+  // tooltip carries the node's own data only.
+  it('carries no hardcoded membership or ring sections', () => {
+    globalThis.personAttributes = new Map([['p1', new Map([['Coach', '1']])]]);
+    globalThis.activeAttributes = new Set(['Coach']);
+    const lines = buildNodeTooltipLines('p1', 'Alice');
+    expect(lines).not.toContain('Zugehörigkeiten:');
+    expect(lines).not.toContain('Ringe:');
   });
 
   it('lists cursor orgs when provided', () => {
-    const lines = buildPersonTooltipLines('p1', 'Alice', ['Division']);
+    const lines = buildNodeTooltipLines('p1', 'Alice', ['Division']);
     expect(lines).toContain('Am Cursor:');
     expect(lines).toContain('  • Division');
   });
@@ -156,7 +155,7 @@ describe('buildPersonTooltipLines', () => {
     });
 
     it('shows changed values next to their predecessors', () => {
-      const lines = buildPersonTooltipLines('p1', 'Alice Neu');
+      const lines = buildNodeTooltipLines('p1', 'Alice Neu');
       expect(lines).toContain('Änderungen (Diff):');
       expect(lines).toContain('  Name: Alice → Alice Neu');
       expect(lines).toContain('  pensum: 60 → 80');
@@ -165,7 +164,7 @@ describe('buildPersonTooltipLines', () => {
 
     it('stays fail-closed in pseudo mode: sensitive values and raw labels hidden (E48/E60)', () => {
       globalThis.pseudonymizationEnabled = true;
-      const lines = buildPersonTooltipLines('p1', 'Person 7');
+      const lines = buildNodeTooltipLines('p1', 'Person 7');
       expect(lines).toContain('  Name geändert');
       expect(lines).toContain('  pensum: 60 → 80'); // whitelisted
       expect(lines.join('\n')).not.toContain('old@x.ch');
@@ -174,7 +173,79 @@ describe('buildPersonTooltipLines', () => {
 
     it('adds no diff section for unchanged or non-diff nodes', () => {
       globalThis.currentSubgraph = { nodes: [{ id: 'p1', label: 'Alice', type: 'Person', props: {} }] };
-      expect(buildPersonTooltipLines('p1', 'Alice')).not.toContain('Änderungen (Diff):');
+      expect(buildNodeTooltipLines('p1', 'Alice')).not.toContain('Änderungen (Diff):');
     });
+  });
+});
+
+// E78: the renderer turns the view's context sections into the indented tree —
+// it knows nothing about rings, clusters or memberships, only about entries.
+describe('context sections in the tooltip (FR-7.9)', () => {
+  const SECTIONS = [
+    {
+      label: 'Zugehörigkeiten',
+      entries: [{ id: 'o3', type: 'OE', label: 'Team', children: [{ id: 'o2', type: 'OE', label: 'Division', children: [] }] }],
+      more: false,
+    },
+    {
+      label: 'Team',
+      entries: [
+        { id: 'p9', type: 'person', label: 'Zora', children: [] },
+        { id: 'p8', type: 'person', label: 'Bob', children: [] },
+      ],
+      more: true,
+    },
+  ];
+
+  afterEach(() => {
+    delete globalThis.og2Active;
+    delete globalThis.og2State;
+    delete globalThis.og2ContextSections;
+    globalThis.pseudonymizationEnabled = false;
+  });
+
+  const withSections = (sections) => {
+    globalThis.og2Active = () => true;
+    globalThis.og2State = () => ({ registry: { nodeTypes: {} } });
+    globalThis.og2ContextSections = () => sections;
+  };
+
+  it('renders one indent level per tree level, siblings by display label', () => {
+    withSections(SECTIONS);
+    expect(buildContextLines('p1', { id: 'p1', type: 'person' })).toEqual([
+      'Zugehörigkeiten:',
+      '  • Team',
+      '    • Division',
+      'Team:',
+      '  • Bob', // sorted by label, not by the engine's (type, id) order
+      '  • Zora',
+      '  … weitere ausgeblendet',
+    ]);
+  });
+
+  it('keeps the section out when it has no entries', () => {
+    withSections([{ label: 'Leer', entries: [], more: false }]);
+    expect(buildContextLines('p1', { id: 'p1', type: 'person' })).toEqual([]);
+  });
+
+  it('is silent without an active v2 tenant', () => {
+    expect(buildContextLines('p1', { id: 'p1', type: 'person' })).toEqual([]);
+  });
+
+  it('survives a failing query instead of losing the whole tooltip', () => {
+    globalThis.og2Active = () => true;
+    globalThis.og2State = () => ({ registry: { nodeTypes: {} } });
+    globalThis.og2ContextSections = () => { throw new Error('boom'); };
+    expect(buildContextLines('p1', { id: 'p1', type: 'person' })).toEqual([]);
+  });
+
+  it('masks every entry in pseudo mode (E48/E60 — the tooltip is no exception)', () => {
+    withSections(SECTIONS);
+    globalThis.pseudonymizationEnabled = true;
+    globalThis.pseudoData = null; // no pools: deterministic fallback labels
+    const lines = renderContextEntries(SECTIONS[1].entries);
+    expect(lines.join(' ')).not.toContain('Zora');
+    expect(lines.join(' ')).not.toContain('Bob');
+    expect(lines).toHaveLength(2);
   });
 });

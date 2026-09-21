@@ -1,0 +1,22 @@
+{
+  "VIEWS": {
+    "Abgeleitet": {
+      "path": "Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster], --hatRolle--> Rolle[ring], --imTeam--> Team[ring])",
+      "roots": ["__auto__"],
+      "depth": 3
+    },
+    "Eigener Kontext": {
+      "path": "Person <--berichtetAn-- Person",
+      "roots": ["__auto__"],
+      "depth": 3,
+      "context": [
+        { "label": "Zugehörigkeiten", "path": "Person --mitgliedIn--> OE --unterstellt--> OE" },
+        { "label": "Team-Kollegen", "path": "Person --mitgliedIn--> OE[hidden] <--mitgliedIn-- Person" },
+        { "label": "Mitglieder", "path": "OE <--mitgliedIn-- Person" }
+      ]
+    }
+  },
+  "TOOLBAR_DEPTH_DEFAULT": 3,
+  "TOOLBAR_MANAGEMENT_ACTIVE": false,
+  "TOOLBAR_PSEUDO_ACTIVE": false
+}

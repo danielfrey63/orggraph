@@ -29,7 +29,42 @@
           "description": "Start depth; toolbar overrides at runtime (PRD FR-7.7)."
         },
         "time": { "$ref": "#/$defs/time" },
-        "filters": { "$ref": "#/$defs/filters" }
+        "filters": { "$ref": "#/$defs/filters" },
+        "context": { "$ref": "#/$defs/context" },
+        "defaults": { "$ref": "#/$defs/defaults" }
+      }
+    },
+    "context": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Hover context queries (PRD FR-7.9 / E78): named path expressions describing relations the view does not draw. Evaluated only for the hover tooltip, with the hovered node as the single root; a query applies to nodes of its anchor type. Same grammar, registry validation and time slice as \"path\"; the result is rendered as an indented tree, [hidden] stations contracted.",
+      "items": {
+        "type": "object",
+        "required": ["label", "path"],
+        "additionalProperties": false,
+        "properties": {
+          "label": { "type": "string", "minLength": 1, "description": "Section heading in the tooltip." },
+          "path": { "type": "string", "minLength": 1, "description": "Path expression; its anchor type decides for which nodes the section appears." },
+          "limit": { "type": "integer", "minimum": 1, "description": "Max entries shown for this query; beyond that the section ends with \"… + n weitere\". Default: 25." }
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Declarative start context for a first-time entered view (PRD FR-7.5b); selections are opt-in (E75) — the defaults name what starts ON.",
+      "properties": {
+        "attributesOn": { "type": "array", "items": { "type": "string" } },
+        "clustersOn": { "type": "array", "items": { "type": "string" } },
+        "hiddenCategories": { "type": "array", "items": { "type": "string" } },
+        "attributeFocus": { "type": "boolean" },
+        "asOf": { "$ref": "#/$defs/instant" },
+        "diff": {
+          "type": "object",
+          "required": ["t1", "t2"],
+          "additionalProperties": false,
+          "properties": { "t1": { "$ref": "#/$defs/instant" }, "t2": { "$ref": "#/$defs/instant" } }
+        }
       }
     },
     "time": {

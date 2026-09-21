@@ -479,7 +479,7 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   --label-y-offset: 4;
   --label-ring-gap: 3;
   --link-label-dy: -3;
-  --tooltip-cursor-offset: 12;
+  --tooltip-corner-margin: 12;
   --toast-fade-ms: 300;
   --depth-pulse-ms: 300;
   --node-hover-tolerance: 6;
@@ -980,6 +980,10 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   white-space: pre;
   display: none;
   max-width: 400px;
+  /* The context tree (FR-7.9) can be tall; the corner placement plus a
+     viewport-bounded height keeps it inside the window. */
+  max-height: calc(100vh - 2 * var(--tooltip-corner-margin) * 1px);
+  overflow: hidden;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--shadow-color) 30%, transparent);
   line-height: 1.4;
 }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parsePathExpression } from '../src/sections/27-og2-path.js';
 import { createTenantStore, createNodeIdentity, createEdgeIdentity, edgeKeyOf, startInterval } from '../src/sections/23-og2-store.js';
 import { projectView } from '../src/sections/28-og2-project.js';
-import { serializeTenantStore, deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff, og2CreateLegendSelection, og2NextLegendSelection } from '../src/sections/29-og2-app.js';
+import { serializeTenantStore, deserializeTenantStore, serializeTenantStoreParts, deserializeTenantStoreParts, isChunkedStoreHeader, adaptProjection, projectionFingerprint, createOg2State, og2Project, og2BuildGlobalsData, og2PathStructure, og2ResolveAnchorRoot, og2TimeInstants, og2ProjectDiff, og2CreateLegendSelection, og2NextLegendSelection, og2ContextSections, og2InvalidateContext } from '../src/sections/29-og2-app.js';
 import { looksLikeSnapshot, looksLikeRegistry, looksLikeData } from '../src/sections/04-storage.js';
 
 // Type names are fixture data (E14, NFR-5 exception).
@@ -408,5 +408,73 @@ describe('legend selection across scene changes (FR-8.2a/E75, live-test findings
     expect(sel.revealNext).toBe(false);
     active = og2NextLegendSelection(sel, ['Team::A', 'Newsletter::Newsletter', 'Rolle::PO'], ['Team::A', 'Newsletter::Newsletter'], active);
     expect(active).toEqual(keys('Newsletter::Newsletter')); // later arrival stays off
+  });
+});
+
+describe('FR-7.9 — hover context sections', () => {
+  const VIEWS = {
+    Start: {
+      path: 'Person (<--berichtetAn-- Person, --mitgliedIn--> OE[cluster] --unterstellt--> OE[cluster], --hatRolle--> Rolle[ring])',
+      roots: ['__auto__'],
+      context: [
+        { label: 'Zugehörigkeiten', path: 'Person --mitgliedIn--> OE --unterstellt--> OE' },
+        { label: 'Team', path: 'Person --mitgliedIn--> OE[hidden] <--mitgliedIn-- Person' },
+        { label: 'Mitglieder', path: 'OE <--mitgliedIn-- Person' },
+      ],
+    },
+  };
+  const state = () => {
+    og2InvalidateContext();
+    return createOg2State({ store: fixtureStore(), registry: REGISTRY, env: { VIEWS } });
+  };
+
+  it('evaluates only the queries whose anchor type matches the hovered node', () => {
+    const s = state();
+    const person = og2ContextSections(s, 'p1', 'Person');
+    expect(person.map((sec) => sec.label)).toEqual(['Zugehörigkeiten', 'Team']);
+    const oe = og2ContextSections(s, 'o2', 'OE');
+    expect(oe.map((sec) => sec.label)).toEqual(['Mitglieder']);
+  });
+
+  it('returns the entries as a labelled tree', () => {
+    const [memberships] = og2ContextSections(state(), 'p1', 'Person');
+    expect(memberships.entries.map((e) => e.label)).toEqual(['Sub-OE']);
+    expect(memberships.entries[0].children.map((e) => e.label)).toEqual(['Root-OE']);
+  });
+
+  it('omits sections without hits instead of showing empty headings', () => {
+    const store = fixtureStore();
+    addNode(store, 'o3', 'OE', 'Allein-OE');
+    addNode(store, 'p3', 'Person', 'Solo');
+    addEdge(store, 'mitgliedIn', 'p3', 'o3'); // sole member: membership yes, colleagues no
+    og2InvalidateContext();
+    const s = createOg2State({ store, registry: REGISTRY, env: { VIEWS } });
+    expect(og2ContextSections(s, 'p1', 'Person').map((sec) => sec.label)).toEqual(['Zugehörigkeiten', 'Team']);
+    expect(og2ContextSections(s, 'p3', 'Person').map((sec) => sec.label)).toEqual(['Zugehörigkeiten']);
+  });
+
+  it('derives sections from the path when the view declares no context (E78)', () => {
+    og2InvalidateContext();
+    const s = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: { VIEWS: { Start: { path: VIEWS.Start.path, roots: ['__auto__'] } } } });
+    const sections = og2ContextSections(s, 'p2', 'Person');
+    expect(sections.map((sec) => sec.label)).toEqual(['OE', 'Rolle']);
+    expect(sections.find((sec) => sec.label === 'Rolle').entries.map((e) => e.label)).toEqual(['Dev']);
+  });
+
+  it('caches per node and serves a fresh tree after invalidation', () => {
+    const s = state();
+    const first = og2ContextSections(s, 'p1', 'Person');
+    expect(og2ContextSections(s, 'p1', 'Person')).toBe(first); // same object: cached
+    og2InvalidateContext();
+    const after = og2ContextSections(s, 'p1', 'Person');
+    expect(after).not.toBe(first);
+    expect(after).toEqual(first);
+  });
+
+  it('returns nothing without an active view or for an unknown node', () => {
+    og2InvalidateContext();
+    const noViews = createOg2State({ store: fixtureStore(), registry: REGISTRY, env: {} });
+    expect(og2ContextSections(noViews, 'p1', 'Person')).toEqual([]);
+    expect(og2ContextSections(state(), 'ghost')).toEqual([]);
   });
 });

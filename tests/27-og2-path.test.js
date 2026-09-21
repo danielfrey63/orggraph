@@ -154,3 +154,80 @@ describe('FR-7.1a — registry-aware view validation', () => {
     expect(none.rejected.Kaputt.length).toBeGreaterThan(0);
   });
 });
+
+describe('FR-7.9 — context queries', () => {
+  const view = (context) => validateView({ path: START_VIEW_PATH, roots: ['__auto__'], context }, REGISTRY);
+
+  it('accepts queries in the path grammar and keeps them parsed', () => {
+    const res = view([
+      { label: 'Projekte', path: 'Person --arbeitetAn--> Projekt' },
+      { label: 'Team', path: 'Person --mitgliedIn--> OE[hidden] <--mitgliedIn-- Person', limit: 5 },
+    ]);
+    expect(res.ok).toBe(true);
+    expect(res.contextParsed.map((q) => q.label)).toEqual(['Projekte', 'Team']);
+    expect(res.contextParsed[0].parsed.type).toBe('Person');
+    expect(res.contextParsed[1].limit).toBe(5);
+  });
+
+  it('rejects unknown types, bad grammar and malformed entries like an invalid path', () => {
+    expect(view([{ label: 'X', path: 'Alien --arbeitetAn--> Projekt' }]).errors.join(' ')).toContain('unknown node type "Alien"');
+    expect(view([{ label: 'X', path: 'Person --nope--> Projekt' }]).errors.join(' ')).toContain('unknown edge type');
+    expect(view([{ label: 'X', path: 'Person --(' }]).errors.join(' ')).toContain('path grammar');
+    expect(view([{ label: 'X', path: 'OE --mitgliedIn--> OE' }]).errors.join(' ')).toContain('no valid from-type');
+    expect(view([{ path: 'Person --arbeitetAn--> Projekt' }]).errors.join(' ')).toContain('label must be a non-empty string');
+    expect(view([{ label: 'X', path: 'Person', extra: 1 }]).errors.join(' ')).toContain('unknown key "extra"');
+    expect(view([{ label: 'X', path: 'Person', limit: 0 }]).errors.join(' ')).toContain('limit must be a positive integer');
+    expect(view([]).errors.join(' ')).toContain('non-empty array');
+  });
+
+  it('rejects duplicate section labels (they would be indistinguishable)', () => {
+    const res = view([
+      { label: 'Team', path: 'Person --arbeitetAn--> Projekt' },
+      { label: 'Team', path: 'Person --mitgliedIn--> OE' },
+    ]);
+    expect(res.errors.join(' ')).toContain('is used twice');
+  });
+
+  it('allows ring stations anywhere — E21 attachment is a scene concern', () => {
+    // [ring] without a preceding visible station is a path error, but fine here
+    expect(view([{ label: 'Rollen', path: 'Person --hatRolle--> Rolle[ring]' }]).ok).toBe(true);
+  });
+
+  // E78: no `context` => the sections are derived from the view path, so the
+  // v1 "Ringe"/"Zugehörigkeiten" survive without type knowledge in the renderer.
+  it('derives ring and cluster sections from the path when context is absent', () => {
+    const { valid } = validateViews({ Start: { path: START_VIEW_PATH, roots: ['__auto__'] } }, REGISTRY);
+    const derived = valid.Start.contextQueries;
+    expect(derived.map((q) => q.label)).toEqual(['OE', 'Rolle']);
+    const oe = derived.find((q) => q.label === 'OE');
+    expect(oe.parsed.type).toBe('Person');
+    expect(oe.parsed.hops[0].edgeType).toBe('mitgliedIn');
+    // the cluster chain keeps its transitive self-hop (the upward chain)
+    expect(oe.parsed.hops[0].target.hops.map((h) => h.edgeType)).toEqual(['unterstellt']);
+    // the self-hop of the anchor (berichtetAn) is no context section
+    expect(derived.some((q) => q.parsed.hops[0].edgeType === 'berichtetAn')).toBe(false);
+  });
+
+  // A validated view is fed back into validateView elsewhere (the list intake
+  // offers a path extension and checks it that way), so validation must be
+  // idempotent: resolved data belongs in its own field, never on top of the
+  // raw declaration.
+  it('keeps a validated view re-validatable', () => {
+    const declared = { path: START_VIEW_PATH, roots: ['__auto__'], context: [{ label: 'Projekte', path: 'Person --arbeitetAn--> Projekt' }] };
+    for (const raw of [declared, { path: START_VIEW_PATH, roots: ['__auto__'] }]) {
+      const { valid } = validateViews({ Start: raw }, REGISTRY);
+      const again = validateView(valid.Start, REGISTRY);
+      expect(again.ok, again.errors.join('; ')).toBe(true);
+      // and with a changed path, as the intake offer does it
+      const extended = validateView({ ...valid.Start, path: `${START_VIEW_PATH.slice(0, -1)}, --arbeitetAn--> Projekt[ring])` }, REGISTRY);
+      expect(extended.ok, extended.errors.join('; ')).toBe(true);
+    }
+  });
+
+  it('prefers declared context over the derived one', () => {
+    const { valid } = validateViews({
+      Start: { path: START_VIEW_PATH, roots: ['__auto__'], context: [{ label: 'Projekte', path: 'Person --arbeitetAn--> Projekt' }] },
+    }, REGISTRY);
+    expect(valid.Start.contextQueries.map((q) => q.label)).toEqual(['Projekte']);
+  });
+});

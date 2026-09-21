@@ -11,6 +11,7 @@ import {
   ensureTooltip,
   showTooltip,
   hideTooltip,
+  tooltipCorner,
 } from '../src/sections/08-color-geometry.js';
 
 const d3Src = readFileSync('vendor/d3.v7.min.js', 'utf8');
@@ -158,19 +159,35 @@ describe('computeClusterPolygon', () => {
 });
 
 describe('cluster tooltip helpers', () => {
-  it('creates the tooltip element once, shows lines at an offset, hides again', () => {
+  // E78: the tooltip carries the context tree and therefore sits in the free
+  // upper corner opposite the pointer, never under it.
+  it('creates the tooltip element once, parks it in the free corner, hides again', () => {
     document.querySelectorAll('.cluster-tooltip').forEach((el) => el.remove());
     ensureTooltip();
     ensureTooltip(); // idempotent — still exactly one element
     const els = document.querySelectorAll('.cluster-tooltip');
     expect(els.length).toBe(1);
-    showTooltip(100, 200, ['Team Alpha', '3 Mitglieder']);
     const el = els[0];
+
+    showTooltip(window.innerWidth - 10, 200, ['Team Alpha', '3 Mitglieder']); // pointer right
     expect(el.textContent).toBe('Team Alpha\n3 Mitglieder');
-    expect(el.style.left).toBe('112px');
-    expect(el.style.top).toBe('212px');
+    expect(el.style.left).toBe('12px');
+    expect(el.style.right).toBe('auto');
+    expect(el.style.top).toBe('12px');
     expect(el.style.display).toBe('block');
+
+    showTooltip(10, 500, ['Team Alpha']); // pointer left
+    expect(el.style.right).toBe('12px');
+    expect(el.style.left).toBe('auto');
+    expect(el.style.top).toBe('12px');
+
     hideTooltip();
     expect(el.style.display).toBe('none');
+  });
+
+  it('picks the corner opposite the pointer', () => {
+    expect(tooltipCorner(900, 1000)).toBe('left');
+    expect(tooltipCorner(100, 1000)).toBe('right');
+    expect(tooltipCorner(500, 1000)).toBe('right'); // exactly centred: no swap
   });
 });

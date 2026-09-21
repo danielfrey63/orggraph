@@ -147,4 +147,33 @@ describe('AK 11 — view schema', () => {
     expect(validateView(mk({ type: 'Person', prop: 'pensum', op: 'in', value: [] }))).toBe(false);
     expect(validateView(mk({ type: 'Person', prop: 'kontext', op: 'refIn', value: ['f1'] }))).toBe(true);
   });
+
+  it('accepts context queries and rejects malformed ones (FR-7.9/E78)', () => {
+    const mk = (context) => ({ V: { path: 'Person', roots: ['p1'], context } });
+    expect(validateView(mk([{ label: 'Projekte', path: 'Person --arbeitetAn--> Projekt' }])), JSON.stringify(validateView.errors)).toBe(true);
+    expect(validateView(mk([{ label: 'X', path: 'Person', limit: 5 }]))).toBe(true);
+    expect(validateView(mk([{ path: 'Person' }]))).toBe(false);            // label required
+    expect(validateView(mk([{ label: 'X' }]))).toBe(false);                // path required
+    expect(validateView(mk([{ label: 'X', path: 'Person', huh: 1 }]))).toBe(false);
+    expect(validateView(mk([{ label: 'X', path: 'Person', limit: 0 }]))).toBe(false);
+    expect(validateView(mk([]))).toBe(false);
+  });
+
+  // The view defaults (FR-7.5b) are honoured by the engine and used by the
+  // shipped fixtures — they must pass the schema too.
+  it('accepts view defaults', () => {
+    const mk = (defaults) => ({ V: { path: 'Person', roots: ['p1'], defaults } });
+    expect(validateView(mk({ hiddenCategories: ['Team'], attributeFocus: true })), JSON.stringify(validateView.errors)).toBe(true);
+    expect(validateView(mk({ asOf: '20260101-1200' }))).toBe(true);
+    expect(validateView(mk({ diff: { t1: '20260101-1200', t2: '20260301-1200' } }))).toBe(true);
+    expect(validateView(mk({ attributesOff: ['Team'] }))).toBe(false); // E75: opt-in only
+    expect(validateView(mk({ attributeFocus: 'yes' }))).toBe(false);
+  });
+
+  it('validates the shipped env fixtures', () => {
+    for (const f of ['fixture-env.json', 'fixture-drop-env.json', 'fixture-context-env.json']) {
+      const env = JSON.parse(readFileSync(join(schemaDir, '..', 'e2e', 'fixtures', f), 'utf8'));
+      expect(validateView(env.VIEWS), `${f}: ${JSON.stringify(validateView.errors)}`).toBe(true);
+    }
+  });
 });

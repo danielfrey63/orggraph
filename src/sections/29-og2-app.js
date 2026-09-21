@@ -7,7 +7,7 @@
 import { canonicalJson } from './21-og2-util.js';
 import { colorForRainbowPosition } from './08-color-geometry.js';
 import { validateViews, visibleTypesOf } from './27-og2-path.js';
-import { projectView, projectDiagnosis, buildLiveIndexes, resolveDisplayLabel } from './28-og2-project.js';
+import { projectView, projectDiagnosis, buildLiveIndexes, resolveDisplayLabel, projectContextTree, CONTEXT_CAPS } from './28-og2-project.js';
 
 // --- Store serialization (FR-8.9) ------------------------------------------
 // The in-memory tenant store uses Maps/Sets; IndexedDB persistence stores one
@@ -315,6 +315,63 @@ export function og2Project(state) {
   ];
   const links = adapted.drawLinks.map((l) => ({ source: l.source, target: l.target, derived: l.derived }));
   return { projection, adapted, mode: 'view', sub: { nodes, links } };
+}
+
+// --- Hover context (FR-7.9 / E78) ------------------------------------------
+
+// One shared live index for all context queries of a view, rebuilt whenever
+// the store, the time slice or the view changes. og2InvalidateContext() is the
+// explicit hook for in-place store mutations (import, intake).
+let contextCache = { key: null, idx: null, byNode: new Map() };
+
+export function og2InvalidateContext() {
+  contextCache = { key: null, idx: null, byNode: new Map() };
+}
+
+function contextIndex(state, view) {
+  const key = `${state.activeViewName}|${state.asOf || ''}`;
+  if (contextCache.key === key && contextCache.store === state.store && contextCache.idx) return contextCache.idx;
+  const edgeTypes = new Set();
+  for (const query of view.contextQueries || []) {
+    (function walk(node) { for (const hop of node.hops) { edgeTypes.add(hop.edgeType); walk(hop.target); } })(query.parsed);
+  }
+  const idx = buildLiveIndexes(state.store, state.asOf, edgeTypes.size ? edgeTypes : undefined);
+  contextCache = { key, store: state.store, idx, byNode: new Map() };
+  return idx;
+}
+
+// Context sections for one node: every query whose anchor type matches, as an
+// indented tree. Labels are the labelProp-resolved raw labels — the privacy
+// gate (FR-8.5/E48) sits in the renderer, like everywhere else.
+// Returns [{ label, entries: [{ id, type, label, children }], more }].
+export function og2ContextSections(state, nodeId, nodeType) {
+  const view = og2ActiveView(state);
+  if (!view || !(view.contextQueries || []).length) return [];
+  const id = String(nodeId);
+  const type = nodeType || (state.store.nodes.get(id) || {}).type;
+  if (!type) return [];
+  const cacheKey = `${id}|${type}`;
+  const idx = contextIndex(state, view);
+  const cached = contextCache.byNode.get(cacheKey);
+  if (cached) return cached;
+
+  const nodeTypes = state.registry.nodeTypes || {};
+  const sections = [];
+  for (const query of view.contextQueries) {
+    if (query.parsed.type !== type) continue;
+    const limit = query.limit || CONTEXT_CAPS.entries;
+    const tree = projectContextTree({ idx, parsed: query.parsed, rootId: id, asOf: state.asOf, limit });
+    if (!tree.children.length) continue;
+    const toEntries = (list) => list.map((child) => ({
+      id: child.id,
+      type: child.type,
+      label: resolveDisplayLabel(nodeTypes[child.type], child.stand) ?? child.id,
+      children: toEntries(child.children),
+    }));
+    sections.push({ label: query.label, entries: toEntries(tree.children), more: tree.truncated });
+  }
+  contextCache.byNode.set(cacheKey, sections);
+  return sections;
 }
 
 // Cluster/member path structure of a parsed view: which node types render as

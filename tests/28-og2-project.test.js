@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parsePathExpression } from '../src/sections/27-og2-path.js';
 import { createTenantStore, createNodeIdentity, createEdgeIdentity, edgeKeyOf, startInterval } from '../src/sections/23-og2-store.js';
-import { projectView, projectDiagnosis, resolveAutoRoots, buildLiveIndexes, resolveDisplayLabel, DIAGNOSIS_CAPS } from '../src/sections/28-og2-project.js';
+import { projectView, projectDiagnosis, resolveAutoRoots, buildLiveIndexes, resolveDisplayLabel, projectContextTree, DIAGNOSIS_CAPS } from '../src/sections/28-og2-project.js';
 
 // Type names are fixture data (E14, NFR-5 exception).
 const REGISTRY = {
@@ -370,5 +370,72 @@ describe('AK 103 — hidden subtrees are excluded from the projection (FR-8.7/E6
     const diag = projectDiagnosis({ store: orgStore(), roots: ['p1'], depth: 2, excluded: new Set(['p2']) });
     expect(diag.nodes.has('p2')).toBe(false);
     expect(diag.nodes.has('p4')).toBe(false); // only reachable through p2
+  });
+});
+
+// --- Hover context queries (FR-7.9 / E78) ----------------------------------
+
+const ctx = (store, path, rootId, opts = {}) =>
+  projectContextTree({ store, parsed: parsePathExpression(path), rootId, ...opts });
+
+// Label of an entry through the same resolver the app uses.
+const labelOf = (entry) => resolveDisplayLabel(REGISTRY.nodeTypes[entry.type], entry.stand);
+
+describe('FR-7.9 — hover context queries', () => {
+  it('returns one level per hop, as a tree hanging off the hovered node', () => {
+    const res = ctx(orgStore(), 'Person --mitgliedIn--> OE --unterstellt--> OE', 'p2');
+    expect(res.children.map(labelOf)).toEqual(['Sub-OE']);
+    expect(res.children[0].children.map(labelOf)).toEqual(['Root-OE']);
+    expect(res.total).toBe(2);
+    expect(res.truncated).toBe(false);
+  });
+
+  it('contracts [hidden] stations: their children move up one level', () => {
+    // colleagues: via the shared OE, which itself must not appear
+    const res = ctx(orgStore(), 'Person --mitgliedIn--> OE[hidden] <--mitgliedIn-- Person', 'p2');
+    expect(res.children.map((c) => c.type)).toEqual(['Person', 'Person']);
+    expect(res.children.map(labelOf).sort()).toEqual(['Leaf', 'Mid2']);
+    // the hovered node is not its own colleague
+    expect(res.children.some((c) => c.id === 'p2')).toBe(false);
+  });
+
+  it('follows a transitive self-hop to the full chain', () => {
+    const res = ctx(orgStore(), 'Person <--berichtetAn-- Person', 'p1');
+    expect(res.children.map(labelOf).sort()).toEqual(['Mid', 'Mid2']);
+    const mid = res.children.find((c) => c.id === 'p2');
+    expect(mid.children.map(labelOf)).toEqual(['Leaf']);
+  });
+
+  it('ignores render modes: ring and cluster stations are ordinary entries', () => {
+    const res = ctx(orgStore(), 'Person --hatRolle--> Rolle[ring]', 'p2');
+    expect(res.children.map(labelOf)).toEqual(['Dev']);
+  });
+
+  it('returns nothing when the node is not of the query anchor type', () => {
+    const res = ctx(orgStore(), 'Person --mitgliedIn--> OE', 'o1');
+    expect(res.children).toEqual([]);
+    expect(res.total).toBe(0);
+  });
+
+  it('respects the entry limit and reports truncation instead of silently cutting', () => {
+    const res = ctx(orgStore(), 'Person <--berichtetAn-- Person', 'p1', { limit: 1 });
+    expect(res.total).toBe(1);
+    expect(res.truncated).toBe(true);
+  });
+
+  it('cuts cycles per (node, path position) instead of looping', () => {
+    const store = orgStore();
+    addEdge(store, 'berichtetAn', 'p1', 'p4'); // p1 → p4 → p2 → p1
+    const res = ctx(store, 'Person <--berichtetAn-- Person', 'p1');
+    expect(res.total).toBeGreaterThan(0);
+    expect(res.total).toBeLessThan(10);
+  });
+
+  it('honours the time slice: closed relations are gone', () => {
+    const store = orgStore();
+    const key = edgeKeyOf({ type: 'arbeitetAn', source: 'p2', target: 'proj1', props: {} }, REGISTRY.edgeTypes.arbeitetAn);
+    store.edges.get(key).existence[0].to = T1;
+    expect(ctx(store, 'Person --arbeitetAn--> Projekt', 'p2', { asOf: T0 }).total).toBe(1);
+    expect(ctx(store, 'Person --arbeitetAn--> Projekt', 'p2', { asOf: T1 }).total).toBe(0);
   });
 });

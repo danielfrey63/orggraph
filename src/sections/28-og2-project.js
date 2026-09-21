@@ -354,6 +354,85 @@ export function projectView(options) {
   };
 }
 
+// --- Hover context queries (FR-7.9 / E78) ----------------------------------
+
+// Per-query caps: a tooltip is a glance, not a scene.
+export const CONTEXT_CAPS = { entries: 25, visited: 2000 };
+
+// projectContextTree({ store|idx, parsed, rootId, asOf, limit }) →
+// { children: [{ id, type, stand, children, more }], total, truncated }
+//
+// Depth-first walk along the path AST from one node: every hop is one level of
+// indentation, [hidden] stations are contracted away (their children move up,
+// like FR-7.1a), [ring]/[cluster] render modes carry no meaning here. Cycles
+// are cut per (node, path position) — the same pair never expands twice.
+// Siblings keep a deterministic order (type, then id); display-label ordering
+// is the caller's job, since only it knows the privacy gate (E48).
+export function projectContextTree(options) {
+  const { parsed, rootId, asOf = null, limit = CONTEXT_CAPS.entries } = options;
+  const idx = options.idx || buildLiveIndexes(options.store, asOf, edgeTypesOfPath(parsed));
+  const at = idx.at;
+
+  const root = idx.nodes.get(String(rootId));
+  if (!root || root.type !== parsed.type) return { children: [], total: 0, truncated: false };
+
+  const astIds = new Map();
+  (function number(node) { astIds.set(node, astIds.size); for (const hop of node.hops) number(hop.target); })(parsed);
+
+  let total = 0;
+  let truncated = false;
+  let visits = 0;
+
+  // Collect the entries one AST station contributes, walking through hidden
+  // stations without emitting them. `path` guards against cycles.
+  const expand = (nodeId, ast, seen) => {
+    const out = [];
+    for (const hop of ast.hops) {
+      const list = (hop.dir === '<--' ? idx.byTarget : idx.bySource).get(nodeId) || [];
+      for (const edge of list) {
+        if (edge.type !== hop.edgeType) continue;
+        const otherId = hop.dir === '<--' ? edge.source : edge.target;
+        // The hovered node is the tooltip's reference point, never one of its
+        // own context entries (nobody is their own colleague); walking on from
+        // it would only repeat what the root expansion already covers.
+        if (otherId === root.id) continue;
+        const other = idx.nodes.get(otherId);
+        if (!other || other.type !== hop.target.type) continue;
+
+        const targetAst = hop.selfHop ? ast : hop.target;
+        const visitKey = `${otherId}|${astIds.get(targetAst)}`;
+        if (seen.has(visitKey)) continue;
+        if (++visits > CONTEXT_CAPS.visited) { truncated = true; return out; }
+        // Backtracking DFS: the guard covers the CURRENT branch, so a node
+        // reachable through two branches shows up under both (a tree, not a
+        // spanning tree) without copying the set at every candidate.
+        seen.add(visitKey);
+        if (hop.target.render === 'hidden') {
+          // Contracted: this station never shows up, its children move up.
+          out.push(...expand(otherId, targetAst, seen));
+        } else if (total >= limit) {
+          truncated = true;
+        } else {
+          total++;
+          out.push({
+            id: otherId,
+            type: other.type,
+            stand: recordStandAt(other, at),
+            children: expand(otherId, targetAst, seen),
+          });
+        }
+        seen.delete(visitKey);
+      }
+    }
+    out.sort((a, b) => (a.type < b.type ? -1 : a.type > b.type ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return out;
+  };
+
+  const seen = new Set([`${root.id}|${astIds.get(parsed)}`]);
+  const children = expand(root.id, parsed, seen);
+  return { children, total, truncated };
+}
+
 // --- Diagnosis projection (§7, AK 53) --------------------------------------
 
 // No VIEWS (or zero valid views): all registry types, neighborhood BFS over

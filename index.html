@@ -487,7 +487,7 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   --label-y-offset: 4;
   --label-ring-gap: 3;
   --link-label-dy: -3;
-  --tooltip-cursor-offset: 12;
+  --tooltip-corner-margin: 12;
   --toast-fade-ms: 300;
   --depth-pulse-ms: 300;
   --node-hover-tolerance: 6;
@@ -988,6 +988,10 @@ html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Bli
   white-space: pre;
   display: none;
   max-width: 400px;
+  /* The context tree (FR-7.9) can be tall; the corner placement plus a
+     viewport-bounded height keeps it inside the window. */
+  max-height: calc(100vh - 2 * var(--tooltip-corner-margin) * 1px);
+  overflow: hidden;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--shadow-color) 30%, transparent);
   line-height: 1.4;
 }
@@ -1668,7 +1672,7 @@ body.dz-dragging::after {
 // App version — the single place the version lives, bumped by the AI-Toolbox
 // versioning hooks. build.js does not touch it; the header renders it here at
 // runtime (the #appVersion span sits earlier in the document, so it exists).
-const APP_VERSION = '1.220.343';
+const APP_VERSION = '1.222.366';
 document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
 
 // ===== src/constants.js =====
@@ -3677,7 +3681,7 @@ const CSS_NUMBER_DEFAULTS = {
   '--viewport-fit-pad': 20,
   '--radial-fallback-radius': 40,
   '--root-spacing-radius-factor': 1.5,
-  '--tooltip-cursor-offset': 12,
+  '--tooltip-corner-margin': 12,
     '--toast-fade-ms': 300,
   '--depth-pulse-ms': 300,
     '--node-hover-tolerance': 6,
@@ -3848,8 +3852,9 @@ function getNodeFillByLevel(node) {
   }
 }
 
-function clustersAtPoint(p) {
-  // Sammle OEs mit ihren IDs und Labels
+// Clusters under a point, innermost (deepest) first, with their ids — the id
+// is what the hover context queries need (FR-7.9).
+function clusterItemsAtPoint(p) {
   const orgItems = [];
   for (const [oid, poly] of clusterPolygons.entries()) {
     if (!allowedOrgs.has(oid)) continue;
@@ -3863,9 +3868,11 @@ function clustersAtPoint(p) {
   
   // Sortiere nach Tiefe absteigend (höhere Tiefe = kleinere OE kommt zuerst)
   orgItems.sort((a, b) => b.depth - a.depth || a.label.localeCompare(b.label));
-  
-  // Gib nur die Labels zurück
-  return orgItems.map(item => item.label);
+  return orgItems;
+}
+
+function clustersAtPoint(p) {
+  return clusterItemsAtPoint(p).map((item) => item.label);
 }
 
 function computeClusterPolygon(nodes, pad) {
@@ -3909,11 +3916,23 @@ function ensureTooltip() {
   tooltipEl.className = 'cluster-tooltip';
   document.body.appendChild(tooltipEl);
 }
+// The tooltip carries the view's context tree (FR-7.9), so it can grow tall —
+// it sits in the free upper corner opposite the pointer (E78) instead of
+// covering the very spot being hovered.
+function tooltipCorner(x, viewportWidth) {
+  return x > viewportWidth / 2 ? 'left' : 'right';
+}
 function showTooltip(x, y, lines) {
-  const offset = cssNumber('--tooltip-cursor-offset');
+  const margin = cssNumber('--tooltip-corner-margin');
   tooltipEl.textContent = lines.join('\n');
-  tooltipEl.style.left = `${x + offset}px`;
-  tooltipEl.style.top = `${y + offset}px`;
+  tooltipEl.style.top = `${margin}px`;
+  if (tooltipCorner(x, window.innerWidth) === 'left') {
+    tooltipEl.style.left = `${margin}px`;
+    tooltipEl.style.right = 'auto';
+  } else {
+    tooltipEl.style.right = `${margin}px`;
+    tooltipEl.style.left = 'auto';
+  }
   tooltipEl.style.display = 'block';
 }
 function hideTooltip() { if (tooltipEl) tooltipEl.style.display = 'none'; }
@@ -3945,9 +3964,10 @@ function updateDebugZoomDisplay() {
  * @param {Array} visibleOrgs - Array von sichtbaren OE-Labels am Cursor
  * @returns {Array} Array von Tooltip-Zeilen
  */
-function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
+function buildNodeTooltipLines(nodeId, nodeLabel, visibleOrgs = []) {
   const lines = [];
-  const node = byId.get(String(personId));
+  const personId = String(nodeId);
+  const node = byId.get(personId);
 
   // Header: registry type name instead of a fixed emoji (FR-4.2a); legacy
   // structural tags keep a neutral header.
@@ -3991,32 +4011,54 @@ function buildPersonTooltipLines(personId, nodeLabel, visibleOrgs = []) {
     }
   }
 
-  // Ring badges of this node (grouped '<Typ>::<Label>' keys)
-  if (personId && personAttributes.has(personId)) {
-    const attrs = personAttributes.get(personId);
-    let hasAttributes = false;
-    for (const [attrName, attrValue] of attrs.entries()) {
-      if (activeAttributes.has(attrName)) {
-        if (!hasAttributes) lines.push('Ringe:');
-        const displayValue = attrValue && attrValue !== '1' ? `: ${attrValue}` : '';
-        lines.push(`  • ${attrName}${displayValue}`);
-        hasAttributes = true;
-      }
-    }
-  }
+  // Relations the view does not draw, as an indented tree (FR-7.9/E78). The
+  // sections come from the view's `context` queries — or, when it declares
+  // none, from the queries derived from its path, which reproduce the v1
+  // "Ringe"/"Zugehörigkeiten" sections without any type knowledge here.
+  lines.push(...buildContextLines(personId, node));
 
-  // Cluster memberships: at the cursor and the full upward chain
-  const allPersonOrgs = findAllPersonOrgs(personId);
+  // Clusters under the cursor: a display fact, not a graph relation.
   if (visibleOrgs.length > 0) {
     lines.push('Am Cursor:');
     visibleOrgs.forEach(org => lines.push(`  • ${org}`));
   }
-  if (allPersonOrgs.length > 0) {
-    lines.push('Zugehörigkeiten:');
-    allPersonOrgs.forEach(org => lines.push(`  • ${org}`));
-  }
 
   return lines;
+}
+
+// Context sections of one node, already through the privacy gate (E48): the
+// engine hands back raw labels, masking and display ordering happen here.
+function buildContextLines(nodeId, node) {
+  if (typeof og2Active !== 'function' || !og2Active() || !og2State()) return [];
+  let sections = [];
+  try {
+    sections = og2ContextSections(og2State(), nodeId, node && node.type);
+  } catch (err) {
+    console.warn('[og2] context query failed', err);
+    return [];
+  }
+  const lines = [];
+  for (const section of sections) {
+    const rendered = renderContextEntries(section.entries);
+    if (!rendered.length) continue;
+    lines.push(`${section.label}:`);
+    lines.push(...rendered);
+    if (section.more) lines.push('  … weitere ausgeblendet');
+  }
+  return lines;
+}
+
+// Entry tree → indented bullet lines; siblings are sorted by the label the
+// user actually sees, which only exists after masking.
+function renderContextEntries(entries, depth = 0) {
+  const out = [];
+  const labelled = entries.map((e) => ({ ...e, text: String(getDisplayLabel({ id: e.id, type: e.type, label: e.label })) }));
+  labelled.sort((a, b) => a.text.localeCompare(b.text, 'de'));
+  for (const entry of labelled) {
+    out.push(`${'  '.repeat(depth + 1)}• ${entry.text}`);
+    out.push(...renderContextEntries(entry.children || [], depth + 1));
+  }
+  return out;
 }
 
 /**
@@ -4045,18 +4087,19 @@ function handleClusterHover(event, svgSel) {
     }
   }
   
-  // Verwende die sortierte clustersAtPoint Funktion
-  const hits = clustersAtPoint(p);
-  
+  const items = clusterItemsAtPoint(p);
+  const hits = items.map((item) => item.label);
+
   let lines = [];
-  
-  // Person information or cluster information
+
   if (nodeLabel) {
-    lines = buildPersonTooltipLines(personId, nodeLabel, hits);
-  } else if (hits.length) {
-    // Display cluster information with header
-    lines.push('Cluster:');
-    hits.forEach(hit => lines.push(`  • ${hit}`));
+    lines = buildNodeTooltipLines(personId, nodeLabel, hits);
+  } else if (items.length) {
+    // A cluster is a node too (FR-7.9): the innermost one under the cursor
+    // gets the full tooltip incl. its own context sections, the enclosing
+    // ones stay the plain "at the cursor" list.
+    const [innermost, ...enclosing] = items;
+    lines = buildNodeTooltipLines(innermost.id, innermost.label, enclosing.map((item) => item.label));
   }
   
   if (lines.length) {
@@ -4067,73 +4110,6 @@ function handleClusterHover(event, svgSel) {
 }
 
 // Color mapping for OEs (harmonious palette)
-/**
- * Finds all organizational units a person belongs to
- * @param {string} personId - ID of the person
- * @returns {string[]} - Array of organization labels ordered by hierarchy (smallest/lowest unit first)
- */
-function findAllPersonOrgs(personId) {
-  if (!personId || !raw || !Array.isArray(raw.links) || !Array.isArray(raw.orgs)) return [];
-
-  const pid = String(personId);
-  const orgIds = new Set(raw.orgs.map(o => String(o.id)));
-
-  // Basis-OEs der Person: direkte Person->Org Kanten
-  const baseOrgs = new Set();
-  for (const link of raw.links) {
-    if (!link) continue;
-    const s = idOf(link.source);
-    const t = idOf(link.target);
-    if (s === pid && orgIds.has(t)) {
-      baseOrgs.add(t);
-    }
-  }
-
-  // Alle OEs entlang der Aufwärts-Kette (Basis-OE + alle Eltern) einsammeln
-  const orgMap = new Map(); // label -> { id, depth }
-
-  // Tiefe innerhalb der OE-Hierarchie cachen (Abstand zur Wurzel)
-  const depthCache = new Map();
-  const computeDepth = (oid) => {
-    const key = String(oid);
-    if (depthCache.has(key)) return depthCache.get(key);
-    let d = 0;
-    let cur = key;
-    const seen = new Set();
-    while (orgParent.has(cur) && !seen.has(cur)) {
-      seen.add(cur);
-      cur = orgParent.get(cur);
-      d++;
-    }
-    depthCache.set(key, d);
-    return d;
-  };
-
-  for (const baseId of baseOrgs) {
-    let cur = String(baseId);
-    const chainSeen = new Set();
-    while (cur && !chainSeen.has(cur)) {
-      chainSeen.add(cur);
-      const node = byId.get(cur);
-      if (node && node.type === 'org') {
-        const label = node.label || cur;
-        if (!orgMap.has(label)) {
-          orgMap.set(label, { id: cur, depth: computeDepth(cur) });
-        }
-      }
-      cur = orgParent.get(cur);
-    }
-  }
-
-  // Nach Tiefe sortieren (kleinere/basisnähere OEs haben eine höhere Tiefe)
-  return Array.from(orgMap.values())
-    .sort((a, b) => b.depth - a.depth || String(a.id).localeCompare(String(b.id)))
-    .map(item => {
-      const node = byId.get(String(item.id));
-      return getDisplayLabel(node, item.depth);
-    });
-}
-
 function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=((h<<5)-h)+str.charCodeAt(i); h|=0; } return h>>>0; }
 const orgColorCache = new Map();
 
@@ -6646,7 +6622,7 @@ function renderGraph(sub) {
     const nodeLabel = getDisplayLabel(d);
     const clusters = clustersAtPoint(p);
     
-    const lines = buildPersonTooltipLines(personId, nodeLabel, clusters);
+    const lines = buildNodeTooltipLines(personId, nodeLabel, clusters);
     showTooltip(event.clientX, event.clientY, lines);
   });
   node.on('mouseleave', hideTooltip);
@@ -10748,25 +10724,11 @@ function validateView(view, registry) {
   const nodeTypes = registry.nodeTypes || {};
   const edgeTypes = registry.edgeTypes || {};
 
+  // Types and hop endpoints (shared with the context queries, FR-7.9).
+  checkHopTypes(parsed, nodeTypes, edgeTypes, errors, 'path');
+
   const checkNode = (node, prevVisible) => {
-    if (!isPathSafeTypeName(node.type) || !nodeTypes[node.type]) {
-      errors.push(`unknown node type "${node.type}" (not in tenant registry)`);
-    }
     for (const hop of node.hops) {
-      const decl = edgeTypes[hop.edgeType];
-      if (!decl) {
-        errors.push(`unknown edge type "${hop.edgeType}" (not in tenant registry)`);
-      } else {
-        // <--E-- B : stored edge points from B (source) to the LEFT node
-        // (target); --E--> B : stored edge points from the left node to B.
-        const [fromType, toType] = hop.dir === '<--' ? [hop.target.type, node.type] : [node.type, hop.target.type];
-        if (nodeTypes[fromType] && !endpointAllows(decl.from, fromType)) {
-          errors.push(`hop ${node.type} ${hop.dir}${hop.edgeType}: "${fromType}" is no valid from-type of "${hop.edgeType}"`);
-        }
-        if (nodeTypes[toType] && !endpointAllows(decl.to, toType)) {
-          errors.push(`hop ${node.type} ${hop.dir}${hop.edgeType}: "${toType}" is no valid to-type of "${hop.edgeType}"`);
-        }
-      }
       // only node/cluster stations count as ring attachment targets (E21)
       checkNode(hop.target, node.render === 'node' || node.render === 'cluster' ? true : prevVisible);
     }
@@ -10846,7 +10808,93 @@ function validateView(view, registry) {
     }
   }
 
-  return { ok: errors.length === 0, errors, parsed };
+  // Hover context queries (FR-7.9/E78): same grammar and registry rules as
+  // `path`, but they never render a scene — no roots, no __auto__, no ring
+  // attachment constraint (E21 is a layout concern; in the tooltip a ring
+  // station is an ordinary tree entry). An invalid query invalidates the view.
+  const contextParsed = [];
+  if (view.context !== undefined) {
+    if (!Array.isArray(view.context) || view.context.length === 0) {
+      errors.push('context must be a non-empty array of { label, path }');
+    } else {
+      const seenLabels = new Set();
+      view.context.forEach((query, i) => {
+        const at = `context[${i}]`;
+        if (!query || typeof query !== 'object' || Array.isArray(query)) { errors.push(`${at} must be an object { label, path }`); return; }
+        for (const key of Object.keys(query)) {
+          if (!['label', 'path', 'limit'].includes(key)) errors.push(`${at}: unknown key "${key}" (known: label, path, limit)`);
+        }
+        if (typeof query.label !== 'string' || !query.label) errors.push(`${at}.label must be a non-empty string`);
+        else if (seenLabels.has(query.label)) errors.push(`${at}.label "${query.label}" is used twice`);
+        else seenLabels.add(query.label);
+        if (query.limit !== undefined && (!Number.isInteger(query.limit) || query.limit < 1)) {
+          errors.push(`${at}.limit must be a positive integer`);
+        }
+        if (typeof query.path !== 'string' || !query.path) { errors.push(`${at}.path must be a non-empty string`); return; }
+        let qParsed = null;
+        try {
+          qParsed = parsePathExpression(query.path);
+        } catch (err) {
+          errors.push(`${at} path grammar: ${err.message}`);
+          return;
+        }
+        const before = errors.length;
+        checkHopTypes(qParsed, nodeTypes, edgeTypes, errors, at);
+        if (errors.length === before) contextParsed.push({ label: query.label, limit: query.limit, parsed: qParsed });
+      });
+    }
+  }
+
+  return { ok: errors.length === 0, errors, parsed, contextParsed };
+}
+
+// Type and endpoint checks of a parsed path, shared by `path` and the context
+// queries (FR-7.9). Ring attachment (E21) and __auto__ (E45) are scene-only
+// concerns and stay in validateView.
+function checkHopTypes(node, nodeTypes, edgeTypes, errors, at) {
+  if (!isPathSafeTypeName(node.type) || !nodeTypes[node.type]) {
+    errors.push(`${at}: unknown node type "${node.type}" (not in tenant registry)`);
+  }
+  for (const hop of node.hops) {
+    const decl = edgeTypes[hop.edgeType];
+    if (!decl) {
+      errors.push(`${at}: unknown edge type "${hop.edgeType}" (not in tenant registry)`);
+    } else {
+      const [fromType, toType] = hop.dir === '<--' ? [hop.target.type, node.type] : [node.type, hop.target.type];
+      if (nodeTypes[fromType] && !endpointAllows(decl.from, fromType)) {
+        errors.push(`${at}: hop ${node.type} ${hop.dir}${hop.edgeType}: "${fromType}" is no valid from-type of "${hop.edgeType}"`);
+      }
+      if (nodeTypes[toType] && !endpointAllows(decl.to, toType)) {
+        errors.push(`${at}: hop ${node.type} ${hop.dir}${hop.edgeType}: "${toType}" is no valid to-type of "${hop.edgeType}"`);
+      }
+    }
+    checkHopTypes(hop.target, nodeTypes, edgeTypes, errors, at);
+  }
+}
+
+// Fallback context queries derived from the view path (E78): one section per
+// ring hop and per cluster hop starting at the anchor, so the v1 tooltip
+// sections "Ringe" and "Zugehörigkeiten" survive without type knowledge in the
+// renderer. A cluster section keeps the cluster's transitive self-hop (the
+// upward chain), but drops everything else hanging off it.
+function derivedContextQueries(parsed) {
+  const out = [];
+  if (!parsed) return out;
+  for (const hop of parsed.hops) {
+    if (hop.selfHop) continue;
+    const target = hop.target;
+    const isRing = target.render === 'ring:prev' || target.render === 'ring:next';
+    const isCluster = target.render === 'cluster';
+    if (!isRing && !isCluster) continue;
+    const keptHops = isCluster ? target.hops.filter((h) => h.selfHop) : [];
+    const query = {
+      type: parsed.type,
+      render: 'node',
+      hops: [{ dir: hop.dir, edgeType: hop.edgeType, selfHop: false, target: { ...target, render: 'node', hops: keptHops } }],
+    };
+    out.push({ label: target.type, parsed: query, derived: true });
+  }
+  return out;
 }
 
 // Validate a whole VIEWS object (FR-7.1a): invalid views are rejected with a
@@ -10857,7 +10905,18 @@ function validateViews(views, registry) {
   const rejected = {};
   for (const [name, view] of Object.entries(views || {})) {
     const res = validateView(view, registry);
-    if (res.ok) valid[name] = { ...view, parsed: res.parsed };
+    // Views without `context` fall back to the queries derived from the path
+    // (E78) — resolved once here so the hover path never re-derives them.
+    // The resolved queries live in their OWN field: `context` stays the raw
+    // declaration, exactly like `path` survives next to `parsed`, so a
+    // validated view can be re-validated (the intake offer does that).
+    if (res.ok) {
+      valid[name] = {
+        ...view,
+        parsed: res.parsed,
+        contextQueries: res.contextParsed && res.contextParsed.length ? res.contextParsed : derivedContextQueries(res.parsed),
+      };
+    }
     else rejected[name] = res.errors;
   }
   return { valid, rejected, anyValid: Object.keys(valid).length > 0 };
@@ -11214,6 +11273,85 @@ function projectView(options) {
       hiddenVisited,
     },
   };
+}
+
+// --- Hover context queries (FR-7.9 / E78) ----------------------------------
+
+// Per-query caps: a tooltip is a glance, not a scene.
+const CONTEXT_CAPS = { entries: 25, visited: 2000 };
+
+// projectContextTree({ store|idx, parsed, rootId, asOf, limit }) →
+// { children: [{ id, type, stand, children, more }], total, truncated }
+//
+// Depth-first walk along the path AST from one node: every hop is one level of
+// indentation, [hidden] stations are contracted away (their children move up,
+// like FR-7.1a), [ring]/[cluster] render modes carry no meaning here. Cycles
+// are cut per (node, path position) — the same pair never expands twice.
+// Siblings keep a deterministic order (type, then id); display-label ordering
+// is the caller's job, since only it knows the privacy gate (E48).
+function projectContextTree(options) {
+  const { parsed, rootId, asOf = null, limit = CONTEXT_CAPS.entries } = options;
+  const idx = options.idx || buildLiveIndexes(options.store, asOf, edgeTypesOfPath(parsed));
+  const at = idx.at;
+
+  const root = idx.nodes.get(String(rootId));
+  if (!root || root.type !== parsed.type) return { children: [], total: 0, truncated: false };
+
+  const astIds = new Map();
+  (function number(node) { astIds.set(node, astIds.size); for (const hop of node.hops) number(hop.target); })(parsed);
+
+  let total = 0;
+  let truncated = false;
+  let visits = 0;
+
+  // Collect the entries one AST station contributes, walking through hidden
+  // stations without emitting them. `path` guards against cycles.
+  const expand = (nodeId, ast, seen) => {
+    const out = [];
+    for (const hop of ast.hops) {
+      const list = (hop.dir === '<--' ? idx.byTarget : idx.bySource).get(nodeId) || [];
+      for (const edge of list) {
+        if (edge.type !== hop.edgeType) continue;
+        const otherId = hop.dir === '<--' ? edge.source : edge.target;
+        // The hovered node is the tooltip's reference point, never one of its
+        // own context entries (nobody is their own colleague); walking on from
+        // it would only repeat what the root expansion already covers.
+        if (otherId === root.id) continue;
+        const other = idx.nodes.get(otherId);
+        if (!other || other.type !== hop.target.type) continue;
+
+        const targetAst = hop.selfHop ? ast : hop.target;
+        const visitKey = `${otherId}|${astIds.get(targetAst)}`;
+        if (seen.has(visitKey)) continue;
+        if (++visits > CONTEXT_CAPS.visited) { truncated = true; return out; }
+        // Backtracking DFS: the guard covers the CURRENT branch, so a node
+        // reachable through two branches shows up under both (a tree, not a
+        // spanning tree) without copying the set at every candidate.
+        seen.add(visitKey);
+        if (hop.target.render === 'hidden') {
+          // Contracted: this station never shows up, its children move up.
+          out.push(...expand(otherId, targetAst, seen));
+        } else if (total >= limit) {
+          truncated = true;
+        } else {
+          total++;
+          out.push({
+            id: otherId,
+            type: other.type,
+            stand: recordStandAt(other, at),
+            children: expand(otherId, targetAst, seen),
+          });
+        }
+        seen.delete(visitKey);
+      }
+    }
+    out.sort((a, b) => (a.type < b.type ? -1 : a.type > b.type ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return out;
+  };
+
+  const seen = new Set([`${root.id}|${astIds.get(parsed)}`]);
+  const children = expand(root.id, parsed, seen);
+  return { children, total, truncated };
 }
 
 // --- Diagnosis projection (§7, AK 53) --------------------------------------
@@ -11598,6 +11736,63 @@ function og2Project(state) {
   ];
   const links = adapted.drawLinks.map((l) => ({ source: l.source, target: l.target, derived: l.derived }));
   return { projection, adapted, mode: 'view', sub: { nodes, links } };
+}
+
+// --- Hover context (FR-7.9 / E78) ------------------------------------------
+
+// One shared live index for all context queries of a view, rebuilt whenever
+// the store, the time slice or the view changes. og2InvalidateContext() is the
+// explicit hook for in-place store mutations (import, intake).
+let contextCache = { key: null, idx: null, byNode: new Map() };
+
+function og2InvalidateContext() {
+  contextCache = { key: null, idx: null, byNode: new Map() };
+}
+
+function contextIndex(state, view) {
+  const key = `${state.activeViewName}|${state.asOf || ''}`;
+  if (contextCache.key === key && contextCache.store === state.store && contextCache.idx) return contextCache.idx;
+  const edgeTypes = new Set();
+  for (const query of view.contextQueries || []) {
+    (function walk(node) { for (const hop of node.hops) { edgeTypes.add(hop.edgeType); walk(hop.target); } })(query.parsed);
+  }
+  const idx = buildLiveIndexes(state.store, state.asOf, edgeTypes.size ? edgeTypes : undefined);
+  contextCache = { key, store: state.store, idx, byNode: new Map() };
+  return idx;
+}
+
+// Context sections for one node: every query whose anchor type matches, as an
+// indented tree. Labels are the labelProp-resolved raw labels — the privacy
+// gate (FR-8.5/E48) sits in the renderer, like everywhere else.
+// Returns [{ label, entries: [{ id, type, label, children }], more }].
+function og2ContextSections(state, nodeId, nodeType) {
+  const view = og2ActiveView(state);
+  if (!view || !(view.contextQueries || []).length) return [];
+  const id = String(nodeId);
+  const type = nodeType || (state.store.nodes.get(id) || {}).type;
+  if (!type) return [];
+  const cacheKey = `${id}|${type}`;
+  const idx = contextIndex(state, view);
+  const cached = contextCache.byNode.get(cacheKey);
+  if (cached) return cached;
+
+  const nodeTypes = state.registry.nodeTypes || {};
+  const sections = [];
+  for (const query of view.contextQueries) {
+    if (query.parsed.type !== type) continue;
+    const limit = query.limit || CONTEXT_CAPS.entries;
+    const tree = projectContextTree({ idx, parsed: query.parsed, rootId: id, asOf: state.asOf, limit });
+    if (!tree.children.length) continue;
+    const toEntries = (list) => list.map((child) => ({
+      id: child.id,
+      type: child.type,
+      label: resolveDisplayLabel(nodeTypes[child.type], child.stand) ?? child.id,
+      children: toEntries(child.children),
+    }));
+    sections.push({ label: query.label, entries: toEntries(tree.children), more: tree.truncated });
+  }
+  contextCache.byNode.set(cacheKey, sections);
+  return sections;
 }
 
 // Cluster/member path structure of a parsed view: which node types render as
@@ -12588,6 +12783,10 @@ function og2ApplyFromUI(triggerSource = 'unknown') {
   // pruned afterwards — the E67 cap budget belongs to the visible scene
   // (AK 103); temporarily shown subtrees rejoin the projection.
   og2.excludedIds = og2EffectiveHiddenIds();
+  // Hover context is derived from the same stock (FR-7.9): drop its cache
+  // whenever the scene is rebuilt, so an import or a time change never leaves
+  // a stale tree behind.
+  og2InvalidateContext();
   const res = og2.diff ? og2ProjectDiff(og2, og2.diff.t1, og2.diff.t2) : og2Project(og2);
   const projection = res.projection;
   og2.lastDiff = res.diff || null;

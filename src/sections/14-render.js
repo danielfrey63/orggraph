@@ -460,7 +460,7 @@ export function renderGraph(sub) {
     const nodeLabel = getDisplayLabel(d);
     const clusters = clustersAtPoint(p);
     
-    const lines = buildPersonTooltipLines(personId, nodeLabel, clusters);
+    const lines = buildNodeTooltipLines(personId, nodeLabel, clusters);
     showTooltip(event.clientX, event.clientY, lines);
   });
   node.on('mouseleave', hideTooltip);

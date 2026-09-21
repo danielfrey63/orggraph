@@ -114,17 +114,29 @@ describe('handleClusterHover', () => {
     expect(tooltip.textContent).toContain('Alice');
   });
 
-  it('shows cluster labels when hovering only an org area', () => {
-    globalThis.byId = new Map([['o1', { id: 'o1', label: 'Company', type: 'org' }]]);
-    globalThis.allowedOrgs = new Set(['o1']);
-    globalThis.clusterPolygons = new Map([['o1', [[-10, -10], [10, -10], [10, 10], [-10, 10]]]]);
+  // FR-7.9/E78: a cluster is a node too — hovering its area gives the full
+  // node tooltip of the innermost cluster (header + its context sections),
+  // with the enclosing ones listed under "Am Cursor".
+  it('shows the innermost cluster as a node tooltip when hovering only an org area', () => {
+    globalThis.byId = new Map([
+      ['o1', { id: 'o1', label: 'Company', type: 'org' }],
+      ['o2', { id: 'o2', label: 'Division', type: 'org' }],
+    ]);
+    globalThis.allowedOrgs = new Set(['o1', 'o2']);
+    globalThis.orgParent = new Map([['o2', 'o1']]);
+    globalThis.clusterPolygons = new Map([
+      ['o1', [[-10, -10], [10, -10], [10, 10], [-10, 10]]],
+      ['o2', [[-5, -5], [5, -5], [5, 5], [-5, 5]]],
+    ]);
     globalThis.d3 = {
       pointer: () => [0, 0],
       polygonContains: () => true,
     };
     handleClusterHover(event, svgSel);
-    expect(document.body.lastElementChild.textContent).toContain('Cluster:');
-    expect(document.body.lastElementChild.textContent).toContain('Company');
+    const text = document.body.lastElementChild.textContent;
+    expect(text.split('\n')[0]).toBe('Division'); // innermost is the subject
+    expect(text).toContain('Am Cursor:');
+    expect(text).toContain('  • Company');       // the enclosing one
   });
 
   it('hides the tooltip when nothing is hit or no transform exists', () => {
