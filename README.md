@@ -8,11 +8,12 @@ dependency-freier Build fügt alles zu einer Datei zusammen.
 
 ## Entwicklung
 
-```
+```text
 src/sections/*.js     # App-Code als ES-Module (nummeriert = Inlining-Reihenfolge)
 src/styles.css        # Styles
 vendor/d3.v7.min.js   # D3 (wird beim Build inlined)
-index.template.html   # HTML-Gerüst mit @@CSS@@/@@D3@@/@@APP@@-Platzhaltern
+vendor/age.min.js     # age-Verschlüsselung (wird beim Build inlined, `npm run bundle:age`)
+index.template.html   # HTML-Gerüst mit @@CSS@@/@@D3@@/@@AGE@@/@@APP@@-Platzhaltern
 build.js              # Inline-Build (nur Node-Builtins)
 verify.js             # Prüft, ob index.html mit den Quellen in Sync ist (Re-Build + Vergleich)
 tests/*.test.js       # Vitest-Suiten
@@ -25,31 +26,26 @@ node build.js     # erzeugt index.html aus Template + Quellen
 npm run verify    # Re-Build + Sync-Check des committeten index.html (modulo Zeilenenden)
 ```
 
-`build.js` läuft mit purem Node (nur `node:fs`): Es inlined CSS, D3 und die Sektionen
-in `index.html` und strippt dabei die Modul-Syntax (`import`-Zeilen, `export`-Präfixe)
-sowie die `/* v8 ignore */`-Coverage-Marker. Der Build ist unabhängig von der
-Versionierung – er bumpt nie, sondern liest nur die aktuelle Version aus dem
-Template und stempelt sie in `index.html`.
+`build.js` läuft mit purem Node (nur Builtins): Es inlined CSS, D3, age und die
+Sektionen in `index.html` und strippt dabei die Modul-Syntax (`import`-Zeilen,
+`export`-Präfixe) sowie die `/* v8 ignore */`-Coverage-Marker. Anschliessend
+parst es das Ergebnis, damit ein doppelter Top-Level-Name oder eine
+stehengebliebene `import`-Zeile den Build abbricht statt eine leere App zu
+erzeugen.
 
 ### Versionierung
 
-Single Source of Truth für die App-Version ist die `APP_VERSION`-Konstante in
-`index.template.html` (Schema `MAJOR.MINOR.BUILD`). `build.js` fasst nur CSS, D3
-und die Sektionen zusammen und fasst die Version **nicht** an; der Header
-(`#appVersion`) rendert sie zur Laufzeit aus `APP_VERSION`. Das `version`-Feld in
-`package.json` ist **nicht** mehr massgebend.
+Die App-Version steht einzig in der `APP_VERSION`-Konstante in
+`index.template.html` (Schema `MAJOR.MINOR.BUILD`). Der Header (`#appVersion`)
+rendert sie zur Laufzeit; `build.js` fasst sie nicht an.
 
-Das Hochzählen besorgt der AI-Toolbox-Versionierer (`bump-version.sh`):
+Build- und Minor-Nummer zählen die Versionierungs-Hooks der
+[ai-toolbox](../ai-toolbox) hoch; installiert werden sie dort mit
+`toolbox install --what versioning-hooks`. **Major** wird manuell im Template
+angehoben.
 
-- **Build-Nummer** (drittes Segment): der Per-Edit-PostToolUse-Hook (in
-  `.claude/settings.json`) zählt sie bei jedem Edit am Template hoch.
-- **Minor** (zweites Segment): der Hook `.githooks/pre-commit` zählt bei jedem
-  Commit Minor+Build hoch, baut `index.html` neu und staged beide Dateien mit.
-
-Der Hook-Pfad wird via `prepare`-Script (`git config core.hooksPath .githooks`)
-bei `npm install` gesetzt – nach einem frischen Clone einmal `npm install`
-ausführen. Der Versionierer wird relativ zum Repo erwartet (`../ai-toolbox`).
-**Major** wird bewusst nur manuell angehoben (direkt im Template editieren).
+Nach einem frischen Clone einmal `npm install` ausführen: Das `prepare`-Script
+setzt `core.hooksPath` auf `.githooks`.
 
 ### Tests & Coverage (einmalig `npm install`)
 
