@@ -87,11 +87,12 @@ Die App wird über eine Env-Datei im JSON-Format konfiguriert (Vorlage:
 
 ```json
 {
-  "DATA_URL": "./data.example.json",
-  "DATA_ATTRIBUTES_URL": "./attributes.example.txt",
+  "VIEWS": {
+    "Start": { "path": "Person <--berichtetAn-- Person", "roots": ["__auto__"], "depth": 3 }
+  },
+  "DATA_URL": "./crawl-legacy-sem-20260916-1143.json",
 
   "TOOLBAR_DEPTH_DEFAULT": 2,
-  "TOOLBAR_DIRECTION_DEFAULT": "down",
   "TOOLBAR_MANAGEMENT_ACTIVE": false,
   "TOOLBAR_HIERARCHY_ACTIVE": false,
   "TOOLBAR_LABELS_ACTIVE": false,
@@ -113,18 +114,13 @@ Die App wird über eine Env-Datei im JSON-Format konfiguriert (Vorlage:
 
 ### Konfigurationsoptionen
 
-- **`DATA_URL`**: Pfad/URL zur Datendatei (beim Import relativ zur Env-Datei
+- **`VIEWS`**: die Views des Mandanten (Pfad-Ausdruck, `roots`, `depth` je
+  View; Grammatik und Render-Modi in PRD.md FR-7.1a). Pflicht für einen
+  OrgGraph-2.0-Mandanten, zusammen mit der Typ-Registry
+- **`DATA_URL`**: Pfad/URL zu Snapshot-Dateien, die mit der Env zusammen
+  importiert werden (String oder Array; beim Import relativ zur Env-Datei
   aufgelöst, am Dev-Server relativ zur Seite)
-- **`DATA_ATTRIBUTES_URL`**: Pfad/URL zu Attributdateien (String oder Array;
-  TSV/CSV/TXT) – explizite Auflistung einzelner Dateien
-- **`DATA_ATTRIBUTES_DIR`**: Verzeichnis(se) mit Attributdateien (String oder
-  Array). Alle TSV/CSV/TXT-Dateien darin werden geladen, ohne sie einzeln
-  aufzulisten; kombinierbar mit `DATA_ATTRIBUTES_URL` (Duplikate werden
-  übersprungen). Beim Import zählt die Verzeichnisstruktur des Drops; am
-  Dev-Server wird das Directory-Listing des Servers ausgewertet (funktioniert
-  z.B. mit `python -m http.server`, VS Code Live Server, nginx autoindex)
 - **`TOOLBAR_DEPTH_DEFAULT`**: Standard-Suchtiefe
-- **`TOOLBAR_DIRECTION_DEFAULT`**: Standard-Richtung (`both`, `down`, `up`)
 - **`TOOLBAR_MANAGEMENT_ACTIVE`**: Management-Filter standardmässig aktiviert
 - **`TOOLBAR_HIERARCHY_ACTIVE`**: Hierarchie-Layout standardmässig aktiviert
 - **`TOOLBAR_LABELS_ACTIVE`**: Label-Sichtbarkeit (`true`/`false` oder
@@ -145,38 +141,19 @@ Die App wird über eine Env-Datei im JSON-Format konfiguriert (Vorlage:
 
 ## Datenformat
 
-> **Legacy bis Big Bang:** Das folgende Format ist das **Alt-Format v1** und gilt bis zur Umstellung auf den typisierten Property-Graphen (PRD.md). Das künftige Snapshot-Format ist in SNAPSHOT-FORMAT-SPEC.md definiert; das Alt-Format bleibt als Migrationsquelle in DATA-FORMAT-SPEC.md dokumentiert.
+Ein Mandant besteht aus drei Dateien, die zusammen in die App gedroppt werden:
 
-Die App erwartet eine Datei `data.json` oder `data.generated.json` im `orggraph/` Verzeichnis mit folgendem Format:
+- **Typ-Registry** (`schema/registry.json`): welche Knoten- und Kantentypen es
+  gibt, mit ihren Properties und Identitäten. Sie entscheidet, was ein Import
+  überhaupt annehmen darf; Schema in `schema/`.
+- **Env-Config** (`env.json`): Views und Oberflächen-Defaults, siehe oben.
+- **Snapshot** (eine JSON-Datei pro Lauf): der **Vollstand** einer Quelle zu
+  einem Zeitpunkt, formal definiert in SNAPSHOT-FORMAT-SPEC.md. Die App difft
+  ihn gegen den Store und schreibt Versionen fort, statt zu überschreiben.
 
-- **`persons`**: Array von Personen-Objekten
-  - `id` (string, required): Eindeutige ID
-  - `label` (string, required): Anzeigename
-  - `email` (string, optional): E-Mail-Adresse
-  - `isBasis` (boolean, optional): `true` = Person ohne Mitarbeiter (Blatt-Knoten, wird bei aktiviertem Management-Filter ausgeblendet)
-- **`orgs`**: Array von Organisations-Objekten
-  - `id` (string, required): Eindeutige ID
-  - `label` (string, required): Name der Organisationseinheit
-- **`links`**: Array von Beziehungen
-  - `source` (string, required): Quell-ID
-  - `target` (string, required): Ziel-ID
-  - Typen: Person→Person (Vorgesetzter→Mitarbeiter), Person→Org (Mitgliedschaft), Org→Org (Hierarchie)
-
-### Optional: Transform-Utility
-
-Falls deine Quelldaten ein anderes Format haben, kannst du das mitgelieferte Transform-Skript verwenden:
-
-```bash
-# Mit Positionsargumenten
-node transform.js input.json output.json
-
-# Mit benannten Optionen
-node transform.js --input source.json --output data.json
-node transform.js -i source.json -o data.json
-
-# Hilfe anzeigen
-node transform.js --help
-```
+Aus mehreren Snapshots und Listen entsteht im Profil der **Tenant-Store**: die
+zusammengeführte, versionierte Wahrheit des Mandanten. Was die App zeichnet,
+ist nie der Store selbst, sondern eine View-Projektion daraus.
 
 ## Start
 
@@ -209,13 +186,14 @@ Das läuft **nicht** durch die Import-Pipeline: kein Diff, kein Plausibilitäts-
 Eine Runde heisst: frischen **Vollstand** der Quelle holen, in die App droppen, das Plausibilitäts-Gate beurteilen. Der Crawler berechnet nie selbst ein Delta; die App difft den Vollstand gegen den Store (FR-5.6).
 
 1. **Sichern.** Zuerst den Bestand exportieren (siehe oben). Das Revisions-Journal nach FR-6.9b liegt zwar im Store, hat aber noch keine Oberfläche: Der Weg zurück ist heute die Wiederherstellung aus dem ZIP.
-2. **Crawlen.** Das Crawler-Skript des Mandanten (unter `data/crawling/<mandant>/`, nicht eingecheckt) in der DevTools-Konsole der eingeloggten Quelle einfügen. Zuerst `await OrgGraphHarvest.status()`: Liegt der exportierte Bestand der letzten Runde noch in der IndexedDB, genügt `await OrgGraphHarvest.update()` (liest nur die OEs neu und daraus die geänderten Personen). Sonst – und etwa jede dritte Runde bewusst – `await OrgGraphHarvest.start()` für den echten Vollstand. Ein Update sieht eine **gewechselte Vorgesetzte** bei sonst unveränderter Person nicht.
-3. **Snapshot exportieren.** `await OrgGraphHarvest.exportSnapshot()` lädt `crawl-<quelle>-<stamp>-<id8>.json` herunter. Danach **kein** `reset()`: Der Bestand in der IndexedDB ist die Basis für das nächste günstige `update()`.
-4. **Droppen.** Die JSON-Datei ins App-Fenster ziehen. Der Fortschritt läuft als Füllung hinter dem Text der Fusszeile.
-5. **Gate beurteilen.** Übersteigt das Delta 20 Prozent eines Zählers, öffnet sich ein kopierbarer Dialog mit den Zählern a bis f und ihren Nennern (FR-5.7). Das ist bei einer Runde nach mehreren Wochen normal. Passt die Grössenordnung zur verstrichenen Zeit, bestätigen; sonst abbrechen und den Crawl prüfen – ein zu enger Scope sieht wie ein Massenabgang aus.
-6. **Abgleich prüfen.** Bei gebundenem Mandanten-Repo committet die App danach selbst. Die Fusszeile muss «Repo: committet …» zeigen.
+2. **Snapshot holen.** Den Crawler des Mandanten laufen lassen und seinen Snapshot exportieren. Crawler und ihre Bedienung gehören ins **private Mandanten-Repo**, nicht hierher: Sie kennen Quelle, Zugang und Scope eines einzelnen Mandanten. Dieses Repo liefert ihnen die Strukturen, gegen die sie schreiben: die Typ-Registry in `schema/` und SNAPSHOT-FORMAT-SPEC.md.
+3. **Droppen.** Die Snapshot-Datei ins App-Fenster ziehen. Der Fortschritt läuft als Füllung hinter dem Text der Fusszeile.
+4. **Gate beurteilen.** Übersteigt das Delta 20 Prozent eines Zählers, öffnet sich ein kopierbarer Dialog mit den Zählern a bis f und ihren Nennern (FR-5.7). Das ist bei einer Runde nach mehreren Wochen normal. Passt die Grössenordnung zur verstrichenen Zeit, bestätigen; sonst abbrechen und den Crawl prüfen – ein zu enger Scope sieht wie ein Massenabgang aus.
+5. **Abgleich prüfen.** Bei gebundenem Mandanten-Repo committet die App danach selbst. Die Fusszeile muss «Repo: committet …» zeigen.
 
 Identifikator-Listen (`.txt`/`.tsv`/`.csv`) laufen nicht über diesen Weg, sondern über den Intake-Dialog: siehe [Attribute](#attribute).
+
+Ein Crawler liefert immer einen **Vollstand** seines Scopes und rechnet selbst kein Delta: Er kennt den Stand des Stores nicht, und ein Vollstand ist wiederholbar. Welche Teile er nicht erreicht hat, muss er in `meta.scope.excluded` melden, sonst sieht ein Ausfall wie ein Massenabgang aus (FR-5.7).
 
 ## Import per Drag & Drop
 
@@ -243,33 +221,41 @@ werden.
 
 ### Unterstützte Drops
 
-- **Einzeldateien** (auch mehrere gleichzeitig): Datensatz-JSON, Env-JSON,
-  Pseudo-Daten, Attribut-Dateien (`.tsv`/`.csv`/`.txt`).
+- **Einzeldateien** (auch mehrere gleichzeitig): Registry, Env-JSON, Snapshot,
+  Identifikator-Liste (`.tsv`/`.csv`/`.txt`), Pseudo-Daten.
 - **Ordner**: wird rekursiv eingelesen.
 - **ZIP-Archiv**: wird direkt im Browser entpackt (ohne Dependencies, via
-  `DecompressionStream`; Stored- und Deflate-Einträge).
+  `DecompressionStream`; Stored- und Deflate-Einträge). Ein Tenant-ZIP wird
+  dabei als Wiederherstellung erkannt, siehe
+  [Bestand wiederherstellen](#bestand-wiederherstellen).
 
 ### Wie Dateien erkannt werden
 
 Die Erkennung erfolgt **inhaltsbasiert, nicht über den Dateinamen** – die
-Dateien dürfen beliebig heissen:
+Dateien dürfen beliebig heissen. Einzige Ausnahme sind die
+Identifikator-Listen, die über die Endung erkannt werden und deren Name zur
+Kategorie wird:
 
-- **Env-Config**: parsebares JSON, das einen `DATA_URL`-Schlüssel oder
-  Schlüssel mit Präfix `TOOLBAR_`/`LEGEND_` enthält.
-- **Datensatz**: JSON mit `persons`-, `orgs`- oder `links`-Array.
+- **Liste**: Endung `.tsv`/`.csv`/`.txt`.
+- **Env-Config**: parsebares JSON mit `VIEWS`, `DATA_URL` oder Schlüsseln mit
+  Präfix `TOOLBAR_`/`LEGEND_`.
 - **Pseudo-Daten**: JSON mit `names`-Array oder `organizationalUnits*`-Schlüsseln.
-- **Attribute**: Dateiendung `.tsv`/`.csv`/`.txt`.
+- **Snapshot**: JSON mit `meta.source`, `meta.snapshot`, `schema` sowie
+  `nodes`- und `edges`-Array.
+- **Registry**: JSON mit `version`, `nodeTypes` und `edgeTypes`.
 
 Nur wenn ein Drop **mehrere** Env-Kandidaten enthält, zählt der Name: Die Datei
 mit dem exakten Namen `env.json` gewinnt (sonst die alphabetisch erste).
+Dateien aus dem Alt-Format werden erkannt, aber nicht übernommen: Sie werden
+mit Hinweis abgewiesen, damit eine liegengebliebene v1-Konfiguration kein
+Profil still übernimmt.
 
 ### Env-gesteuertes Nachziehen
 
 Enthält ein Ordner-/ZIP-Drop eine Env-Config, ist sie **massgebend**: Die in
-`DATA_URL` und `DATA_ATTRIBUTES_URL` referenzierten Dateien werden relativ zur
-Lage der Env-Datei im Drop aufgelöst (Fallback: eindeutiger Dateiname) und
-gezielt übernommen; nicht referenzierte Datensatz-/Env-Kandidaten werden
-ignoriert (mit Hinweis). Referenzen, die im Drop fehlen, werden gemeldet – auf
+`DATA_URL` referenzierten Snapshots werden relativ zur Lage der Env-Datei im
+Drop aufgelöst (Fallback: eindeutiger Dateiname) und gezielt übernommen; nicht
+referenzierte Kandidaten werden ignoriert (mit Hinweis). Referenzen, die im Drop fehlen, werden gemeldet – auf
 einem Dev-Server greift dafür weiterhin der `fetch`-Fallback.
 
 Nach dem Import liest die App die Konfiguration bei jedem Start zuerst aus
@@ -293,7 +279,9 @@ METHODS = GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
 HEADERS = Content-Type,User-Agent,Authorization,Accept
 ```
 
-Das Repo enthält `config.json` (Empfänger), `manifest.json` (Klartext, diffbar), `tenant.zip.age` (Registry, env, Store) und `snapshots/*.age` (Rohdateien). Von Hand geht dasselbe über [Bestand sichern](#bestand-sichern-export) und [Bestand wiederherstellen](#bestand-wiederherstellen); `tools/tenant_repo.py` (Python 3 + `pyrage`) legt Repos an und spielt Dateien über einen lokalen Klon ein oder aus:
+Das Repo enthält `config.json` (Empfänger), `manifest.json` (Klartext, diffbar), `tenant.zip.age` (Registry, env, Store) und `snapshots/*.age` (Rohdateien). Dort gehört auch alles Mandantenspezifische hin, das nicht in die App wandert: der **Crawler** der Quelle samt Bedienungsanleitung, seine Konfiguration und die Rohlisten. Dieses Repo bleibt mandantenfrei und liefert nur die Strukturen, gegen die ein Crawler schreibt: die Typ-Registry in `schema/`, die Schemas daneben und SNAPSHOT-FORMAT-SPEC.md.
+
+Von Hand geht dasselbe über [Bestand sichern](#bestand-sichern-export) und [Bestand wiederherstellen](#bestand-wiederherstellen); `tools/tenant_repo.py` (Python 3 + `pyrage`) legt Repos an und spielt Dateien über einen lokalen Klon ein oder aus:
 
 ```bash
 python tools/tenant_repo.py keygen                                     # age-Identität der Maschine (einmalig)
@@ -330,19 +318,21 @@ Hinweis: Das Browser-Kontextmenü ist global unterdrückt, damit die App-eigenen
 
 ## Attribute
 
-Attributdateien (`.tsv`/`.csv`/`.txt`) ordnen Personen Attribute zu – eine
-Zeile pro Zuordnung: `identifier<TAB>attributname` (Identifier = E-Mail oder
-Personen-ID; Komma statt Tab funktioniert ebenfalls). Der **Dateiname ohne
-Endung** wird zur Kategorie: Die Attribut-Legende gruppiert hierarchisch nach
-Kategorie → Attribut (mit Trefferzahl pro Attribut), die Farben sind innerhalb
-einer Kategorie ähnlich und zwischen Kategorien klar unterscheidbar.
+Attribute sind keine eigene Dateiklasse, sondern Knoten im Store: Eine Kante
+von der Person zum Attribut-Knoten wird als **Ring** am Personenknoten
+gezeichnet, wenn der View-Pfad die Station mit `[ring]` rendert. Die
+Attribut-Legende gruppiert nach Kategorie und Attribut mit Trefferzahl; die
+Farben sind innerhalb einer Kategorie ähnlich und zwischen Kategorien klar
+unterscheidbar.
 
-Geladen wird über die Env-Konfiguration – `DATA_ATTRIBUTES_DIR` (ganzes
-Verzeichnis, keine Einzelauflistung nötig) und/oder `DATA_ATTRIBUTES_URL`
-(explizite Dateiliste) –, per Drag & Drop oder über den Upload-Button im
-Legenden-Header. Importierte Dateien landen in IndexedDB und werden beim
-nächsten Start automatisch geladen. Leere Dateien registrieren eine Kategorie
-als Platzhalter.
+Der Weg hinein ist eine **Identifikator-Liste** (`.txt`/`.tsv`/`.csv`): eine
+E-Mail oder ID pro Zeile, der Dateiname ohne Endung wird zur Kategorie. Breite
+Tabellen mit Kopfzeile ergeben eine Liste pro Spalte. Ein Drop öffnet den
+Intake-Dialog, der die Treffer gegen die offenen Identitäten auflöst, Kanten-
+und Zieltyp erfragt und daraus einen Snapshot baut, den die reguläre
+Import-Pipeline übernimmt. Jede Liste läuft als eigene Quelle: Ein erneuter
+Import derselben Liste ist der Vollstand genau dieses Attributs, andere Listen
+bleiben unberührt. Wer in der Liste fehlt, verliert die Kante.
 
 ### Bedienung der Attribut-Legende
 
@@ -379,61 +369,19 @@ berechnet die Ausblendung sofort neu. Der Zustand ist transient: keine
 Einträge in der Hidden-Legende, nichts persistiert, Ausschalten stellt alles
 wieder her; der Root-Knoten bleibt immer sichtbar.
 
-### Attribute erstellen & speichern
+### Treffer und Vorschläge im Intake-Dialog
 
-Per Rechtsklick auf einen Personen-Knoten («Attribute») lassen sich bestehende
-Attribute zuweisen sowie **neue Attribute und neue Kategorien** anlegen.
-Geänderte Kategorien zeigen in der Legende einen **Speichern-Button**
-(Diskette) – auch frisch im UI erstellte Kategorien.
-
-Speichern wirkt zweistufig:
-
-1. **IndexedDB**: Der aktuelle Stand der Kategorie wird unter dem Schlüssel
-   der importierten Datei abgelegt und überlebt damit jeden Reload –
-   unabhängig von der Festplatte.
-2. **Festplatte**: In Browsern mit File System Access API (Chrome/Edge)
-   öffnet sich ein Speichern-Dialog; das gewählte Datei-Handle wird pro
-   Kategorie gemerkt, weitere Speichervorgänge überschreiben die Datei
-   direkt ohne Dialog. Andere Browser erhalten einen normalen Download.
-
-Gespeichert wird `identifier<TAB>attributname`; ein optionaler Attributwert
-aus der Quelldatei (dritte Spalte, Default `1`) bleibt dabei erhalten –
-Laden und Speichern sind verlustfrei.
-
-### Fuzzy-Matching & gespeicherte Zuordnungen
-
-Identifier ohne exakten Treffer durchlaufen beim Import eine Fuzzy-Suche
-(Levenshtein über Namen und E-Mails). Gefundene Kandidaten werden in einem
-Dialog zur Bestätigung angeboten; Einträge ohne Zuordnung werden als CSV
-exportiert.
-
-Alle Auflösungen werden in IndexedDB persistiert (`identifier → Personen-ID`
-bzw. `null` für bestätigte Nicht-Treffer): Beim nächsten Reload werden sie
-direkt angewendet – Fuzzy-Suche und Dialog laufen nur noch für neue
-Identifier. Zeigt eine gespeicherte Zuordnung auf eine Person, die es im
-aktuellen Datensatz nicht mehr gibt, wird der Identifier automatisch neu
-aufgelöst. Der Papierkorb-Knopf in der Fusszeile löscht auch diese
-Zuordnungen; ein erneuter Ordner-Drop behält sie.
+Die Zuordnung passiert **vor** dem Snapshot, nicht im Import: Exakte Treffer
+laufen über die Identifikator-Pfade der Registry (E-Mail, ID) gegen die zum
+Zeitpunkt offenen Identitäten. Ein Eintrag ohne exakten Treffer wird nicht
+geraten, sondern als Vorschlag mit Kandidaten gezeigt und einzeln bestätigt
+oder übersprungen. Übersprungene Einträge erzeugen keine Kante.
 
 ## Beispiel
 
-```json
-{
-  "persons": [
-    { "id": "p-123", "label": "Max Mustermann", "email": "max@example.ch", "isBasis": true },
-    { "id": "p-456", "label": "Anna Müller", "email": "anna@example.ch" }
-  ],
-  "orgs": [
-    { "id": "10000025", "label": "Bundeskanzlei" }
-  ],
-  "links": [
-    { "source": "p-456", "target": "p-123" },
-    { "source": "p-123", "target": "10000025" }
-  ]
-}
-```
-
-**Hinweis**: `isBasis: true` bedeutet, dass die Person keine Mitarbeiter hat (Blatt-Knoten). Personen ohne `isBasis`-Feld oder mit `isBasis: false` sind Manager.
+Ein lauffähiger Mandant im Kleinformat liegt in `e2e/fixtures/`: Registry,
+Env mit Views und ein Snapshot, genau das Bündel, das die End-to-End-Tests in
+die App droppen.
 
 ## Anpassen
 
@@ -441,6 +389,5 @@ Zuordnungen; ein erneuter Ordner-Drop behält sie.
 - Styles: `src/styles.css` (u.a. `--root-node-fill` für die Füllfarbe der
   Root-Knoten und die `--attribute-circle-*`-Variablen für die Attributringe)
 - Logik/Rendering: `src/sections/*.js` (Nummern-Präfix = Inlining-Reihenfolge)
-- Transformation: `helpers/transform.js` (`npm run transform`)
 
 Niemals `index.html` direkt editieren – sie ist Build-Output.
