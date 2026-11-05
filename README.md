@@ -28,7 +28,7 @@ npm run verify    # Re-Build + Sync-Check des committeten index.html (modulo Zei
 `build.js` läuft mit purem Node (nur `node:fs`): Es inlined CSS, D3 und die Sektionen
 in `index.html` und strippt dabei die Modul-Syntax (`import`-Zeilen, `export`-Präfixe)
 sowie die `/* v8 ignore */`-Coverage-Marker. Der Build ist unabhängig von der
-Versionierung — er bumpt nie, sondern liest nur die aktuelle Version aus dem
+Versionierung – er bumpt nie, sondern liest nur die aktuelle Version aus dem
 Template und stempelt sie in `index.html`.
 
 ### Versionierung
@@ -47,7 +47,7 @@ Das Hochzählen besorgt der AI-Toolbox-Versionierer (`bump-version.sh`):
   Commit Minor+Build hoch, baut `index.html` neu und staged beide Dateien mit.
 
 Der Hook-Pfad wird via `prepare`-Script (`git config core.hooksPath .githooks`)
-bei `npm install` gesetzt — nach einem frischen Clone einmal `npm install`
+bei `npm install` gesetzt – nach einem frischen Clone einmal `npm install`
 ausführen. Der Versionierer wird relativ zum Repo erwartet (`../ai-toolbox`).
 **Major** wird bewusst nur manuell angehoben (direkt im Template editieren).
 
@@ -68,8 +68,8 @@ liegt die absolute Brutto-Coverage bei ~90,6 %.
 ### Coverage-Gutters in VS Code
 
 1. Extension **„Coverage Gutters"** (ryanluker.vscode-coverage-gutters) installieren.
-2. `npm run test:coverage` ausführen — erzeugt `coverage/lcov.info`.
-3. Befehl „Coverage Gutters: Display Coverage" (oder „Watch") ausführen —
+2. `npm run test:coverage` ausführen – erzeugt `coverage/lcov.info`.
+3. Befehl „Coverage Gutters: Display Coverage" (oder „Watch") ausführen –
    getestete/ungetestete Zeilen erscheinen farbig im Editor-Gutter.
 
 Die Gutters funktionieren in den Quell-Sektionen (`src/sections/*.js`) **und** in der
@@ -83,7 +83,7 @@ Die App wird über eine Env-Datei im JSON-Format konfiguriert (Vorlage:
 `data/env.example.json`). Sie kann auf zwei Wegen geladen werden:
 
 1. **Import** (empfohlen, funktioniert überall inkl. `file://`): Datei, Ordner
-   oder ZIP per Drag & Drop importieren — siehe [Import per Drag & Drop](#import-per-drag--drop).
+   oder ZIP per Drag & Drop importieren – siehe [Import per Drag & Drop](#import-per-drag--drop).
    Die Config landet in IndexedDB und wird bei jedem Start von dort gelesen.
 2. **Dev-Server-Fallback**: Liegt nichts in IndexedDB, versucht die App
    `./env.json` per `fetch` relativ zur Seite zu laden (funktioniert nur über
@@ -120,7 +120,7 @@ Die App wird über eine Env-Datei im JSON-Format konfiguriert (Vorlage:
 - **`DATA_URL`**: Pfad/URL zur Datendatei (beim Import relativ zur Env-Datei
   aufgelöst, am Dev-Server relativ zur Seite)
 - **`DATA_ATTRIBUTES_URL`**: Pfad/URL zu Attributdateien (String oder Array;
-  TSV/CSV/TXT) — explizite Auflistung einzelner Dateien
+  TSV/CSV/TXT) – explizite Auflistung einzelner Dateien
 - **`DATA_ATTRIBUTES_DIR`**: Verzeichnis(se) mit Attributdateien (String oder
   Array). Alle TSV/CSV/TXT-Dateien darin werden geladen, ohne sie einzeln
   aufzulisten; kombinierbar mit `DATA_ATTRIBUTES_URL` (Duplikate werden
@@ -189,25 +189,57 @@ node transform.js --help
 
 Nach Änderungen an `src/` zuerst `node build.js` ausführen.
 
+## Bestand sichern (Export)
+
+Der ganze Mandant – Registry, Views, env und der komplette Store – geht als **ein ZIP** auf die Platte. Das ist die Sicherung vor jeder Import-Runde und der Weg auf einen anderen Rechner.
+
+1. App öffnen. In der Fusszeile unter «Konfig:» prüfen, dass das richtige Profil aktiv ist: Der Profilname ist der Mandantenname im Export.
+2. In der Toolbar auf das Speichern-Symbol klicken (Tooltip «Grafik exportieren»).
+3. Im Dialog den **unteren** Knopf «Mandant exportieren (ZIP)» wählen. «SVG herunterladen» und «PNG herunterladen» liefern nur das Bild, nicht die Daten.
+4. Der Browser lädt `tenant-<mandant>-<zeitstempel>.zip` herunter. Die Meldung nennt Knoten- und Kantenzahl – stimmt die Grössenordnung, ist die Sicherung vollständig.
+
+Im ZIP liegen `manifest.json` im Klartext (Mandant, Zeitstempel, Zählwerte), `registry.json`, `env.json` und der Store (`store.json`, bei grossen Beständen zusätzlich `store.partN.json`). Das ZIP ist **unverschlüsselt** und enthält Personendaten: nicht in dieses Repo legen, sondern zu den übrigen Mandantendaten (dauerhaft und verschlüsselt liegt der Stand im [Mandanten-Repo](#mandanten-repo-e77)).
+
+## Bestand wiederherstellen
+
+1. App öffnen und unter «Konfig:» das **Zielprofil** wählen. Die Wiederherstellung überschreibt genau dieses Profil, ohne Rückfrage.
+2. Das Tenant-ZIP ins Fenster ziehen.
+3. Die App erkennt es am `manifest.json`, schreibt Registry, env und Store zurück und lädt neu. In der Fusszeile steht «Mandant «…» (Stand …) wiederhergestellt».
+
+Das läuft **nicht** durch die Import-Pipeline: kein Diff, kein Plausibilitäts-Gate, keine Dialoge, sondern ein 1:1-Zurückschreiben des gesicherten Stands. Fehlt im ZIP ein Store-Teil, wird die Wiederherstellung abgelehnt und das Profil bleibt unberührt.
+
+## Import-Runde (neue Daten einlesen)
+
+Eine Runde heisst: frischen **Vollstand** der Quelle holen, in die App droppen, das Plausibilitäts-Gate beurteilen. Der Crawler berechnet nie selbst ein Delta; die App difft den Vollstand gegen den Store (FR-5.6).
+
+1. **Sichern.** Zuerst den Bestand exportieren (siehe oben). Das Revisions-Journal nach FR-6.9b liegt zwar im Store, hat aber noch keine Oberfläche: Der Weg zurück ist heute die Wiederherstellung aus dem ZIP.
+2. **Crawlen.** Das Crawler-Skript des Mandanten (unter `data/crawling/<mandant>/`, nicht eingecheckt) in der DevTools-Konsole der eingeloggten Quelle einfügen. Zuerst `await OrgGraphHarvest.status()`: Liegt der exportierte Bestand der letzten Runde noch in der IndexedDB, genügt `await OrgGraphHarvest.update()` (liest nur die OEs neu und daraus die geänderten Personen). Sonst – und etwa jede dritte Runde bewusst – `await OrgGraphHarvest.start()` für den echten Vollstand. Ein Update sieht eine **gewechselte Vorgesetzte** bei sonst unveränderter Person nicht.
+3. **Snapshot exportieren.** `await OrgGraphHarvest.exportSnapshot()` lädt `crawl-<quelle>-<stamp>-<id8>.json` herunter. Danach **kein** `reset()`: Der Bestand in der IndexedDB ist die Basis für das nächste günstige `update()`.
+4. **Droppen.** Die JSON-Datei ins App-Fenster ziehen. Der Fortschritt läuft als Füllung hinter dem Text der Fusszeile.
+5. **Gate beurteilen.** Übersteigt das Delta 20 Prozent eines Zählers, öffnet sich ein kopierbarer Dialog mit den Zählern a bis f und ihren Nennern (FR-5.7). Das ist bei einer Runde nach mehreren Wochen normal. Passt die Grössenordnung zur verstrichenen Zeit, bestätigen; sonst abbrechen und den Crawl prüfen – ein zu enger Scope sieht wie ein Massenabgang aus.
+6. **Abgleich prüfen.** Bei gebundenem Mandanten-Repo committet die App danach selbst. Die Fusszeile muss «Repo: committet …» zeigen.
+
+Identifikator-Listen (`.txt`/`.tsv`/`.csv`) laufen nicht über diesen Weg, sondern über den Intake-Dialog: siehe [Attribute](#attribute).
+
 ## Import per Drag & Drop
 
 Daten lassen sich jederzeit per Drag & Drop ins Fenster laden (oder über den
 Dateiauswahl-Button der Drop-Zone). Alles wird lokal im Browser (IndexedDB)
-gespeichert und beim nächsten Öffnen automatisch geladen — funktioniert damit
+gespeichert und beim nächsten Öffnen automatisch geladen – funktioniert damit
 vollständig offline über `file://`, ohne Server.
 
 ### Desktop-Workflow (file://)
 
 1. `index.html` per Doppelklick öffnen.
 2. Den **Ordner** (oder das **ZIP**) mit Env-, Daten- und Attributdateien aus
-   dem Explorer/Finder direkt ins Browserfenster ziehen — ein
+   dem Explorer/Finder direkt ins Browserfenster ziehen – ein
    Verzeichnis-Dialog ist nicht nötig, der Drop ersetzt das «Verzeichnis
    öffnen».
 3. Die App speichert alles in IndexedDB und lädt sich neu; ab dann startet sie
    auch ohne erneuten Import direkt mit diesen Daten.
 
 Der Button «Dateien auswählen…» öffnet einen Datei-Dialog (mehrere Dateien
-inkl. ZIP möglich, aber keine Ordner) — für ganze Ordner den Drag & Drop-Weg
+inkl. ZIP möglich, aber keine Ordner) – für ganze Ordner den Drag & Drop-Weg
 nutzen. Hinweis: Beim Drop einer *einzelnen* Env-Datei kann der Browser aus
 Sicherheitsgründen nicht auf deren Nachbardateien zugreifen; die referenzierten
 Dateien müssen Teil desselben Drops sein (Ordner/ZIP) oder separat gedroppt
@@ -223,7 +255,7 @@ werden.
 
 ### Wie Dateien erkannt werden
 
-Die Erkennung erfolgt **inhaltsbasiert, nicht über den Dateinamen** — die
+Die Erkennung erfolgt **inhaltsbasiert, nicht über den Dateinamen** – die
 Dateien dürfen beliebig heissen:
 
 - **Env-Config**: parsebares JSON, das einen `DATA_URL`-Schlüssel oder
@@ -241,13 +273,15 @@ Enthält ein Ordner-/ZIP-Drop eine Env-Config, ist sie **massgebend**: Die in
 `DATA_URL` und `DATA_ATTRIBUTES_URL` referenzierten Dateien werden relativ zur
 Lage der Env-Datei im Drop aufgelöst (Fallback: eindeutiger Dateiname) und
 gezielt übernommen; nicht referenzierte Datensatz-/Env-Kandidaten werden
-ignoriert (mit Hinweis). Referenzen, die im Drop fehlen, werden gemeldet — auf
+ignoriert (mit Hinweis). Referenzen, die im Drop fehlen, werden gemeldet – auf
 einem Dev-Server greift dafür weiterhin der `fetch`-Fallback.
 
 Nach dem Import liest die App die Konfiguration bei jedem Start zuerst aus
 IndexedDB; der `fetch` auf `./env.json` ist nur noch Fallback für den
-Dev-Server-Betrieb ohne importierte Daten. «Daten zurücksetzen» im Footer
-leert den lokalen Speicher wieder.
+Dev-Server-Betrieb ohne importierte Daten. Der Papierkorb-Knopf in der
+Fusszeile («Alle lokalen Daten löschen») leert den lokalen Speicher wieder –
+sämtliche Profile, nicht nur das aktive. Vorher sichern (siehe
+[Bestand sichern](#bestand-sichern-export)).
 
 ## Mandanten-Repo (E77)
 
@@ -263,7 +297,7 @@ METHODS = GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
 HEADERS = Content-Type,User-Agent,Authorization,Accept
 ```
 
-Das Repo enthält `config.json` (Empfänger), `manifest.json` (Klartext, diffbar), `tenant.zip.age` (Registry, env, Store) und `snapshots/*.age` (Rohdateien). Manuell: «Grafik exportieren → Mandant exportieren (ZIP)» lädt den ganzen Mandanten, ein gedropptes Tenant-ZIP stellt ihn wieder her; `tools/tenant_repo.py` (Python 3 + `pyrage`) legt Repos an und spielt Dateien über einen lokalen Klon ein oder aus:
+Das Repo enthält `config.json` (Empfänger), `manifest.json` (Klartext, diffbar), `tenant.zip.age` (Registry, env, Store) und `snapshots/*.age` (Rohdateien). Von Hand geht dasselbe über [Bestand sichern](#bestand-sichern-export) und [Bestand wiederherstellen](#bestand-wiederherstellen); `tools/tenant_repo.py` (Python 3 + `pyrage`) legt Repos an und spielt Dateien über einen lokalen Klon ein oder aus:
 
 ```bash
 python tools/tenant_repo.py keygen                                     # age-Identität der Maschine (einmalig)
@@ -300,16 +334,16 @@ Hinweis: Das Browser-Kontextmenü ist global unterdrückt, damit die App-eigenen
 
 ## Attribute
 
-Attributdateien (`.tsv`/`.csv`/`.txt`) ordnen Personen Attribute zu — eine
+Attributdateien (`.tsv`/`.csv`/`.txt`) ordnen Personen Attribute zu – eine
 Zeile pro Zuordnung: `identifier<TAB>attributname` (Identifier = E-Mail oder
 Personen-ID; Komma statt Tab funktioniert ebenfalls). Der **Dateiname ohne
 Endung** wird zur Kategorie: Die Attribut-Legende gruppiert hierarchisch nach
 Kategorie → Attribut (mit Trefferzahl pro Attribut), die Farben sind innerhalb
 einer Kategorie ähnlich und zwischen Kategorien klar unterscheidbar.
 
-Geladen wird über die Env-Konfiguration — `DATA_ATTRIBUTES_DIR` (ganzes
+Geladen wird über die Env-Konfiguration – `DATA_ATTRIBUTES_DIR` (ganzes
 Verzeichnis, keine Einzelauflistung nötig) und/oder `DATA_ATTRIBUTES_URL`
-(explizite Dateiliste) —, per Drag & Drop oder über den Upload-Button im
+(explizite Dateiliste) –, per Drag & Drop oder über den Upload-Button im
 Legenden-Header. Importierte Dateien landen in IndexedDB und werden beim
 nächsten Start automatisch geladen. Leere Dateien registrieren eine Kategorie
 als Platzhalter.
@@ -324,7 +358,7 @@ als Platzhalter.
 - **Header-Buttons**: Doppel-Chevron expandiert/kollabiert alle Kategorien;
   **Doppelhäkchen** wählt alle Attribute an/ab; **Trichter** schaltet den
   Attribut-Fokus (siehe unten); **Auge** schaltet die globale
-  Attribut-Sichtbarkeit im Graph — **Shift+Klick** auf das Auge toggelt
+  Attribut-Sichtbarkeit im Graph – **Shift+Klick** auf das Auge toggelt
   stattdessen die Sichtbarkeit aller Kategorien auf einmal, ohne den globalen
   Status anzufassen.
 
@@ -336,11 +370,11 @@ Pfeile entsprechend näher an den Knoten.
 
 Der Trichter-Button im Legenden-Header blendet alle Knoten aus, die weder
 selbst ein sichtbares Attribut tragen noch auf dem Pfad (Manager,
-Mitglieds-OEs, übergeordnete OEs) zu einem solchen liegen — es bleibt also
+Mitglieds-OEs, übergeordnete OEs) zu einem solchen liegen – es bleibt also
 genau das Verbindungsgerüst zu den attributierten Personen stehen. «Sichtbar»
 heisst: Attribut angewählt und Kategorie nicht per Auge ausgeblendet (das
 globale Auge zählt bewusst nicht). Innerhalb der aktuellen Ansicht bleiben
-exakt die attributierten Knoten plus die Verbindungspfade zum Root stehen —
+exakt die attributierten Knoten plus die Verbindungspfade zum Root stehen –
 Äste ohne attributiertes Ende (etwa weil die Suchtiefe, ein ausgeblendeter
 Teilbaum oder der Management-Filter den attributierten Nachfahren entfernt)
 werden ebenso gekappt wie unattributierte Knoten auf Zyklen (z.B.
@@ -354,12 +388,12 @@ wieder her; der Root-Knoten bleibt immer sichtbar.
 Per Rechtsklick auf einen Personen-Knoten («Attribute») lassen sich bestehende
 Attribute zuweisen sowie **neue Attribute und neue Kategorien** anlegen.
 Geänderte Kategorien zeigen in der Legende einen **Speichern-Button**
-(Diskette) — auch frisch im UI erstellte Kategorien.
+(Diskette) – auch frisch im UI erstellte Kategorien.
 
 Speichern wirkt zweistufig:
 
 1. **IndexedDB**: Der aktuelle Stand der Kategorie wird unter dem Schlüssel
-   der importierten Datei abgelegt und überlebt damit jeden Reload —
+   der importierten Datei abgelegt und überlebt damit jeden Reload –
    unabhängig von der Festplatte.
 2. **Festplatte**: In Browsern mit File System Access API (Chrome/Edge)
    öffnet sich ein Speichern-Dialog; das gewählte Datei-Handle wird pro
@@ -367,7 +401,7 @@ Speichern wirkt zweistufig:
    direkt ohne Dialog. Andere Browser erhalten einen normalen Download.
 
 Gespeichert wird `identifier<TAB>attributname`; ein optionaler Attributwert
-aus der Quelldatei (dritte Spalte, Default `1`) bleibt dabei erhalten —
+aus der Quelldatei (dritte Spalte, Default `1`) bleibt dabei erhalten –
 Laden und Speichern sind verlustfrei.
 
 ### Fuzzy-Matching & gespeicherte Zuordnungen
@@ -379,11 +413,11 @@ exportiert.
 
 Alle Auflösungen werden in IndexedDB persistiert (`identifier → Personen-ID`
 bzw. `null` für bestätigte Nicht-Treffer): Beim nächsten Reload werden sie
-direkt angewendet — Fuzzy-Suche und Dialog laufen nur noch für neue
+direkt angewendet – Fuzzy-Suche und Dialog laufen nur noch für neue
 Identifier. Zeigt eine gespeicherte Zuordnung auf eine Person, die es im
 aktuellen Datensatz nicht mehr gibt, wird der Identifier automatisch neu
-aufgelöst. «Daten zurücksetzen» (Footer) löscht auch diese Zuordnungen; ein
-erneuter Ordner-Drop behält sie.
+aufgelöst. Der Papierkorb-Knopf in der Fusszeile löscht auch diese
+Zuordnungen; ein erneuter Ordner-Drop behält sie.
 
 ## Beispiel
 
@@ -413,4 +447,4 @@ erneuter Ordner-Drop behält sie.
 - Logik/Rendering: `src/sections/*.js` (Nummern-Präfix = Inlining-Reihenfolge)
 - Transformation: `helpers/transform.js` (`npm run transform`)
 
-Niemals `index.html` direkt editieren — sie ist Build-Output.
+Niemals `index.html` direkt editieren – sie ist Build-Output.
