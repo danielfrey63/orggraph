@@ -32,35 +32,37 @@ const isDroppedLine = (line) =>
   /^export \{[^}]*\};?$/.test(line) ||
   /^\/\* v8 ignore (start|stop) \*\/$/.test(line);
 
-// One section, stripped, plus the line map the stripping implies:
-// original 1-based line -> 0-based line within the stripped text, or null when
-// the line is gone. The consistency check keeps the map honest if the strip
-// rules above ever grow a case the predicate does not mirror.
+// One section, stripped, plus what the stripping implies for coverage:
+//   map     original 1-based line -> 0-based line within the stripped text,
+//           or null when the line is gone
+//   ignored original 1-based lines inside /* v8 ignore */ blocks (markers
+//           excluded) — they carry no DA entry, so coverage reporting needs
+//           them to state an honest gross total
+// The consistency check keeps the map honest if the strip rules above ever
+// grow a case the predicate does not mirror.
 export function stripSection(code) {
   const text = stripModuleSyntax(code);
   const map = new Map();
+  const ignored = new Set();
   let kept = 0;
+  let inIgnore = false;
   code.split('\n').forEach((line, i) => {
+    if (/^\/\* v8 ignore start \*\/$/.test(line)) inIgnore = true;
+    else if (/^\/\* v8 ignore stop \*\/$/.test(line)) inIgnore = false;
+    else if (inIgnore) ignored.add(i + 1);
     if (isDroppedLine(line)) map.set(i + 1, null);
     else map.set(i + 1, kept++);
   });
   if (kept !== text.split('\n').length) {
     throw new Error(`strip line map out of sync: ${kept} kept lines vs ${text.split('\n').length} in the stripped text`);
   }
-  return { text, map };
-}
-
-// Count the content lines inside /* v8 ignore */ blocks — they carry no DA
-// entries, so coverage reporting needs them to state an honest gross total.
-export function countIgnoredLines(code) {
-  let inIgnore = false;
-  let n = 0;
-  for (const line of code.split('\n')) {
-    if (/^\/\* v8 ignore start \*\/$/.test(line)) inIgnore = true;
-    else if (/^\/\* v8 ignore stop \*\/$/.test(line)) inIgnore = false;
-    else if (inIgnore) n++;
-  }
-  return n;
+  // The empty string after a file's final newline is not a line of that file:
+  // in the deliverable its slot is the next section's first line. Mapping it
+  // would claim foreign lines for this section (and for the last section a
+  // line past the app span altogether).
+  const lines = code.split('\n');
+  if (lines.length > 1 && lines[lines.length - 1] === '') map.delete(lines.length);
+  return { text, map, ignored };
 }
 
 // Build the deliverable. Returns the html and, per app section, its 1-based
@@ -105,7 +107,7 @@ export function assembleIndexHtml() {
   const sections = stripped.map((s) => {
     const startLine = line;
     line += countLines(s.text);
-    return { file: s.file, startLine, map: s.map };
+    return { file: s.file, startLine, endLine: line - 1, map: s.map, ignored: s.ignored };
   });
   return { html, sections };
 }

@@ -6,7 +6,7 @@
 // self-verifies every archive with the APP's own ZIP reader + classifier.
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deflateRawSync } from 'node:zlib';
 import { readZipEntries } from '../src/sections/05-dropzone.js';
 import { classifyFile } from '../src/sections/04-storage.js';
@@ -123,7 +123,5 @@ async function main() {
   }
 }
 
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === join(process.argv[1]);
-if (process.argv[1] && fileURLToPath(import.meta.url).endsWith('package-tenants.mjs') && process.argv[1].endsWith('package-tenants.mjs')) {
-  await main();
-}
+// Only package when run as a script: the tests import buildZip.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
