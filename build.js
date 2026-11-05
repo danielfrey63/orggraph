@@ -95,6 +95,11 @@ export function assembleIndexHtml() {
   if (slot < 0) throw new Error('index.template.html has no @@APP@@ slot');
   const head = filled.slice(0, slot);
   const html = head + app + filled.slice(slot + '@@APP@@'.length);
+  // A slot the template gained but the assembly above does not fill would ship
+  // a literal placeholder into the deliverable — and silently shift every line
+  // number the coverage remap depends on. Fail here instead.
+  const leftover = html.match(/@@[A-Z0-9_]+@@/);
+  if (leftover) throw new Error(`unfilled template slot ${leftover[0]} — add it to assembleIndexHtml`);
 
   let line = countLines(head) + 1;
   const sections = stripped.map((s) => {
