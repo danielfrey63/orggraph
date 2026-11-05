@@ -3,10 +3,10 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { buildZip, crc32 } from '../src/sections/33-og2-zip-writer.js';
 import { readZipEntries } from '../src/sections/05-dropzone.js';
-import { TENANT_FORMAT, og2TenantManifest, og2TenantManifestOf, og2RestoreTenant } from '../src/sections/34-og2-tenant.js';
+import { TENANT_FORMAT, og2TenantManifest, og2TenantManifestOf, og2RestoreTenant, og2TenantName, og2BuildTenantZip } from '../src/sections/34-og2-tenant.js';
 import { og2SyncDecision, og2SafeFilename } from '../src/sections/35-og2-sync.js';
 import { bytesToBase64, base64ToBytes, normalizeRepoConfig, repoConfigComplete, giteaClient, GiteaError } from '../src/sections/36-og2-gitea.js';
-import { KEY_STORE, KEY_STORE_PART_PREFIX, KEY_REGISTRY, KEY_ENV, getStoredText, putStored, idbClear, _resetProfilesCache } from '../src/sections/04-storage.js';
+import { KEY_STORE, KEY_STORE_PART_PREFIX, KEY_REGISTRY, KEY_ENV, getStoredText, putStored, idbClear, _resetProfilesCache, createProfile } from '../src/sections/04-storage.js';
 import { createTenantStore } from '../src/sections/23-og2-store.js';
 import { serializeTenantStoreParts, deserializeTenantStoreParts } from '../src/sections/29-og2-app.js';
 import { importSnapshot } from '../src/sections/26-og2-import.js';
@@ -95,6 +95,18 @@ describe('34 — tenant export and restore', () => {
     expect(back.edges.size).toBe(1);
     expect(back.nodes.get('hrm:p1').timelines.get('label')).toBeTruthy();
     expect((await getStoredText(KEY_STORE_PART_PREFIX + 9)) ?? null).toBeNull();
+  });
+
+  it('names the export after the active profile', async () => {
+    expect(await og2TenantName()).toBe('Standard');
+    await createProfile('SEM Mandant');
+    expect(await og2TenantName()).toBe('SEM Mandant');
+  });
+
+  it('refuses to build an export while no tenant is loaded', async () => {
+    // og2BuildTenantZip reads the running state — the guard is what keeps a
+    // push from committing an empty tenant over a good one.
+    await expect(og2BuildTenantZip()).rejects.toThrow(/kein geladener Mandant/);
   });
 
   it('an incomplete export is refused before anything is written', async () => {
