@@ -10,6 +10,7 @@ decrypting a stand, checking the state — through a local clone.
   python tools/tenant_repo.py init sem --repo <dir> [--remote <url>] [--create-remote]
   python tools/tenant_repo.py push sem <file>            # tenant ZIP (export) or raw snapshot
   python tools/tenant_repo.py restore sem --out <dir>    # decrypt the latest tenant ZIP + snapshots
+  python tools/tenant_repo.py bundle sem --out <dir>     # numbered drop ZIPs for a from-scratch rebuild
   python tools/tenant_repo.py status [sem]
   python tools/tenant_repo.py selftest
 
@@ -344,6 +345,96 @@ def cmd_restore(args):
     log(f'entschlüsselt nach {out}')
 
 
+LIST_EXT = re.compile(r'\.(tsv|csv|txt)$', re.IGNORECASE)
+APP_REGISTRY = Path(__file__).resolve().parent.parent / 'schema' / 'registry.json'
+
+
+def snapshot_meta(data):
+    """meta of an OrgGraph snapshot (same test as the app's looksLikeSnapshot), else None."""
+    try:
+        obj = json.loads(data.decode('utf-8'))
+    except (UnicodeDecodeError, ValueError):
+        return None
+    meta = obj.get('meta') if isinstance(obj, dict) else None
+    if not (isinstance(meta, dict) and meta.get('source') and meta.get('snapshot') and 'schema' in obj
+            and isinstance(obj.get('nodes'), list) and isinstance(obj.get('edges'), list)):
+        return None
+    return {**meta, 'nodeCount': len(obj['nodes']), 'edgeCount': len(obj['edges'])}
+
+
+def build_bundle(t, out, registry_path=APP_REGISTRY, with_lists=False):
+    """Decrypt a tenant repo into numbered drop ZIPs for a from-scratch rebuild in the app.
+
+    1-<tenant>-basis-<stamp>.zip   registry + env.<tenant>.json + the oldest snapshot
+    N-<tenant>-<stamp>.zip         every further snapshot, oldest first (the app's
+                                   chronology rejects older-after-newer)
+    lists: only with with_lists, as a last ZIP — they open the intake dialog.
+    Plain env name env.<tenant>.json sets the profile name. Re-runs replace earlier bundles.
+    """
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    env_age = t.repo / f'env.{t.name}.json.age'
+    env = t.decrypt_read(env_age.name) if env_age.exists() else None
+    snapshots, lists, skipped = [], [], []
+    snap_dir = t.repo / SNAPSHOT_DIR
+    for p in sorted(snap_dir.glob('*.age')) if snap_dir.exists() else []:
+        name, data = p.name[:-4], t.decrypt_read(f'{SNAPSHOT_DIR}/{p.name}')
+        if LIST_EXT.search(name):
+            lists.append((name, data))
+            continue
+        meta = snapshot_meta(data)
+        if meta is None:
+            skipped.append(name)
+        else:
+            snapshots.append((str(meta['snapshot']), name, data, meta))
+    snapshots.sort(key=lambda s: (s[0], s[1]))
+    if not snapshots:
+        raise RuntimeError(f'{t.name}: kein Snapshot in {SNAPSHOT_DIR}/ – ohne Basisbestand gibt es nichts zu installieren')
+    for old in out.glob(f'[0-9]*-{t.name}-*.zip'):
+        old.unlink()
+
+    def write_zip(fname, entries):
+        with zipfile.ZipFile(out / fname, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for arc, data in entries:
+                zf.writestr(arc, data)
+        return fname
+
+    produced = []
+    stamp, name, data, meta = snapshots[0]
+    entries = [('registry.json', Path(registry_path).read_bytes())]
+    if env is not None:
+        entries.append((f'env.{t.name}.json', env))
+    entries.append((name, data))
+    produced.append({'zip': write_zip(f'1-{t.name}-basis-{stamp}.zip', entries), 'snapshot': name, 'meta': meta})
+    for i, (stamp, name, data, meta) in enumerate(snapshots[1:], start=2):
+        produced.append({'zip': write_zip(f'{i}-{t.name}-{stamp}.zip', [(name, data)]), 'snapshot': name, 'meta': meta})
+    if with_lists and lists:
+        produced.append({'zip': write_zip(f'{len(produced) + 1}-{t.name}-listen.zip', lists), 'lists': [n for n, _ in lists]})
+    return {'produced': produced, 'env': env is not None, 'lists': [n for n, _ in lists], 'skipped': skipped}
+
+
+def cmd_bundle(args):
+    t = tenants_from(load_config()).get(args.name) or sys.exit(f'unbekannter Mandant: {args.name}')
+    t.pull(force=True)
+    res = build_bundle(t, args.out, Path(args.registry) if args.registry else APP_REGISTRY, args.with_lists)
+    out = Path(args.out).resolve()
+    print(f'\nDrop-Pakete für «{t.name}» in {out}, in dieser Reihenfolge in eine frische App ziehen,')
+    print('jeweils erst nach Abschluss des vorherigen Imports:\n')
+    for p in res['produced']:
+        if 'meta' in p:
+            m = p['meta']
+            print(f'  {p["zip"]:<48} {m["source"]} {m["snapshot"]}  {m["nodeCount"]} Knoten, {m["edgeCount"]} Kanten')
+        else:
+            print(f'  {p["zip"]:<48} {len(p["lists"])} Listen (Intake-Dialog je Liste)')
+    if not res['env']:
+        print(f'\n  Hinweis: kein env.{t.name}.json.age im Repo – Paket 1 ohne Sichten, Profilname aus der Registry.')
+    if res['lists'] and not args.with_lists:
+        print(f'\n  {len(res["lists"])} Listen nicht gebündelt (laufen über den Intake-Dialog; mit --with-lists als letztes Paket).')
+    if res['skipped']:
+        print(f'\n  Weder Snapshot noch Liste, ausgelassen: {", ".join(res["skipped"])}')
+    print('\n  Die Pakete sind unverschlüsselt und enthalten Personendaten: nach dem Import löschen.')
+
+
 def cmd_status(args):
     cfg = load_config()
     tenants = tenants_from(cfg)
@@ -396,6 +487,18 @@ def cmd_selftest(args):
         except RuntimeError:
             pass
         assert t.pull(force=True)['reason'] == 'no remote'
+        snap = lambda stamp: json.dumps({'meta': {'source': 's', 'snapshot': stamp}, 'schema': {}, 'nodes': [], 'edges': []}).encode()
+        t.encrypt_write(f'{SNAPSHOT_DIR}/late.json.age', snap('20260916-1143'))
+        t.encrypt_write(f'{SNAPSHOT_DIR}/base.json.age', snap('20260612-0000'))
+        t.encrypt_write(f'{SNAPSHOT_DIR}/list.tsv.age', b'a\tb\n')
+        t.encrypt_write('env.test.json.age', b'{"VIEWS":{}}')
+        b = build_bundle(t, tmp / 'drop')
+        assert [p['zip'] for p in b['produced']] == ['1-test-basis-20260612-0000.zip', '2-test-20260916-1143.zip'], b
+        with zipfile.ZipFile(tmp / 'drop' / b['produced'][0]['zip']) as zf:
+            assert sorted(zf.namelist()) == ['base.json', 'env.test.json', 'registry.json'], zf.namelist()
+        assert b['lists'] == ['list.tsv'] and b['skipped'] == ['y.json'], b
+        b2 = build_bundle(t, tmp / 'drop', with_lists=True)
+        assert b2['produced'][-1]['zip'] == '3-test-listen.zip' and len(list((tmp / 'drop').glob('*.zip'))) == 3, b2
         print(f'selftest ok — {commits} commits, snapshot {r2["stored"]}, status {json.dumps(t.status()["manifest"]["reason"])}')
 
 
@@ -416,6 +519,12 @@ def main(argv=None):
     p.add_argument('name')
     p.add_argument('--out', required=True)
     p.set_defaults(fn=cmd_restore)
+    p = sub.add_parser('bundle', help='Drop-Pakete für einen Neuaufbau in der App erzeugen')
+    p.add_argument('name')
+    p.add_argument('--out', required=True)
+    p.add_argument('--registry', help=f'Registry statt {APP_REGISTRY.relative_to(APP_REGISTRY.parent.parent)}')
+    p.add_argument('--with-lists', action='store_true', help='Identifikator-Listen als letztes Paket mitgeben')
+    p.set_defaults(fn=cmd_bundle)
     p = sub.add_parser('status', help='Stand der Mandanten')
     p.add_argument('name', nargs='?')
     p.set_defaults(fn=cmd_status)

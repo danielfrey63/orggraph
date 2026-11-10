@@ -288,8 +288,22 @@ python tools/tenant_repo.py keygen                                     # age-Ide
 python tools/tenant_repo.py init sem --repo ../orggraph-sem --remote <url> --create-remote
 python tools/tenant_repo.py push sem <datei>                           # Tenant-ZIP oder Rohdatei
 python tools/tenant_repo.py restore sem --out <ordner>                 # entschlüsseln
+python tools/tenant_repo.py bundle sem --out <ordner>                  # Drop-Pakete für einen Neuaufbau
 python tools/tenant_repo.py status
 ```
+
+### Neuaufbau aus dem Mandanten-Repo
+
+`bundle` macht aus dem Repo eines Mandanten nummerierte ZIPs, die eine frisch installierte App per Drop in den heutigen Stand bringen. Paket 1 enthält die Registry dieses App-Repos, die gepflegte Konfiguration `env.<mandant>.json` (im Repo als `env.<mandant>.json.age`) und den ältesten Snapshot. Jedes weitere Paket enthält einen Snapshot, nach `meta.snapshot` aufsteigend sortiert, weil die App ältere Stände nach neueren ablehnt. Der Dateiname der env bestimmt den Profilnamen.
+
+1. `python tools/tenant_repo.py bundle sem --out <ordner>` – die Ausgabe nennt Reihenfolge, Quelle, Stand und Zählwerte jedes Pakets.
+2. Paket 1 ins Fenster ziehen und die Registrierung der Quelle bestätigen.
+3. Jedes weitere Paket erst ziehen, wenn der vorherige Import fertig ist. Das Plausibilitäts-Gate beim ersten Crawl auf einem migrierten Bestand ist erwartet.
+4. Den Ordner danach löschen: Die Pakete sind unverschlüsselt.
+
+Identifikator-Listen im Repo bündelt `bundle` nur mit `--with-lists`, als letztes Paket: Jede Liste öffnet den Intake-Dialog. Was ein Basisbestand bereits enthält, nicht nochmals einlesen.
+
+Damit ein Mandanten-Repo so installierbar ist, braucht es den Basisbestand und jeden späteren Crawl unter `snapshots/` (`push`) sowie die Konfiguration als `env.<mandant>.json.age`. Die Repos liegen als Geschwister neben diesem Repo, nicht als Submodul: Ein Submodul würde die privaten Repo-URLs hier veröffentlichen. Den Pfad pro Mandant hält `~/.config/orggraph/hub.json`.
 
 ## Nutzung
 
